@@ -22,7 +22,14 @@ type Loop struct {
 	WorkDir      string
 }
 
-func (l *Loop) RunTask(ctx context.Context, taskDescription string) error {
+// TaskResult holds the outcome of a completed task loop.
+type TaskResult struct {
+	TotalCostUSD float64
+	CyclesUsed   int
+	Report       *ReviewReport // From final reviewer cycle (may be nil)
+}
+
+func (l *Loop) RunTask(ctx context.Context, taskDescription string) (*TaskResult, error) {
 	// Create task bead.
 	beadID, err := l.Beads.Create(taskDescription, beads.CreateOpts{
 		Type:        "task",
@@ -30,18 +37,42 @@ func (l *Loop) RunTask(ctx context.Context, taskDescription string) error {
 		Description: taskDescription,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create task bead: %w", err)
+		return nil, fmt.Errorf("failed to create task bead: %w", err)
 	}
 	return l.runLoop(ctx, beadID, taskDescription)
 }
 
 // RunExistingTask runs the coder-reviewer loop for an already-created bead.
-func (l *Loop) RunExistingTask(ctx context.Context, beadID, taskDescription string) error {
+func (l *Loop) RunExistingTask(ctx context.Context, beadID, taskDescription string) (*TaskResult, error) {
 	return l.runLoop(ctx, beadID, taskDescription)
 }
 
+// GenerateCheckpoint asks the coder to summarize its current progress for resumption.
+func (l *Loop) GenerateCheckpoint(ctx context.Context, beadID, taskDescription string) (string, error) {
+	a := agent.Agent{
+		Role:         agent.RoleCoder,
+		SystemPrompt: l.CoderPrompt,
+		Model:        l.Model,
+		MaxBudgetUSD: 0.50,
+	}
+	prompt := fmt.Sprintf(
+		"You were working on task (bead %s): %s\n\n"+
+			"Summarize your current progress concisely:\n"+
+			"- What you have completed\n"+
+			"- What files you changed\n"+
+			"- What remains to be done\n"+
+			"- Any important context for continuing",
+		beadID, taskDescription,
+	)
+	result, err := l.Invoker.Invoke(ctx, a, prompt, l.WorkDir)
+	if err != nil {
+		return "", err
+	}
+	return result.ResultText, nil
+}
+
 // runLoop is the core coder-reviewer loop extracted from RunTask.
-func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) error {
+func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*TaskResult, error) {
 	// Compute per-agent budget: split total evenly between coder and reviewer
 	// across all cycles.
 	perAgentBudget := 0.0
@@ -82,7 +113,7 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) erro
 		coderResult, err := l.Invoker.Invoke(ctx, coderAgent, coderPrompt, l.WorkDir)
 		if err != nil {
 			state.Phase = PhaseError
-			return fmt.Errorf("coder invocation failed: %w", err)
+			return nil, fmt.Errorf("coder invocation failed: %w", err)
 		}
 
 		state.CoderOutput = coderResult.ResultText
@@ -97,7 +128,7 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) erro
 		if l.MaxBudgetUSD > 0 && state.TotalCostUSD >= l.MaxBudgetUSD {
 			l.UI.BudgetExceeded(state.TotalCostUSD, l.MaxBudgetUSD)
 			_ = l.Beads.AddComment(beadID, fmt.Sprintf("Budget exceeded: $%.4f / $%.2f", state.TotalCostUSD, l.MaxBudgetUSD))
-			return ErrBudgetExceeded
+			return nil, ErrBudgetExceeded
 		}
 
 		// --- Reviewer phase ---
@@ -119,7 +150,7 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) erro
 		reviewResult, err := l.Invoker.Invoke(ctx, reviewerAgent, reviewerPrompt, l.WorkDir)
 		if err != nil {
 			state.Phase = PhaseError
-			return fmt.Errorf("reviewer invocation failed: %w", err)
+			return nil, fmt.Errorf("reviewer invocation failed: %w", err)
 		}
 
 		state.ReviewOutput = reviewResult.ResultText
@@ -134,7 +165,7 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) erro
 		if l.MaxBudgetUSD > 0 && state.TotalCostUSD >= l.MaxBudgetUSD {
 			l.UI.BudgetExceeded(state.TotalCostUSD, l.MaxBudgetUSD)
 			_ = l.Beads.AddComment(beadID, fmt.Sprintf("Budget exceeded: $%.4f / $%.2f", state.TotalCostUSD, l.MaxBudgetUSD))
-			return ErrBudgetExceeded
+			return nil, ErrBudgetExceeded
 		}
 
 		// Parse review findings.
@@ -144,10 +175,17 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) erro
 		if isApproved(reviewResult.ResultText) {
 			state.Phase = PhaseApproved
 			l.UI.Approved()
-
+			report := ParseReviewReport(reviewResult.ResultText)
 			_ = l.Beads.Close(beadID, "Approved by reviewer")
+			if report != nil {
+				_ = l.Beads.AddComment(beadID, FormatReportComment(report))
+			}
 			l.UI.TaskComplete(beadID, state.TotalCostUSD)
-			return nil
+			return &TaskResult{
+				TotalCostUSD: state.TotalCostUSD,
+				CyclesUsed:   cycle,
+				Report:       report,
+			}, nil
 		}
 
 		// Issues found.
@@ -180,7 +218,7 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) erro
 
 	l.UI.MaxCyclesReached(l.MaxCycles)
 	_ = l.Beads.AddComment(beadID, fmt.Sprintf("Max cycles reached (%d). Manual review recommended.", l.MaxCycles))
-	return ErrMaxCycles
+	return nil, ErrMaxCycles
 }
 
 func (l *Loop) buildCoderPrompt(state *CycleState) string {

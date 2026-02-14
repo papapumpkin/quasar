@@ -21,4 +21,11 @@ ISSUE:
 SEVERITY: critical|major|minor
 DESCRIPTION: Clear description of what's wrong and how to fix it.
 
-You may list multiple ISSUE blocks. Only use APPROVED if there are truly no issues.`
+You may list multiple ISSUE blocks. Only use APPROVED if there are truly no issues.
+
+After your APPROVED or ISSUE blocks, always include a REPORT block:
+REPORT:
+SATISFACTION: high|medium|low (how satisfied you are with the code quality)
+RISK: high|medium|low (how risky is this change to the codebase)
+NEEDS_HUMAN_REVIEW: yes|no (does this need a human to review before merge)
+SUMMARY: One-sentence summary of the work and your assessment.`

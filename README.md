@@ -44,11 +44,15 @@ go install .
 
 ## Commands
 
-| Command    | Description                                    |
-|------------|------------------------------------------------|
-| `run`      | Start the interactive coder-reviewer REPL      |
-| `validate` | Check that `claude` and `beads` CLIs are found |
-| `version`  | Print the version number                       |
+| Command              | Description                                    |
+|----------------------|------------------------------------------------|
+| `run`                | Start the interactive coder-reviewer REPL      |
+| `validate`           | Check that `claude` and `beads` CLIs are found |
+| `version`            | Print the version number                       |
+| `nebula validate`    | Validate a nebula blueprint directory          |
+| `nebula plan`        | Preview bead changes for a nebula              |
+| `nebula apply`       | Create/update beads and optionally run workers |
+| `nebula show`        | Display current nebula state                   |
 
 ### `run` Flags
 
@@ -150,28 +154,6 @@ You type a task
 
 Each agent gets a per-invocation budget of `max_budget_usd / (2 * max_review_cycles)`.
 
-## Review Format
-
-The reviewer's output must end with one of:
-
-**Approval:**
-```
-APPROVED: Changes look correct and follow project conventions.
-```
-
-**Issues (one or more blocks):**
-```
-ISSUE:
-SEVERITY: critical
-DESCRIPTION: SQL query uses string concatenation instead of parameterized queries.
-
-ISSUE:
-SEVERITY: minor
-DESCRIPTION: Missing error check on file close.
-```
-
-Severity levels: `critical`, `major`, `minor`. If omitted, defaults to `major`.
-
 ## Safety
 
 Quasar has two built-in safeguards to prevent runaway costs:
@@ -211,6 +193,139 @@ echo "Fix the nil pointer in handler.go" | quasar run --auto
 ```
 
 The process exits with code 0 on approval, non-zero on failure or max cycles reached.
+
+## Nebula Blueprints
+
+Nebula is a structured multi-task blueprint system inspired by OpenTofu's plan/apply lifecycle. Define a set of related tasks in a directory, and Quasar will create beads, resolve dependencies, and execute them with the coder-reviewer loop.
+
+### File Format
+
+A nebula is a directory containing:
+
+- **`nebula.toml`** — Manifest with project name, description, and default settings
+- **`*.md`** — One file per task, with TOML frontmatter between `+++` delimiters
+
+```
+my-nebula/
+├── nebula.toml
+├── add-auth.md
+├── write-tests.md
+└── update-docs.md
+```
+
+**`nebula.toml`:**
+
+```toml
+[nebula]
+name = "auth-feature"
+description = "Add authentication to the API"
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["auth"]
+```
+
+**Task file (`add-auth.md`):**
+
+```
++++
+id = "add-auth"
+title = "Add JWT authentication"
+type = "feature"
+priority = 1
+depends_on = []
++++
+
+Implement JWT-based authentication for all API endpoints...
+```
+
+### CLI Commands
+
+| Command                      | Description                                      |
+|------------------------------|--------------------------------------------------|
+| `nebula validate <path>`     | Validate structure, frontmatter, and dependencies |
+| `nebula plan <path>`         | Preview what bead changes would be made          |
+| `nebula apply <path>`        | Create/update beads from the blueprint           |
+| `nebula show <path>`         | Display current nebula state                     |
+
+### `nebula apply` Flags
+
+| Flag             | Description                                                  | Default |
+|------------------|--------------------------------------------------------------|---------|
+| `--auto`         | Start workers to execute ready tasks after applying          | false   |
+| `--watch`        | Watch for task file changes during execution (with `--auto`) | false   |
+| `--max-workers N`| Maximum concurrent workers (with `--auto`)                   | 1       |
+
+### In-Flight Editing
+
+When `--auto --watch` is enabled, Quasar monitors the nebula directory for task file changes using `fsnotify`. If you edit a task's `.md` file while its worker is running:
+
+1. The worker detects the change and pauses
+2. A checkpoint prompt captures the coder's current progress
+3. The updated task description is loaded
+4. The worker resumes with a resumption prompt that includes both the checkpoint and the new task body
+
+This allows you to refine task descriptions mid-execution without losing work.
+
+### Reviewer Reports
+
+After reviewing each task, the reviewer generates a structured report alongside the `APPROVED:` or `ISSUE:` blocks:
+
+```
+REPORT:
+SATISFACTION: high|medium|low
+RISK: high|medium|low
+NEEDS_HUMAN_REVIEW: yes|no
+SUMMARY: One-sentence assessment of the work.
+```
+
+Reports are stored in the nebula state file and posted as bead comments. Use `nebula show` to view reports for completed tasks.
+
+### Example
+
+The `examples/dogfood-nebula/` directory contains a working nebula that tests Quasar on its own codebase:
+
+```bash
+quasar nebula validate examples/dogfood-nebula/
+quasar nebula plan examples/dogfood-nebula/
+quasar nebula apply examples/dogfood-nebula/ --auto --max-workers 2
+```
+
+### Jet (Future)
+
+Jet is the planned temporal orchestration layer for running nebula tasks at scale — named after the focused, directed relativistic outflows of a quasar. It will support distributed execution via Temporal workflows with Kubernetes deployment. Not yet implemented.
+
+## Review Format
+
+The reviewer's output must end with one of:
+
+**Approval:**
+```
+APPROVED: Changes look correct and follow project conventions.
+```
+
+**Issues (one or more blocks):**
+```
+ISSUE:
+SEVERITY: critical
+DESCRIPTION: SQL query uses string concatenation instead of parameterized queries.
+
+ISSUE:
+SEVERITY: minor
+DESCRIPTION: Missing error check on file close.
+```
+
+Severity levels: `critical`, `major`, `minor`. If omitted, defaults to `major`.
+
+**Report (always included after APPROVED or ISSUE blocks):**
+```
+REPORT:
+SATISFACTION: high
+RISK: low
+NEEDS_HUMAN_REVIEW: no
+SUMMARY: Clean implementation with proper error handling.
+```
 
 ## License
 

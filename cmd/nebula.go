@@ -52,6 +52,7 @@ var nebulaShowCmd = &cobra.Command{
 
 func init() {
 	nebulaApplyCmd.Flags().Bool("auto", false, "automatically start workers for ready tasks")
+	nebulaApplyCmd.Flags().Bool("watch", false, "watch for task file changes during execution (with --auto)")
 	nebulaApplyCmd.Flags().Int("max-workers", 1, "maximum concurrent workers (with --auto)")
 
 	nebulaCmd.AddCommand(nebulaValidateCmd)
@@ -219,10 +220,26 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	wg := &nebula.WorkerGroup{
-		Runner:     taskLoop,
+		Runner:     &loopAdapter{loop: taskLoop},
 		Nebula:     n,
 		State:      state,
 		MaxWorkers: maxWorkers,
+	}
+
+	watch, _ := cmd.Flags().GetBool("watch")
+	if watch {
+		w, err := nebula.NewWatcher(dir)
+		if err != nil {
+			printer.Error(fmt.Sprintf("failed to create watcher: %v", err))
+		} else {
+			if err := w.Start(); err != nil {
+				printer.Error(fmt.Sprintf("failed to start watcher: %v", err))
+			} else {
+				wg.Watcher = w
+				defer w.Stop()
+				printer.Info("watching for task file changes...")
+			}
+		}
 	}
 
 	printer.Info(fmt.Sprintf("starting workers (max %d)...", maxWorkers))
@@ -234,6 +251,35 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 
 	printer.NebulaWorkerResults(results)
 	return nil
+}
+
+// loopAdapter wraps *loop.Loop to satisfy nebula.TaskRunner.
+type loopAdapter struct {
+	loop *loop.Loop
+}
+
+func (a *loopAdapter) RunExistingTask(ctx context.Context, beadID, taskDescription string) (*nebula.TaskRunnerResult, error) {
+	result, err := a.loop.RunExistingTask(ctx, beadID, taskDescription)
+	if err != nil {
+		return nil, err
+	}
+	tr := &nebula.TaskRunnerResult{
+		TotalCostUSD: result.TotalCostUSD,
+		CyclesUsed:   result.CyclesUsed,
+	}
+	if result.Report != nil {
+		tr.Report = &nebula.ReviewReport{
+			Satisfaction:     result.Report.Satisfaction,
+			Risk:             result.Report.Risk,
+			NeedsHumanReview: result.Report.NeedsHumanReview,
+			Summary:          result.Report.Summary,
+		}
+	}
+	return tr, nil
+}
+
+func (a *loopAdapter) GenerateCheckpoint(ctx context.Context, beadID, taskDescription string) (string, error) {
+	return a.loop.GenerateCheckpoint(ctx, beadID, taskDescription)
 }
 
 func runNebulaShow(cmd *cobra.Command, args []string) error {

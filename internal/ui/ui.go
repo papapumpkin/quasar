@@ -174,8 +174,23 @@ func (p *Printer) NebulaWorkerResults(results []nebula.WorkerResult) {
 			fmt.Fprintf(os.Stderr, "  "+red+"✗ %s"+reset+" — %v\n", r.TaskID, r.Err)
 		} else {
 			fmt.Fprintf(os.Stderr, "  "+green+"✓ %s"+reset+" (bead %s)\n", r.TaskID, r.BeadID)
+			if r.Report != nil {
+				p.ReviewReport(r.TaskID, r.Report)
+			}
 		}
 	}
+}
+
+func (p *Printer) ReviewReport(taskID string, report *nebula.ReviewReport) {
+	fmt.Fprintf(os.Stderr, dim+"  report for %s:"+reset+"\n", taskID)
+	fmt.Fprintf(os.Stderr, "    satisfaction:  %s\n", report.Satisfaction)
+	fmt.Fprintf(os.Stderr, "    risk:          %s\n", report.Risk)
+	humanReview := "no"
+	if report.NeedsHumanReview {
+		humanReview = yellow + "yes" + reset
+	}
+	fmt.Fprintf(os.Stderr, "    human review:  %s\n", humanReview)
+	fmt.Fprintf(os.Stderr, "    summary:       %s\n", report.Summary)
 }
 
 func (p *Printer) NebulaShow(n *nebula.Nebula, state *nebula.State) {
@@ -205,5 +220,9 @@ func (p *Printer) NebulaShow(n *nebula.Nebula, state *nebula.State) {
 		}
 
 		fmt.Fprintf(os.Stderr, "  %-20s %-12s %s%s%s\n", t.ID, status, t.Title, deps, beadStr)
+		if hasState && ts.Report != nil {
+			fmt.Fprintf(os.Stderr, "    "+dim+"satisfaction:%s risk:%s human-review:%v"+reset+"\n",
+				ts.Report.Satisfaction, ts.Report.Risk, ts.Report.NeedsHumanReview)
+		}
 	}
 }

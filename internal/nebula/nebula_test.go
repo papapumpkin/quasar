@@ -454,13 +454,18 @@ func TestApply_CreatesBeads(t *testing.T) {
 // --- Worker tests ---
 
 type mockRunner struct {
-	calls []string
-	err   error
+	calls  []string
+	err    error
+	result *TaskRunnerResult
 }
 
-func (m *mockRunner) RunExistingTask(ctx context.Context, beadID, taskDescription string) error {
+func (m *mockRunner) RunExistingTask(ctx context.Context, beadID, taskDescription string) (*TaskRunnerResult, error) {
 	m.calls = append(m.calls, beadID)
-	return m.err
+	return m.result, m.err
+}
+
+func (m *mockRunner) GenerateCheckpoint(ctx context.Context, beadID, taskDescription string) (string, error) {
+	return "checkpoint summary", nil
 }
 
 func TestWorkerGroup_ExecutesDependencyOrder(t *testing.T) {

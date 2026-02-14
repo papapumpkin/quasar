@@ -180,7 +180,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 }
 
 func runTask(ctx context.Context, taskLoop *loop.Loop, printer *ui.Printer, task string) error {
-	err := taskLoop.RunTask(ctx, task)
+	_, err := taskLoop.RunTask(ctx, task)
 	if err == nil {
 		return nil
 	}

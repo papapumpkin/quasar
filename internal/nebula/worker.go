@@ -6,9 +6,17 @@ import (
 	"sync"
 )
 
+// TaskRunnerResult holds the outcome of a single task execution.
+type TaskRunnerResult struct {
+	TotalCostUSD float64
+	CyclesUsed   int
+	Report       *ReviewReport
+}
+
 // TaskRunner is the interface for executing a task (satisfied by loop.Loop).
 type TaskRunner interface {
-	RunExistingTask(ctx context.Context, beadID, taskDescription string) error
+	RunExistingTask(ctx context.Context, beadID, taskDescription string) (*TaskRunnerResult, error)
+	GenerateCheckpoint(ctx context.Context, beadID, taskDescription string) (string, error)
 }
 
 // WorkerGroup executes tasks in dependency order using a pool of workers.
@@ -17,6 +25,7 @@ type WorkerGroup struct {
 	Nebula     *Nebula
 	State      *State
 	MaxWorkers int
+	Watcher    *Watcher // nil = no in-flight editing
 
 	mu      sync.Mutex
 	results []WorkerResult
@@ -130,12 +139,21 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 					return
 				}
 
-				err := wg.Runner.RunExistingTask(ctx, ts.BeadID, task.Body)
+					wg.mu.Lock()
+				wg.State.SetTaskState(taskID, ts.BeadID, TaskStatusInProgress)
+				_ = SaveState(wg.Nebula.Dir, wg.State)
+				wg.mu.Unlock()
+
+				taskResult, err := wg.Runner.RunExistingTask(ctx, ts.BeadID, task.Body)
 
 				wg.mu.Lock()
 				delete(inFlight, taskID)
-				result := WorkerResult{TaskID: taskID, BeadID: ts.BeadID, Err: err}
-				wg.results = append(wg.results, result)
+				wr := WorkerResult{TaskID: taskID, BeadID: ts.BeadID, Err: err}
+				if err == nil && taskResult != nil && taskResult.Report != nil {
+					wr.Report = taskResult.Report
+					ts.Report = taskResult.Report
+				}
+				wg.results = append(wg.results, wr)
 
 				if err != nil {
 					failed[taskID] = true
