@@ -2,13 +2,64 @@ package nebula
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/aaronsalm/quasar/internal/beads"
 )
 
+// CheckDependencies verifies that all external dependencies declared in the nebula are met.
+// For requires_beads: each bead must exist and be closed.
+// For requires_nebulae: each named nebula's state file must show all tasks done.
+func CheckDependencies(deps Dependencies, nebulaDir string, client beads.BeadsClient) error {
+	var unmet []string
+
+	for _, beadID := range deps.RequiresBeads {
+		b, err := client.Show(beadID)
+		if err != nil {
+			unmet = append(unmet, fmt.Sprintf("bead %q: %v", beadID, err))
+			continue
+		}
+		if b.Status != "closed" {
+			unmet = append(unmet, fmt.Sprintf("bead %q: status is %q, expected closed", beadID, b.Status))
+		}
+	}
+
+	for _, name := range deps.RequiresNebulae {
+		stateDir := filepath.Join(filepath.Dir(nebulaDir), name)
+		st, err := LoadState(stateDir)
+		if err != nil {
+			unmet = append(unmet, fmt.Sprintf("nebula %q: cannot load state: %v", name, err))
+			continue
+		}
+		if len(st.Tasks) == 0 {
+			unmet = append(unmet, fmt.Sprintf("nebula %q: no tasks found in state", name))
+			continue
+		}
+		for taskID, ts := range st.Tasks {
+			if ts.Status != TaskStatusDone {
+				unmet = append(unmet, fmt.Sprintf("nebula %q: task %q is %s, not done", name, taskID, ts.Status))
+			}
+		}
+	}
+
+	if len(unmet) > 0 {
+		return fmt.Errorf("%w: %s", ErrUnmetDependency, strings.Join(unmet, "; "))
+	}
+	return nil
+}
+
 // BuildPlan diffs the desired nebula state against actual beads state,
 // producing a plan of create/update/skip/close actions.
 func BuildPlan(n *Nebula, state *State, client beads.BeadsClient) (*Plan, error) {
+	// Check external dependencies before building the plan.
+	deps := n.Manifest.Dependencies
+	if len(deps.RequiresBeads) > 0 || len(deps.RequiresNebulae) > 0 {
+		if err := CheckDependencies(deps, n.Dir, client); err != nil {
+			return nil, err
+		}
+	}
+
 	plan := &Plan{
 		NebulaName: n.Manifest.Nebula.Name,
 	}

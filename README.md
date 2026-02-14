@@ -224,6 +224,28 @@ description = "Add authentication to the API"
 type = "task"
 priority = 2
 labels = ["auth"]
+
+[execution]
+max_workers = 2           # Concurrent workers for this nebula
+max_review_cycles = 3     # Default review cycles per task
+max_budget_usd = 5.0      # Default per-task budget
+model = ""                # Model override (empty = use global config)
+
+[context]
+repo = "github.com/example/myproject"
+working_dir = "."
+goals = [
+    "Add authentication to all API endpoints",
+    "Ensure all new code has tests",
+]
+constraints = [
+    "Do not break existing public API contracts",
+    "Use JWT, not session-based auth",
+]
+
+[dependencies]
+requires_beads = []        # Bead IDs that must be closed before apply
+requires_nebulae = []      # Other nebula names that must be fully done
 ```
 
 **Task file (`add-auth.md`):**
@@ -235,10 +257,34 @@ title = "Add JWT authentication"
 type = "feature"
 priority = 1
 depends_on = []
+max_review_cycles = 5     # Override: more iterations for complex work
+max_budget_usd = 10.0     # Override: higher budget
+model = "claude-opus-4-6" # Override: use a specific model
 +++
 
 Implement JWT-based authentication for all API endpoints...
 ```
+
+### Config Cascade (Nebula)
+
+Execution settings are resolved per-task with the following precedence (highest wins, zero/empty values are skipped):
+
+1. **CLI flags** — `--max-workers`, `--max-cycles`, etc.
+2. **Task frontmatter** — `max_review_cycles`, `max_budget_usd`, `model` in `+++` block
+3. **Nebula `[execution]`** — defaults for all tasks in this nebula
+4. **Global config** — `.quasar.yaml` / `QUASAR_*` env
+5. **Built-in defaults** — cycles=3, budget=$5.00
+
+### Nebula Context
+
+The `[context]` section provides project-level information that is automatically injected into coder and reviewer prompts. Goals and constraints help agents understand the project's intent without repeating context in every task file.
+
+### External Dependencies
+
+The `[dependencies]` section declares prerequisites that must be met before `nebula apply` will proceed:
+
+- **`requires_beads`** — list of bead IDs that must be in `closed` status
+- **`requires_nebulae`** — list of other nebula names whose state files must show all tasks done
 
 ### CLI Commands
 

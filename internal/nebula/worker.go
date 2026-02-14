@@ -3,6 +3,7 @@ package nebula
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -15,20 +16,52 @@ type TaskRunnerResult struct {
 
 // TaskRunner is the interface for executing a task (satisfied by loop.Loop).
 type TaskRunner interface {
-	RunExistingTask(ctx context.Context, beadID, taskDescription string) (*TaskRunnerResult, error)
+	RunExistingTask(ctx context.Context, beadID, taskDescription string, exec ResolvedExecution) (*TaskRunnerResult, error)
 	GenerateCheckpoint(ctx context.Context, beadID, taskDescription string) (string, error)
 }
 
 // WorkerGroup executes tasks in dependency order using a pool of workers.
 type WorkerGroup struct {
-	Runner     TaskRunner
-	Nebula     *Nebula
-	State      *State
-	MaxWorkers int
-	Watcher    *Watcher // nil = no in-flight editing
+	Runner       TaskRunner
+	Nebula       *Nebula
+	State        *State
+	MaxWorkers   int
+	Watcher      *Watcher // nil = no in-flight editing
+	GlobalCycles int
+	GlobalBudget float64
+	GlobalModel  string
 
 	mu      sync.Mutex
 	results []WorkerResult
+}
+
+// buildTaskPrompt prepends nebula context (goals, constraints) to the task body.
+func buildTaskPrompt(task *TaskSpec, ctx *Context) string {
+	if ctx == nil || (len(ctx.Goals) == 0 && len(ctx.Constraints) == 0) {
+		return task.Body
+	}
+
+	var sb strings.Builder
+	sb.WriteString("PROJECT CONTEXT:\n")
+	if len(ctx.Goals) > 0 {
+		sb.WriteString("Goals:\n")
+		for _, g := range ctx.Goals {
+			sb.WriteString("- ")
+			sb.WriteString(g)
+			sb.WriteString("\n")
+		}
+	}
+	if len(ctx.Constraints) > 0 {
+		sb.WriteString("Constraints:\n")
+		for _, c := range ctx.Constraints {
+			sb.WriteString("- ")
+			sb.WriteString(c)
+			sb.WriteString("\n")
+		}
+	}
+	sb.WriteString("\nTASK:\n")
+	sb.WriteString(task.Body)
+	return sb.String()
 }
 
 // Run dispatches tasks respecting dependency order.
@@ -144,7 +177,11 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 				_ = SaveState(wg.Nebula.Dir, wg.State)
 				wg.mu.Unlock()
 
-				taskResult, err := wg.Runner.RunExistingTask(ctx, ts.BeadID, task.Body)
+				// Resolve per-task execution config and build enriched prompt.
+			exec := ResolveExecution(wg.GlobalCycles, wg.GlobalBudget, wg.GlobalModel, &wg.Nebula.Manifest.Execution, task)
+			prompt := buildTaskPrompt(task, &wg.Nebula.Manifest.Context)
+
+			taskResult, err := wg.Runner.RunExistingTask(ctx, ts.BeadID, prompt, exec)
 
 				wg.mu.Lock()
 				delete(inFlight, taskID)

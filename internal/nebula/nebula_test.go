@@ -459,7 +459,7 @@ type mockRunner struct {
 	result *TaskRunnerResult
 }
 
-func (m *mockRunner) RunExistingTask(ctx context.Context, beadID, taskDescription string) (*TaskRunnerResult, error) {
+func (m *mockRunner) RunExistingTask(ctx context.Context, beadID, taskDescription string, exec ResolvedExecution) (*TaskRunnerResult, error) {
 	m.calls = append(m.calls, beadID)
 	return m.result, m.err
 }

@@ -181,6 +181,12 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	maxWorkers, _ := cmd.Flags().GetInt("max-workers")
+	maxWorkersChanged := cmd.Flags().Changed("max-workers")
+
+	// If --max-workers was not explicitly set, use nebula execution config if available.
+	if !maxWorkersChanged && n.Manifest.Execution.MaxWorkers > 0 {
+		maxWorkers = n.Manifest.Execution.MaxWorkers
+	}
 
 	// Load custom prompts.
 	coderPrompt := agent.DefaultCoderSystemPrompt
@@ -199,6 +205,10 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	workDir := cfg.WorkDir
+	// Nebula context.working_dir overrides global if set.
+	if n.Manifest.Context.WorkingDir != "" {
+		workDir = n.Manifest.Context.WorkingDir
+	}
 	if workDir == "." || workDir == "" {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -220,10 +230,13 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	wg := &nebula.WorkerGroup{
-		Runner:     &loopAdapter{loop: taskLoop},
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: maxWorkers,
+		Runner:       &loopAdapter{loop: taskLoop},
+		Nebula:       n,
+		State:        state,
+		MaxWorkers:   maxWorkers,
+		GlobalCycles: cfg.MaxReviewCycles,
+		GlobalBudget: cfg.MaxBudgetUSD,
+		GlobalModel:  cfg.Model,
 	}
 
 	watch, _ := cmd.Flags().GetBool("watch")
@@ -258,7 +271,18 @@ type loopAdapter struct {
 	loop *loop.Loop
 }
 
-func (a *loopAdapter) RunExistingTask(ctx context.Context, beadID, taskDescription string) (*nebula.TaskRunnerResult, error) {
+func (a *loopAdapter) RunExistingTask(ctx context.Context, beadID, taskDescription string, exec nebula.ResolvedExecution) (*nebula.TaskRunnerResult, error) {
+	// Apply per-task execution overrides to the loop.
+	if exec.MaxReviewCycles > 0 {
+		a.loop.MaxCycles = exec.MaxReviewCycles
+	}
+	if exec.MaxBudgetUSD > 0 {
+		a.loop.MaxBudgetUSD = exec.MaxBudgetUSD
+	}
+	if exec.Model != "" {
+		a.loop.Model = exec.Model
+	}
+
 	result, err := a.loop.RunExistingTask(ctx, beadID, taskDescription)
 	if err != nil {
 		return nil, err

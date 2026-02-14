@@ -200,6 +200,63 @@ func (p *Printer) NebulaShow(n *nebula.Nebula, state *nebula.State) {
 	}
 	fmt.Fprintf(os.Stderr, "tasks: %d\n\n", len(n.Tasks))
 
+	// Display execution config if any fields are set.
+	exec := n.Manifest.Execution
+	if exec.MaxWorkers > 0 || exec.MaxReviewCycles > 0 || exec.MaxBudgetUSD > 0 || exec.Model != "" {
+		fmt.Fprintf(os.Stderr, bold+"execution:"+reset+"\n")
+		if exec.MaxWorkers > 0 {
+			fmt.Fprintf(os.Stderr, "  max workers:       %d\n", exec.MaxWorkers)
+		}
+		if exec.MaxReviewCycles > 0 {
+			fmt.Fprintf(os.Stderr, "  max review cycles: %d\n", exec.MaxReviewCycles)
+		}
+		if exec.MaxBudgetUSD > 0 {
+			fmt.Fprintf(os.Stderr, "  max budget:        $%.2f\n", exec.MaxBudgetUSD)
+		}
+		if exec.Model != "" {
+			fmt.Fprintf(os.Stderr, "  model:             %s\n", exec.Model)
+		}
+		fmt.Fprintln(os.Stderr)
+	}
+
+	// Display context if any fields are set.
+	ctx := n.Manifest.Context
+	if ctx.Repo != "" || len(ctx.Goals) > 0 || len(ctx.Constraints) > 0 {
+		fmt.Fprintf(os.Stderr, bold+"context:"+reset+"\n")
+		if ctx.Repo != "" {
+			fmt.Fprintf(os.Stderr, "  repo: %s\n", ctx.Repo)
+		}
+		if ctx.WorkingDir != "" {
+			fmt.Fprintf(os.Stderr, "  working dir: %s\n", ctx.WorkingDir)
+		}
+		if len(ctx.Goals) > 0 {
+			fmt.Fprintf(os.Stderr, "  goals:\n")
+			for _, g := range ctx.Goals {
+				fmt.Fprintf(os.Stderr, "    - %s\n", g)
+			}
+		}
+		if len(ctx.Constraints) > 0 {
+			fmt.Fprintf(os.Stderr, "  constraints:\n")
+			for _, c := range ctx.Constraints {
+				fmt.Fprintf(os.Stderr, "    - %s\n", c)
+			}
+		}
+		fmt.Fprintln(os.Stderr)
+	}
+
+	// Display dependencies if any are set.
+	deps := n.Manifest.Dependencies
+	if len(deps.RequiresBeads) > 0 || len(deps.RequiresNebulae) > 0 {
+		fmt.Fprintf(os.Stderr, bold+"dependencies:"+reset+"\n")
+		if len(deps.RequiresBeads) > 0 {
+			fmt.Fprintf(os.Stderr, "  requires beads:   %s\n", strings.Join(deps.RequiresBeads, ", "))
+		}
+		if len(deps.RequiresNebulae) > 0 {
+			fmt.Fprintf(os.Stderr, "  requires nebulae: %s\n", strings.Join(deps.RequiresNebulae, ", "))
+		}
+		fmt.Fprintln(os.Stderr)
+	}
+
 	for _, t := range n.Tasks {
 		ts, hasState := state.Tasks[t.ID]
 		status := "pending"

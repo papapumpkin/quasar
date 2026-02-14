@@ -63,6 +63,63 @@ func Validate(n *Nebula) []ValidationError {
 		}
 	}
 
+	// Validate execution bounds.
+	exec := n.Manifest.Execution
+	if exec.MaxReviewCycles < 0 {
+		errs = append(errs, ValidationError{
+			SourceFile: "nebula.toml",
+			Field:      "execution.max_review_cycles",
+			Err:        fmt.Errorf("execution.max_review_cycles must be >= 0, got %d", exec.MaxReviewCycles),
+		})
+	}
+	if exec.MaxBudgetUSD < 0 {
+		errs = append(errs, ValidationError{
+			SourceFile: "nebula.toml",
+			Field:      "execution.max_budget_usd",
+			Err:        fmt.Errorf("execution.max_budget_usd must be >= 0, got %f", exec.MaxBudgetUSD),
+		})
+	}
+
+	// Validate per-task execution overrides.
+	for _, t := range n.Tasks {
+		if t.MaxReviewCycles < 0 {
+			errs = append(errs, ValidationError{
+				TaskID:     t.ID,
+				SourceFile: t.SourceFile,
+				Field:      "max_review_cycles",
+				Err:        fmt.Errorf("max_review_cycles must be >= 0, got %d", t.MaxReviewCycles),
+			})
+		}
+		if t.MaxBudgetUSD < 0 {
+			errs = append(errs, ValidationError{
+				TaskID:     t.ID,
+				SourceFile: t.SourceFile,
+				Field:      "max_budget_usd",
+				Err:        fmt.Errorf("max_budget_usd must be >= 0, got %f", t.MaxBudgetUSD),
+			})
+		}
+	}
+
+	// Validate dependency entries are non-empty strings.
+	for _, dep := range n.Manifest.Dependencies.RequiresBeads {
+		if dep == "" {
+			errs = append(errs, ValidationError{
+				SourceFile: "nebula.toml",
+				Field:      "dependencies.requires_beads",
+				Err:        fmt.Errorf("requires_beads entries must be non-empty strings"),
+			})
+		}
+	}
+	for _, dep := range n.Manifest.Dependencies.RequiresNebulae {
+		if dep == "" {
+			errs = append(errs, ValidationError{
+				SourceFile: "nebula.toml",
+				Field:      "dependencies.requires_nebulae",
+				Err:        fmt.Errorf("requires_nebulae entries must be non-empty strings"),
+			})
+		}
+	}
+
 	// Cycle detection via topological sort.
 	if len(errs) == 0 {
 		g := NewGraph(n.Tasks)

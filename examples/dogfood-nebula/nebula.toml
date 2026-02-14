@@ -6,3 +6,20 @@ description = "Real improvements to the Quasar codebase, scoped for dogfooding"
 type = "task"
 priority = 2
 labels = ["quasar", "dogfood"]
+
+[execution]
+max_workers = 2
+max_review_cycles = 3
+max_budget_usd = 5.0
+
+[context]
+repo = "github.com/aaronsalm/quasar"
+working_dir = "."
+goals = [
+    "Improve test coverage",
+    "Fix known bugs before v0.2 release",
+]
+constraints = [
+    "Do not modify the public CLI interface",
+    "All new code must have tests",
+]

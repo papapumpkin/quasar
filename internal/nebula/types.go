@@ -4,8 +4,33 @@ import "time"
 
 // Manifest is parsed from nebula.toml in the nebula directory root.
 type Manifest struct {
-	Nebula   NebulaInfo `toml:"nebula"`
-	Defaults Defaults   `toml:"defaults"`
+	Nebula       NebulaInfo   `toml:"nebula"`
+	Defaults     Defaults     `toml:"defaults"`
+	Execution    Execution    `toml:"execution"`
+	Context      Context      `toml:"context"`
+	Dependencies Dependencies `toml:"dependencies"`
+}
+
+// Execution holds default execution parameters for the nebula.
+type Execution struct {
+	MaxWorkers      int     `toml:"max_workers"`
+	MaxReviewCycles int     `toml:"max_review_cycles"`
+	MaxBudgetUSD    float64 `toml:"max_budget_usd"`
+	Model           string  `toml:"model"`
+}
+
+// Context provides project-level information injected into agent prompts.
+type Context struct {
+	Repo        string   `toml:"repo"`
+	WorkingDir  string   `toml:"working_dir"`
+	Goals       []string `toml:"goals"`
+	Constraints []string `toml:"constraints"`
+}
+
+// Dependencies declares external prerequisites that must be met before apply.
+type Dependencies struct {
+	RequiresBeads   []string `toml:"requires_beads"`
+	RequiresNebulae []string `toml:"requires_nebulae"`
 }
 
 type NebulaInfo struct {
@@ -22,15 +47,18 @@ type Defaults struct {
 
 // TaskSpec is parsed from each *.md file's TOML frontmatter.
 type TaskSpec struct {
-	ID         string   `toml:"id"`
-	Title      string   `toml:"title"`
-	Type       string   `toml:"type"`
-	Priority   int      `toml:"priority"`
-	DependsOn  []string `toml:"depends_on"`
-	Labels     []string `toml:"labels"`
-	Assignee   string   `toml:"assignee"`
-	Body       string   // Markdown body after +++ block
-	SourceFile string   // Relative path for error context
+	ID              string   `toml:"id"`
+	Title           string   `toml:"title"`
+	Type            string   `toml:"type"`
+	Priority        int      `toml:"priority"`
+	DependsOn       []string `toml:"depends_on"`
+	Labels          []string `toml:"labels"`
+	Assignee        string   `toml:"assignee"`
+	MaxReviewCycles int      `toml:"max_review_cycles"` // 0 = use default
+	MaxBudgetUSD    float64  `toml:"max_budget_usd"`    // 0 = use default
+	Model           string   `toml:"model"`             // "" = use default
+	Body            string   // Markdown body after +++ block
+	SourceFile      string   // Relative path for error context
 }
 
 // Nebula is the fully parsed representation of a nebula directory.

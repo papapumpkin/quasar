@@ -3,11 +3,12 @@ package nebula
 import "errors"
 
 var (
-	ErrNoManifest    = errors.New("nebula.toml not found in nebula directory")
-	ErrDuplicateID   = errors.New("duplicate task ID")
+	ErrNoManifest      = errors.New("nebula.toml not found in nebula directory")
+	ErrDuplicateID     = errors.New("duplicate task ID")
 	ErrDependencyCycle = errors.New("dependency cycle detected")
-	ErrUnknownDep    = errors.New("task depends on unknown task ID")
-	ErrMissingField  = errors.New("required field missing")
+	ErrUnknownDep      = errors.New("task depends on unknown task ID")
+	ErrMissingField    = errors.New("required field missing")
+	ErrUnmetDependency = errors.New("unmet external dependency")
 )
 
 // ValidationError records a validation problem with source context.
