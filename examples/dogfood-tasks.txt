@@ -1,0 +1,29 @@
+# Quasar Dogfood Tasks
+# ====================
+# Real improvements to the Quasar codebase, each scoped to 1-3 files.
+# Ordered by recommended execution — earlier tasks set up context for later ones.
+#
+# Usage:
+#   Single task:  ./quasar run --auto "$(sed -n '11p' examples/dogfood-tasks.txt)"
+#   Interactive:  ./quasar run   (then paste a line at the prompt)
+#   All tasks:    while IFS= read -r task; do [[ "$task" =~ ^#|^$ ]] && continue; ./quasar run --auto "$task"; done < examples/dogfood-tasks.txt
+
+Fix the truncate() function in internal/loop/loop.go to count runes instead of bytes so that multi-byte UTF-8 characters are not split mid-character.
+
+Replace the magic numbers 2000, 3000, and 80 in internal/loop/loop.go with named constants (e.g. maxOutputLen, maxPromptLen, maxLineWidth) defined at the top of the file.
+
+Add test cases for the truncate() function in internal/loop/loop_test.go covering: empty string input, input exactly at the truncation boundary, and input containing multi-byte UTF-8 characters (e.g. emoji or CJK).
+
+Add a test case in internal/loop/loop_test.go for ParseReviewFindings that verifies correct parsing when both an APPROVED: block and one or more ISSUE: blocks appear in the same review output.
+
+Make config.Load() in internal/config/config.go return an error instead of silently ignoring viper.Unmarshal failures, and update its callers in cmd/ to handle the returned error.
+
+Add unit tests in internal/config/config_test.go for config.Load() that verify default values are applied and that QUASAR_* environment variable overrides take effect.
+
+Add unit tests in internal/ui/ui_test.go for the ui.Printer methods (Header, Step, Success, Warn, Error, Detail) verifying that all output is written to stderr, not stdout.
+
+Log a warning via ui.Printer (instead of silently discarding the error) when Beads.Close() or Beads.AddComment() calls fail inside the main loop in internal/loop/loop.go.
+
+Add a Makefile at the project root with build, test, fmt, and clean targets. Build should produce ./quasar, test should run go test ./..., fmt should run gofmt -w, and clean should remove the binary.
+
+Add verbose logging in internal/beads/beads.go that logs the stdout/stderr results of beads commands (not just the command invocation), gated behind the existing verbose flag.
