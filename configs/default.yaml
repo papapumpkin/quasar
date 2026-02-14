@@ -1,0 +1,27 @@
+# Quasar default configuration
+# Copy to .quasar.yaml in your project root to customize.
+
+# Path to claude CLI binary
+claude_path: claude
+
+# Path to beads CLI binary
+beads_path: beads
+
+# Working directory for agent invocations
+work_dir: "."
+
+# Maximum coder-reviewer cycles before giving up
+max_review_cycles: 3
+
+# Maximum total budget in USD per task
+max_budget_usd: 5.0
+
+# Claude model to use (empty = CLI default)
+model: ""
+
+# Override system prompts (empty = use built-in defaults)
+coder_system_prompt: ""
+reviewer_system_prompt: ""
+
+# Verbose output
+verbose: false
