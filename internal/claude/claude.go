@@ -17,15 +17,15 @@ type Invoker struct {
 	Verbose    bool
 }
 
-func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, workDir string) (agent.InvocationResult, error) {
+// buildArgs constructs the CLI arguments for a claude invocation.
+func buildArgs(a agent.Agent, prompt string) []string {
 	args := []string{
 		"-p", prompt,
 		"--output-format", "json",
 	}
 
-	systemPrompt := a.SystemPrompt
-	if systemPrompt != "" {
-		args = append(args, "--system-prompt", systemPrompt)
+	if a.SystemPrompt != "" {
+		args = append(args, "--system-prompt", a.SystemPrompt)
 	}
 
 	if a.Model != "" {
@@ -35,6 +35,16 @@ func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, wo
 	if a.MaxBudgetUSD > 0 {
 		args = append(args, "--max-budget-usd", fmt.Sprintf("%.2f", a.MaxBudgetUSD))
 	}
+
+	for _, tool := range a.AllowedTools {
+		args = append(args, "--allowedTools", tool)
+	}
+
+	return args
+}
+
+func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, workDir string) (agent.InvocationResult, error) {
+	args := buildArgs(a, prompt)
 
 	cmd := exec.CommandContext(ctx, inv.ClaudePath, args...)
 	cmd.Dir = workDir

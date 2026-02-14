@@ -54,6 +54,7 @@ func (l *Loop) GenerateCheckpoint(ctx context.Context, beadID, taskDescription s
 		SystemPrompt: l.CoderPrompt,
 		Model:        l.Model,
 		MaxBudgetUSD: 0.50,
+		AllowedTools: []string{"Read", "Glob", "Grep"},
 	}
 	prompt := fmt.Sprintf(
 		"You were working on task (bead %s): %s\n\n"+
@@ -105,6 +106,10 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 			SystemPrompt: l.CoderPrompt,
 			Model:        l.Model,
 			MaxBudgetUSD: perAgentBudget,
+			AllowedTools: []string{
+				"Read", "Edit", "Write", "Glob", "Grep",
+				"Bash(go *)", "Bash(git diff *)", "Bash(git status)", "Bash(git log *)",
+			},
 		}
 
 		coderPrompt := l.buildCoderPrompt(state)
@@ -138,6 +143,10 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 			SystemPrompt: l.ReviewPrompt,
 			Model:        l.Model,
 			MaxBudgetUSD: perAgentBudget,
+			AllowedTools: []string{
+				"Read", "Glob", "Grep",
+				"Bash(go vet *)", "Bash(git diff *)", "Bash(git log *)",
+			},
 		}
 
 		reviewerPrompt := l.buildReviewerPrompt(state)

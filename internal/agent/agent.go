@@ -14,6 +14,7 @@ type Agent struct {
 	SystemPrompt string
 	Model        string
 	MaxBudgetUSD float64
+	AllowedTools []string // Tool permissions for this agent (passed as --allowedTools flags)
 }
 
 type InvocationResult struct {
