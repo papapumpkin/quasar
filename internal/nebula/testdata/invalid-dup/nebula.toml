@@ -1,0 +1,6 @@
+[nebula]
+name = "dup-test"
+
+[defaults]
+type = "task"
+priority = 2

@@ -1,0 +1,8 @@
+[nebula]
+name = "test-nebula"
+description = "A test nebula for unit tests"
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["test"]

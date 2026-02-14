@@ -1,0 +1,6 @@
+[nebula]
+name = "missing-fields-test"
+
+[defaults]
+type = "task"
+priority = 2

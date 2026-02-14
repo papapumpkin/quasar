@@ -12,7 +12,7 @@ import (
 
 type Loop struct {
 	Invoker      agent.Invoker
-	Beads        *beads.Client
+	Beads        beads.BeadsClient
 	UI           *ui.Printer
 	MaxCycles    int
 	MaxBudgetUSD float64
@@ -23,13 +23,6 @@ type Loop struct {
 }
 
 func (l *Loop) RunTask(ctx context.Context, taskDescription string) error {
-	// Compute per-agent budget: split total evenly between coder and reviewer
-	// across all cycles.
-	perAgentBudget := 0.0
-	if l.MaxBudgetUSD > 0 {
-		perAgentBudget = l.MaxBudgetUSD / float64(2*l.MaxCycles)
-	}
-
 	// Create task bead.
 	beadID, err := l.Beads.Create(taskDescription, beads.CreateOpts{
 		Type:        "task",
@@ -38,6 +31,22 @@ func (l *Loop) RunTask(ctx context.Context, taskDescription string) error {
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create task bead: %w", err)
+	}
+	return l.runLoop(ctx, beadID, taskDescription)
+}
+
+// RunExistingTask runs the coder-reviewer loop for an already-created bead.
+func (l *Loop) RunExistingTask(ctx context.Context, beadID, taskDescription string) error {
+	return l.runLoop(ctx, beadID, taskDescription)
+}
+
+// runLoop is the core coder-reviewer loop extracted from RunTask.
+func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) error {
+	// Compute per-agent budget: split total evenly between coder and reviewer
+	// across all cycles.
+	perAgentBudget := 0.0
+	if l.MaxBudgetUSD > 0 {
+		perAgentBudget = l.MaxBudgetUSD / float64(2*l.MaxCycles)
 	}
 
 	state := &CycleState{

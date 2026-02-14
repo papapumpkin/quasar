@@ -1,0 +1,6 @@
+[nebula]
+name = "cycle-test"
+
+[defaults]
+type = "task"
+priority = 2

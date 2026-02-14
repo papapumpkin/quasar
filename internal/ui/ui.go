@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/aaronsalm/quasar/internal/nebula"
 )
 
 // ANSI color codes.
@@ -108,5 +110,100 @@ func (p *Printer) ShowStatus(maxCycles int, maxBudget float64, model string) {
 		fmt.Fprintf(os.Stderr, "  model:       %s\n", model)
 	} else {
 		fmt.Fprintf(os.Stderr, "  model:       (default)\n")
+	}
+}
+
+// --- Nebula-specific output ---
+
+func (p *Printer) NebulaValidateResult(name string, taskCount int, errs []nebula.ValidationError) {
+	if len(errs) == 0 {
+		fmt.Fprintf(os.Stderr, green+bold+"✓ nebula %q"+reset+" — %d task(s), no errors\n", name, taskCount)
+		return
+	}
+	fmt.Fprintf(os.Stderr, red+bold+"✗ nebula %q"+reset+" — %d error(s):\n", name, len(errs))
+	for _, e := range errs {
+		fmt.Fprintf(os.Stderr, "  "+red+"• "+reset+"%s\n", e.Error())
+	}
+}
+
+func (p *Printer) NebulaPlan(plan *nebula.Plan) {
+	fmt.Fprintf(os.Stderr, "\n"+bold+cyan+"nebula plan: %s"+reset+"\n", plan.NebulaName)
+	if len(plan.Actions) == 0 {
+		fmt.Fprintln(os.Stderr, dim+"  (no actions)"+reset)
+		return
+	}
+	for _, a := range plan.Actions {
+		var symbol, color string
+		switch a.Type {
+		case nebula.ActionCreate:
+			symbol, color = "+", green
+		case nebula.ActionUpdate:
+			symbol, color = "~", yellow
+		case nebula.ActionSkip:
+			symbol, color = "-", dim
+		case nebula.ActionClose:
+			symbol, color = "×", red
+		}
+		fmt.Fprintf(os.Stderr, "  "+color+symbol+" %-20s"+reset+" %s\n", a.TaskID, a.Reason)
+	}
+	fmt.Fprintln(os.Stderr)
+}
+
+func (p *Printer) NebulaApplyDone(plan *nebula.Plan) {
+	var created, updated, closed, skipped int
+	for _, a := range plan.Actions {
+		switch a.Type {
+		case nebula.ActionCreate:
+			created++
+		case nebula.ActionUpdate:
+			updated++
+		case nebula.ActionClose:
+			closed++
+		case nebula.ActionSkip:
+			skipped++
+		}
+	}
+	fmt.Fprintf(os.Stderr, green+bold+"✓ apply complete"+reset+" — created: %d, updated: %d, closed: %d, skipped: %d\n",
+		created, updated, closed, skipped)
+}
+
+func (p *Printer) NebulaWorkerResults(results []nebula.WorkerResult) {
+	fmt.Fprintln(os.Stderr, "\n"+bold+"worker results:"+reset)
+	for _, r := range results {
+		if r.Err != nil {
+			fmt.Fprintf(os.Stderr, "  "+red+"✗ %s"+reset+" — %v\n", r.TaskID, r.Err)
+		} else {
+			fmt.Fprintf(os.Stderr, "  "+green+"✓ %s"+reset+" (bead %s)\n", r.TaskID, r.BeadID)
+		}
+	}
+}
+
+func (p *Printer) NebulaShow(n *nebula.Nebula, state *nebula.State) {
+	fmt.Fprintf(os.Stderr, bold+cyan+"nebula: %s"+reset+"\n", n.Manifest.Nebula.Name)
+	if n.Manifest.Nebula.Description != "" {
+		fmt.Fprintf(os.Stderr, dim+"%s"+reset+"\n", n.Manifest.Nebula.Description)
+	}
+	fmt.Fprintf(os.Stderr, "tasks: %d\n\n", len(n.Tasks))
+
+	for _, t := range n.Tasks {
+		ts, hasState := state.Tasks[t.ID]
+		status := "pending"
+		beadID := ""
+		if hasState {
+			status = string(ts.Status)
+			beadID = ts.BeadID
+		}
+
+		var deps string
+		if len(t.DependsOn) > 0 {
+			deps = " depends:[" + strings.Join(t.DependsOn, ",") + "]"
+		}
+
+		var beadStr string
+		if beadID != "" {
+			beadStr = " bead:" + beadID
+		}
+
+		fmt.Fprintf(os.Stderr, "  %-20s %-12s %s%s%s\n", t.ID, status, t.Title, deps, beadStr)
 	}
 }
