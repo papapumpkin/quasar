@@ -1,0 +1,30 @@
+[nebula]
+name = "agentmail"
+description = "MCP server for inter-agent communication via Dolt-backed mailbox"
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["agentmail", "mcp"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 3
+max_budget_usd = 8.0
+
+[context]
+repo = "github.com/aaronsalm/quasar"
+working_dir = "."
+goals = [
+    "Enable parallel quasar agents to communicate and coordinate",
+    "Prevent file conflicts between concurrent workers",
+    "Use Dolt as the backing store for versioned message history",
+    "Implement as an MCP server using the official Go SDK",
+]
+constraints = [
+    "Use the official Go MCP SDK (github.com/modelcontextprotocol/go-sdk)",
+    "Use database/sql with go-sql-driver/mysql for Dolt access",
+    "Keep the MCP server as a standalone binary in cmd/agentmail/",
+    "All new code must have tests",
+    "Do not modify existing quasar CLI interface — MCP wiring is additive",
+]

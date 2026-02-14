@@ -1,0 +1,63 @@
+version = 1
+nebula_name = 'quasar-dogfood'
+
+[tasks]
+[tasks.config-error]
+bead_id = 'quasar-27m'
+status = 'failed'
+created_at = 2026-02-14T14:24:19.431086-05:00
+updated_at = 2026-02-14T15:42:32.200576-05:00
+
+[tasks.config-tests]
+bead_id = 'quasar-661'
+status = 'created'
+created_at = 2026-02-14T14:24:19.512655-05:00
+updated_at = 2026-02-14T15:32:42.38821-05:00
+
+[tasks.fix-truncate]
+bead_id = 'quasar-kmc'
+status = 'failed'
+created_at = 2026-02-14T14:24:19.107654-05:00
+updated_at = 2026-02-14T15:36:39.587264-05:00
+
+[tasks.log-bead-errors]
+bead_id = 'quasar-3bq'
+status = 'created'
+created_at = 2026-02-14T14:24:19.708801-05:00
+updated_at = 2026-02-14T15:32:42.388555-05:00
+
+[tasks.makefile]
+bead_id = 'quasar-6jw'
+status = 'failed'
+created_at = 2026-02-14T14:24:19.803113-05:00
+updated_at = 2026-02-14T15:45:06.249437-05:00
+
+[tasks.mixed-review-test]
+bead_id = 'quasar-4xs'
+status = 'failed'
+created_at = 2026-02-14T14:24:19.348932-05:00
+updated_at = 2026-02-14T15:38:05.997646-05:00
+
+[tasks.named-constants]
+bead_id = 'quasar-l9i'
+status = 'created'
+created_at = 2026-02-14T14:24:19.183972-05:00
+updated_at = 2026-02-14T15:32:42.387467-05:00
+
+[tasks.truncate-tests]
+bead_id = 'quasar-9p0'
+status = 'created'
+created_at = 2026-02-14T14:24:19.267428-05:00
+updated_at = 2026-02-14T15:32:42.387658-05:00
+
+[tasks.ui-tests]
+bead_id = 'quasar-5ih'
+status = 'failed'
+created_at = 2026-02-14T14:24:19.600488-05:00
+updated_at = 2026-02-14T15:46:05.39705-05:00
+
+[tasks.verbose-beads]
+bead_id = 'quasar-0df'
+status = 'failed'
+created_at = 2026-02-14T14:24:19.889081-05:00
+updated_at = 2026-02-14T15:41:01.744003-05:00
