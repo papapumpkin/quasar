@@ -285,6 +285,64 @@ func TestState_LoadNonExistent(t *testing.T) {
 	}
 }
 
+func TestState_LoadLegacyTasks(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write a state file using the deprecated [tasks] section.
+	legacyTOML := `version = 1
+nebula_name = "legacy-test"
+
+[tasks.phase-1]
+bead_id = "bead-legacy"
+status = "created"
+created_at = 2025-01-01T00:00:00Z
+updated_at = 2025-01-01T00:00:00Z
+
+[tasks.phase-2]
+bead_id = "bead-legacy-2"
+status = "done"
+created_at = 2025-01-01T00:00:00Z
+updated_at = 2025-01-01T00:00:00Z
+`
+	if err := os.WriteFile(filepath.Join(dir, stateFileName), []byte(legacyTOML), 0644); err != nil {
+		t.Fatalf("failed to write legacy state file: %v", err)
+	}
+
+	state, err := LoadState(dir)
+	if err != nil {
+		t.Fatalf("LoadState with legacy [tasks] failed: %v", err)
+	}
+
+	if state.NebulaName != "legacy-test" {
+		t.Errorf("expected nebula name 'legacy-test', got %q", state.NebulaName)
+	}
+	if len(state.Phases) != 2 {
+		t.Fatalf("expected 2 phases from legacy [tasks], got %d", len(state.Phases))
+	}
+
+	ps1, ok := state.Phases["phase-1"]
+	if !ok {
+		t.Fatal("phase-1 not found in loaded legacy state")
+	}
+	if ps1.BeadID != "bead-legacy" {
+		t.Errorf("expected bead ID 'bead-legacy', got %q", ps1.BeadID)
+	}
+	if ps1.Status != PhaseStatusCreated {
+		t.Errorf("expected status 'created', got %q", ps1.Status)
+	}
+
+	ps2, ok := state.Phases["phase-2"]
+	if !ok {
+		t.Fatal("phase-2 not found in loaded legacy state")
+	}
+	if ps2.BeadID != "bead-legacy-2" {
+		t.Errorf("expected bead ID 'bead-legacy-2', got %q", ps2.BeadID)
+	}
+	if ps2.Status != PhaseStatusDone {
+		t.Errorf("expected status 'done', got %q", ps2.Status)
+	}
+}
+
 // --- Mock beads client for plan/apply tests ---
 
 type mockBeadsClient struct {

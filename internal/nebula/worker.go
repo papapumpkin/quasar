@@ -65,7 +65,7 @@ func buildPhasePrompt(phase *PhaseSpec, ctx *Context) string {
 			sb.WriteString("\n")
 		}
 	}
-	sb.WriteString("\nTASK:\n")
+	sb.WriteString("\nPHASE:\n")
 	sb.WriteString(phase.Body)
 	return sb.String()
 }
