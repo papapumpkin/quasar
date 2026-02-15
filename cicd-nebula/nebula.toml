@@ -1,0 +1,32 @@
+[nebula]
+name = "CI/CD Pipeline"
+description = "GitHub Actions CI/CD pipeline with portable bash scripts, composite actions, and workflows"
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["quasar", "cicd"]
+
+[execution]
+max_workers = 2
+max_review_cycles = 3
+max_budget_usd = 5.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Create portable bash scripts for each CI check (test, vet, lint, fmt, security, build)",
+    "Wrap each script in a GitHub Actions composite action for CI-specific setup",
+    "Compose actions into a CI workflow triggered on push/PR to main",
+    "Create a release workflow triggered by v* tags with cross-compiled binaries",
+    "Scripts must be runnable locally by developers",
+]
+constraints = [
+    "Scripts use POSIX-compatible bash with set -euo pipefail",
+    "Actions use actions/setup-go@v5 with go-version-file: go.mod",
+    "Lint action uses golangci/golangci-lint-action@v6 and existing .golangci.yml",
+    "Build ldflags inject version into cmd.Version (cmd/version.go)",
+    "All scripts assume Go is already in PATH",
+    "github org is papapumpkin",
+]
