@@ -96,6 +96,9 @@ func (wg *WorkerGroup) reportProgress() {
 		case PhaseStatusFailed:
 			closed++
 			completed++
+		case PhaseStatusSkipped:
+			closed++
+			completed++
 		case PhaseStatusInProgress, PhaseStatusCreated:
 			open++
 		case PhaseStatusPending:
@@ -280,9 +283,6 @@ func (wg *WorkerGroup) executePhase(
 			wg.mu.Unlock()
 			return
 		}
-	} else if cp != nil {
-		// Phase failed but we have a checkpoint — render it for visibility.
-		RenderCheckpoint(os.Stderr, cp)
 	}
 
 	wg.recordResult(phaseID, ps, phaseResult, err, done, failed, inFlight)
@@ -433,16 +433,72 @@ func (wg *WorkerGroup) handleStop() {
 	fmt.Fprintf(os.Stderr, "───────────────────────────────────────────────────\n\n")
 }
 
+// globalGateMode returns the effective gate mode from the manifest execution config.
+// If no Gater is configured, returns GateModeTrust.
+func (wg *WorkerGroup) globalGateMode() GateMode {
+	if wg.Gater == nil {
+		return GateModeTrust
+	}
+	if wg.Nebula.Manifest.Execution.Gate != "" {
+		return wg.Nebula.Manifest.Execution.Gate
+	}
+	return GateModeTrust
+}
+
+// gatePlan displays the execution plan and prompts for approval when in approve mode.
+// Returns nil if the plan is approved or the mode doesn't require plan gating.
+// Returns ErrPlanRejected if the user rejects the plan.
+func (wg *WorkerGroup) gatePlan(ctx context.Context, graph *Graph) error {
+	mode := wg.globalGateMode()
+	if mode != GateModeApprove {
+		return nil
+	}
+
+	waves, err := graph.ComputeWaves()
+	if err != nil {
+		return fmt.Errorf("failed to compute execution waves: %w", err)
+	}
+
+	RenderPlan(os.Stderr, wg.Nebula.Manifest.Nebula.Name, waves, len(wg.Nebula.Phases), wg.GlobalBudget, mode)
+
+	// Build a plan-level checkpoint (no diff, just plan metadata).
+	cp := &Checkpoint{
+		PhaseID:    "_plan",
+		PhaseTitle: "Execution Plan",
+		NebulaName: wg.Nebula.Manifest.Nebula.Name,
+	}
+
+	action, err := wg.Gater.Prompt(ctx, cp)
+	if err != nil {
+		return fmt.Errorf("plan gate prompt failed: %w", err)
+	}
+
+	switch action {
+	case GateActionAccept:
+		return nil
+	default:
+		return ErrPlanRejected
+	}
+}
+
 // Run dispatches phases respecting dependency order.
 // It returns after all eligible phases have been executed or the context is canceled.
 // If a STOP file is detected, it returns ErrManualStop after finishing current phases.
 // Gate signals (reject, skip) from phase boundaries also cause graceful termination.
+// In approve mode, the execution plan is displayed and requires human approval before
+// any phases begin executing.
 func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	if wg.MaxWorkers <= 0 {
 		wg.MaxWorkers = 1
 	}
 	phasesByID, done, failed := wg.initPhaseState()
 	graph := NewGraph(wg.Nebula.Phases)
+
+	// Gate the execution plan before dispatching any phases.
+	if err := wg.gatePlan(ctx, graph); err != nil {
+		return nil, err
+	}
+
 	inFlight := make(map[string]bool)
 	sem := make(chan struct{}, wg.MaxWorkers)
 	var wgSync sync.WaitGroup

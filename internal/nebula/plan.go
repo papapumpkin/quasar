@@ -3,6 +3,7 @@ package nebula
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 
@@ -172,4 +173,35 @@ func (p *Plan) HasChanges() bool {
 		}
 	}
 	return false
+}
+
+// RenderPlan writes a formatted execution plan summary to the given writer.
+// It shows phases grouped into dependency waves and key statistics.
+// Output uses ANSI colors consistent with checkpoint rendering.
+func RenderPlan(w io.Writer, nebulaName string, waves []Wave, phaseCount int, budgetUSD float64, gate GateMode) {
+	separator := cpDim + "───────────────────────────────────────────────────" + cpReset
+
+	fmt.Fprintf(w, "\n"+cpBold+cpMagenta+"── Nebula: %s (%s mode) ──"+cpReset+"\n", nebulaName, gate)
+
+	for _, wave := range waves {
+		label := fmt.Sprintf("Wave %d", wave.Number)
+		phases := strings.Join(wave.PhaseIDs, ", ")
+		if len(wave.PhaseIDs) > 1 {
+			fmt.Fprintf(w, "   "+cpDim+"%s (parallel):"+cpReset+" %s\n", label, phases)
+		} else {
+			fmt.Fprintf(w, "   "+cpDim+"%s:"+cpReset+"            %s\n", label, phases)
+		}
+	}
+
+	fmt.Fprintln(w)
+	var stats []string
+	stats = append(stats, fmt.Sprintf("Phases: %d", phaseCount))
+	if budgetUSD > 0 {
+		stats = append(stats, fmt.Sprintf("Budget: $%.2f", budgetUSD))
+	}
+	stats = append(stats, fmt.Sprintf("Gate: %s", gate))
+	fmt.Fprintf(w, "   %s\n", strings.Join(stats, " | "))
+
+	fmt.Fprintln(w, separator)
+	fmt.Fprintf(w, "   [a]pprove  [s]kip (abort)\n   > ")
 }

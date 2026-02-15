@@ -18,6 +18,10 @@ var (
 	ErrUnmetDependency = errors.New("unmet external dependency")
 	// ErrManualStop indicates the user requested a graceful stop via a STOP file.
 	ErrManualStop = errors.New("nebula stopped by user")
+	// ErrInvalidGate indicates an unrecognized gate mode value.
+	ErrInvalidGate = errors.New("invalid gate mode")
+	// ErrPlanRejected indicates the human rejected the execution plan before any phases ran.
+	ErrPlanRejected = errors.New("execution plan rejected")
 )
 
 // ValidationError records a validation problem with source context.

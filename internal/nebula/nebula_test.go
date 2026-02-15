@@ -1013,3 +1013,596 @@ func TestGitExcludePatterns(t *testing.T) {
 		t.Error("expected STOP in exclude patterns")
 	}
 }
+
+// --- Gate mode tests ---
+
+func TestResolveGate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		manifest Execution
+		phase    PhaseSpec
+		want     GateMode
+	}{
+		{
+			name:     "both empty defaults to trust",
+			manifest: Execution{},
+			phase:    PhaseSpec{},
+			want:     GateModeTrust,
+		},
+		{
+			name:     "manifest gate used when phase empty",
+			manifest: Execution{Gate: GateModeReview},
+			phase:    PhaseSpec{},
+			want:     GateModeReview,
+		},
+		{
+			name:     "phase gate overrides manifest",
+			manifest: Execution{Gate: GateModeReview},
+			phase:    PhaseSpec{Gate: GateModeApprove},
+			want:     GateModeApprove,
+		},
+		{
+			name:     "phase gate used when manifest empty",
+			manifest: Execution{},
+			phase:    PhaseSpec{Gate: GateModeWatch},
+			want:     GateModeWatch,
+		},
+		{
+			name:     "trust can be explicitly set on phase",
+			manifest: Execution{Gate: GateModeApprove},
+			phase:    PhaseSpec{Gate: GateModeTrust},
+			want:     GateModeTrust,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := ResolveGate(tt.manifest, tt.phase)
+			if got != tt.want {
+				t.Errorf("ResolveGate() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidate_InvalidManifestGate(t *testing.T) {
+	t.Parallel()
+
+	n := &Nebula{
+		Manifest: Manifest{
+			Nebula:    Info{Name: "test"},
+			Execution: Execution{Gate: "yolo"},
+		},
+		Phases: []PhaseSpec{
+			{ID: "a", Title: "Phase A", Body: "do stuff", SourceFile: "a.md"},
+		},
+	}
+
+	errs := Validate(n)
+	found := false
+	for _, e := range errs {
+		if e.Field == "execution.gate" && strings.Contains(e.Err.Error(), "yolo") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected validation error for invalid manifest gate, got %v", errs)
+	}
+}
+
+func TestValidate_InvalidPhaseGate(t *testing.T) {
+	t.Parallel()
+
+	n := &Nebula{
+		Manifest: Manifest{
+			Nebula: Info{Name: "test"},
+		},
+		Phases: []PhaseSpec{
+			{ID: "a", Title: "Phase A", Gate: "nope", Body: "do stuff", SourceFile: "a.md"},
+		},
+	}
+
+	errs := Validate(n)
+	found := false
+	for _, e := range errs {
+		if e.Field == "gate" && e.PhaseID == "a" && strings.Contains(e.Err.Error(), "nope") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected validation error for invalid phase gate, got %v", errs)
+	}
+}
+
+func TestValidate_ValidGateModes(t *testing.T) {
+	t.Parallel()
+
+	modes := []GateMode{GateModeTrust, GateModeReview, GateModeApprove, GateModeWatch, ""}
+	for _, mode := range modes {
+		t.Run(string(mode), func(t *testing.T) {
+			t.Parallel()
+			n := &Nebula{
+				Manifest: Manifest{
+					Nebula:    Info{Name: "test"},
+					Execution: Execution{Gate: mode},
+				},
+				Phases: []PhaseSpec{
+					{ID: "a", Title: "Phase A", Gate: mode, Body: "do stuff", SourceFile: "a.md"},
+				},
+			}
+
+			errs := Validate(n)
+			for _, e := range errs {
+				if e.Field == "execution.gate" || e.Field == "gate" {
+					t.Errorf("unexpected gate validation error for mode %q: %v", mode, e.Err)
+				}
+			}
+		})
+	}
+}
+
+// --- ComputeWaves tests ---
+
+func TestGraph_ComputeWaves_Linear(t *testing.T) {
+	t.Parallel()
+	phases := []PhaseSpec{
+		{ID: "a"},
+		{ID: "b", DependsOn: []string{"a"}},
+		{ID: "c", DependsOn: []string{"b"}},
+	}
+	g := NewGraph(phases)
+	waves, err := g.ComputeWaves()
+	if err != nil {
+		t.Fatalf("ComputeWaves failed: %v", err)
+	}
+	if len(waves) != 3 {
+		t.Fatalf("expected 3 waves, got %d", len(waves))
+	}
+	if waves[0].PhaseIDs[0] != "a" {
+		t.Errorf("wave 1: expected [a], got %v", waves[0].PhaseIDs)
+	}
+	if waves[1].PhaseIDs[0] != "b" {
+		t.Errorf("wave 2: expected [b], got %v", waves[1].PhaseIDs)
+	}
+	if waves[2].PhaseIDs[0] != "c" {
+		t.Errorf("wave 3: expected [c], got %v", waves[2].PhaseIDs)
+	}
+}
+
+func TestGraph_ComputeWaves_Parallel(t *testing.T) {
+	t.Parallel()
+	phases := []PhaseSpec{
+		{ID: "a"},
+		{ID: "b"},
+		{ID: "c"},
+		{ID: "d", DependsOn: []string{"a", "b", "c"}},
+	}
+	g := NewGraph(phases)
+	waves, err := g.ComputeWaves()
+	if err != nil {
+		t.Fatalf("ComputeWaves failed: %v", err)
+	}
+	if len(waves) != 2 {
+		t.Fatalf("expected 2 waves, got %d", len(waves))
+	}
+	if len(waves[0].PhaseIDs) != 3 {
+		t.Errorf("wave 1: expected 3 phases, got %d", len(waves[0].PhaseIDs))
+	}
+	// PhaseIDs should be sorted within each wave.
+	if waves[0].PhaseIDs[0] != "a" || waves[0].PhaseIDs[1] != "b" || waves[0].PhaseIDs[2] != "c" {
+		t.Errorf("wave 1: expected [a, b, c], got %v", waves[0].PhaseIDs)
+	}
+	if waves[1].PhaseIDs[0] != "d" {
+		t.Errorf("wave 2: expected [d], got %v", waves[1].PhaseIDs)
+	}
+}
+
+func TestGraph_ComputeWaves_Cycle(t *testing.T) {
+	t.Parallel()
+	phases := []PhaseSpec{
+		{ID: "x", DependsOn: []string{"y"}},
+		{ID: "y", DependsOn: []string{"x"}},
+	}
+	g := NewGraph(phases)
+	_, err := g.ComputeWaves()
+	if err == nil {
+		t.Fatal("expected cycle detection error")
+	}
+	if !errors.Is(err, ErrDependencyCycle) {
+		t.Errorf("expected ErrDependencyCycle, got %v", err)
+	}
+}
+
+func TestGraph_ComputeWaves_WaveNumbers(t *testing.T) {
+	t.Parallel()
+	phases := []PhaseSpec{
+		{ID: "a"},
+		{ID: "b", DependsOn: []string{"a"}},
+	}
+	g := NewGraph(phases)
+	waves, err := g.ComputeWaves()
+	if err != nil {
+		t.Fatalf("ComputeWaves failed: %v", err)
+	}
+	for i, w := range waves {
+		if w.Number != i+1 {
+			t.Errorf("wave %d: expected Number=%d, got %d", i, i+1, w.Number)
+		}
+	}
+}
+
+// --- RenderPlan tests ---
+
+func TestRenderPlan_Output(t *testing.T) {
+	t.Parallel()
+	waves := []Wave{
+		{Number: 1, PhaseIDs: []string{"test", "vet", "lint"}},
+		{Number: 2, PhaseIDs: []string{"build"}},
+		{Number: 3, PhaseIDs: []string{"deploy"}},
+	}
+
+	var buf strings.Builder
+	RenderPlan(&buf, "CI Pipeline", waves, 5, 50.0, GateModeApprove)
+
+	output := buf.String()
+	if !strings.Contains(output, "CI Pipeline") {
+		t.Error("expected nebula name in output")
+	}
+	if !strings.Contains(output, "approve mode") {
+		t.Error("expected gate mode in output")
+	}
+	if !strings.Contains(output, "Wave 1 (parallel)") {
+		t.Error("expected parallel label for wave with multiple phases")
+	}
+	if !strings.Contains(output, "test, vet, lint") {
+		t.Error("expected phase IDs in wave 1")
+	}
+	if !strings.Contains(output, "Wave 2:") {
+		t.Error("expected Wave 2 label without parallel")
+	}
+	if !strings.Contains(output, "Phases: 5") {
+		t.Error("expected phase count in output")
+	}
+	if !strings.Contains(output, "Budget: $50.00") {
+		t.Error("expected budget in output")
+	}
+	if !strings.Contains(output, "[a]pprove") {
+		t.Error("expected approve prompt in output")
+	}
+	if !strings.Contains(output, "[s]kip") {
+		t.Error("expected skip prompt in output")
+	}
+}
+
+func TestRenderPlan_NoBudget(t *testing.T) {
+	t.Parallel()
+	waves := []Wave{
+		{Number: 1, PhaseIDs: []string{"a"}},
+	}
+
+	var buf strings.Builder
+	RenderPlan(&buf, "test", waves, 1, 0, GateModeApprove)
+
+	output := buf.String()
+	if strings.Contains(output, "Budget") {
+		t.Error("expected no budget line when budget is 0")
+	}
+}
+
+// --- Plan gate tests ---
+
+// mockGater is a Gater that returns a predetermined action.
+type mockGater struct {
+	action GateAction
+	calls  int
+}
+
+func (g *mockGater) Prompt(ctx context.Context, cp *Checkpoint) (GateAction, error) {
+	g.calls++
+	return g.action, nil
+}
+
+func TestWorkerGroup_ApproveMode_PlanAccepted(t *testing.T) {
+	dir := t.TempDir()
+	n := &Nebula{
+		Dir: dir,
+		Manifest: Manifest{
+			Nebula:    Info{Name: "test"},
+			Execution: Execution{Gate: GateModeApprove},
+		},
+		Phases: []PhaseSpec{
+			{ID: "a", Body: "do stuff"},
+		},
+	}
+
+	state := &State{
+		Version: 1,
+		Phases: map[string]*PhaseState{
+			"a": {BeadID: "bead-a", Status: PhaseStatusCreated},
+		},
+	}
+
+	gater := &mockGater{action: GateActionAccept}
+	runner := &mockRunner{}
+	wg := &WorkerGroup{
+		Runner:     runner,
+		Nebula:     n,
+		State:      state,
+		MaxWorkers: 1,
+		Gater:      gater,
+	}
+
+	_, err := wg.Run(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Gater should have been called at least once (for the plan gate).
+	if gater.calls < 1 {
+		t.Error("expected gater to be called for plan gate")
+	}
+
+	// Phase should have been executed.
+	if len(runner.calls) != 1 {
+		t.Errorf("expected 1 phase execution, got %d", len(runner.calls))
+	}
+}
+
+func TestWorkerGroup_ApproveMode_PlanRejected(t *testing.T) {
+	dir := t.TempDir()
+	n := &Nebula{
+		Dir: dir,
+		Manifest: Manifest{
+			Nebula:    Info{Name: "test"},
+			Execution: Execution{Gate: GateModeApprove},
+		},
+		Phases: []PhaseSpec{
+			{ID: "a", Body: "do stuff"},
+		},
+	}
+
+	state := &State{
+		Version: 1,
+		Phases: map[string]*PhaseState{
+			"a": {BeadID: "bead-a", Status: PhaseStatusCreated},
+		},
+	}
+
+	gater := &mockGater{action: GateActionSkip}
+	runner := &mockRunner{}
+	wg := &WorkerGroup{
+		Runner:     runner,
+		Nebula:     n,
+		State:      state,
+		MaxWorkers: 1,
+		Gater:      gater,
+	}
+
+	_, err := wg.Run(context.Background())
+	if !errors.Is(err, ErrPlanRejected) {
+		t.Fatalf("expected ErrPlanRejected, got %v", err)
+	}
+
+	// No phases should have been executed.
+	if len(runner.calls) != 0 {
+		t.Errorf("expected 0 phase executions after plan rejection, got %d", len(runner.calls))
+	}
+}
+
+func TestWorkerGroup_ReviewMode_NoPlanGate(t *testing.T) {
+	dir := t.TempDir()
+	n := &Nebula{
+		Dir: dir,
+		Manifest: Manifest{
+			Nebula:    Info{Name: "test"},
+			Execution: Execution{Gate: GateModeReview},
+		},
+		Phases: []PhaseSpec{
+			{ID: "a", Body: "do stuff"},
+		},
+	}
+
+	state := &State{
+		Version: 1,
+		Phases: map[string]*PhaseState{
+			"a": {BeadID: "bead-a", Status: PhaseStatusCreated},
+		},
+	}
+
+	// Use a gater that accepts — but we want to verify the plan gate is NOT shown.
+	gater := &mockGater{action: GateActionAccept}
+	runner := &mockRunner{}
+	wg := &WorkerGroup{
+		Runner:     runner,
+		Nebula:     n,
+		State:      state,
+		MaxWorkers: 1,
+		Gater:      gater,
+	}
+
+	_, err := wg.Run(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Phase should have been executed.
+	if len(runner.calls) != 1 {
+		t.Errorf("expected 1 phase execution, got %d", len(runner.calls))
+	}
+
+	// Gater should have been called once for the phase gate (review mode),
+	// but NOT for a plan gate.
+	if gater.calls != 1 {
+		t.Errorf("expected 1 gater call (phase only, no plan), got %d", gater.calls)
+	}
+}
+
+func TestWorkerGroup_TrustMode_NoPlanGate(t *testing.T) {
+	dir := t.TempDir()
+	n := &Nebula{
+		Dir: dir,
+		Manifest: Manifest{
+			Nebula:    Info{Name: "test"},
+			Execution: Execution{Gate: GateModeTrust},
+		},
+		Phases: []PhaseSpec{
+			{ID: "a", Body: "do stuff"},
+		},
+	}
+
+	state := &State{
+		Version: 1,
+		Phases: map[string]*PhaseState{
+			"a": {BeadID: "bead-a", Status: PhaseStatusCreated},
+		},
+	}
+
+	gater := &mockGater{action: GateActionAccept}
+	runner := &mockRunner{}
+	wg := &WorkerGroup{
+		Runner:     runner,
+		Nebula:     n,
+		State:      state,
+		MaxWorkers: 1,
+		Gater:      gater,
+	}
+
+	_, err := wg.Run(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Trust mode: no gater calls at all (neither plan nor phase).
+	if gater.calls != 0 {
+		t.Errorf("expected 0 gater calls in trust mode, got %d", gater.calls)
+	}
+}
+
+func TestWorkerGroup_WatchMode_NoPlanGate(t *testing.T) {
+	dir := t.TempDir()
+	n := &Nebula{
+		Dir: dir,
+		Manifest: Manifest{
+			Nebula:    Info{Name: "test"},
+			Execution: Execution{Gate: GateModeWatch},
+		},
+		Phases: []PhaseSpec{
+			{ID: "a", Body: "do stuff"},
+		},
+	}
+
+	state := &State{
+		Version: 1,
+		Phases: map[string]*PhaseState{
+			"a": {BeadID: "bead-a", Status: PhaseStatusCreated},
+		},
+	}
+
+	gater := &mockGater{action: GateActionAccept}
+	runner := &mockRunner{}
+	wg := &WorkerGroup{
+		Runner:     runner,
+		Nebula:     n,
+		State:      state,
+		MaxWorkers: 1,
+		Gater:      gater,
+	}
+
+	_, err := wg.Run(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Watch mode: no plan gate, but phase gate renders checkpoint without blocking.
+	// Since watch mode doesn't call Prompt, gater.calls should be 0.
+	if gater.calls != 0 {
+		t.Errorf("expected 0 gater calls in watch mode, got %d", gater.calls)
+	}
+}
+
+func TestWorkerGroup_ApproveMode_PlanRejectedWithReject(t *testing.T) {
+	dir := t.TempDir()
+	n := &Nebula{
+		Dir: dir,
+		Manifest: Manifest{
+			Nebula:    Info{Name: "test"},
+			Execution: Execution{Gate: GateModeApprove},
+		},
+		Phases: []PhaseSpec{
+			{ID: "a", Body: "do stuff"},
+		},
+	}
+
+	state := &State{
+		Version: 1,
+		Phases: map[string]*PhaseState{
+			"a": {BeadID: "bead-a", Status: PhaseStatusCreated},
+		},
+	}
+
+	gater := &mockGater{action: GateActionReject}
+	runner := &mockRunner{}
+	wg := &WorkerGroup{
+		Runner:     runner,
+		Nebula:     n,
+		State:      state,
+		MaxWorkers: 1,
+		Gater:      gater,
+	}
+
+	_, err := wg.Run(context.Background())
+	if !errors.Is(err, ErrPlanRejected) {
+		t.Fatalf("expected ErrPlanRejected, got %v", err)
+	}
+
+	// No phases should have been executed.
+	if len(runner.calls) != 0 {
+		t.Errorf("expected 0 phase executions after plan rejection, got %d", len(runner.calls))
+	}
+}
+
+func TestWorkerGroup_NilGater_NoPlanGate(t *testing.T) {
+	dir := t.TempDir()
+	n := &Nebula{
+		Dir: dir,
+		Manifest: Manifest{
+			Nebula:    Info{Name: "test"},
+			Execution: Execution{Gate: GateModeApprove}, // approve mode but no gater
+		},
+		Phases: []PhaseSpec{
+			{ID: "a", Body: "do stuff"},
+		},
+	}
+
+	state := &State{
+		Version: 1,
+		Phases: map[string]*PhaseState{
+			"a": {BeadID: "bead-a", Status: PhaseStatusCreated},
+		},
+	}
+
+	runner := &mockRunner{}
+	wg := &WorkerGroup{
+		Runner:     runner,
+		Nebula:     n,
+		State:      state,
+		MaxWorkers: 1,
+		// Gater is nil — should fall back to trust mode.
+	}
+
+	_, err := wg.Run(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error with nil gater, got %v", err)
+	}
+
+	// Phase should have been executed even with approve mode set,
+	// because nil Gater falls back to trust.
+	if len(runner.calls) != 1 {
+		t.Errorf("expected 1 phase execution with nil gater, got %d", len(runner.calls))
+	}
+}

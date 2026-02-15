@@ -1,6 +1,9 @@
 package nebula
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 // Graph is a dependency DAG over phase IDs.
 type Graph struct {
@@ -91,4 +94,57 @@ func (g *Graph) Ready(done map[string]bool) []string {
 		}
 	}
 	return ready
+}
+
+// Wave represents a group of phases that can execute in parallel
+// because all their dependencies are satisfied by prior waves.
+type Wave struct {
+	Number   int      // 1-based wave number
+	PhaseIDs []string // Phase IDs in this wave
+}
+
+// ComputeWaves groups phase IDs into dependency waves using Kahn's algorithm.
+// Wave 1 contains phases with no dependencies, wave 2 contains phases whose
+// dependencies are all in wave 1, and so on. Returns an error if a cycle is detected.
+func (g *Graph) ComputeWaves() ([]Wave, error) {
+	inDegree := make(map[string]int)
+	for id := range g.adjacency {
+		inDegree[id] = len(g.adjacency[id])
+	}
+
+	// Collect initial wave: nodes with zero in-degree.
+	var current []string
+	for id, deg := range inDegree {
+		if deg == 0 {
+			current = append(current, id)
+		}
+	}
+
+	var waves []Wave
+	visited := 0
+	for len(current) > 0 {
+		sort.Strings(current) // deterministic ordering within each wave
+		waves = append(waves, Wave{
+			Number:   len(waves) + 1,
+			PhaseIDs: current,
+		})
+		visited += len(current)
+
+		var next []string
+		for _, id := range current {
+			for dependent := range g.reverse[id] {
+				inDegree[dependent]--
+				if inDegree[dependent] == 0 {
+					next = append(next, dependent)
+				}
+			}
+		}
+		current = next
+	}
+
+	if visited != len(g.adjacency) {
+		return nil, fmt.Errorf("%w: not all phases could be grouped into waves", ErrDependencyCycle)
+	}
+
+	return waves, nil
 }
