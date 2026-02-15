@@ -32,7 +32,8 @@ type WorkerGroup struct {
 	Nebula       *Nebula
 	State        *State
 	MaxWorkers   int
-	Watcher      *Watcher // nil = no in-flight editing
+	Watcher      *Watcher      // nil = no in-flight editing
+	Committer    GitCommitter   // nil = no phase-boundary commits
 	GlobalCycles int
 	GlobalBudget float64
 	GlobalModel  string
@@ -178,6 +179,23 @@ func (wg *WorkerGroup) executePhase(
 	prompt := buildPhasePrompt(phase, &wg.Nebula.Manifest.Context)
 	phaseResult, err := wg.Runner.RunExistingPhase(ctx, ps.BeadID, prompt, exec)
 
+	// Commit phase changes on success so reviewers see clean diffs.
+	if err == nil && wg.Committer != nil {
+		if commitErr := wg.Committer.CommitPhase(ctx, wg.Nebula.Manifest.Nebula.Name, phaseID); commitErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to commit phase %q: %v\n", phaseID, commitErr)
+		}
+	}
+
+	// Build and render checkpoint after successful phase completion.
+	if err == nil && phaseResult != nil && wg.Committer != nil {
+		cp, cpErr := BuildCheckpoint(ctx, wg.Committer, phaseID, *phaseResult, wg.Nebula)
+		if cpErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to build checkpoint for %q: %v\n", phaseID, cpErr)
+		} else {
+			RenderCheckpoint(os.Stderr, cp)
+		}
+	}
+
 	wg.recordResult(phaseID, ps, phaseResult, err, done, failed, inFlight)
 }
 
@@ -275,9 +293,8 @@ func (wg *WorkerGroup) handlePause() {
 			return
 		}
 		if kind == InterventionStop {
-			// Stop overrides pause; caller will see ErrManualStop on next check.
-			// Re-send stop so the main loop picks it up.
-			wg.Watcher.interventions <- InterventionStop
+			// Stop overrides pause; re-send so the main loop picks it up.
+			wg.Watcher.SendIntervention(InterventionStop)
 			return
 		}
 	}
@@ -293,7 +310,9 @@ func (wg *WorkerGroup) handleStop() {
 
 	// Clean up the STOP file.
 	stopPath := filepath.Join(wg.Nebula.Dir, "STOP")
-	_ = os.Remove(stopPath)
+	if err := os.Remove(stopPath); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to remove STOP file: %v\n", err)
+	}
 
 	fmt.Fprintf(os.Stderr, "\n── Nebula stopped by user ─────────────────────────\n")
 	fmt.Fprintf(os.Stderr, "   State saved. Resume with: quasar nebula apply\n")
