@@ -125,6 +125,15 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 		state.TotalCostUSD += coderResult.CostUSD
 		state.Phase = PhaseCodeComplete
 		l.UI.AgentDone("coder", coderResult.CostUSD, coderResult.DurationMs)
+		l.UI.CycleSummary(ui.CycleSummaryData{
+			Cycle:        cycle,
+			MaxCycles:    l.MaxCycles,
+			Phase:        PhaseCodeComplete.String(),
+			CostUSD:      coderResult.CostUSD,
+			TotalCostUSD: state.TotalCostUSD,
+			MaxBudgetUSD: l.MaxBudgetUSD,
+			DurationMs:   coderResult.DurationMs,
+		})
 
 		// Record coder output as bead comment.
 		_ = l.Beads.AddComment(beadID, fmt.Sprintf("[coder cycle %d]\n%s", cycle, truncate(coderResult.ResultText, 2000)))
@@ -181,7 +190,20 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 		findings := ParseReviewFindings(reviewResult.ResultText)
 		state.Findings = findings
 
-		if isApproved(reviewResult.ResultText) {
+		approved := isApproved(reviewResult.ResultText)
+		l.UI.CycleSummary(ui.CycleSummaryData{
+			Cycle:        cycle,
+			MaxCycles:    l.MaxCycles,
+			Phase:        PhaseReviewComplete.String(),
+			CostUSD:      reviewResult.CostUSD,
+			TotalCostUSD: state.TotalCostUSD,
+			MaxBudgetUSD: l.MaxBudgetUSD,
+			DurationMs:   reviewResult.DurationMs,
+			Approved:     approved,
+			IssueCount:   len(findings),
+		})
+
+		if approved {
 			state.Phase = PhaseApproved
 			l.UI.Approved()
 			report := ParseReviewReport(reviewResult.ResultText)

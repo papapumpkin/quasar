@@ -283,3 +283,58 @@ func (p *Printer) NebulaShow(n *nebula.Nebula, state *nebula.State) {
 		}
 	}
 }
+
+// CycleSummaryData holds data needed to render a cycle summary.
+// This struct lives in the ui package to avoid circular imports with loop.
+type CycleSummaryData struct {
+	Cycle        int
+	MaxCycles    int
+	Phase        string // e.g. "code_complete", "review_complete"
+	CostUSD      float64
+	TotalCostUSD float64
+	MaxBudgetUSD float64
+	DurationMs   int64
+	Approved     bool
+	IssueCount   int
+}
+
+// CycleSummary prints a structured summary after each coder/reviewer phase.
+func (p *Printer) CycleSummary(d CycleSummaryData) {
+	role := "coder"
+	roleColor := blue
+	if d.Phase == "review_complete" {
+		role = "reviewer"
+		roleColor = yellow
+	}
+
+	secs := float64(d.DurationMs) / 1000.0
+
+	fmt.Fprintf(os.Stderr, "\n"+dim+"┌─ "+reset+bold+"Cycle %d/%d"+reset+dim+" ── %s%s%s%s ─────────────────"+reset+"\n",
+		d.Cycle, d.MaxCycles, roleColor, bold, role, reset)
+
+	// Cost line.
+	budgetPct := 0.0
+	if d.MaxBudgetUSD > 0 {
+		budgetPct = (d.TotalCostUSD / d.MaxBudgetUSD) * 100
+	}
+	fmt.Fprintf(os.Stderr, dim+"│"+reset+"  cost: $%.4f this phase, "+bold+"$%.4f"+reset+" total",
+		d.CostUSD, d.TotalCostUSD)
+	if d.MaxBudgetUSD > 0 {
+		fmt.Fprintf(os.Stderr, dim+" (%.0f%% of $%.2f budget)"+reset, budgetPct, d.MaxBudgetUSD)
+	}
+	fmt.Fprintln(os.Stderr)
+
+	// Duration line.
+	fmt.Fprintf(os.Stderr, dim+"│"+reset+"  duration: %.1fs\n", secs)
+
+	// Outcome line (only for reviewer).
+	if d.Phase == "review_complete" {
+		if d.Approved {
+			fmt.Fprintf(os.Stderr, dim+"│"+reset+"  outcome: "+green+bold+"approved"+reset+"\n")
+		} else {
+			fmt.Fprintf(os.Stderr, dim+"│"+reset+"  outcome: "+yellow+"%d issue(s) found"+reset+"\n", d.IssueCount)
+		}
+	}
+
+	fmt.Fprintln(os.Stderr, dim+"└──────────────────────────────────────────"+reset)
+}
