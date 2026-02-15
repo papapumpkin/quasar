@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -231,8 +232,77 @@ func (wg *WorkerGroup) recordFailure(phaseID string, done, failed, inFlight map[
 	wg.mu.Unlock()
 }
 
+// checkInterventions drains the intervention channel and returns the most
+// significant pending intervention (stop > pause > none).
+func (wg *WorkerGroup) checkInterventions() InterventionKind {
+	if wg.Watcher == nil {
+		return ""
+	}
+	var latest InterventionKind
+	for {
+		select {
+		case kind := <-wg.Watcher.Interventions:
+			// Stop takes priority over pause.
+			if kind == InterventionStop {
+				return InterventionStop
+			}
+			if kind == InterventionPause {
+				latest = InterventionPause
+			}
+		default:
+			return latest
+		}
+	}
+}
+
+// handlePause blocks until the PAUSE file is removed from the nebula directory.
+// It watches the Interventions channel for a resume signal.
+func (wg *WorkerGroup) handlePause() {
+	pausePath := filepath.Join(wg.Nebula.Dir, "PAUSE")
+	fmt.Fprintf(os.Stderr, "\n── Nebula paused ──────────────────────────────────\n")
+	fmt.Fprintf(os.Stderr, "   Remove the PAUSE file to continue:\n")
+	fmt.Fprintf(os.Stderr, "   rm %s\n", pausePath)
+	fmt.Fprintf(os.Stderr, "───────────────────────────────────────────────────\n\n")
+
+	// Check if PAUSE was already removed before we started waiting.
+	if _, err := os.Stat(pausePath); os.IsNotExist(err) {
+		return
+	}
+
+	// Block until resume signal or stop signal.
+	for kind := range wg.Watcher.Interventions {
+		if kind == InterventionResume {
+			return
+		}
+		if kind == InterventionStop {
+			// Stop overrides pause; caller will see ErrManualStop on next check.
+			// Re-send stop so the main loop picks it up.
+			wg.Watcher.interventions <- InterventionStop
+			return
+		}
+	}
+}
+
+// handleStop saves state, cleans up the STOP file, and prints a message.
+func (wg *WorkerGroup) handleStop() {
+	wg.mu.Lock()
+	if err := SaveState(wg.Nebula.Dir, wg.State); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to save state: %v\n", err)
+	}
+	wg.mu.Unlock()
+
+	// Clean up the STOP file.
+	stopPath := filepath.Join(wg.Nebula.Dir, "STOP")
+	_ = os.Remove(stopPath)
+
+	fmt.Fprintf(os.Stderr, "\n── Nebula stopped by user ─────────────────────────\n")
+	fmt.Fprintf(os.Stderr, "   State saved. Resume with: quasar nebula apply\n")
+	fmt.Fprintf(os.Stderr, "───────────────────────────────────────────────────\n\n")
+}
+
 // Run dispatches phases respecting dependency order.
 // It returns after all eligible phases have been executed or the context is canceled.
+// If a STOP file is detected, it returns ErrManualStop after finishing current phases.
 func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	if wg.MaxWorkers <= 0 {
 		wg.MaxWorkers = 1
@@ -244,6 +314,26 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	var wgSync sync.WaitGroup
 
 	for ctx.Err() == nil {
+		// Check for interventions between batches.
+		switch wg.checkInterventions() {
+		case InterventionStop:
+			wg.handleStop()
+			wg.mu.Lock()
+			results := wg.results
+			wg.mu.Unlock()
+			return results, ErrManualStop
+		case InterventionPause:
+			wg.handlePause()
+			// After resume, re-check for stop.
+			if wg.checkInterventions() == InterventionStop {
+				wg.handleStop()
+				wg.mu.Lock()
+				results := wg.results
+				wg.mu.Unlock()
+				return results, ErrManualStop
+			}
+		}
+
 		wg.mu.Lock()
 		eligible := filterEligible(graph.Ready(done), inFlight, failed, graph)
 		anyInFlight := len(inFlight) > 0

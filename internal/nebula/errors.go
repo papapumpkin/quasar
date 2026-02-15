@@ -16,6 +16,8 @@ var (
 	ErrMissingField = errors.New("required field missing")
 	// ErrUnmetDependency indicates an external dependency (bead or nebula) is not satisfied.
 	ErrUnmetDependency = errors.New("unmet external dependency")
+	// ErrManualStop indicates the user requested a graceful stop via a STOP file.
+	ErrManualStop = errors.New("nebula stopped by user")
 )
 
 // ValidationError records a validation problem with source context.

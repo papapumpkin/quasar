@@ -24,14 +24,40 @@ type Change struct {
 	File    string // Absolute path
 }
 
+// InterventionKind describes the type of human intervention detected.
+type InterventionKind string
+
+const (
+	// InterventionPause indicates the user created a PAUSE file.
+	InterventionPause InterventionKind = "pause"
+	// InterventionStop indicates the user created a STOP file.
+	InterventionStop InterventionKind = "stop"
+	// InterventionResume indicates the user removed the PAUSE file.
+	InterventionResume InterventionKind = "resume"
+)
+
+// interventionFiles maps filenames to their intervention kinds.
+var interventionFiles = map[string]InterventionKind{
+	"PAUSE": InterventionPause,
+	"STOP":  InterventionStop,
+}
+
+// IsInterventionFile reports whether the given filename is an intervention file (PAUSE or STOP).
+func IsInterventionFile(name string) bool {
+	_, ok := interventionFiles[name]
+	return ok
+}
+
 // Watcher monitors a nebula directory for phase file changes using fsnotify.
 type Watcher struct {
-	Dir     string
-	Changes <-chan Change // Read-only external channel
+	Dir           string
+	Changes       <-chan Change            // Read-only external channel
+	Interventions <-chan InterventionKind  // Read-only intervention channel
 
-	changes chan Change // Internal write channel
-	done    chan struct{}
-	watcher *fsnotify.Watcher
+	changes       chan Change             // Internal write channel
+	interventions chan InterventionKind   // Internal write channel
+	done          chan struct{}
+	watcher       *fsnotify.Watcher
 }
 
 // NewWatcher creates a new watcher for the given nebula directory.
@@ -42,12 +68,15 @@ func NewWatcher(dir string) (*Watcher, error) {
 	}
 
 	ch := make(chan Change, 16)
+	iv := make(chan InterventionKind, 4)
 	w := &Watcher{
-		Dir:     dir,
-		Changes: ch,
-		changes: ch,
-		done:    make(chan struct{}),
-		watcher: fw,
+		Dir:           dir,
+		Changes:       ch,
+		Interventions: iv,
+		changes:       ch,
+		interventions: iv,
+		done:          make(chan struct{}),
+		watcher:       fw,
 	}
 	return w, nil
 }
@@ -67,6 +96,7 @@ func (w *Watcher) Stop() {
 	w.watcher.Close()
 	<-w.done // Wait for loop to exit
 	close(w.changes)
+	close(w.interventions)
 }
 
 func (w *Watcher) loop() {
@@ -87,6 +117,11 @@ func (w *Watcher) loop() {
 					w.emitChange(file)
 				}
 				return
+			}
+
+			// Check for intervention files (PAUSE, STOP).
+			if w.handleIntervention(event) {
+				continue
 			}
 
 			if !w.isPhaseFile(event.Name) {
@@ -116,6 +151,29 @@ func (w *Watcher) loop() {
 			// Ignore watch errors; they're non-fatal.
 		}
 	}
+}
+
+// handleIntervention checks whether the event corresponds to an intervention file
+// (PAUSE or STOP). If so, it emits the appropriate signal and returns true.
+func (w *Watcher) handleIntervention(event fsnotify.Event) bool {
+	base := filepath.Base(event.Name)
+	kind, ok := interventionFiles[base]
+	if !ok {
+		return false
+	}
+
+	if event.Has(fsnotify.Create) || event.Has(fsnotify.Write) {
+		w.interventions <- kind
+		return true
+	}
+
+	if event.Has(fsnotify.Remove) && kind == InterventionPause {
+		// Removing the PAUSE file signals resume.
+		w.interventions <- InterventionResume
+		return true
+	}
+
+	return false
 }
 
 func (w *Watcher) isPhaseFile(name string) bool {

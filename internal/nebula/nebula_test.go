@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/aaronsalm/quasar/internal/beads"
 )
@@ -783,5 +785,231 @@ func TestWorkerGroup_AccumulatesCostAcrossPhases(t *testing.T) {
 	lastCost := progressCosts[len(progressCosts)-1]
 	if lastCost != expectedTotal {
 		t.Errorf("expected final progress cost $%.2f, got $%.2f", expectedTotal, lastCost)
+	}
+}
+
+// --- Intervention tests ---
+
+// newTestWatcher creates a Watcher with pre-built channels for unit testing
+// (no fsnotify needed).
+func newTestWatcher(dir string) *Watcher {
+	ch := make(chan Change, 16)
+	iv := make(chan InterventionKind, 4)
+	return &Watcher{
+		Dir:           dir,
+		Changes:       ch,
+		Interventions: iv,
+		changes:       ch,
+		interventions: iv,
+		done:          make(chan struct{}),
+	}
+}
+
+func TestWorkerGroup_StopIntervention(t *testing.T) {
+	dir := t.TempDir()
+
+	n := &Nebula{
+		Dir:      dir,
+		Manifest: Manifest{Nebula: Info{Name: "test"}},
+		Phases: []PhaseSpec{
+			{ID: "a", Body: "phase a"},
+			{ID: "b", Body: "phase b", DependsOn: []string{"a"}},
+		},
+	}
+
+	state := &State{
+		Version: 1,
+		Phases: map[string]*PhaseState{
+			"a": {BeadID: "bead-a", Status: PhaseStatusCreated},
+			"b": {BeadID: "bead-b", Status: PhaseStatusCreated},
+		},
+	}
+
+	w := newTestWatcher(dir)
+	runner := &mockRunner{}
+
+	wg := &WorkerGroup{
+		Runner:     runner,
+		Nebula:     n,
+		State:      state,
+		MaxWorkers: 1,
+		Watcher:    w,
+	}
+
+	// Create a STOP file so it can be cleaned up.
+	stopFile := filepath.Join(dir, "STOP")
+	if err := os.WriteFile(stopFile, []byte(""), 0644); err != nil {
+		t.Fatalf("failed to create STOP file: %v", err)
+	}
+
+	// Pre-load a stop intervention before Run starts.
+	w.interventions <- InterventionStop
+
+	results, err := wg.Run(context.Background())
+	if !errors.Is(err, ErrManualStop) {
+		t.Fatalf("expected ErrManualStop, got %v", err)
+	}
+
+	// No phases should have been executed (stop came before first batch).
+	if len(results) != 0 {
+		t.Errorf("expected 0 results (stopped before execution), got %d", len(results))
+	}
+
+	// STOP file should be cleaned up.
+	if _, err := os.Stat(stopFile); !os.IsNotExist(err) {
+		t.Error("expected STOP file to be removed after stop")
+	}
+}
+
+func TestWorkerGroup_PauseIntervention(t *testing.T) {
+	dir := t.TempDir()
+
+	n := &Nebula{
+		Dir:      dir,
+		Manifest: Manifest{Nebula: Info{Name: "test"}},
+		Phases: []PhaseSpec{
+			{ID: "a", Body: "phase a"},
+			{ID: "b", Body: "phase b", DependsOn: []string{"a"}},
+		},
+	}
+
+	state := &State{
+		Version: 1,
+		Phases: map[string]*PhaseState{
+			"a": {BeadID: "bead-a", Status: PhaseStatusCreated},
+			"b": {BeadID: "bead-b", Status: PhaseStatusCreated},
+		},
+	}
+
+	w := newTestWatcher(dir)
+	runner := &mockRunner{}
+
+	wg := &WorkerGroup{
+		Runner:     runner,
+		Nebula:     n,
+		State:      state,
+		MaxWorkers: 1,
+		Watcher:    w,
+	}
+
+	// Send pause, but the PAUSE file doesn't exist on disk so handlePause
+	// returns immediately (the stat check finds no file).
+	w.interventions <- InterventionPause
+
+	results, err := wg.Run(context.Background())
+	if err != nil {
+		t.Fatalf("WorkerGroup.Run failed: %v", err)
+	}
+
+	// After resume, all phases should complete.
+	if len(results) != 2 {
+		t.Errorf("expected 2 results after resume, got %d", len(results))
+	}
+}
+
+func TestWorkerGroup_PauseBlocksUntilResume(t *testing.T) {
+	dir := t.TempDir()
+
+	n := &Nebula{
+		Dir:      dir,
+		Manifest: Manifest{Nebula: Info{Name: "test"}},
+		Phases: []PhaseSpec{
+			{ID: "a", Body: "phase a"},
+		},
+	}
+
+	state := &State{
+		Version: 1,
+		Phases: map[string]*PhaseState{
+			"a": {BeadID: "bead-a", Status: PhaseStatusCreated},
+		},
+	}
+
+	w := newTestWatcher(dir)
+	runner := &mockRunner{}
+
+	wg := &WorkerGroup{
+		Runner:     runner,
+		Nebula:     n,
+		State:      state,
+		MaxWorkers: 1,
+		Watcher:    w,
+	}
+
+	// Create the PAUSE file so handlePause actually blocks.
+	pauseFile := filepath.Join(dir, "PAUSE")
+	if err := os.WriteFile(pauseFile, []byte(""), 0644); err != nil {
+		t.Fatalf("failed to create PAUSE file: %v", err)
+	}
+
+	w.interventions <- InterventionPause
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = wg.Run(context.Background())
+		close(done)
+	}()
+
+	// Give the worker time to start and block on pause.
+	time.Sleep(100 * time.Millisecond)
+
+	// Send resume to unblock.
+	w.interventions <- InterventionResume
+
+	select {
+	case <-done:
+		// Success: Run completed after resume.
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for Run to complete after resume")
+	}
+}
+
+func TestIsInterventionFile(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{"PAUSE", true},
+		{"STOP", true},
+		{"pause", false},
+		{"stop", false},
+		{"README.md", false},
+		{"PAUSING", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsInterventionFile(tt.name)
+			if got != tt.want {
+				t.Errorf("IsInterventionFile(%q) = %v, want %v", tt.name, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestInterventionFileNames(t *testing.T) {
+	names := InterventionFileNames()
+	if len(names) != 2 {
+		t.Fatalf("expected 2 intervention file names, got %d", len(names))
+	}
+
+	sort.Strings(names)
+	if names[0] != "PAUSE" || names[1] != "STOP" {
+		t.Errorf("expected [PAUSE, STOP], got %v", names)
+	}
+}
+
+func TestGitExcludePatterns(t *testing.T) {
+	patterns := GitExcludePatterns()
+	if len(patterns) != 2 {
+		t.Fatalf("expected 2 patterns, got %d", len(patterns))
+	}
+
+	joined := strings.Join(patterns, ",")
+	if !strings.Contains(joined, "PAUSE") {
+		t.Error("expected PAUSE in exclude patterns")
+	}
+	if !strings.Contains(joined, "STOP") {
+		t.Error("expected STOP in exclude patterns")
 	}
 }

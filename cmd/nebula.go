@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -243,25 +244,33 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		OnProgress:   printer.NebulaProgressBar,
 	}
 
+	// Always create a watcher for intervention file detection (PAUSE/STOP).
+	// The --watch flag additionally enables phase file change monitoring.
+	w, err := nebula.NewWatcher(dir)
+	if err != nil {
+		printer.Error(fmt.Sprintf("failed to create watcher: %v", err))
+	} else {
+		if err := w.Start(); err != nil {
+			printer.Error(fmt.Sprintf("failed to start watcher: %v", err))
+		} else {
+			wg.Watcher = w
+			defer w.Stop()
+		}
+	}
+
 	watch, _ := cmd.Flags().GetBool("watch")
 	if watch {
-		w, err := nebula.NewWatcher(dir)
-		if err != nil {
-			printer.Error(fmt.Sprintf("failed to create watcher: %v", err))
-		} else {
-			if err := w.Start(); err != nil {
-				printer.Error(fmt.Sprintf("failed to start watcher: %v", err))
-			} else {
-				wg.Watcher = w
-				defer w.Stop()
-				printer.Info("watching for phase file changes...")
-			}
-		}
+		printer.Info("watching for phase file changes...")
 	}
 
 	printer.Info(fmt.Sprintf("starting workers (max %d)...", maxWorkers))
 	results, err := wg.Run(ctx)
 	printer.NebulaProgressBarDone()
+	if errors.Is(err, nebula.ErrManualStop) {
+		// Manual stop is not a failure — return results but no error.
+		printer.NebulaWorkerResults(results)
+		return nil
+	}
 	if err != nil {
 		printer.Error(err.Error())
 		return err
