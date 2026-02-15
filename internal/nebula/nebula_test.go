@@ -558,7 +558,7 @@ func (m *mockRunner) GenerateCheckpoint(ctx context.Context, beadID, taskDescrip
 
 func TestWorkerGroup_ExecutesDependencyOrder(t *testing.T) {
 	n := &Nebula{
-		Dir: t.TempDir(),
+		Dir:      t.TempDir(),
 		Manifest: Manifest{Nebula: NebulaInfo{Name: "test"}},
 		Tasks: []TaskSpec{
 			{ID: "a", Body: "task a"},
@@ -610,7 +610,7 @@ func TestWorkerGroup_ExecutesDependencyOrder(t *testing.T) {
 
 func TestWorkerGroup_FailureBlocksDependents(t *testing.T) {
 	n := &Nebula{
-		Dir: t.TempDir(),
+		Dir:      t.TempDir(),
 		Manifest: Manifest{Nebula: NebulaInfo{Name: "test"}},
 		Tasks: []TaskSpec{
 			{ID: "a", Body: "task a"},

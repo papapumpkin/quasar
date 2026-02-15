@@ -7,8 +7,8 @@ import (
 
 // ReviewReport captures structured metadata from the reviewer's REPORT: block.
 type ReviewReport struct {
-	Satisfaction     string `toml:"satisfaction"`       // high, medium, low
-	Risk             string `toml:"risk"`               // high, medium, low
+	Satisfaction     string `toml:"satisfaction"` // high, medium, low
+	Risk             string `toml:"risk"`         // high, medium, low
 	NeedsHumanReview bool   `toml:"needs_human_review"`
 	Summary          string `toml:"summary"`
 }

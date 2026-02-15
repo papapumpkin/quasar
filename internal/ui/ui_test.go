@@ -38,8 +38,8 @@ func TestCycleSummary_CoderPhase(t *testing.T) {
 	})
 
 	checks := []struct {
-		name    string
-		substr  string
+		name   string
+		substr string
 	}{
 		{"cycle number", "Cycle 1/3"},
 		{"role", "coder"},
@@ -238,10 +238,10 @@ func TestCycleSummary_OutputToStderr(t *testing.T) {
 	p := New()
 	output := captureStderr(func() {
 		p.CycleSummary(CycleSummaryData{
-			Cycle:     1,
-			MaxCycles: 1,
-			Phase:     "code_complete",
-			CostUSD:   0.01,
+			Cycle:      1,
+			MaxCycles:  1,
+			Phase:      "code_complete",
+			CostUSD:    0.01,
 			DurationMs: 1000,
 		})
 	})
