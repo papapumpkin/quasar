@@ -1,0 +1,85 @@
+# golangci-lint configuration for Quasar
+# Keep this minimal — only linters that catch real bugs or enforce
+# conventions already established in CLAUDE.md.
+
+run:
+  timeout: 3m
+
+linters:
+  disable-all: true
+  enable:
+    # Error handling — catch unhandled errors
+    - errcheck
+    # Standard go vet checks
+    - govet
+    # Advanced static analysis (successor to staticcheck, gosimple, stylecheck)
+    - staticcheck
+    # Dead code detection
+    - unused
+    # Formatting consistency
+    - gofmt
+    - goimports
+    # Exported symbol doc comments and general linting
+    - revive
+    # Useless assignment detection
+    - ineffassign
+    # Typos in comments and strings
+    - misspell
+
+linters-settings:
+  revive:
+    rules:
+      # Require comments on exported symbols (reinforces GoDoc conventions)
+      - name: exported
+        severity: warning
+        arguments:
+          - checkPrivateReceivers
+          - disableStutterCheck
+      # Blank imports should have a comment explaining why
+      - name: blank-imports
+      # Context should be the first parameter
+      - name: context-as-argument
+      # Don't use dot imports
+      - name: dot-imports
+      # Error return value should be last
+      - name: error-return
+      # Errors should be named with Err prefix
+      - name: error-naming
+      # Increment/decrement operators should be used
+      - name: increment-decrement
+      # Receiver names should be consistent
+      - name: receiver-naming
+      # Avoid unnecessary else blocks
+      - name: indent-error-flow
+      # Range variable captured in func literal
+      - name: range
+      # Superfluous else
+      - name: superfluous-else
+
+  misspell:
+    locale: US
+
+  goimports:
+    local-prefixes: github.com/aaronsalm/quasar
+
+  staticcheck:
+    checks:
+      - all
+
+issues:
+  # Show all issues, don't limit per-linter
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude-rules:
+    # Test files can be more relaxed about doc comments
+    - path: _test\.go
+      linters:
+        - revive
+      text: "exported:"
+
+    # Test files don't need exported doc comments
+    - path: _test\.go
+      linters:
+        - revive
+      text: "comment on exported"
