@@ -60,3 +60,15 @@ func ResolveExecution(globalCycles int, globalBudget float64, globalModel string
 
 	return r
 }
+
+// ResolveGate returns the effective gate mode for a phase.
+// Precedence: phase override → manifest default → GateModeTrust.
+func ResolveGate(manifest Execution, phase PhaseSpec) GateMode {
+	if phase.Gate != "" {
+		return phase.Gate
+	}
+	if manifest.Gate != "" {
+		return manifest.Gate
+	}
+	return GateModeTrust
+}

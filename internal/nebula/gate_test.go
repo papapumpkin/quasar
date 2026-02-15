@@ -59,6 +59,25 @@ func TestTerminalGater_NonTTY(t *testing.T) {
 	}
 }
 
+func TestTerminalGater_NonTTY_NilCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	in := strings.NewReader("")
+	var out bytes.Buffer
+	g := newTerminalGaterWithIO(in, &out)
+
+	action, err := g.Prompt(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if action != GateActionAccept {
+		t.Errorf("expected accept for non-TTY with nil checkpoint, got %q", action)
+	}
+	if !strings.Contains(out.String(), `"unknown"`) {
+		t.Errorf("expected fallback phase ID 'unknown', got %q", out.String())
+	}
+}
+
 func TestTerminalGater_ContextCancelled(t *testing.T) {
 	t.Parallel()
 
@@ -121,6 +140,59 @@ func TestTerminalGater_TTYInput(t *testing.T) {
 				t.Errorf("got %q, want %q", action, tt.want)
 			}
 		})
+	}
+}
+
+func TestTerminalGater_PlanPrompt(t *testing.T) {
+	t.Parallel()
+
+	in := strings.NewReader("a\n")
+	var out bytes.Buffer
+	ttyTrue := true
+	g := &terminalGater{in: in, out: &out, forceTTY: &ttyTrue}
+
+	cp := &Checkpoint{PhaseID: PlanPhaseID}
+	action, err := g.Prompt(context.Background(), cp)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if action != GateActionAccept {
+		t.Errorf("expected accept, got %q", action)
+	}
+	prompt := out.String()
+	if !strings.Contains(prompt, "[a]pprove") {
+		t.Errorf("plan prompt should show [a]pprove, got %q", prompt)
+	}
+	if strings.Contains(prompt, "[r]eject") {
+		t.Errorf("plan prompt should not show [r]eject, got %q", prompt)
+	}
+	if strings.Contains(prompt, "re[t]ry") {
+		t.Errorf("plan prompt should not show re[t]ry, got %q", prompt)
+	}
+}
+
+func TestTerminalGater_PhasePrompt(t *testing.T) {
+	t.Parallel()
+
+	in := strings.NewReader("a\n")
+	var out bytes.Buffer
+	ttyTrue := true
+	g := &terminalGater{in: in, out: &out, forceTTY: &ttyTrue}
+
+	cp := &Checkpoint{PhaseID: "build"}
+	action, err := g.Prompt(context.Background(), cp)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if action != GateActionAccept {
+		t.Errorf("expected accept, got %q", action)
+	}
+	prompt := out.String()
+	if !strings.Contains(prompt, "[a]ccept") {
+		t.Errorf("phase prompt should show [a]ccept, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "[r]eject") {
+		t.Errorf("phase prompt should show [r]eject, got %q", prompt)
 	}
 }
 

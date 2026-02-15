@@ -99,6 +99,16 @@ func (w *Watcher) Stop() {
 	close(w.interventions)
 }
 
+// SendIntervention enqueues an intervention signal on the internal channel.
+// The send is non-blocking; if the buffer is full the signal is dropped,
+// which is safe because the consumer drains all pending interventions.
+func (w *Watcher) SendIntervention(kind InterventionKind) {
+	select {
+	case w.interventions <- kind:
+	default:
+	}
+}
+
 func (w *Watcher) loop() {
 	defer close(w.done)
 
@@ -163,13 +173,21 @@ func (w *Watcher) handleIntervention(event fsnotify.Event) bool {
 	}
 
 	if event.Has(fsnotify.Create) || event.Has(fsnotify.Write) {
-		w.interventions <- kind
+		// Non-blocking send: drop duplicates if the buffer is full.
+		// The consumer drains the whole channel, so duplicates are harmless.
+		select {
+		case w.interventions <- kind:
+		default:
+		}
 		return true
 	}
 
 	if event.Has(fsnotify.Remove) && kind == InterventionPause {
 		// Removing the PAUSE file signals resume.
-		w.interventions <- InterventionResume
+		select {
+		case w.interventions <- InterventionResume:
+		default:
+		}
 		return true
 	}
 

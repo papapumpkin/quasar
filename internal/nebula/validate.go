@@ -80,6 +80,15 @@ func Validate(n *Nebula) []ValidationError {
 		})
 	}
 
+	// Validate manifest gate mode.
+	if exec.Gate != "" && !ValidGateModes[exec.Gate] {
+		errs = append(errs, ValidationError{
+			SourceFile: "nebula.toml",
+			Field:      "execution.gate",
+			Err:        fmt.Errorf("%w: %q", ErrInvalidGate, exec.Gate),
+		})
+	}
+
 	// Validate per-phase execution overrides.
 	for _, p := range n.Phases {
 		if p.MaxReviewCycles < 0 {
@@ -96,6 +105,14 @@ func Validate(n *Nebula) []ValidationError {
 				SourceFile: p.SourceFile,
 				Field:      "max_budget_usd",
 				Err:        fmt.Errorf("max_budget_usd must be >= 0, got %f", p.MaxBudgetUSD),
+			})
+		}
+		if p.Gate != "" && !ValidGateModes[p.Gate] {
+			errs = append(errs, ValidationError{
+				PhaseID:    p.ID,
+				SourceFile: p.SourceFile,
+				Field:      "gate",
+				Err:        fmt.Errorf("%w: %q", ErrInvalidGate, p.Gate),
 			})
 		}
 	}

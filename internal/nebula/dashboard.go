@@ -28,6 +28,7 @@ type Dashboard struct {
 	State        *State
 	MaxBudgetUSD float64
 	IsTTY        bool // controls whether to use ANSI cursor movement
+	AppendOnly   bool // when true, never use cursor movement (watch mode scroll-back)
 
 	mu        sync.Mutex
 	lineCount int  // number of lines rendered in the last draw (for cursor-up in TTY mode)
@@ -54,22 +55,28 @@ func (d *Dashboard) ProgressCallback() ProgressFunc {
 }
 
 // Render draws the full dashboard. Thread-safe.
+// In AppendOnly mode (watch), always uses plain rendering for scroll-back compatibility.
 func (d *Dashboard) Render() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	if d.IsTTY {
-		d.renderTTY()
-	} else {
+	if d.AppendOnly || !d.IsTTY {
 		d.renderPlain()
+	} else {
+		d.renderTTY()
 	}
 }
 
 // Pause clears the dashboard state so that gate prompts or other output
 // can write to stderr without visual conflicts. Thread-safe.
+// In AppendOnly mode this is a no-op because there is no cursor movement to undo.
 func (d *Dashboard) Pause() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
+	if d.AppendOnly {
+		return
+	}
 
 	if d.IsTTY && d.rendered && d.lineCount > 0 {
 		// Move cursor up and clear each line to remove the dashboard.

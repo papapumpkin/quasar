@@ -20,6 +20,9 @@ const (
 	cpMagenta = "\033[35m"
 )
 
+// PlanPhaseID is the synthetic phase ID used for plan-level gate checkpoints.
+const PlanPhaseID = "_plan"
+
 // Checkpoint captures the outcome of a completed phase for human review.
 type Checkpoint struct {
 	PhaseID       string

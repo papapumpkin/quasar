@@ -41,12 +41,14 @@ type WorkerGroup struct {
 	Watcher      *Watcher      // nil = no in-flight editing
 	Committer    GitCommitter   // nil = no phase-boundary commits
 	Gater        Gater          // nil = trust mode (no prompts)
+	Dashboard    *Dashboard     // nil = no dashboard; used to coordinate watch-mode output
 	GlobalCycles int
 	GlobalBudget float64
 	GlobalModel  string
 	OnProgress   ProgressFunc // optional progress callback
 
 	mu          sync.Mutex
+	outputMu    sync.Mutex   // serializes checkpoint + dashboard output in watch mode
 	results     []WorkerResult
 	gateSignals []gateSignal // collected after each batch
 }
@@ -175,6 +177,10 @@ func (wg *WorkerGroup) resolveGateMode(phase *PhaseSpec) GateMode {
 // applyGate handles the gate check after a phase completes successfully.
 // It resolves the gate mode, optionally renders the checkpoint, and prompts the
 // human if required. Returns the GateAction taken.
+//
+// In watch mode, the output mutex serializes checkpoint rendering across concurrent
+// goroutines so that checkpoint blocks from parallel phases never interleave.
+// The dashboard is paused during checkpoint rendering and resumed afterward.
 func (wg *WorkerGroup) applyGate(ctx context.Context, phase *PhaseSpec, cp *Checkpoint) GateAction {
 	mode := wg.resolveGateMode(phase)
 
@@ -184,8 +190,17 @@ func (wg *WorkerGroup) applyGate(ctx context.Context, phase *PhaseSpec, cp *Chec
 
 	case GateModeWatch:
 		// Render checkpoint but don't block.
+		// Serialize output so concurrent phase completions don't interleave.
 		if cp != nil {
+			wg.outputMu.Lock()
+			if wg.Dashboard != nil {
+				wg.Dashboard.Pause()
+			}
 			RenderCheckpoint(os.Stderr, cp)
+			if wg.Dashboard != nil {
+				wg.Dashboard.Resume()
+			}
+			wg.outputMu.Unlock()
 		}
 		return GateActionAccept
 
@@ -463,7 +478,7 @@ func (wg *WorkerGroup) gatePlan(ctx context.Context, graph *Graph) error {
 
 	// Build a plan-level checkpoint (no diff, just plan metadata).
 	cp := &Checkpoint{
-		PhaseID:    "_plan",
+		PhaseID:    PlanPhaseID,
 		PhaseTitle: "Execution Plan",
 		NebulaName: wg.Nebula.Manifest.Nebula.Name,
 	}

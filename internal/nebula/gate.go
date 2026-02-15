@@ -75,11 +75,19 @@ func (g *terminalGater) isTTYInput() bool {
 func (g *terminalGater) Prompt(ctx context.Context, cp *Checkpoint) (GateAction, error) {
 	// Non-TTY: auto-accept with warning.
 	if !g.isTTYInput() {
-		fmt.Fprintf(g.out, "warning: non-TTY stdin, auto-accepting gate for phase %q\n", cp.PhaseID)
+		phaseID := "unknown"
+		if cp != nil {
+			phaseID = cp.PhaseID
+		}
+		fmt.Fprintf(g.out, "warning: non-TTY stdin, auto-accepting gate for phase %q\n", phaseID)
 		return GateActionAccept, nil
 	}
 
-	fmt.Fprintf(g.out, "\n   [a]ccept  [r]eject  re[t]ry  [s]kip\n   > ")
+	if cp != nil && cp.PhaseID == PlanPhaseID {
+		fmt.Fprintf(g.out, "\n   [a]pprove  [s]kip (abort)\n   > ")
+	} else {
+		fmt.Fprintf(g.out, "\n   [a]ccept  [r]eject  re[t]ry  [s]kip\n   > ")
+	}
 
 	// Read input in a goroutine so we can respect context cancellation.
 	type result struct {

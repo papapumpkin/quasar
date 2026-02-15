@@ -1,6 +1,7 @@
 package nebula
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -1271,11 +1272,9 @@ func TestRenderPlan_Output(t *testing.T) {
 	if !strings.Contains(output, "Budget: $50.00") {
 		t.Error("expected budget in output")
 	}
-	if !strings.Contains(output, "[a]pprove") {
-		t.Error("expected approve prompt in output")
-	}
-	if !strings.Contains(output, "[s]kip") {
-		t.Error("expected skip prompt in output")
+	// RenderPlan should NOT include prompt options; those come from Gater.Prompt.
+	if strings.Contains(output, "[a]pprove") {
+		t.Error("RenderPlan should not include prompt options")
 	}
 }
 
@@ -1522,6 +1521,136 @@ func TestWorkerGroup_WatchMode_NoPlanGate(t *testing.T) {
 	// Since watch mode doesn't call Prompt, gater.calls should be 0.
 	if gater.calls != 0 {
 		t.Errorf("expected 0 gater calls in watch mode, got %d", gater.calls)
+	}
+}
+
+func TestWorkerGroup_WatchMode_RendersCheckpointWithoutBlocking(t *testing.T) {
+	dir := t.TempDir()
+	n := &Nebula{
+		Dir: dir,
+		Manifest: Manifest{
+			Nebula:    Info{Name: "watch-render-test"},
+			Execution: Execution{Gate: GateModeWatch},
+		},
+		Phases: []PhaseSpec{
+			{ID: "a", Body: "do stuff", Title: "Phase A"},
+			{ID: "b", Body: "do more", Title: "Phase B"},
+		},
+	}
+
+	state := &State{
+		Version: 1,
+		Phases: map[string]*PhaseState{
+			"a": {BeadID: "bead-a", Status: PhaseStatusCreated},
+			"b": {BeadID: "bead-b", Status: PhaseStatusCreated},
+		},
+	}
+
+	runner := &mockRunner{
+		result: &PhaseRunnerResult{
+			TotalCostUSD: 0.10,
+			CyclesUsed:   1,
+			Report:       &ReviewReport{Summary: "looks good"},
+		},
+	}
+	committer := &mockGitCommitter{
+		diffLastCommit:     "diff --git a/main.go b/main.go\n",
+		diffStatLastCommit: " main.go | 5 +++++\n 1 file changed, 5 insertions(+)\n",
+	}
+	gater := &mockGater{action: GateActionAccept}
+
+	var dashBuf bytes.Buffer
+	dashboard := NewDashboard(&dashBuf, n, state, 10.0, true)
+	dashboard.AppendOnly = true
+
+	wg := &WorkerGroup{
+		Runner:     runner,
+		Nebula:     n,
+		State:      state,
+		MaxWorkers: 2,
+		Gater:      gater,
+		Dashboard:  dashboard,
+		Committer:  committer,
+		OnProgress: dashboard.ProgressCallback(),
+	}
+
+	results, err := wg.Run(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Both phases should complete.
+	if len(results) != 2 {
+		t.Errorf("expected 2 results, got %d", len(results))
+	}
+
+	// Watch mode should not have called Prompt.
+	if gater.calls != 0 {
+		t.Errorf("expected 0 gater calls in watch mode, got %d", gater.calls)
+	}
+
+	// Both phases should be done.
+	for _, r := range results {
+		if r.Err != nil {
+			t.Errorf("phase %q failed: %v", r.PhaseID, r.Err)
+		}
+	}
+}
+
+func TestWorkerGroup_WatchMode_DashboardPausedDuringCheckpoint(t *testing.T) {
+	dir := t.TempDir()
+	n := &Nebula{
+		Dir: dir,
+		Manifest: Manifest{
+			Nebula:    Info{Name: "dashboard-pause-test"},
+			Execution: Execution{Gate: GateModeWatch},
+		},
+		Phases: []PhaseSpec{
+			{ID: "a", Body: "do stuff"},
+		},
+	}
+
+	state := &State{
+		Version: 1,
+		Phases: map[string]*PhaseState{
+			"a": {BeadID: "bead-a", Status: PhaseStatusCreated},
+		},
+	}
+
+	runner := &mockRunner{
+		result: &PhaseRunnerResult{
+			TotalCostUSD: 0.05,
+			CyclesUsed:   1,
+		},
+	}
+	committer := &mockGitCommitter{
+		diffLastCommit:     "diff --git a/test.go b/test.go\n",
+		diffStatLastCommit: " test.go | 3 +++\n 1 file changed, 3 insertions(+)\n",
+	}
+
+	var dashBuf bytes.Buffer
+	dashboard := NewDashboard(&dashBuf, n, state, 5.0, true)
+	dashboard.AppendOnly = true
+
+	wg := &WorkerGroup{
+		Runner:     runner,
+		Nebula:     n,
+		State:      state,
+		MaxWorkers: 1,
+		Gater:      &mockGater{action: GateActionAccept},
+		Dashboard:  dashboard,
+		Committer:  committer,
+		OnProgress: dashboard.ProgressCallback(),
+	}
+
+	_, err := wg.Run(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Dashboard should have produced output (append-only plain lines).
+	if dashBuf.Len() == 0 {
+		t.Error("expected dashboard output in watch mode")
 	}
 }
 

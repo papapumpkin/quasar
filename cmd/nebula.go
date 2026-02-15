@@ -240,11 +240,18 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 	dashboard := nebula.NewDashboard(os.Stderr, n, state, cfg.MaxBudgetUSD, isTTY)
 
+	// Enable append-only dashboard when the global gate mode is watch.
+	// This avoids cursor movement so checkpoint blocks remain visible in scroll-back.
+	if n.Manifest.Execution.Gate == nebula.GateModeWatch {
+		dashboard.AppendOnly = true
+	}
+
 	wg := &nebula.WorkerGroup{
 		Runner:       &loopAdapter{loop: taskLoop},
 		Nebula:       n,
 		State:        state,
 		MaxWorkers:   maxWorkers,
+		Dashboard:    dashboard,
 		GlobalCycles: cfg.MaxReviewCycles,
 		GlobalBudget: cfg.MaxBudgetUSD,
 		GlobalModel:  cfg.Model,

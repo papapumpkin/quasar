@@ -203,5 +203,4 @@ func RenderPlan(w io.Writer, nebulaName string, waves []Wave, phaseCount int, bu
 	fmt.Fprintf(w, "   %s\n", strings.Join(stats, " | "))
 
 	fmt.Fprintln(w, separator)
-	fmt.Fprintf(w, "   [a]pprove  [s]kip (abort)\n   > ")
 }

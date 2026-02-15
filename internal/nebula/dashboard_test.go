@@ -277,6 +277,103 @@ func TestDashboard_BlockedShowsDeps(t *testing.T) {
 	}
 }
 
+func TestDashboard_AppendOnly_UsesPlainEvenWithTTY(t *testing.T) {
+	t.Parallel()
+
+	n := newTestNebula("watch-test", []PhaseSpec{
+		{ID: "a"},
+		{ID: "b"},
+	})
+
+	state := newTestState(map[string]*PhaseState{
+		"a": {BeadID: "b1", Status: PhaseStatusDone},
+		"b": {BeadID: "b2", Status: PhaseStatusInProgress},
+	}, 1.50)
+
+	var buf bytes.Buffer
+	d := NewDashboard(&buf, n, state, 10.0, true)
+	d.AppendOnly = true
+	d.Render()
+
+	output := buf.String()
+
+	// AppendOnly mode should produce plain output even with IsTTY=true.
+	if !strings.Contains(output, "1/2 done") {
+		t.Errorf("expected plain '1/2 done' in append-only output, got: %s", output)
+	}
+	if !strings.Contains(output, "1 active") {
+		t.Errorf("expected '1 active' in append-only output, got: %s", output)
+	}
+}
+
+func TestDashboard_AppendOnly_PauseIsNoop(t *testing.T) {
+	t.Parallel()
+
+	n := newTestNebula("pause-noop-test", []PhaseSpec{
+		{ID: "a"},
+	})
+
+	state := newTestState(map[string]*PhaseState{
+		"a": {BeadID: "b1", Status: PhaseStatusInProgress},
+	}, 0)
+
+	var buf bytes.Buffer
+	d := NewDashboard(&buf, n, state, 0, true)
+	d.AppendOnly = true
+
+	d.Render()
+	beforePause := buf.Len()
+	d.Pause()
+	afterPause := buf.Len()
+
+	// Pause should be a no-op in append-only mode — no clear-line sequences written.
+	if beforePause != afterPause {
+		t.Errorf("expected Pause to be no-op in append-only mode, but %d bytes written before and %d after",
+			beforePause, afterPause)
+	}
+}
+
+func TestDashboard_AppendOnly_NoCursorMovement(t *testing.T) {
+	t.Parallel()
+
+	n := newTestNebula("no-cursor-test", []PhaseSpec{
+		{ID: "a"},
+	})
+
+	state := newTestState(map[string]*PhaseState{
+		"a": {BeadID: "b1", Status: PhaseStatusPending},
+	}, 0)
+
+	var buf bytes.Buffer
+	d := NewDashboard(&buf, n, state, 0, true)
+	d.AppendOnly = true
+
+	// Two renders should NOT produce cursor-up sequences.
+	d.Render()
+	state.Phases["a"].Status = PhaseStatusDone
+	d.Render()
+
+	output := buf.String()
+	// Cursor-up is \033[<N>A — should not appear in append-only mode.
+	if strings.Contains(output, "\033[") && strings.Contains(output, "A") {
+		// Check more specifically for the cursor-up pattern.
+		for i := 0; i < len(output)-3; i++ {
+			if output[i] == '\033' && output[i+1] == '[' {
+				// Look for a digit followed by 'A'.
+				for j := i + 2; j < len(output); j++ {
+					if output[j] == 'A' {
+						t.Errorf("found cursor-up sequence in append-only mode output")
+						break
+					}
+					if output[j] < '0' || output[j] > '9' {
+						break
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestStatusIcon(t *testing.T) {
 	t.Parallel()
 
