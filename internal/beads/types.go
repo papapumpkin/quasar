@@ -2,9 +2,9 @@ package beads
 
 import "context"
 
-// BeadsClient defines the interface for interacting with beads.
+// Client defines the interface for interacting with beads.
 // *Client satisfies this interface.
-type BeadsClient interface {
+type Client interface {
 	Create(ctx context.Context, title string, opts CreateOpts) (string, error)
 	Show(ctx context.Context, id string) (*Bead, error)
 	Update(ctx context.Context, id string, opts UpdateOpts) error

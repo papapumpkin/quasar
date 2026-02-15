@@ -10,13 +10,13 @@ import (
 	"strings"
 )
 
-// Client implements BeadsClient by shelling out to the beads CLI.
-type Client struct {
+// CLI implements Client by shelling out to the beads CLI.
+type CLI struct {
 	BeadsPath string
 	Verbose   bool
 }
 
-func (c *Client) run(ctx context.Context, args ...string) (string, error) {
+func (c *CLI) run(ctx context.Context, args ...string) (string, error) {
 	if c.Verbose {
 		fmt.Fprintf(os.Stderr, "[beads] running: %s %s\n", c.BeadsPath, strings.Join(args, " "))
 	}
@@ -49,7 +49,7 @@ func buildQuickCreateArgs(title string, opts CreateOpts) []string {
 }
 
 // QuickCreate creates a bead using the quick-create command and returns its ID.
-func (c *Client) QuickCreate(ctx context.Context, title string, opts CreateOpts) (string, error) {
+func (c *CLI) QuickCreate(ctx context.Context, title string, opts CreateOpts) (string, error) {
 	args := buildQuickCreateArgs(title, opts)
 
 	out, err := c.run(ctx, args...)
@@ -86,7 +86,7 @@ func buildCreateArgs(title string, opts CreateOpts) []string {
 }
 
 // Create creates a bead with full options and returns its ID.
-func (c *Client) Create(ctx context.Context, title string, opts CreateOpts) (string, error) {
+func (c *CLI) Create(ctx context.Context, title string, opts CreateOpts) (string, error) {
 	args := buildCreateArgs(title, opts)
 
 	out, err := c.run(ctx, args...)
@@ -102,7 +102,7 @@ func buildShowArgs(id string) []string {
 }
 
 // Show retrieves a bead by ID.
-func (c *Client) Show(ctx context.Context, id string) (*Bead, error) {
+func (c *CLI) Show(ctx context.Context, id string) (*Bead, error) {
 	out, err := c.run(ctx, buildShowArgs(id)...)
 	if err != nil {
 		return nil, err
@@ -132,7 +132,7 @@ func buildUpdateArgs(id string, opts UpdateOpts) []string {
 }
 
 // Update modifies a bead's status and/or assignee.
-func (c *Client) Update(ctx context.Context, id string, opts UpdateOpts) error {
+func (c *CLI) Update(ctx context.Context, id string, opts UpdateOpts) error {
 	_, err := c.run(ctx, buildUpdateArgs(id, opts)...)
 	return err
 }
@@ -148,7 +148,7 @@ func buildCloseArgs(id string, reason string) []string {
 }
 
 // Close closes a bead with an optional reason.
-func (c *Client) Close(ctx context.Context, id string, reason string) error {
+func (c *CLI) Close(ctx context.Context, id string, reason string) error {
 	_, err := c.run(ctx, buildCloseArgs(id, reason)...)
 	return err
 }
@@ -159,13 +159,13 @@ func buildAddCommentArgs(id string, body string) []string {
 }
 
 // AddComment adds a comment to a bead.
-func (c *Client) AddComment(ctx context.Context, id string, body string) error {
+func (c *CLI) AddComment(ctx context.Context, id string, body string) error {
 	_, err := c.run(ctx, buildAddCommentArgs(id, body)...)
 	return err
 }
 
 // Validate checks that the beads CLI binary is available.
-func (c *Client) Validate() error {
+func (c *CLI) Validate() error {
 	cmd := exec.Command(c.BeadsPath, "--version")
 	out, err := cmd.Output()
 	if err != nil {

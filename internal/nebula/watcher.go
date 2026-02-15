@@ -17,8 +17,8 @@ const (
 	ChangeAdded                      // New .md file appeared
 )
 
-// NebulaChange represents a detected change in the nebula directory.
-type NebulaChange struct {
+// Change represents a detected change in the nebula directory.
+type Change struct {
 	Kind   ChangeKind
 	TaskID string // Derived from parsing the file (or empty on removal)
 	File   string // Absolute path
@@ -27,9 +27,9 @@ type NebulaChange struct {
 // Watcher monitors a nebula directory for task file changes using fsnotify.
 type Watcher struct {
 	Dir     string
-	Changes <-chan NebulaChange // Read-only external channel
+	Changes <-chan Change // Read-only external channel
 
-	changes chan NebulaChange // Internal write channel
+	changes chan Change // Internal write channel
 	done    chan struct{}
 	watcher *fsnotify.Watcher
 }
@@ -41,7 +41,7 @@ func NewWatcher(dir string) (*Watcher, error) {
 		return nil, err
 	}
 
-	ch := make(chan NebulaChange, 16)
+	ch := make(chan Change, 16)
 	w := &Watcher{
 		Dir:     dir,
 		Changes: ch,
@@ -135,14 +135,14 @@ func (w *Watcher) emitChange(file string) {
 	task, err := parseTaskFile(file, Defaults{})
 	if err != nil {
 		// File may have been removed.
-		w.changes <- NebulaChange{
+		w.changes <- Change{
 			Kind: ChangeRemoved,
 			File: file,
 		}
 		return
 	}
 
-	w.changes <- NebulaChange{
+	w.changes <- Change{
 		Kind:   ChangeModified,
 		TaskID: task.ID,
 		File:   file,

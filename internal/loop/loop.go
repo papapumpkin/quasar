@@ -13,7 +13,7 @@ import (
 // Loop orchestrates the coder-reviewer cycle for a single task.
 type Loop struct {
 	Invoker      agent.Invoker
-	Beads        beads.BeadsClient
+	Beads        beads.Client
 	UI           ui.UI
 	MaxCycles    int
 	MaxBudgetUSD float64

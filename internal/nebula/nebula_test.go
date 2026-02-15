@@ -373,7 +373,7 @@ func TestBuildPlan_NewNebula(t *testing.T) {
 
 func TestBuildPlan_LockedTask(t *testing.T) {
 	n := &Nebula{
-		Manifest: Manifest{Nebula: NebulaInfo{Name: "test"}},
+		Manifest: Manifest{Nebula: Info{Name: "test"}},
 		Tasks:    []TaskSpec{{ID: "locked", Title: "A locked task"}},
 	}
 
@@ -401,7 +401,7 @@ func TestBuildPlan_LockedTask(t *testing.T) {
 
 func TestBuildPlan_FailedTask(t *testing.T) {
 	n := &Nebula{
-		Manifest: Manifest{Nebula: NebulaInfo{Name: "test"}},
+		Manifest: Manifest{Nebula: Info{Name: "test"}},
 		Tasks:    []TaskSpec{{ID: "fail-task", Title: "A failed task"}},
 	}
 
@@ -559,7 +559,7 @@ func (m *mockRunner) GenerateCheckpoint(ctx context.Context, beadID, taskDescrip
 func TestWorkerGroup_ExecutesDependencyOrder(t *testing.T) {
 	n := &Nebula{
 		Dir:      t.TempDir(),
-		Manifest: Manifest{Nebula: NebulaInfo{Name: "test"}},
+		Manifest: Manifest{Nebula: Info{Name: "test"}},
 		Tasks: []TaskSpec{
 			{ID: "a", Body: "task a"},
 			{ID: "b", Body: "task b", DependsOn: []string{"a"}},
@@ -611,7 +611,7 @@ func TestWorkerGroup_ExecutesDependencyOrder(t *testing.T) {
 func TestWorkerGroup_FailureBlocksDependents(t *testing.T) {
 	n := &Nebula{
 		Dir:      t.TempDir(),
-		Manifest: Manifest{Nebula: NebulaInfo{Name: "test"}},
+		Manifest: Manifest{Nebula: Info{Name: "test"}},
 		Tasks: []TaskSpec{
 			{ID: "a", Body: "task a"},
 			{ID: "b", Body: "task b", DependsOn: []string{"a"}},
@@ -662,7 +662,7 @@ func TestWorkerGroup_FailureBlocksDependents(t *testing.T) {
 func TestWorkerGroup_AccumulatesCostAcrossTasks(t *testing.T) {
 	n := &Nebula{
 		Dir:      t.TempDir(),
-		Manifest: Manifest{Nebula: NebulaInfo{Name: "test"}},
+		Manifest: Manifest{Nebula: Info{Name: "test"}},
 		Tasks: []TaskSpec{
 			{ID: "a", Body: "task a"},
 			{ID: "b", Body: "task b"},

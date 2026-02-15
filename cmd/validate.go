@@ -26,7 +26,7 @@ var validateCmd = &cobra.Command{
 			fmt.Fprintln(os.Stderr, "✓ claude CLI found")
 		}
 
-		beadsClient := &beads.Client{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
+		beadsClient := &beads.CLI{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
 		if err := beadsClient.Validate(); err != nil {
 			fmt.Fprintf(os.Stderr, "✗ beads: %v\n", err)
 			ok = false

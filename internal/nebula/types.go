@@ -4,7 +4,7 @@ import "time"
 
 // Manifest is parsed from nebula.toml in the nebula directory root.
 type Manifest struct {
-	Nebula       NebulaInfo   `toml:"nebula"`
+	Nebula       Info         `toml:"nebula"`
 	Defaults     Defaults     `toml:"defaults"`
 	Execution    Execution    `toml:"execution"`
 	Context      Context      `toml:"context"`
@@ -33,8 +33,8 @@ type Dependencies struct {
 	RequiresNebulae []string `toml:"requires_nebulae"`
 }
 
-// NebulaInfo holds the nebula's name and description from the manifest.
-type NebulaInfo struct {
+// Info holds the nebula's name and description from the manifest.
+type Info struct {
 	Name        string `toml:"name"`
 	Description string `toml:"description"`
 }

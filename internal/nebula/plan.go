@@ -12,7 +12,7 @@ import (
 // CheckDependencies verifies that all external dependencies declared in the nebula are met.
 // For requires_beads: each bead must exist and be closed.
 // For requires_nebulae: each named nebula's state file must show all tasks done.
-func CheckDependencies(ctx context.Context, deps Dependencies, nebulaDir string, client beads.BeadsClient) error {
+func CheckDependencies(ctx context.Context, deps Dependencies, nebulaDir string, client beads.Client) error {
 	var unmet []string
 
 	for _, beadID := range deps.RequiresBeads {
@@ -52,7 +52,7 @@ func CheckDependencies(ctx context.Context, deps Dependencies, nebulaDir string,
 
 // BuildPlan diffs the desired nebula state against actual beads state,
 // producing a plan of create/update/skip/close/retry actions.
-func BuildPlan(ctx context.Context, n *Nebula, state *State, client beads.BeadsClient) (*Plan, error) {
+func BuildPlan(ctx context.Context, n *Nebula, state *State, client beads.Client) (*Plan, error) {
 	// Check external dependencies before building the plan.
 	deps := n.Manifest.Dependencies
 	if len(deps.RequiresBeads) > 0 || len(deps.RequiresNebulae) > 0 {

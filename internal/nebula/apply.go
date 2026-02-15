@@ -10,7 +10,7 @@ import (
 
 // Apply executes a plan's actions, creating/updating/closing beads and
 // persisting state after each successful action.
-func Apply(ctx context.Context, plan *Plan, n *Nebula, state *State, client beads.BeadsClient) error {
+func Apply(ctx context.Context, plan *Plan, n *Nebula, state *State, client beads.Client) error {
 	state.NebulaName = plan.NebulaName
 
 	tasksByID := make(map[string]*TaskSpec)
@@ -30,7 +30,7 @@ func Apply(ctx context.Context, plan *Plan, n *Nebula, state *State, client bead
 }
 
 // applyAction dispatches a single plan action to the appropriate handler.
-func applyAction(ctx context.Context, action Action, tasksByID map[string]*TaskSpec, dir string, state *State, client beads.BeadsClient) error {
+func applyAction(ctx context.Context, action Action, tasksByID map[string]*TaskSpec, dir string, state *State, client beads.Client) error {
 	switch action.Type {
 	case ActionSkip:
 		return nil
@@ -50,7 +50,7 @@ func applyAction(ctx context.Context, action Action, tasksByID map[string]*TaskS
 
 // applyCreateBead creates a new bead for a task and persists state.
 // Used for both ActionCreate and ActionRetry.
-func applyCreateBead(ctx context.Context, client beads.BeadsClient, task *TaskSpec, state *State, dir string) error {
+func applyCreateBead(ctx context.Context, client beads.Client, task *TaskSpec, state *State, dir string) error {
 	beadID, err := client.Create(ctx, task.Title, beads.CreateOpts{
 		Description: task.Body,
 		Type:        task.Type,
@@ -69,7 +69,7 @@ func applyCreateBead(ctx context.Context, client beads.BeadsClient, task *TaskSp
 }
 
 // applyUpdateBead updates an existing bead's assignee and persists state.
-func applyUpdateBead(ctx context.Context, client beads.BeadsClient, task *TaskSpec, state *State, dir string) error {
+func applyUpdateBead(ctx context.Context, client beads.Client, task *TaskSpec, state *State, dir string) error {
 	if task == nil {
 		return nil
 	}
@@ -90,7 +90,7 @@ func applyUpdateBead(ctx context.Context, client beads.BeadsClient, task *TaskSp
 }
 
 // applyCloseBead closes an existing bead and persists state.
-func applyCloseBead(ctx context.Context, client beads.BeadsClient, action Action, state *State, dir string) error {
+func applyCloseBead(ctx context.Context, client beads.Client, action Action, state *State, dir string) error {
 	ts := state.Tasks[action.TaskID]
 	if ts == nil || ts.BeadID == "" {
 		return nil

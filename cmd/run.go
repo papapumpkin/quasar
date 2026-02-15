@@ -111,7 +111,7 @@ func buildLoop(cfg *config.Config, printer *ui.Printer, coderPrompt, reviewerPro
 		return nil, err
 	}
 
-	beadsClient := &beads.Client{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
+	beadsClient := &beads.CLI{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
 	if err := beadsClient.Validate(); err != nil {
 		printer.Error(fmt.Sprintf("beads not available: %v", err))
 		return nil, err

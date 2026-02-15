@@ -105,7 +105,7 @@ func runNebulaPlan(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	client := &beads.Client{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
+	client := &beads.CLI{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
 
 	ctx := context.Background()
 	plan, err := nebula.BuildPlan(ctx, n, state, client)
@@ -140,7 +140,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	client := &beads.Client{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
+	client := &beads.CLI{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
 
 	if v, _ := cmd.Flags().GetBool("verbose"); v {
 		cfg.Verbose = true
