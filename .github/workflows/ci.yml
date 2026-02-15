@@ -14,30 +14,35 @@ jobs:
     name: Vet
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/vet
 
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/lint
 
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/test
 
   fmt:
     name: Format
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/fmt
 
   security:
     name: Security
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/security
 
   build:
@@ -45,4 +50,5 @@ jobs:
     runs-on: ubuntu-latest
     needs: [vet, lint, test, fmt, security]
     steps:
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/build
