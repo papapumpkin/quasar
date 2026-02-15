@@ -232,7 +232,7 @@ func (wg *WorkerGroup) recordFailure(taskID string, done, failed, inFlight map[s
 }
 
 // Run dispatches tasks respecting dependency order.
-// It returns after all eligible tasks have been executed or the context is cancelled.
+// It returns after all eligible tasks have been executed or the context is canceled.
 func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	if wg.MaxWorkers <= 0 {
 		wg.MaxWorkers = 1

@@ -34,7 +34,7 @@ linters-settings:
         severity: warning
         arguments:
           - checkPrivateReceivers
-          - disableStutterCheck
+          - sayRepetitiveInsteadOfStutters
       # Blank imports should have a comment explaining why
       - name: blank-imports
       # Context should be the first parameter

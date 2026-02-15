@@ -7,6 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/spf13/cobra"
+
 	"github.com/aaronsalm/quasar/internal/agent"
 	"github.com/aaronsalm/quasar/internal/beads"
 	"github.com/aaronsalm/quasar/internal/claude"
@@ -14,7 +16,6 @@ import (
 	"github.com/aaronsalm/quasar/internal/loop"
 	"github.com/aaronsalm/quasar/internal/nebula"
 	"github.com/aaronsalm/quasar/internal/ui"
-	"github.com/spf13/cobra"
 )
 
 var nebulaCmd = &cobra.Command{

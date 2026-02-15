@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/aaronsalm/quasar/internal/beads"
 	"github.com/aaronsalm/quasar/internal/claude"
 	"github.com/aaronsalm/quasar/internal/config"
-	"github.com/spf13/cobra"
 )
 
 var validateCmd = &cobra.Command{

@@ -10,13 +10,14 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/spf13/cobra"
+
 	"github.com/aaronsalm/quasar/internal/agent"
 	"github.com/aaronsalm/quasar/internal/beads"
 	"github.com/aaronsalm/quasar/internal/claude"
 	"github.com/aaronsalm/quasar/internal/config"
 	"github.com/aaronsalm/quasar/internal/loop"
 	"github.com/aaronsalm/quasar/internal/ui"
-	"github.com/spf13/cobra"
 )
 
 var runCmd = &cobra.Command{
@@ -146,7 +147,7 @@ func resolveWorkDir(workDir string) (string, error) {
 	return wd, nil
 }
 
-// setupSignalContext returns a context that is cancelled on SIGINT or SIGTERM.
+// setupSignalContext returns a context that is canceled on SIGINT or SIGTERM.
 func setupSignalContext(printer *ui.Printer) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(context.Background())
 	sigCh := make(chan os.Signal, 1)
@@ -228,7 +229,7 @@ func runTask(ctx context.Context, taskLoop *loop.Loop, printer *ui.Printer, task
 	}
 
 	if ctx.Err() != nil {
-		printer.Info("task cancelled")
+		printer.Info("task canceled")
 		return err
 	}
 
