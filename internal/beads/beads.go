@@ -2,6 +2,7 @@ package beads
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,17 +10,18 @@ import (
 	"strings"
 )
 
+// Client implements BeadsClient by shelling out to the beads CLI.
 type Client struct {
 	BeadsPath string
 	Verbose   bool
 }
 
-func (c *Client) run(args ...string) (string, error) {
+func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 	if c.Verbose {
 		fmt.Fprintf(os.Stderr, "[beads] running: %s %s\n", c.BeadsPath, strings.Join(args, " "))
 	}
 
-	cmd := exec.Command(c.BeadsPath, args...)
+	cmd := exec.CommandContext(ctx, c.BeadsPath, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -30,8 +32,8 @@ func (c *Client) run(args ...string) (string, error) {
 	return strings.TrimSpace(stdout.String()), nil
 }
 
-// QuickCreate creates a bead using the quick-create command and returns its ID.
-func (c *Client) QuickCreate(title string, opts CreateOpts) (string, error) {
+// buildQuickCreateArgs constructs CLI arguments for the quick-create command.
+func buildQuickCreateArgs(title string, opts CreateOpts) []string {
 	args := []string{"q", title}
 
 	if opts.Type != "" {
@@ -43,8 +45,14 @@ func (c *Client) QuickCreate(title string, opts CreateOpts) (string, error) {
 	if opts.Priority != "" {
 		args = append(args, "-p", opts.Priority)
 	}
+	return args
+}
 
-	out, err := c.run(args...)
+// QuickCreate creates a bead using the quick-create command and returns its ID.
+func (c *Client) QuickCreate(ctx context.Context, title string, opts CreateOpts) (string, error) {
+	args := buildQuickCreateArgs(title, opts)
+
+	out, err := c.run(ctx, args...)
 	if err != nil {
 		return "", err
 	}
@@ -52,8 +60,8 @@ func (c *Client) QuickCreate(title string, opts CreateOpts) (string, error) {
 	return out, nil
 }
 
-// Create creates a bead with full options and returns its ID.
-func (c *Client) Create(title string, opts CreateOpts) (string, error) {
+// buildCreateArgs constructs CLI arguments for the create command.
+func buildCreateArgs(title string, opts CreateOpts) []string {
 	args := []string{"create", title, "--silent"}
 
 	if opts.Description != "" {
@@ -74,17 +82,28 @@ func (c *Client) Create(title string, opts CreateOpts) (string, error) {
 	if opts.Priority != "" {
 		args = append(args, "-p", opts.Priority)
 	}
+	return args
+}
 
-	out, err := c.run(args...)
+// Create creates a bead with full options and returns its ID.
+func (c *Client) Create(ctx context.Context, title string, opts CreateOpts) (string, error) {
+	args := buildCreateArgs(title, opts)
+
+	out, err := c.run(ctx, args...)
 	if err != nil {
 		return "", err
 	}
 	return out, nil
 }
 
+// buildShowArgs constructs CLI arguments for the show command.
+func buildShowArgs(id string) []string {
+	return []string{"show", id, "--json"}
+}
+
 // Show retrieves a bead by ID.
-func (c *Client) Show(id string) (*Bead, error) {
-	out, err := c.run("show", id, "--json")
+func (c *Client) Show(ctx context.Context, id string) (*Bead, error) {
+	out, err := c.run(ctx, buildShowArgs(id)...)
 	if err != nil {
 		return nil, err
 	}
@@ -99,8 +118,8 @@ func (c *Client) Show(id string) (*Bead, error) {
 	return &beads[0], nil
 }
 
-// Update modifies a bead's status and/or assignee.
-func (c *Client) Update(id string, opts UpdateOpts) error {
+// buildUpdateArgs constructs CLI arguments for the update command.
+func buildUpdateArgs(id string, opts UpdateOpts) []string {
 	args := []string{"update", id}
 
 	if opts.Status != "" {
@@ -109,26 +128,39 @@ func (c *Client) Update(id string, opts UpdateOpts) error {
 	if opts.Assignee != "" {
 		args = append(args, "-a", opts.Assignee)
 	}
+	return args
+}
 
-	_, err := c.run(args...)
+// Update modifies a bead's status and/or assignee.
+func (c *Client) Update(ctx context.Context, id string, opts UpdateOpts) error {
+	_, err := c.run(ctx, buildUpdateArgs(id, opts)...)
 	return err
 }
 
-// Close closes a bead with an optional reason.
-func (c *Client) Close(id string, reason string) error {
+// buildCloseArgs constructs CLI arguments for the close command.
+func buildCloseArgs(id string, reason string) []string {
 	args := []string{"close", id}
 
 	if reason != "" {
 		args = append(args, "-r", reason)
 	}
+	return args
+}
 
-	_, err := c.run(args...)
+// Close closes a bead with an optional reason.
+func (c *Client) Close(ctx context.Context, id string, reason string) error {
+	_, err := c.run(ctx, buildCloseArgs(id, reason)...)
 	return err
 }
 
+// buildAddCommentArgs constructs CLI arguments for the add-comment command.
+func buildAddCommentArgs(id string, body string) []string {
+	return []string{"comments", "add", id, body}
+}
+
 // AddComment adds a comment to a bead.
-func (c *Client) AddComment(id string, body string) error {
-	_, err := c.run("comments", "add", id, body)
+func (c *Client) AddComment(ctx context.Context, id string, body string) error {
+	_, err := c.run(ctx, buildAddCommentArgs(id, body)...)
 	return err
 }
 

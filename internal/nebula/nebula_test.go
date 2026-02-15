@@ -303,7 +303,7 @@ func newMockBeadsClient() *mockBeadsClient {
 	}
 }
 
-func (m *mockBeadsClient) Create(title string, opts beads.CreateOpts) (string, error) {
+func (m *mockBeadsClient) Create(_ context.Context, title string, opts beads.CreateOpts) (string, error) {
 	if m.createErr != nil {
 		return "", m.createErr
 	}
@@ -314,7 +314,7 @@ func (m *mockBeadsClient) Create(title string, opts beads.CreateOpts) (string, e
 	return id, nil
 }
 
-func (m *mockBeadsClient) Show(id string) (*beads.Bead, error) {
+func (m *mockBeadsClient) Show(_ context.Context, id string) (*beads.Bead, error) {
 	b, ok := m.shown[id]
 	if !ok {
 		return nil, errors.New("not found")
@@ -322,16 +322,16 @@ func (m *mockBeadsClient) Show(id string) (*beads.Bead, error) {
 	return b, nil
 }
 
-func (m *mockBeadsClient) Update(id string, opts beads.UpdateOpts) error {
+func (m *mockBeadsClient) Update(_ context.Context, id string, opts beads.UpdateOpts) error {
 	return nil
 }
 
-func (m *mockBeadsClient) Close(id string, reason string) error {
+func (m *mockBeadsClient) Close(_ context.Context, id string, reason string) error {
 	m.closed[id] = reason
 	return nil
 }
 
-func (m *mockBeadsClient) AddComment(id string, body string) error {
+func (m *mockBeadsClient) AddComment(_ context.Context, id string, body string) error {
 	return nil
 }
 
@@ -350,7 +350,7 @@ func TestBuildPlan_NewNebula(t *testing.T) {
 	state := &State{Version: 1, Tasks: make(map[string]*TaskState)}
 	client := newMockBeadsClient()
 
-	plan, err := BuildPlan(n, state, client)
+	plan, err := BuildPlan(context.Background(), n, state, client)
 	if err != nil {
 		t.Fatalf("BuildPlan failed: %v", err)
 	}
@@ -386,7 +386,7 @@ func TestBuildPlan_LockedTask(t *testing.T) {
 	client := newMockBeadsClient()
 	client.shown["bead-123"] = &beads.Bead{ID: "bead-123"}
 
-	plan, err := BuildPlan(n, state, client)
+	plan, err := BuildPlan(context.Background(), n, state, client)
 	if err != nil {
 		t.Fatalf("BuildPlan failed: %v", err)
 	}
@@ -413,7 +413,7 @@ func TestBuildPlan_FailedTask(t *testing.T) {
 	}
 	client := newMockBeadsClient()
 
-	plan, err := BuildPlan(n, state, client)
+	plan, err := BuildPlan(context.Background(), n, state, client)
 	if err != nil {
 		t.Fatalf("BuildPlan failed: %v", err)
 	}

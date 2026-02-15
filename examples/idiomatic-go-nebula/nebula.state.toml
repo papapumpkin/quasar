@@ -1,0 +1,136 @@
+version = 1
+nebula_name = 'Idiomatic Go'
+total_cost_usd = 20.134156849999997
+
+[tasks]
+[tasks.add-godoc]
+bead_id = 'quasar-n4n'
+status = 'done'
+created_at = 2026-02-15T10:14:14.953895-05:00
+updated_at = 2026-02-15T11:08:19.171008-05:00
+
+[tasks.add-godoc.report]
+satisfaction = 'high'
+risk = 'medium'
+needs_human_review = true
+summary = 'Comprehensive refactoring adding GoDoc comments, context propagation to BeadsClient, function decomposition across loop/worker/apply/cmd, table-driven tests, and error handling fixes — well-executed but scope significantly exceeds the summary provided.'
+
+[tasks.add-golangci-lint]
+bead_id = 'quasar-xyo'
+status = 'done'
+created_at = 2026-02-15T10:14:15.167184-05:00
+updated_at = 2026-02-15T11:12:56.36779-05:00
+
+[tasks.add-golangci-lint.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, minimal golangci-lint config covering all required linters with one minor typo in a revive rule argument (`disableStutterCheck` → `disableStutteringCheck`).'
+
+[tasks.add-missing-tests]
+bead_id = 'quasar-f5p'
+status = 'done'
+created_at = 2026-02-15T10:14:15.055726-05:00
+updated_at = 2026-02-15T10:46:33.724001-05:00
+
+[tasks.add-missing-tests.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-executed addition of table-driven tests for beads arg-building and config loading, following existing project patterns with only very minor style nits.'
+
+[tasks.context-in-beads]
+bead_id = 'quasar-djt'
+status = 'done'
+created_at = 2026-02-15T10:14:14.313091-05:00
+updated_at = 2026-02-15T10:24:42.97894-05:00
+
+[tasks.context-in-beads.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, mechanical addition of context.Context to BeadsClient interface and all implementations/call sites, enabling proper cancellation of bead CLI subprocess calls.'
+
+[tasks.extract-ui-interface]
+bead_id = 'quasar-r5e'
+status = 'done'
+created_at = 2026-02-15T10:14:14.203752-05:00
+updated_at = 2026-02-15T10:18:39.232625-05:00
+
+[tasks.extract-ui-interface.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean extraction of a UI interface from concrete *ui.Printer, enabling testability in the loop package with proper compile-time checks and a noopUI mock — all tests pass.'
+
+[tasks.handle-silent-errors]
+bead_id = 'quasar-68i'
+status = 'done'
+created_at = 2026-02-15T10:14:14.849737-05:00
+updated_at = 2026-02-15T10:56:48.740163-05:00
+
+[tasks.handle-silent-errors.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean replacement of 8 silent error discards with logged error handling, plus well-structured function decomposition in both loop.go and worker.go — all tests pass with no behavior changes.'
+
+[tasks.refactor-runloop]
+bead_id = 'quasar-5nr'
+status = 'done'
+created_at = 2026-02-15T10:14:14.425196-05:00
+updated_at = 2026-02-15T10:43:02.114998-05:00
+
+[tasks.refactor-runloop.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Textbook refactoring of a 180-line method into 11 focused helpers with no visible behavioral changes, proper context propagation, and clean test/build/vet results.'
+
+[tasks.refactor-worker-run]
+bead_id = 'quasar-2ah'
+status = 'done'
+created_at = 2026-02-15T10:14:14.534438-05:00
+updated_at = 2026-02-15T10:38:05.067258-05:00
+
+[tasks.refactor-worker-run.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-executed decomposition of a 160-line method into focused helpers with no behavior changes, clean concurrency preservation, and all tests passing.'
+
+[tasks.shorten-funcs-clean-conds]
+bead_id = 'quasar-dbm'
+status = 'done'
+created_at = 2026-02-15T10:14:15.281168-05:00
+updated_at = 2026-02-15T10:52:02.697118-05:00
+
+[tasks.shorten-funcs-clean-conds.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean decomposition of 4+ long functions into focused helpers with consistent context propagation, all tests passing, and no behavioral changes — scope was broader than specified but all changes are sound.'
+
+[tasks.stdlib-string-helpers]
+bead_id = 'quasar-va7'
+status = 'done'
+created_at = 2026-02-15T10:14:14.745269-05:00
+updated_at = 2026-02-15T10:53:32.96349-05:00
+
+[tasks.stdlib-string-helpers.report]
+satisfaction = 'medium'
+risk = 'low'
+needs_human_review = false
+summary = "Test files were correctly refactored into table-driven tests with good Go idioms, but the coder's summary inaccurately claimed no changes were made, and the changes appear uncommitted."
+
+[tasks.table-driven-tests]
+bead_id = 'quasar-w6a'
+status = 'done'
+created_at = 2026-02-15T10:14:14.639266-05:00
+updated_at = 2026-02-15T10:20:42.513623-05:00
+
+[tasks.table-driven-tests.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Straightforward and correct consolidation of test functions into idiomatic table-driven tests with no coverage loss.'

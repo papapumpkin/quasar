@@ -44,10 +44,12 @@ var _ UI = (*Printer)(nil)
 // Printer writes ANSI-colored status output to stderr.
 type Printer struct{}
 
+// New returns a new Printer.
 func New() *Printer {
 	return &Printer{}
 }
 
+// Banner prints the quasar ASCII banner to stderr.
 func (p *Printer) Banner() {
 	fmt.Fprintln(os.Stderr, bold+cyan+"  ╔═══════════════════════════════════╗"+reset)
 	fmt.Fprintln(os.Stderr, bold+cyan+"  ║"+reset+bold+"   QUASAR  "+dim+"dual-agent coordinator"+reset+bold+cyan+"  ║"+reset)
@@ -55,14 +57,17 @@ func (p *Printer) Banner() {
 	fmt.Fprintln(os.Stderr)
 }
 
+// Prompt prints the interactive prompt prefix to stderr.
 func (p *Printer) Prompt() {
 	fmt.Fprintf(os.Stderr, bold+cyan+"quasar> "+reset)
 }
 
+// CycleStart prints the cycle header line.
 func (p *Printer) CycleStart(cycle, maxCycles int) {
 	fmt.Fprintf(os.Stderr, "\n"+bold+magenta+"── cycle %d/%d ──"+reset+"\n", cycle, maxCycles)
 }
 
+// AgentStart prints a status line when an agent begins work.
 func (p *Printer) AgentStart(role string) {
 	color := blue
 	if role == "reviewer" {
@@ -71,6 +76,7 @@ func (p *Printer) AgentStart(role string) {
 	fmt.Fprintf(os.Stderr, color+bold+"▶ %s"+reset+dim+" working..."+reset+"\n", role)
 }
 
+// AgentDone prints a completion line with cost and duration.
 func (p *Printer) AgentDone(role string, costUSD float64, durationMs int64) {
 	color := blue
 	if role == "reviewer" {
@@ -80,38 +86,47 @@ func (p *Printer) AgentDone(role string, costUSD float64, durationMs int64) {
 	fmt.Fprintf(os.Stderr, color+"✓ %s"+reset+dim+" done (%.1fs, $%.4f)"+reset+"\n", role, secs, costUSD)
 }
 
+// IssuesFound prints a warning that review issues were found.
 func (p *Printer) IssuesFound(count int) {
 	fmt.Fprintf(os.Stderr, yellow+bold+"⚠ %d issue(s) found"+reset+" — sending back to coder\n", count)
 }
 
+// Approved prints a success message indicating reviewer approval.
 func (p *Printer) Approved() {
 	fmt.Fprintln(os.Stderr, green+bold+"✓ APPROVED"+reset+" — reviewer is satisfied")
 }
 
+// MaxCyclesReached prints an error indicating the cycle limit was hit.
 func (p *Printer) MaxCyclesReached(max int) {
 	fmt.Fprintf(os.Stderr, red+bold+"✗ max cycles reached (%d)"+reset+" — stopping\n", max)
 }
 
+// BudgetExceeded prints an error indicating the cost budget was exceeded.
 func (p *Printer) BudgetExceeded(spent, limit float64) {
 	fmt.Fprintf(os.Stderr, red+bold+"✗ budget exceeded"+reset+" ($%.2f / $%.2f)\n", spent, limit)
 }
 
+// Error prints an error message to stderr.
 func (p *Printer) Error(msg string) {
 	fmt.Fprintf(os.Stderr, red+bold+"error: "+reset+"%s\n", msg)
 }
 
+// Info prints an informational message to stderr.
 func (p *Printer) Info(msg string) {
 	fmt.Fprintf(os.Stderr, dim+"%s"+reset+"\n", msg)
 }
 
+// TaskStarted prints a status line when a task begins.
 func (p *Printer) TaskStarted(beadID, title string) {
 	fmt.Fprintf(os.Stderr, cyan+"◆ task"+reset+" %s — %s\n", beadID, title)
 }
 
+// TaskComplete prints a success line when a task finishes.
 func (p *Printer) TaskComplete(beadID string, totalCost float64) {
 	fmt.Fprintf(os.Stderr, green+"◆ task complete"+reset+" %s "+dim+"(total: $%.4f)"+reset+"\n", beadID, totalCost)
 }
 
+// ShowHelp prints available interactive commands to stderr.
 func (p *Printer) ShowHelp() {
 	lines := []string{
 		bold + "Commands:" + reset,
@@ -123,6 +138,7 @@ func (p *Printer) ShowHelp() {
 	fmt.Fprintln(os.Stderr, strings.Join(lines, "\n"))
 }
 
+// ShowStatus prints the current configuration summary to stderr.
 func (p *Printer) ShowStatus(maxCycles int, maxBudget float64, model string) {
 	fmt.Fprintln(os.Stderr, dim+"config:"+reset)
 	fmt.Fprintf(os.Stderr, "  max cycles:  %d\n", maxCycles)
@@ -136,6 +152,7 @@ func (p *Printer) ShowStatus(maxCycles int, maxBudget float64, model string) {
 
 // --- Nebula-specific output ---
 
+// NebulaValidateResult prints the validation outcome for a nebula.
 func (p *Printer) NebulaValidateResult(name string, taskCount int, errs []nebula.ValidationError) {
 	if len(errs) == 0 {
 		fmt.Fprintf(os.Stderr, green+bold+"✓ nebula %q"+reset+" — %d task(s), no errors\n", name, taskCount)
@@ -147,6 +164,7 @@ func (p *Printer) NebulaValidateResult(name string, taskCount int, errs []nebula
 	}
 }
 
+// NebulaPlan prints a formatted plan of nebula actions to stderr.
 func (p *Printer) NebulaPlan(plan *nebula.Plan) {
 	fmt.Fprintf(os.Stderr, "\n"+bold+cyan+"nebula plan: %s"+reset+"\n", plan.NebulaName)
 	if len(plan.Actions) == 0 {
@@ -172,6 +190,7 @@ func (p *Printer) NebulaPlan(plan *nebula.Plan) {
 	fmt.Fprintln(os.Stderr)
 }
 
+// NebulaApplyDone prints a summary of completed apply actions.
 func (p *Printer) NebulaApplyDone(plan *nebula.Plan) {
 	var created, updated, closed, skipped, retried int
 	for _, a := range plan.Actions {
@@ -192,6 +211,7 @@ func (p *Printer) NebulaApplyDone(plan *nebula.Plan) {
 		created, updated, retried, closed, skipped)
 }
 
+// NebulaWorkerResults prints the outcome of each worker task execution.
 func (p *Printer) NebulaWorkerResults(results []nebula.WorkerResult) {
 	fmt.Fprintln(os.Stderr, "\n"+bold+"worker results:"+reset)
 	for _, r := range results {
@@ -206,6 +226,7 @@ func (p *Printer) NebulaWorkerResults(results []nebula.WorkerResult) {
 	}
 }
 
+// ReviewReport prints structured review metadata for a task.
 func (p *Printer) ReviewReport(taskID string, report *nebula.ReviewReport) {
 	fmt.Fprintf(os.Stderr, dim+"  report for %s:"+reset+"\n", taskID)
 	fmt.Fprintf(os.Stderr, "    satisfaction:  %s\n", report.Satisfaction)
@@ -218,6 +239,7 @@ func (p *Printer) ReviewReport(taskID string, report *nebula.ReviewReport) {
 	fmt.Fprintf(os.Stderr, "    summary:       %s\n", report.Summary)
 }
 
+// NebulaShow prints a detailed overview of a nebula and its task states.
 func (p *Printer) NebulaShow(n *nebula.Nebula, state *nebula.State) {
 	fmt.Fprintf(os.Stderr, bold+cyan+"nebula: %s"+reset+"\n", n.Manifest.Nebula.Name)
 	if n.Manifest.Nebula.Description != "" {

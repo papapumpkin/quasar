@@ -5,8 +5,19 @@ import (
 	"testing"
 )
 
-func TestParseReviewReport_Full(t *testing.T) {
-	output := `The code looks great.
+func TestParseReviewReport(t *testing.T) {
+	tests := []struct {
+		name             string
+		input            string
+		wantNil          bool
+		wantSatisfaction string
+		wantRisk         string
+		wantHumanReview  bool
+		wantSummary      bool // true if summary should be non-empty
+	}{
+		{
+			name: "Full",
+			input: `The code looks great.
 
 APPROVED: Clean implementation with proper error handling.
 
@@ -14,28 +25,15 @@ REPORT:
 SATISFACTION: high
 RISK: low
 NEEDS_HUMAN_REVIEW: no
-SUMMARY: Clean implementation of rune-based truncation with proper edge case handling.`
-
-	report := ParseReviewReport(output)
-	if report == nil {
-		t.Fatal("expected non-nil report")
-	}
-	if report.Satisfaction != "high" {
-		t.Errorf("expected satisfaction 'high', got %q", report.Satisfaction)
-	}
-	if report.Risk != "low" {
-		t.Errorf("expected risk 'low', got %q", report.Risk)
-	}
-	if report.NeedsHumanReview {
-		t.Error("expected NeedsHumanReview to be false")
-	}
-	if report.Summary == "" {
-		t.Error("expected non-empty summary")
-	}
-}
-
-func TestParseReviewReport_NeedsHumanReview(t *testing.T) {
-	output := `ISSUE:
+SUMMARY: Clean implementation of rune-based truncation with proper edge case handling.`,
+			wantSatisfaction: "high",
+			wantRisk:         "low",
+			wantHumanReview:  false,
+			wantSummary:      true,
+		},
+		{
+			name: "NeedsHumanReview",
+			input: `ISSUE:
 SEVERITY: major
 DESCRIPTION: Security concern.
 
@@ -43,48 +41,58 @@ REPORT:
 SATISFACTION: low
 RISK: high
 NEEDS_HUMAN_REVIEW: yes
-SUMMARY: Significant security concerns that require human review.`
-
-	report := ParseReviewReport(output)
-	if report == nil {
-		t.Fatal("expected non-nil report")
-	}
-	if report.Satisfaction != "low" {
-		t.Errorf("expected satisfaction 'low', got %q", report.Satisfaction)
-	}
-	if report.Risk != "high" {
-		t.Errorf("expected risk 'high', got %q", report.Risk)
-	}
-	if !report.NeedsHumanReview {
-		t.Error("expected NeedsHumanReview to be true")
-	}
-}
-
-func TestParseReviewReport_Missing(t *testing.T) {
-	output := `APPROVED: Looks good, no issues.`
-
-	report := ParseReviewReport(output)
-	if report != nil {
-		t.Error("expected nil report when no REPORT: block present")
-	}
-}
-
-func TestParseReviewReport_MediumValues(t *testing.T) {
-	output := `REPORT:
+SUMMARY: Significant security concerns that require human review.`,
+			wantSatisfaction: "low",
+			wantRisk:         "high",
+			wantHumanReview:  true,
+		},
+		{
+			name:    "Missing",
+			input:   `APPROVED: Looks good, no issues.`,
+			wantNil: true,
+		},
+		{
+			name: "MediumValues",
+			input: `REPORT:
 SATISFACTION: medium
 RISK: medium
 NEEDS_HUMAN_REVIEW: no
-SUMMARY: Acceptable implementation with minor style concerns.`
+SUMMARY: Acceptable implementation with minor style concerns.`,
+			wantSatisfaction: "medium",
+			wantRisk:         "medium",
+			wantHumanReview:  false,
+		},
+	}
 
-	report := ParseReviewReport(output)
-	if report == nil {
-		t.Fatal("expected non-nil report")
-	}
-	if report.Satisfaction != "medium" {
-		t.Errorf("expected satisfaction 'medium', got %q", report.Satisfaction)
-	}
-	if report.Risk != "medium" {
-		t.Errorf("expected risk 'medium', got %q", report.Risk)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			report := ParseReviewReport(tt.input)
+
+			if tt.wantNil {
+				if report != nil {
+					t.Error("expected nil report when no REPORT: block present")
+				}
+				return
+			}
+
+			if report == nil {
+				t.Fatal("expected non-nil report")
+			}
+			if report.Satisfaction != tt.wantSatisfaction {
+				t.Errorf("expected satisfaction %q, got %q", tt.wantSatisfaction, report.Satisfaction)
+			}
+			if report.Risk != tt.wantRisk {
+				t.Errorf("expected risk %q, got %q", tt.wantRisk, report.Risk)
+			}
+			if report.NeedsHumanReview != tt.wantHumanReview {
+				t.Errorf("NeedsHumanReview = %v, want %v", report.NeedsHumanReview, tt.wantHumanReview)
+			}
+			if tt.wantSummary && report.Summary == "" {
+				t.Error("expected non-empty summary")
+			}
+		})
 	}
 }
 

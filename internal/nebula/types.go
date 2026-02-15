@@ -33,11 +33,13 @@ type Dependencies struct {
 	RequiresNebulae []string `toml:"requires_nebulae"`
 }
 
+// NebulaInfo holds the nebula's name and description from the manifest.
 type NebulaInfo struct {
 	Name        string `toml:"name"`
 	Description string `toml:"description"`
 }
 
+// Defaults holds fallback values applied to tasks that omit those fields.
 type Defaults struct {
 	Type     string   `toml:"type"`
 	Priority int      `toml:"priority"`
@@ -87,6 +89,7 @@ type State struct {
 	Tasks        map[string]*TaskState `toml:"tasks"`
 }
 
+// TaskState tracks the current status and bead association for a single task.
 type TaskState struct {
 	BeadID    string        `toml:"bead_id"`
 	Status    TaskStatus    `toml:"status"`

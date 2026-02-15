@@ -105,7 +105,9 @@ func runNebulaPlan(cmd *cobra.Command, args []string) error {
 	}
 
 	client := &beads.Client{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
-	plan, err := nebula.BuildPlan(n, state, client)
+
+	ctx := context.Background()
+	plan, err := nebula.BuildPlan(ctx, n, state, client)
 	if err != nil {
 		printer.Error(err.Error())
 		return err
@@ -143,7 +145,10 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		cfg.Verbose = true
 	}
 
-	plan, err := nebula.BuildPlan(n, state, client)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	plan, err := nebula.BuildPlan(ctx, n, state, client)
 	if err != nil {
 		printer.Error(err.Error())
 		return err
@@ -155,9 +160,6 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		printer.Info("nothing to do")
 		return nil
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)

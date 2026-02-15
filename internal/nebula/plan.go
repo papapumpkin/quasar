@@ -1,6 +1,7 @@
 package nebula
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -11,11 +12,11 @@ import (
 // CheckDependencies verifies that all external dependencies declared in the nebula are met.
 // For requires_beads: each bead must exist and be closed.
 // For requires_nebulae: each named nebula's state file must show all tasks done.
-func CheckDependencies(deps Dependencies, nebulaDir string, client beads.BeadsClient) error {
+func CheckDependencies(ctx context.Context, deps Dependencies, nebulaDir string, client beads.BeadsClient) error {
 	var unmet []string
 
 	for _, beadID := range deps.RequiresBeads {
-		b, err := client.Show(beadID)
+		b, err := client.Show(ctx, beadID)
 		if err != nil {
 			unmet = append(unmet, fmt.Sprintf("bead %q: %v", beadID, err))
 			continue
@@ -51,11 +52,11 @@ func CheckDependencies(deps Dependencies, nebulaDir string, client beads.BeadsCl
 
 // BuildPlan diffs the desired nebula state against actual beads state,
 // producing a plan of create/update/skip/close/retry actions.
-func BuildPlan(n *Nebula, state *State, client beads.BeadsClient) (*Plan, error) {
+func BuildPlan(ctx context.Context, n *Nebula, state *State, client beads.BeadsClient) (*Plan, error) {
 	// Check external dependencies before building the plan.
 	deps := n.Manifest.Dependencies
 	if len(deps.RequiresBeads) > 0 || len(deps.RequiresNebulae) > 0 {
-		if err := CheckDependencies(deps, n.Dir, client); err != nil {
+		if err := CheckDependencies(ctx, deps, n.Dir, client); err != nil {
 			return nil, err
 		}
 	}
@@ -116,7 +117,7 @@ func BuildPlan(n *Nebula, state *State, client beads.BeadsClient) (*Plan, error)
 		// Task exists in state but bead may need updating.
 		if ts.BeadID != "" {
 			// Verify bead still exists.
-			_, err := client.Show(ts.BeadID)
+			_, err := client.Show(ctx, ts.BeadID)
 			if err != nil {
 				// Bead missing — recreate.
 				plan.Actions = append(plan.Actions, Action{

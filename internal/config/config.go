@@ -2,6 +2,8 @@ package config
 
 import "github.com/spf13/viper"
 
+// Config holds all runtime configuration for a quasar session.
+// Values are populated from .quasar.yaml, QUASAR_* env vars, and CLI flags.
 type Config struct {
 	ClaudePath           string  `mapstructure:"claude_path"`
 	BeadsPath            string  `mapstructure:"beads_path"`
@@ -14,6 +16,8 @@ type Config struct {
 	Verbose              bool    `mapstructure:"verbose"`
 }
 
+// Load reads configuration from viper, applying built-in defaults for any
+// values not set by config file, environment, or flags.
 func Load() Config {
 	viper.SetDefault("claude_path", "claude")
 	viper.SetDefault("beads_path", "beads")
