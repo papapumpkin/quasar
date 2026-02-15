@@ -13,7 +13,7 @@ import (
 type Loop struct {
 	Invoker      agent.Invoker
 	Beads        beads.BeadsClient
-	UI           *ui.Printer
+	UI           ui.UI
 	MaxCycles    int
 	MaxBudgetUSD float64
 	Model        string

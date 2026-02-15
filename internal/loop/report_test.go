@@ -1,6 +1,9 @@
 package loop
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseReviewReport_Full(t *testing.T) {
 	output := `The code looks great.
@@ -93,13 +96,13 @@ func TestFormatReportComment(t *testing.T) {
 		Summary:          "All good.",
 	}
 	comment := FormatReportComment(r)
-	if !contains(comment, "Satisfaction: high") {
+	if !strings.Contains(comment, "Satisfaction: high") {
 		t.Errorf("expected satisfaction in comment, got %q", comment)
 	}
-	if !contains(comment, "Risk: low") {
+	if !strings.Contains(comment, "Risk: low") {
 		t.Errorf("expected risk in comment, got %q", comment)
 	}
-	if !contains(comment, "Needs human review: no") {
+	if !strings.Contains(comment, "Needs human review: no") {
 		t.Errorf("expected human review in comment, got %q", comment)
 	}
 }

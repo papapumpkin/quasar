@@ -1,8 +1,29 @@
 package loop
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/aaronsalm/quasar/internal/ui"
 )
+
+// noopUI satisfies ui.UI for tests without producing any output.
+type noopUI struct{}
+
+var _ ui.UI = (*noopUI)(nil)
+
+func (n *noopUI) TaskStarted(string, string)          {}
+func (n *noopUI) TaskComplete(string, float64)         {}
+func (n *noopUI) CycleStart(int, int)                  {}
+func (n *noopUI) AgentStart(string)                    {}
+func (n *noopUI) AgentDone(string, float64, int64)     {}
+func (n *noopUI) CycleSummary(ui.CycleSummaryData)     {}
+func (n *noopUI) IssuesFound(int)                      {}
+func (n *noopUI) Approved()                            {}
+func (n *noopUI) MaxCyclesReached(int)                 {}
+func (n *noopUI) BudgetExceeded(float64, float64)      {}
+func (n *noopUI) Error(string)                         {}
+func (n *noopUI) Info(string)                          {}
 
 func TestParseReviewFindings_Approved(t *testing.T) {
 	output := `The code looks good. All changes are correct and well-structured.
@@ -110,7 +131,7 @@ and wastes API budget.`
 	}
 
 	// Check that continuation lines are included.
-	if !contains(findings[0].Description, "non-retriable") {
+	if !strings.Contains(findings[0].Description, "non-retriable") {
 		t.Errorf("expected description to contain 'non-retriable', got %q", findings[0].Description)
 	}
 }
@@ -136,15 +157,3 @@ func TestIsApproved(t *testing.T) {
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && searchSubstring(s, substr)
-}
-
-func searchSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

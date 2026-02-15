@@ -21,6 +21,27 @@ const (
 	magenta = "\033[35m"
 )
 
+// UI defines the interface for user-facing output during a coder-reviewer loop.
+// Consumers (e.g. loop.Loop) depend on this interface rather than the concrete Printer.
+type UI interface {
+	TaskStarted(beadID, title string)
+	TaskComplete(beadID string, totalCost float64)
+	CycleStart(cycle, maxCycles int)
+	AgentStart(role string)
+	AgentDone(role string, costUSD float64, durationMs int64)
+	CycleSummary(d CycleSummaryData)
+	IssuesFound(count int)
+	Approved()
+	MaxCyclesReached(max int)
+	BudgetExceeded(spent, limit float64)
+	Error(msg string)
+	Info(msg string)
+}
+
+// Verify that *Printer satisfies the UI interface at compile time.
+var _ UI = (*Printer)(nil)
+
+// Printer writes ANSI-colored status output to stderr.
 type Printer struct{}
 
 func New() *Printer {
