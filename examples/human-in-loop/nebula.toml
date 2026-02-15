@@ -1,0 +1,35 @@
+[nebula]
+name = "Human-in-the-Loop"
+description = "Add human involvement to nebula execution via gate modes, checkpoint diffs, intervention hooks, and a live progress dashboard"
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "nebula", "human-in-loop"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 75.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Rename 'task' to 'phase' throughout the nebula subsystem for clearer identity",
+    "Introduce gate modes (trust, review, approve, watch) to control human involvement",
+    "Commit at phase boundaries so reviewers always see clean diffs",
+    "Show structured checkpoint diffs when pausing for human review",
+    "Allow per-phase gate overrides for granular control over risky phases",
+    "Support intervention hooks (PAUSE/STOP files) for async human control",
+    "Build a live progress dashboard via the OnProgress callback",
+    "Add a watch mode that streams diffs without blocking execution",
+]
+constraints = [
+    "All UI output goes to stderr via ui.Printer",
+    "Follow existing Go conventions from CLAUDE.md",
+    "Maintain backward compatibility with existing nebula.toml manifests during transition",
+    "Gate prompts must work in non-TTY environments (degrade gracefully)",
+    "Git operations use exec.CommandContext for cancellation support",
+    "No external TUI frameworks — use ANSI escape codes via ui.Printer",
+]

@@ -1,0 +1,19 @@
+name: Lint
+description: Run golangci-lint using existing .golangci.yml configuration
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+
+    - uses: golangci/golangci-lint-action@v6
+      with:
+        only-install: true
+
+    - name: Run lint
+      shell: bash
+      run: bash scripts/lint.sh

@@ -1,0 +1,15 @@
+name: Format Check
+description: Check Go source formatting with gofmt
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+
+    - name: Run format check
+      shell: bash
+      run: bash scripts/fmt.sh

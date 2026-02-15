@@ -1,0 +1,19 @@
+name: Build
+description: Build quasar binary with version metadata via ldflags
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+
+    - name: Build binary
+      shell: bash
+      run: bash scripts/build.sh
+
+    - name: Verify binary
+      shell: bash
+      run: ./quasar version

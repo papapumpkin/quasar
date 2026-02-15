@@ -1,0 +1,15 @@
+name: Vet
+description: Run go vet static analysis
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+
+    - name: Run vet
+      shell: bash
+      run: bash scripts/vet.sh
