@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/aaronsalm/quasar/internal/agent"
@@ -115,5 +116,32 @@ func TestBuildArgs_BaseFlags(t *testing.T) {
 	}
 	if args[2] != "--output-format" || args[3] != "json" {
 		t.Errorf("expected args[2:4] = [--output-format, json], got %v", args[2:4])
+	}
+}
+
+func TestBuildEnv_StripsCLAUDECODE(t *testing.T) {
+	base := []string{"PATH=/usr/bin", "CLAUDECODE=something", "HOME=/home/user"}
+	env := buildEnv(base)
+
+	for _, e := range env {
+		if strings.HasPrefix(e, "CLAUDECODE=") {
+			t.Errorf("CLAUDECODE should be stripped, but found: %s", e)
+		}
+	}
+}
+
+func TestBuildEnv_SuppressesMCPPopups(t *testing.T) {
+	base := []string{"PATH=/usr/bin", "HOME=/home/user"}
+	env := buildEnv(base)
+
+	found := false
+	for _, e := range env {
+		if e == "CLAUDE_CODE_DISABLE_MCP_POPUPS=1" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected CLAUDE_CODE_DISABLE_MCP_POPUPS=1 in env, but it was not present")
 	}
 }

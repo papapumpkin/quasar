@@ -153,6 +153,86 @@ func TestCycleSummary_NoBudget(t *testing.T) {
 	}
 }
 
+func TestNebulaProgressBarLine_Basic(t *testing.T) {
+	line := NebulaProgressBarLine(3, 7, 12, 8, 2.34)
+	// Expected: [nebula] 3/7 tasks complete | $2.34 spent
+
+	checks := []struct {
+		name   string
+		substr string
+	}{
+		{"prefix", "[nebula]"},
+		{"task ratio", "3/7 tasks complete"},
+		{"cost", "$2.34 spent"},
+	}
+
+	for _, c := range checks {
+		if !strings.Contains(line, c.substr) {
+			t.Errorf("expected line to contain %s (%q), got: %s", c.name, c.substr, line)
+		}
+	}
+}
+
+func TestNebulaProgressBarLine_AllComplete(t *testing.T) {
+	line := NebulaProgressBarLine(5, 5, 0, 10, 5.67)
+
+	if !strings.Contains(line, "[nebula]") {
+		t.Errorf("expected [nebula] prefix, got: %s", line)
+	}
+	if !strings.Contains(line, "5/5 tasks complete") {
+		t.Errorf("expected 5/5 tasks complete, got: %s", line)
+	}
+	if !strings.Contains(line, "$5.67 spent") {
+		t.Errorf("expected $5.67 spent, got: %s", line)
+	}
+}
+
+func TestNebulaProgressBarLine_NoneComplete(t *testing.T) {
+	line := NebulaProgressBarLine(0, 4, 4, 0, 0.0)
+
+	if !strings.Contains(line, "[nebula]") {
+		t.Errorf("expected [nebula] prefix, got: %s", line)
+	}
+	if !strings.Contains(line, "0/4 tasks complete") {
+		t.Errorf("expected 0/4 tasks complete, got: %s", line)
+	}
+	if !strings.Contains(line, "$0.00 spent") {
+		t.Errorf("expected $0.00 spent, got: %s", line)
+	}
+}
+
+func TestNebulaProgressBarLine_ZeroTotal(t *testing.T) {
+	// Edge case: no tasks at all.
+	line := NebulaProgressBarLine(0, 0, 0, 0, 0.0)
+
+	if !strings.Contains(line, "[nebula]") {
+		t.Errorf("expected [nebula] prefix, got: %s", line)
+	}
+	if !strings.Contains(line, "0/0 tasks complete") {
+		t.Errorf("expected 0/0 tasks complete, got: %s", line)
+	}
+}
+
+func TestNebulaProgressBar_WritesToStderr(t *testing.T) {
+	p := New()
+	output := captureStderr(func() {
+		p.NebulaProgressBar(2, 5, 3, 2, 1.50)
+	})
+
+	if len(output) == 0 {
+		t.Error("expected NebulaProgressBar to write to stderr, got no output")
+	}
+	if !strings.Contains(output, "2/5 tasks complete") {
+		t.Errorf("expected output to contain task ratio, got: %s", output)
+	}
+	if !strings.Contains(output, "$1.50 spent") {
+		t.Errorf("expected output to contain cost, got: %s", output)
+	}
+	if !strings.Contains(output, "\r") {
+		t.Errorf("expected output to contain carriage return, got: %q", output)
+	}
+}
+
 func TestCycleSummary_OutputToStderr(t *testing.T) {
 	// Verify that CycleSummary writes to stderr by capturing it.
 	p := New()

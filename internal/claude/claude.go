@@ -17,6 +17,21 @@ type Invoker struct {
 	Verbose    bool
 }
 
+// buildEnv constructs the environment for a claude invocation.
+// It strips the CLAUDECODE variable (to allow nested invocation) and adds
+// CLAUDE_CODE_DISABLE_MCP_POPUPS=1 to suppress MCP server UI popups
+// during headless agent runs.
+func buildEnv(base []string) []string {
+	env := make([]string, 0, len(base)+1)
+	for _, e := range base {
+		if !strings.HasPrefix(e, "CLAUDECODE=") {
+			env = append(env, e)
+		}
+	}
+	env = append(env, "CLAUDE_CODE_DISABLE_MCP_POPUPS=1")
+	return env
+}
+
 // buildArgs constructs the CLI arguments for a claude invocation.
 func buildArgs(a agent.Agent, prompt string) []string {
 	args := []string{
@@ -49,14 +64,7 @@ func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, wo
 	cmd := exec.CommandContext(ctx, inv.ClaudePath, args...)
 	cmd.Dir = workDir
 
-	// Strip CLAUDECODE env var to allow nested invocation.
-	env := make([]string, 0, len(os.Environ()))
-	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "CLAUDECODE=") {
-			env = append(env, e)
-		}
-	}
-	cmd.Env = env
+	cmd.Env = buildEnv(os.Environ())
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -89,14 +97,7 @@ func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, wo
 
 func (inv *Invoker) Validate() error {
 	cmd := exec.Command(inv.ClaudePath, "--version")
-	// Strip CLAUDECODE here too so validation works from within Claude Code.
-	env := make([]string, 0, len(os.Environ()))
-	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "CLAUDECODE=") {
-			env = append(env, e)
-		}
-	}
-	cmd.Env = env
+	cmd.Env = buildEnv(os.Environ())
 
 	out, err := cmd.Output()
 	if err != nil {

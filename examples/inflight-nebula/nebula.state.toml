@@ -2,3 +2,62 @@ version = 1
 nebula_name = 'CLI Inflight Performance'
 
 [tasks]
+[tasks.cycle-output]
+bead_id = 'quasar-j76'
+status = 'done'
+created_at = 2026-02-14T16:55:29.239447-05:00
+updated_at = 2026-02-15T09:30:46.865899-05:00
+
+[tasks.cycle-output.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented cycle summary feature with clean struct-based data passing, consistent ANSI styling, and thorough test coverage — no issues found.'
+
+[tasks.progress-bar]
+bead_id = 'quasar-inx'
+status = 'done'
+created_at = 2026-02-14T16:55:29.317839-05:00
+updated_at = 2026-02-15T09:38:10.019219-05:00
+
+[tasks.progress-bar.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented nebula progress bar with proper `\r` overwrite, comprehensive tests, and clean integration into the worker pipeline, plus minor but correct bug fixes for failed-task graph handling.'
+
+[tasks.quasar-state]
+bead_id = 'quasar-5z1'
+status = 'done'
+created_at = 2026-02-14T16:55:29.395-05:00
+updated_at = 2026-02-15T09:46:04.172148-05:00
+
+[tasks.quasar-state.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean implementation of failed-task retry in nebula planner/apply with proper new-bead creation, state transitions, UI display, and comprehensive test coverage across all changed modules.'
+
+[tasks.stop-serena-popup]
+bead_id = 'quasar-dy0'
+status = 'done'
+created_at = 2026-02-14T16:55:29.474433-05:00
+updated_at = 2026-02-15T09:26:32.046902-05:00
+
+[tasks.stop-serena-popup.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-executed extraction of buildEnv() with MCP popup suppression env var and solid test coverage — low risk, clean change.'
+
+[tasks.total-cost]
+bead_id = 'quasar-ywu'
+status = 'done'
+created_at = 2026-02-14T16:55:29.550117-05:00
+updated_at = 2026-02-15T09:53:52.100565-05:00
+
+[tasks.total-cost.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean implementation of nebula cost accumulation with progress reporting, proper concurrency handling, state persistence, and good test coverage — all acceptance criteria met.'

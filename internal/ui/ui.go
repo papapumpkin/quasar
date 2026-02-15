@@ -143,6 +143,8 @@ func (p *Printer) NebulaPlan(plan *nebula.Plan) {
 			symbol, color = "-", dim
 		case nebula.ActionClose:
 			symbol, color = "×", red
+		case nebula.ActionRetry:
+			symbol, color = "↻", yellow
 		}
 		fmt.Fprintf(os.Stderr, "  "+color+symbol+" %-20s"+reset+" %s\n", a.TaskID, a.Reason)
 	}
@@ -150,7 +152,7 @@ func (p *Printer) NebulaPlan(plan *nebula.Plan) {
 }
 
 func (p *Printer) NebulaApplyDone(plan *nebula.Plan) {
-	var created, updated, closed, skipped int
+	var created, updated, closed, skipped, retried int
 	for _, a := range plan.Actions {
 		switch a.Type {
 		case nebula.ActionCreate:
@@ -161,10 +163,12 @@ func (p *Printer) NebulaApplyDone(plan *nebula.Plan) {
 			closed++
 		case nebula.ActionSkip:
 			skipped++
+		case nebula.ActionRetry:
+			retried++
 		}
 	}
-	fmt.Fprintf(os.Stderr, green+bold+"✓ apply complete"+reset+" — created: %d, updated: %d, closed: %d, skipped: %d\n",
-		created, updated, closed, skipped)
+	fmt.Fprintf(os.Stderr, green+bold+"✓ apply complete"+reset+" — created: %d, updated: %d, retried: %d, closed: %d, skipped: %d\n",
+		created, updated, retried, closed, skipped)
 }
 
 func (p *Printer) NebulaWorkerResults(results []nebula.WorkerResult) {
@@ -337,4 +341,25 @@ func (p *Printer) CycleSummary(d CycleSummaryData) {
 	}
 
 	fmt.Fprintln(os.Stderr, dim+"└──────────────────────────────────────────"+reset)
+}
+
+// NebulaProgressBarLine formats a progress line string (without ANSI escape prefix).
+// Format matches the spec: [nebula] 3/7 tasks complete | $2.34 spent
+// This is exported for testing.
+func NebulaProgressBarLine(completed, total, openBeads, closedBeads int, totalCostUSD float64) string {
+	return fmt.Sprintf("[nebula] %d/%d tasks complete | $%.2f spent", completed, total, totalCostUSD)
+}
+
+// NebulaProgressBar writes a carriage-return-overwritten progress line to stderr.
+// It uses \r to overwrite the current line (no newline) so the bar updates in place.
+func (p *Printer) NebulaProgressBar(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
+	line := NebulaProgressBarLine(completed, total, openBeads, closedBeads, totalCostUSD)
+	// \r returns to start of line; padding clears any leftover characters from previous line.
+	fmt.Fprintf(os.Stderr, "\r"+cyan+"%s"+reset+"   ", line)
+}
+
+// NebulaProgressBarDone writes a final newline after the progress bar so
+// subsequent output doesn't overwrite it.
+func (p *Printer) NebulaProgressBarDone() {
+	fmt.Fprintln(os.Stderr)
 }

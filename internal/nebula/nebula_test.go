@@ -399,6 +399,36 @@ func TestBuildPlan_LockedTask(t *testing.T) {
 	}
 }
 
+func TestBuildPlan_FailedTask(t *testing.T) {
+	n := &Nebula{
+		Manifest: Manifest{Nebula: NebulaInfo{Name: "test"}},
+		Tasks:    []TaskSpec{{ID: "fail-task", Title: "A failed task"}},
+	}
+
+	state := &State{
+		Version: 1,
+		Tasks: map[string]*TaskState{
+			"fail-task": {BeadID: "bead-old", Status: TaskStatusFailed},
+		},
+	}
+	client := newMockBeadsClient()
+
+	plan, err := BuildPlan(n, state, client)
+	if err != nil {
+		t.Fatalf("BuildPlan failed: %v", err)
+	}
+
+	if len(plan.Actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(plan.Actions))
+	}
+	if plan.Actions[0].Type != ActionRetry {
+		t.Errorf("expected retry action for failed task, got %s", plan.Actions[0].Type)
+	}
+	if plan.Actions[0].TaskID != "fail-task" {
+		t.Errorf("expected task ID 'fail-task', got %q", plan.Actions[0].TaskID)
+	}
+}
+
 // --- Apply tests ---
 
 func TestApply_CreatesBeads(t *testing.T) {
@@ -451,16 +481,74 @@ func TestApply_CreatesBeads(t *testing.T) {
 	}
 }
 
+func TestApply_RetriesFailedTask(t *testing.T) {
+	n, err := Load("testdata/valid")
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	// Use a temp dir so we don't write state into testdata.
+	tmpDir := t.TempDir()
+	n.Dir = tmpDir
+
+	oldBeadID := "bead-old-failed"
+	state := &State{
+		Version: 1,
+		Tasks: map[string]*TaskState{
+			"first-task": {BeadID: oldBeadID, Status: TaskStatusFailed},
+		},
+	}
+	client := newMockBeadsClient()
+
+	plan := &Plan{
+		NebulaName: "test-nebula",
+		Actions: []Action{
+			{TaskID: "first-task", Type: ActionRetry, Reason: "retrying failed task"},
+		},
+	}
+
+	if err := Apply(context.Background(), plan, n, state, client); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	// A new bead should have been created.
+	if len(client.created) != 1 {
+		t.Errorf("expected 1 bead created for retry, got %d", len(client.created))
+	}
+
+	ts, ok := state.Tasks["first-task"]
+	if !ok {
+		t.Fatal("task 'first-task' not in state after retry")
+	}
+
+	// The bead ID should be different from the old failed bead.
+	if ts.BeadID == oldBeadID {
+		t.Errorf("expected new bead ID after retry, but still has old ID %q", oldBeadID)
+	}
+	if ts.BeadID == "" {
+		t.Error("expected non-empty bead ID after retry")
+	}
+
+	// Status should be reset to created (not failed).
+	if ts.Status != TaskStatusCreated {
+		t.Errorf("expected status %q after retry, got %q", TaskStatusCreated, ts.Status)
+	}
+}
+
 // --- Worker tests ---
 
 type mockRunner struct {
-	calls  []string
-	err    error
-	result *TaskRunnerResult
+	calls      []string
+	err        error
+	result     *TaskRunnerResult
+	resultFunc func(beadID string) *TaskRunnerResult // optional per-call result
 }
 
 func (m *mockRunner) RunExistingTask(ctx context.Context, beadID, taskDescription string, exec ResolvedExecution) (*TaskRunnerResult, error) {
 	m.calls = append(m.calls, beadID)
+	if m.resultFunc != nil {
+		return m.resultFunc(beadID), m.err
+	}
 	return m.result, m.err
 }
 
@@ -568,5 +656,74 @@ func TestWorkerGroup_FailureBlocksDependents(t *testing.T) {
 	// b should remain created (never touched).
 	if state.Tasks["b"].Status != TaskStatusCreated {
 		t.Errorf("task b status: %s, expected created (untouched)", state.Tasks["b"].Status)
+	}
+}
+
+func TestWorkerGroup_AccumulatesCostAcrossTasks(t *testing.T) {
+	n := &Nebula{
+		Dir:      t.TempDir(),
+		Manifest: Manifest{Nebula: NebulaInfo{Name: "test"}},
+		Tasks: []TaskSpec{
+			{ID: "a", Body: "task a"},
+			{ID: "b", Body: "task b"},
+			{ID: "c", Body: "task c", DependsOn: []string{"a"}},
+		},
+	}
+
+	state := &State{
+		Version: 1,
+		Tasks: map[string]*TaskState{
+			"a": {BeadID: "bead-a", Status: TaskStatusCreated},
+			"b": {BeadID: "bead-b", Status: TaskStatusCreated},
+			"c": {BeadID: "bead-c", Status: TaskStatusCreated},
+		},
+	}
+
+	costs := map[string]float64{
+		"bead-a": 0.50,
+		"bead-b": 1.25,
+		"bead-c": 0.75,
+	}
+
+	runner := &mockRunner{
+		resultFunc: func(beadID string) *TaskRunnerResult {
+			return &TaskRunnerResult{TotalCostUSD: costs[beadID]}
+		},
+	}
+
+	var progressCosts []float64
+	wg := &WorkerGroup{
+		Runner:     runner,
+		Nebula:     n,
+		State:      state,
+		MaxWorkers: 1,
+		OnProgress: func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
+			progressCosts = append(progressCosts, totalCostUSD)
+		},
+	}
+
+	results, err := wg.Run(context.Background())
+	if err != nil {
+		t.Fatalf("WorkerGroup.Run failed: %v", err)
+	}
+
+	if len(results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(results))
+	}
+
+	// Total cost should be sum of all tasks.
+	expectedTotal := 0.50 + 1.25 + 0.75
+	if state.TotalCostUSD != expectedTotal {
+		t.Errorf("expected total cost $%.2f, got $%.2f", expectedTotal, state.TotalCostUSD)
+	}
+
+	// Progress callback should have been called with increasing costs.
+	// Each task triggers two progress calls (in_progress + done), so we check the final one.
+	if len(progressCosts) == 0 {
+		t.Fatal("expected progress callbacks, got none")
+	}
+	lastCost := progressCosts[len(progressCosts)-1]
+	if lastCost != expectedTotal {
+		t.Errorf("expected final progress cost $%.2f, got $%.2f", expectedTotal, lastCost)
 	}
 }

@@ -237,6 +237,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		GlobalCycles: cfg.MaxReviewCycles,
 		GlobalBudget: cfg.MaxBudgetUSD,
 		GlobalModel:  cfg.Model,
+		OnProgress:   printer.NebulaProgressBar,
 	}
 
 	watch, _ := cmd.Flags().GetBool("watch")
@@ -257,6 +258,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 
 	printer.Info(fmt.Sprintf("starting workers (max %d)...", maxWorkers))
 	results, err := wg.Run(ctx)
+	printer.NebulaProgressBarDone()
 	if err != nil {
 		printer.Error(err.Error())
 		return err

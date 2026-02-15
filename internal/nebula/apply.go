@@ -71,6 +71,29 @@ func Apply(ctx context.Context, plan *Plan, n *Nebula, state *State, client bead
 				return fmt.Errorf("saving state after updating %q: %w", task.ID, err)
 			}
 
+		case ActionRetry:
+			task := tasksByID[action.TaskID]
+			if task == nil {
+				continue
+			}
+
+			// Create a new bead for the retry (don't reuse the failed bead).
+			beadID, err := client.Create(task.Title, beads.CreateOpts{
+				Description: task.Body,
+				Type:        task.Type,
+				Labels:      task.Labels,
+				Assignee:    task.Assignee,
+				Priority:    priorityStr(task.Priority),
+			})
+			if err != nil {
+				return fmt.Errorf("creating retry bead for task %q: %w", task.ID, err)
+			}
+
+			state.SetTaskState(task.ID, beadID, TaskStatusCreated)
+			if err := SaveState(n.Dir, state); err != nil {
+				return fmt.Errorf("saving state after retrying %q: %w", task.ID, err)
+			}
+
 		case ActionClose:
 			ts := state.Tasks[action.TaskID]
 			if ts == nil || ts.BeadID == "" {

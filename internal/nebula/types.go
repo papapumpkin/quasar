@@ -81,9 +81,10 @@ const (
 
 // State is persisted in nebula.state.toml, mapping task IDs to bead IDs.
 type State struct {
-	Version    int                   `toml:"version"`
-	NebulaName string                `toml:"nebula_name"`
-	Tasks      map[string]*TaskState `toml:"tasks"`
+	Version      int                   `toml:"version"`
+	NebulaName   string                `toml:"nebula_name"`
+	TotalCostUSD float64               `toml:"total_cost_usd,omitempty"`
+	Tasks        map[string]*TaskState `toml:"tasks"`
 }
 
 type TaskState struct {
@@ -110,6 +111,7 @@ const (
 	ActionUpdate ActionType = "update"
 	ActionSkip   ActionType = "skip"
 	ActionClose  ActionType = "close"
+	ActionRetry  ActionType = "retry"
 )
 
 // Action is a single planned change.

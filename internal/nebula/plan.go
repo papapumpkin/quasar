@@ -50,7 +50,7 @@ func CheckDependencies(deps Dependencies, nebulaDir string, client beads.BeadsCl
 }
 
 // BuildPlan diffs the desired nebula state against actual beads state,
-// producing a plan of create/update/skip/close actions.
+// producing a plan of create/update/skip/close/retry actions.
 func BuildPlan(n *Nebula, state *State, client beads.BeadsClient) (*Plan, error) {
 	// Check external dependencies before building the plan.
 	deps := n.Manifest.Dependencies
@@ -99,6 +99,16 @@ func BuildPlan(n *Nebula, state *State, client beads.BeadsClient) (*Plan, error)
 				TaskID: t.ID,
 				Type:   ActionSkip,
 				Reason: "already completed",
+			})
+			continue
+		}
+
+		// Failed tasks are retried with a new bead.
+		if ts.Status == TaskStatusFailed {
+			plan.Actions = append(plan.Actions, Action{
+				TaskID: t.ID,
+				Type:   ActionRetry,
+				Reason: fmt.Sprintf("retrying failed task (previous bead: %s)", ts.BeadID),
 			})
 			continue
 		}

@@ -20,6 +20,10 @@ type TaskRunner interface {
 	GenerateCheckpoint(ctx context.Context, beadID, taskDescription string) (string, error)
 }
 
+// ProgressFunc is called after each task status change to report progress.
+// Parameters: completed, total, openBeads, closedBeads, totalCostUSD.
+type ProgressFunc func(completed, total, openBeads, closedBeads int, totalCostUSD float64)
+
 // WorkerGroup executes tasks in dependency order using a pool of workers.
 type WorkerGroup struct {
 	Runner       TaskRunner
@@ -30,6 +34,7 @@ type WorkerGroup struct {
 	GlobalCycles int
 	GlobalBudget float64
 	GlobalModel  string
+	OnProgress   ProgressFunc // optional progress callback
 
 	mu      sync.Mutex
 	results []WorkerResult
@@ -64,6 +69,32 @@ func buildTaskPrompt(task *TaskSpec, ctx *Context) string {
 	return sb.String()
 }
 
+// reportProgress calls the OnProgress callback (if set) with current counts.
+// Must be called with wg.mu held.
+func (wg *WorkerGroup) reportProgress() {
+	if wg.OnProgress == nil {
+		return
+	}
+	total := len(wg.Nebula.Tasks)
+	var completed, open, closed int
+	for _, ts := range wg.State.Tasks {
+		switch ts.Status {
+		case TaskStatusDone:
+			closed++
+			completed++
+		case TaskStatusFailed:
+			closed++
+			completed++
+		case TaskStatusInProgress, TaskStatusCreated:
+			open++
+		case TaskStatusPending:
+			// Pending tasks have no bead yet — not counted in open or closed.
+			// They still contribute to total (via len(wg.Nebula.Tasks)).
+		}
+	}
+	wg.OnProgress(completed, total, open, closed, wg.State.TotalCostUSD)
+}
+
 // Run dispatches tasks respecting dependency order.
 // It returns after all eligible tasks have been executed or the context is cancelled.
 func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
@@ -78,7 +109,9 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 
 	graph := NewGraph(wg.Nebula.Tasks)
 
-	// Build initial done set from state.
+	// Build initial done/failed sets from state.
+	// "resolved" includes both done and failed tasks so that graph.Ready()
+	// can unblock dependents — the blocked-by-failure filter handles the rest.
 	done := make(map[string]bool)
 	failed := make(map[string]bool)
 	for id, ts := range wg.State.Tasks {
@@ -87,6 +120,7 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		}
 		if ts.Status == TaskStatusFailed {
 			failed[id] = true
+			done[id] = true
 		}
 	}
 
@@ -163,6 +197,7 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 				if task == nil || ts == nil || ts.BeadID == "" {
 					wg.mu.Lock()
 					failed[taskID] = true
+					done[taskID] = true
 					delete(inFlight, taskID)
 					wg.results = append(wg.results, WorkerResult{
 						TaskID: taskID,
@@ -172,20 +207,24 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 					return
 				}
 
-					wg.mu.Lock()
+				wg.mu.Lock()
 				wg.State.SetTaskState(taskID, ts.BeadID, TaskStatusInProgress)
 				_ = SaveState(wg.Nebula.Dir, wg.State)
+				wg.reportProgress()
 				wg.mu.Unlock()
 
 				// Resolve per-task execution config and build enriched prompt.
-			exec := ResolveExecution(wg.GlobalCycles, wg.GlobalBudget, wg.GlobalModel, &wg.Nebula.Manifest.Execution, task)
-			prompt := buildTaskPrompt(task, &wg.Nebula.Manifest.Context)
+				exec := ResolveExecution(wg.GlobalCycles, wg.GlobalBudget, wg.GlobalModel, &wg.Nebula.Manifest.Execution, task)
+				prompt := buildTaskPrompt(task, &wg.Nebula.Manifest.Context)
 
-			taskResult, err := wg.Runner.RunExistingTask(ctx, ts.BeadID, prompt, exec)
+				taskResult, err := wg.Runner.RunExistingTask(ctx, ts.BeadID, prompt, exec)
 
 				wg.mu.Lock()
 				delete(inFlight, taskID)
 				wr := WorkerResult{TaskID: taskID, BeadID: ts.BeadID, Err: err}
+				if taskResult != nil {
+					wg.State.TotalCostUSD += taskResult.TotalCostUSD
+				}
 				if err == nil && taskResult != nil && taskResult.Report != nil {
 					wr.Report = taskResult.Report
 					ts.Report = taskResult.Report
@@ -194,12 +233,14 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 
 				if err != nil {
 					failed[taskID] = true
+					done[taskID] = true // unblock dependents (blocked-by-failure filter skips them)
 					wg.State.SetTaskState(taskID, ts.BeadID, TaskStatusFailed)
 				} else {
 					done[taskID] = true
 					wg.State.SetTaskState(taskID, ts.BeadID, TaskStatusDone)
 				}
 				_ = SaveState(wg.Nebula.Dir, wg.State)
+				wg.reportProgress()
 				wg.mu.Unlock()
 			}(id)
 		}
