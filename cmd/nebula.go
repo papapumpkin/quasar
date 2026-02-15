@@ -52,8 +52,8 @@ var nebulaShowCmd = &cobra.Command{
 }
 
 func init() {
-	nebulaApplyCmd.Flags().Bool("auto", false, "automatically start workers for ready tasks")
-	nebulaApplyCmd.Flags().Bool("watch", false, "watch for task file changes during execution (with --auto)")
+	nebulaApplyCmd.Flags().Bool("auto", false, "automatically start workers for ready phases")
+	nebulaApplyCmd.Flags().Bool("watch", false, "watch for phase file changes during execution (with --auto)")
 	nebulaApplyCmd.Flags().Int("max-workers", 1, "maximum concurrent workers (with --auto)")
 
 	nebulaCmd.AddCommand(nebulaValidateCmd)
@@ -75,11 +75,11 @@ func runNebulaValidate(cmd *cobra.Command, args []string) error {
 
 	errs := nebula.Validate(n)
 	if len(errs) > 0 {
-		printer.NebulaValidateResult(n.Manifest.Nebula.Name, len(n.Tasks), errs)
+		printer.NebulaValidateResult(n.Manifest.Nebula.Name, len(n.Phases), errs)
 		return fmt.Errorf("validation failed with %d error(s)", len(errs))
 	}
 
-	printer.NebulaValidateResult(n.Manifest.Nebula.Name, len(n.Tasks), nil)
+	printer.NebulaValidateResult(n.Manifest.Nebula.Name, len(n.Phases), nil)
 	return nil
 }
 
@@ -95,7 +95,7 @@ func runNebulaPlan(cmd *cobra.Command, args []string) error {
 	}
 
 	if errs := nebula.Validate(n); len(errs) > 0 {
-		printer.NebulaValidateResult(n.Manifest.Nebula.Name, len(n.Tasks), errs)
+		printer.NebulaValidateResult(n.Manifest.Nebula.Name, len(n.Phases), errs)
 		return fmt.Errorf("validation failed")
 	}
 
@@ -130,7 +130,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	if errs := nebula.Validate(n); len(errs) > 0 {
-		printer.NebulaValidateResult(n.Manifest.Nebula.Name, len(n.Tasks), errs)
+		printer.NebulaValidateResult(n.Manifest.Nebula.Name, len(n.Phases), errs)
 		return fmt.Errorf("validation failed")
 	}
 
@@ -254,7 +254,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			} else {
 				wg.Watcher = w
 				defer w.Stop()
-				printer.Info("watching for task file changes...")
+				printer.Info("watching for phase file changes...")
 			}
 		}
 	}
@@ -271,13 +271,13 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// loopAdapter wraps *loop.Loop to satisfy nebula.TaskRunner.
+// loopAdapter wraps *loop.Loop to satisfy nebula.PhaseRunner.
 type loopAdapter struct {
 	loop *loop.Loop
 }
 
-func (a *loopAdapter) RunExistingTask(ctx context.Context, beadID, taskDescription string, exec nebula.ResolvedExecution) (*nebula.TaskRunnerResult, error) {
-	// Apply per-task execution overrides to the loop.
+func (a *loopAdapter) RunExistingPhase(ctx context.Context, beadID, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
+	// Apply per-phase execution overrides to the loop.
 	if exec.MaxReviewCycles > 0 {
 		a.loop.MaxCycles = exec.MaxReviewCycles
 	}
@@ -288,11 +288,11 @@ func (a *loopAdapter) RunExistingTask(ctx context.Context, beadID, taskDescripti
 		a.loop.Model = exec.Model
 	}
 
-	result, err := a.loop.RunExistingTask(ctx, beadID, taskDescription)
+	result, err := a.loop.RunExistingTask(ctx, beadID, phaseDescription)
 	if err != nil {
 		return nil, err
 	}
-	tr := &nebula.TaskRunnerResult{
+	tr := &nebula.PhaseRunnerResult{
 		TotalCostUSD: result.TotalCostUSD,
 		CyclesUsed:   result.CyclesUsed,
 	}
@@ -307,8 +307,8 @@ func (a *loopAdapter) RunExistingTask(ctx context.Context, beadID, taskDescripti
 	return tr, nil
 }
 
-func (a *loopAdapter) GenerateCheckpoint(ctx context.Context, beadID, taskDescription string) (string, error) {
-	return a.loop.GenerateCheckpoint(ctx, beadID, taskDescription)
+func (a *loopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error) {
+	return a.loop.GenerateCheckpoint(ctx, beadID, phaseDescription)
 }
 
 func runNebulaShow(cmd *cobra.Command, args []string) error {

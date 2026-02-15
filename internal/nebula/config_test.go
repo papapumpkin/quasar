@@ -42,10 +42,10 @@ func TestResolveExecution_NebulaOverridesGlobal(t *testing.T) {
 	}
 }
 
-func TestResolveExecution_TaskOverridesNebula(t *testing.T) {
+func TestResolveExecution_PhaseOverridesNebula(t *testing.T) {
 	neb := &Execution{MaxReviewCycles: 5, MaxBudgetUSD: 8.0, Model: "claude-opus"}
-	task := &TaskSpec{MaxReviewCycles: 7, MaxBudgetUSD: 15.0, Model: "claude-haiku"}
-	r := ResolveExecution(10, 20.0, "claude-sonnet", neb, task)
+	phase := &PhaseSpec{MaxReviewCycles: 7, MaxBudgetUSD: 15.0, Model: "claude-haiku"}
+	r := ResolveExecution(10, 20.0, "claude-sonnet", neb, phase)
 	if r.MaxReviewCycles != 7 {
 		t.Errorf("expected 7 cycles, got %d", r.MaxReviewCycles)
 	}
@@ -58,29 +58,29 @@ func TestResolveExecution_TaskOverridesNebula(t *testing.T) {
 }
 
 func TestResolveExecution_PartialOverrides(t *testing.T) {
-	// Nebula sets cycles, task sets budget, global sets model.
+	// Nebula sets cycles, phase sets budget, global sets model.
 	neb := &Execution{MaxReviewCycles: 5}
-	task := &TaskSpec{MaxBudgetUSD: 12.0}
-	r := ResolveExecution(0, 0, "claude-sonnet", neb, task)
+	phase := &PhaseSpec{MaxBudgetUSD: 12.0}
+	r := ResolveExecution(0, 0, "claude-sonnet", neb, phase)
 	if r.MaxReviewCycles != 5 {
 		t.Errorf("expected 5 cycles from nebula, got %d", r.MaxReviewCycles)
 	}
 	if r.MaxBudgetUSD != 12.0 {
-		t.Errorf("expected $12.00 from task, got $%.2f", r.MaxBudgetUSD)
+		t.Errorf("expected $12.00 from phase, got $%.2f", r.MaxBudgetUSD)
 	}
 	if r.Model != "claude-sonnet" {
 		t.Errorf("expected claude-sonnet from global, got %q", r.Model)
 	}
 }
 
-func TestResolveExecution_ZeroTaskDoesNotOverride(t *testing.T) {
+func TestResolveExecution_ZeroPhaseDoesNotOverride(t *testing.T) {
 	neb := &Execution{MaxReviewCycles: 5, MaxBudgetUSD: 8.0}
-	task := &TaskSpec{MaxReviewCycles: 0, MaxBudgetUSD: 0}
-	r := ResolveExecution(0, 0, "", neb, task)
+	phase := &PhaseSpec{MaxReviewCycles: 0, MaxBudgetUSD: 0}
+	r := ResolveExecution(0, 0, "", neb, phase)
 	if r.MaxReviewCycles != 5 {
-		t.Errorf("zero task cycles should not override nebula, got %d", r.MaxReviewCycles)
+		t.Errorf("zero phase cycles should not override nebula, got %d", r.MaxReviewCycles)
 	}
 	if r.MaxBudgetUSD != 8.0 {
-		t.Errorf("zero task budget should not override nebula, got $%.2f", r.MaxBudgetUSD)
+		t.Errorf("zero phase budget should not override nebula, got $%.2f", r.MaxBudgetUSD)
 	}
 }

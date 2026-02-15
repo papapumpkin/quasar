@@ -1,6 +1,6 @@
 package nebula
 
-// ResolvedExecution holds the fully resolved execution config for a single task.
+// ResolvedExecution holds the fully resolved execution config for a single phase.
 type ResolvedExecution struct {
 	MaxReviewCycles int
 	MaxBudgetUSD    float64
@@ -10,12 +10,12 @@ type ResolvedExecution struct {
 // DefaultMaxReviewCycles is the built-in fallback for max review cycles.
 const DefaultMaxReviewCycles = 3
 
-// DefaultMaxBudgetUSD is the built-in fallback for per-task budget.
+// DefaultMaxBudgetUSD is the built-in fallback for per-phase budget.
 const DefaultMaxBudgetUSD = 5.0
 
-// ResolveExecution merges config from task → nebula → global, picking the first non-zero value.
-// Precedence (highest wins, skipping zero/empty): task → nebula → global → built-in defaults.
-func ResolveExecution(globalCycles int, globalBudget float64, globalModel string, neb *Execution, task *TaskSpec) ResolvedExecution {
+// ResolveExecution merges config from phase → nebula → global, picking the first non-zero value.
+// Precedence (highest wins, skipping zero/empty): phase → nebula → global → built-in defaults.
+func ResolveExecution(globalCycles int, globalBudget float64, globalModel string, neb *Execution, phase *PhaseSpec) ResolvedExecution {
 	r := ResolvedExecution{
 		MaxReviewCycles: DefaultMaxReviewCycles,
 		MaxBudgetUSD:    DefaultMaxBudgetUSD,
@@ -45,16 +45,16 @@ func ResolveExecution(globalCycles int, globalBudget float64, globalModel string
 		}
 	}
 
-	// Task overrides nebula.
-	if task != nil {
-		if task.MaxReviewCycles > 0 {
-			r.MaxReviewCycles = task.MaxReviewCycles
+	// Phase overrides nebula.
+	if phase != nil {
+		if phase.MaxReviewCycles > 0 {
+			r.MaxReviewCycles = phase.MaxReviewCycles
 		}
-		if task.MaxBudgetUSD > 0 {
-			r.MaxBudgetUSD = task.MaxBudgetUSD
+		if phase.MaxBudgetUSD > 0 {
+			r.MaxBudgetUSD = phase.MaxBudgetUSD
 		}
-		if task.Model != "" {
-			r.Model = task.Model
+		if phase.Model != "" {
+			r.Model = phase.Model
 		}
 	}
 

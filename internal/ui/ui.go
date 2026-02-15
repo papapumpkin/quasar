@@ -153,9 +153,9 @@ func (p *Printer) ShowStatus(maxCycles int, maxBudget float64, model string) {
 // --- Nebula-specific output ---
 
 // NebulaValidateResult prints the validation outcome for a nebula.
-func (p *Printer) NebulaValidateResult(name string, taskCount int, errs []nebula.ValidationError) {
+func (p *Printer) NebulaValidateResult(name string, phaseCount int, errs []nebula.ValidationError) {
 	if len(errs) == 0 {
-		fmt.Fprintf(os.Stderr, green+bold+"✓ nebula %q"+reset+" — %d task(s), no errors\n", name, taskCount)
+		fmt.Fprintf(os.Stderr, green+bold+"✓ nebula %q"+reset+" — %d phase(s), no errors\n", name, phaseCount)
 		return
 	}
 	fmt.Fprintf(os.Stderr, red+bold+"✗ nebula %q"+reset+" — %d error(s):\n", name, len(errs))
@@ -185,7 +185,7 @@ func (p *Printer) NebulaPlan(plan *nebula.Plan) {
 		case nebula.ActionRetry:
 			symbol, color = "↻", yellow
 		}
-		fmt.Fprintf(os.Stderr, "  "+color+symbol+" %-20s"+reset+" %s\n", a.TaskID, a.Reason)
+		fmt.Fprintf(os.Stderr, "  "+color+symbol+" %-20s"+reset+" %s\n", a.PhaseID, a.Reason)
 	}
 	fmt.Fprintln(os.Stderr)
 }
@@ -216,19 +216,19 @@ func (p *Printer) NebulaWorkerResults(results []nebula.WorkerResult) {
 	fmt.Fprintln(os.Stderr, "\n"+bold+"worker results:"+reset)
 	for _, r := range results {
 		if r.Err != nil {
-			fmt.Fprintf(os.Stderr, "  "+red+"✗ %s"+reset+" — %v\n", r.TaskID, r.Err)
+			fmt.Fprintf(os.Stderr, "  "+red+"✗ %s"+reset+" — %v\n", r.PhaseID, r.Err)
 		} else {
-			fmt.Fprintf(os.Stderr, "  "+green+"✓ %s"+reset+" (bead %s)\n", r.TaskID, r.BeadID)
+			fmt.Fprintf(os.Stderr, "  "+green+"✓ %s"+reset+" (bead %s)\n", r.PhaseID, r.BeadID)
 			if r.Report != nil {
-				p.ReviewReport(r.TaskID, r.Report)
+				p.ReviewReport(r.PhaseID, r.Report)
 			}
 		}
 	}
 }
 
-// ReviewReport prints structured review metadata for a task.
-func (p *Printer) ReviewReport(taskID string, report *nebula.ReviewReport) {
-	fmt.Fprintf(os.Stderr, dim+"  report for %s:"+reset+"\n", taskID)
+// ReviewReport prints structured review metadata for a phase.
+func (p *Printer) ReviewReport(phaseID string, report *nebula.ReviewReport) {
+	fmt.Fprintf(os.Stderr, dim+"  report for %s:"+reset+"\n", phaseID)
 	fmt.Fprintf(os.Stderr, "    satisfaction:  %s\n", report.Satisfaction)
 	fmt.Fprintf(os.Stderr, "    risk:          %s\n", report.Risk)
 	humanReview := "no"
@@ -239,13 +239,13 @@ func (p *Printer) ReviewReport(taskID string, report *nebula.ReviewReport) {
 	fmt.Fprintf(os.Stderr, "    summary:       %s\n", report.Summary)
 }
 
-// NebulaShow prints a detailed overview of a nebula and its task states.
+// NebulaShow prints a detailed overview of a nebula and its phase states.
 func (p *Printer) NebulaShow(n *nebula.Nebula, state *nebula.State) {
 	fmt.Fprintf(os.Stderr, bold+cyan+"nebula: %s"+reset+"\n", n.Manifest.Nebula.Name)
 	if n.Manifest.Nebula.Description != "" {
 		fmt.Fprintf(os.Stderr, dim+"%s"+reset+"\n", n.Manifest.Nebula.Description)
 	}
-	fmt.Fprintf(os.Stderr, "tasks: %d\n\n", len(n.Tasks))
+	fmt.Fprintf(os.Stderr, "phases: %d\n\n", len(n.Phases))
 
 	// Display execution config if any fields are set.
 	exec := n.Manifest.Execution
@@ -304,8 +304,8 @@ func (p *Printer) NebulaShow(n *nebula.Nebula, state *nebula.State) {
 		fmt.Fprintln(os.Stderr)
 	}
 
-	for _, t := range n.Tasks {
-		ts, hasState := state.Tasks[t.ID]
+	for _, t := range n.Phases {
+		ts, hasState := state.Phases[t.ID]
 		status := "pending"
 		beadID := ""
 		if hasState {
@@ -387,10 +387,10 @@ func (p *Printer) CycleSummary(d CycleSummaryData) {
 }
 
 // NebulaProgressBarLine formats a progress line string (without ANSI escape prefix).
-// Format matches the spec: [nebula] 3/7 tasks complete | $2.34 spent
+// Format matches the spec: [nebula] 3/7 phases complete | $2.34 spent
 // This is exported for testing.
 func NebulaProgressBarLine(completed, total, openBeads, closedBeads int, totalCostUSD float64) string {
-	return fmt.Sprintf("[nebula] %d/%d tasks complete | $%.2f spent", completed, total, totalCostUSD)
+	return fmt.Sprintf("[nebula] %d/%d phases complete | $%.2f spent", completed, total, totalCostUSD)
 }
 
 // NebulaProgressBar writes a carriage-return-overwritten progress line to stderr.

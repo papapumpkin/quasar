@@ -26,47 +26,47 @@ func TestLoad_ValidNebula(t *testing.T) {
 		t.Errorf("unexpected description: %q", n.Manifest.Nebula.Description)
 	}
 
-	if len(n.Tasks) != 3 {
-		t.Fatalf("expected 3 tasks, got %d", len(n.Tasks))
+	if len(n.Phases) != 3 {
+		t.Fatalf("expected 3 phases, got %d", len(n.Phases))
 	}
 
-	// Tasks should be in directory order.
-	taskByID := make(map[string]TaskSpec)
-	for _, task := range n.Tasks {
-		taskByID[task.ID] = task
+	// Phases should be in directory order.
+	phaseByID := make(map[string]PhaseSpec)
+	for _, phase := range n.Phases {
+		phaseByID[phase.ID] = phase
 	}
 
-	// Check first task inherits defaults.
-	first := taskByID["first-task"]
+	// Check first phase inherits defaults.
+	first := phaseByID["first-task"]
 	if first.Title != "First test task" {
-		t.Errorf("first task title: %q", first.Title)
+		t.Errorf("first phase title: %q", first.Title)
 	}
 	if first.Type != "task" {
-		t.Errorf("first task type should inherit default 'task', got %q", first.Type)
+		t.Errorf("first phase type should inherit default 'task', got %q", first.Type)
 	}
 	if first.Priority != 2 {
-		t.Errorf("first task priority should inherit default 2, got %d", first.Priority)
+		t.Errorf("first phase priority should inherit default 2, got %d", first.Priority)
 	}
 	if len(first.Labels) != 1 || first.Labels[0] != "test" {
-		t.Errorf("first task labels should inherit default, got %v", first.Labels)
+		t.Errorf("first phase labels should inherit default, got %v", first.Labels)
 	}
 	if first.Body == "" {
-		t.Error("first task body should not be empty")
+		t.Error("first phase body should not be empty")
 	}
 
-	// Check second task overrides defaults.
-	second := taskByID["second-task"]
+	// Check second phase overrides defaults.
+	second := phaseByID["second-task"]
 	if second.Type != "feature" {
-		t.Errorf("second task type: %q", second.Type)
+		t.Errorf("second phase type: %q", second.Type)
 	}
 	if second.Priority != 1 {
-		t.Errorf("second task priority: %d", second.Priority)
+		t.Errorf("second phase priority: %d", second.Priority)
 	}
 	if len(second.DependsOn) != 1 || second.DependsOn[0] != "first-task" {
-		t.Errorf("second task depends_on: %v", second.DependsOn)
+		t.Errorf("second phase depends_on: %v", second.DependsOn)
 	}
 	if len(second.Labels) != 1 || second.Labels[0] != "custom-label" {
-		t.Errorf("second task labels: %v", second.Labels)
+		t.Errorf("second phase labels: %v", second.Labels)
 	}
 }
 
@@ -163,13 +163,13 @@ func TestValidate_MissingTitle(t *testing.T) {
 // --- Graph tests ---
 
 func TestGraph_Sort(t *testing.T) {
-	tasks := []TaskSpec{
+	phases := []PhaseSpec{
 		{ID: "a"},
 		{ID: "b", DependsOn: []string{"a"}},
 		{ID: "c", DependsOn: []string{"a", "b"}},
 	}
 
-	g := NewGraph(tasks)
+	g := NewGraph(phases)
 	sorted, err := g.Sort()
 	if err != nil {
 		t.Fatalf("Sort failed: %v", err)
@@ -190,12 +190,12 @@ func TestGraph_Sort(t *testing.T) {
 }
 
 func TestGraph_SortCycleDetection(t *testing.T) {
-	tasks := []TaskSpec{
+	phases := []PhaseSpec{
 		{ID: "x", DependsOn: []string{"y"}},
 		{ID: "y", DependsOn: []string{"x"}},
 	}
 
-	g := NewGraph(tasks)
+	g := NewGraph(phases)
 	_, err := g.Sort()
 	if err == nil {
 		t.Fatal("expected cycle detection error")
@@ -206,13 +206,13 @@ func TestGraph_SortCycleDetection(t *testing.T) {
 }
 
 func TestGraph_Ready(t *testing.T) {
-	tasks := []TaskSpec{
+	phases := []PhaseSpec{
 		{ID: "a"},
 		{ID: "b", DependsOn: []string{"a"}},
 		{ID: "c"},
 	}
 
-	g := NewGraph(tasks)
+	g := NewGraph(phases)
 
 	// Initially, a and c should be ready.
 	ready := g.Ready(map[string]bool{})
@@ -237,9 +237,9 @@ func TestState_SaveAndLoad(t *testing.T) {
 	state := &State{
 		Version:    1,
 		NebulaName: "test",
-		Tasks:      make(map[string]*TaskState),
+		Phases:     make(map[string]*PhaseState),
 	}
-	state.SetTaskState("task-1", "bead-abc", TaskStatusCreated)
+	state.SetPhaseState("phase-1", "bead-abc", PhaseStatusCreated)
 
 	if err := SaveState(dir, state); err != nil {
 		t.Fatalf("SaveState failed: %v", err)
@@ -258,15 +258,15 @@ func TestState_SaveAndLoad(t *testing.T) {
 	if loaded.NebulaName != "test" {
 		t.Errorf("expected name 'test', got %q", loaded.NebulaName)
 	}
-	ts, ok := loaded.Tasks["task-1"]
+	ps, ok := loaded.Phases["phase-1"]
 	if !ok {
-		t.Fatal("task-1 not found in loaded state")
+		t.Fatal("phase-1 not found in loaded state")
 	}
-	if ts.BeadID != "bead-abc" {
-		t.Errorf("expected bead ID 'bead-abc', got %q", ts.BeadID)
+	if ps.BeadID != "bead-abc" {
+		t.Errorf("expected bead ID 'bead-abc', got %q", ps.BeadID)
 	}
-	if ts.Status != TaskStatusCreated {
-		t.Errorf("expected status 'created', got %q", ts.Status)
+	if ps.Status != PhaseStatusCreated {
+		t.Errorf("expected status 'created', got %q", ps.Status)
 	}
 }
 
@@ -280,8 +280,8 @@ func TestState_LoadNonExistent(t *testing.T) {
 	if state.Version != 1 {
 		t.Errorf("expected version 1, got %d", state.Version)
 	}
-	if len(state.Tasks) != 0 {
-		t.Errorf("expected empty tasks, got %d", len(state.Tasks))
+	if len(state.Phases) != 0 {
+		t.Errorf("expected empty phases, got %d", len(state.Phases))
 	}
 }
 
@@ -347,7 +347,7 @@ func TestBuildPlan_NewNebula(t *testing.T) {
 		t.Fatalf("Load failed: %v", err)
 	}
 
-	state := &State{Version: 1, Tasks: make(map[string]*TaskState)}
+	state := &State{Version: 1, Phases: make(map[string]*PhaseState)}
 	client := newMockBeadsClient()
 
 	plan, err := BuildPlan(context.Background(), n, state, client)
@@ -359,7 +359,7 @@ func TestBuildPlan_NewNebula(t *testing.T) {
 		t.Errorf("expected plan name 'test-nebula', got %q", plan.NebulaName)
 	}
 
-	// All 3 tasks should be creates.
+	// All 3 phases should be creates.
 	creates := 0
 	for _, a := range plan.Actions {
 		if a.Type == ActionCreate {
@@ -371,16 +371,16 @@ func TestBuildPlan_NewNebula(t *testing.T) {
 	}
 }
 
-func TestBuildPlan_LockedTask(t *testing.T) {
+func TestBuildPlan_LockedPhase(t *testing.T) {
 	n := &Nebula{
 		Manifest: Manifest{Nebula: Info{Name: "test"}},
-		Tasks:    []TaskSpec{{ID: "locked", Title: "A locked task"}},
+		Phases:   []PhaseSpec{{ID: "locked", Title: "A locked phase"}},
 	}
 
 	state := &State{
 		Version: 1,
-		Tasks: map[string]*TaskState{
-			"locked": {BeadID: "bead-123", Status: TaskStatusInProgress},
+		Phases: map[string]*PhaseState{
+			"locked": {BeadID: "bead-123", Status: PhaseStatusInProgress},
 		},
 	}
 	client := newMockBeadsClient()
@@ -395,20 +395,20 @@ func TestBuildPlan_LockedTask(t *testing.T) {
 		t.Fatalf("expected 1 action, got %d", len(plan.Actions))
 	}
 	if plan.Actions[0].Type != ActionSkip {
-		t.Errorf("expected skip action for locked task, got %s", plan.Actions[0].Type)
+		t.Errorf("expected skip action for locked phase, got %s", plan.Actions[0].Type)
 	}
 }
 
-func TestBuildPlan_FailedTask(t *testing.T) {
+func TestBuildPlan_FailedPhase(t *testing.T) {
 	n := &Nebula{
 		Manifest: Manifest{Nebula: Info{Name: "test"}},
-		Tasks:    []TaskSpec{{ID: "fail-task", Title: "A failed task"}},
+		Phases:   []PhaseSpec{{ID: "fail-phase", Title: "A failed phase"}},
 	}
 
 	state := &State{
 		Version: 1,
-		Tasks: map[string]*TaskState{
-			"fail-task": {BeadID: "bead-old", Status: TaskStatusFailed},
+		Phases: map[string]*PhaseState{
+			"fail-phase": {BeadID: "bead-old", Status: PhaseStatusFailed},
 		},
 	}
 	client := newMockBeadsClient()
@@ -422,10 +422,10 @@ func TestBuildPlan_FailedTask(t *testing.T) {
 		t.Fatalf("expected 1 action, got %d", len(plan.Actions))
 	}
 	if plan.Actions[0].Type != ActionRetry {
-		t.Errorf("expected retry action for failed task, got %s", plan.Actions[0].Type)
+		t.Errorf("expected retry action for failed phase, got %s", plan.Actions[0].Type)
 	}
-	if plan.Actions[0].TaskID != "fail-task" {
-		t.Errorf("expected task ID 'fail-task', got %q", plan.Actions[0].TaskID)
+	if plan.Actions[0].PhaseID != "fail-phase" {
+		t.Errorf("expected phase ID 'fail-phase', got %q", plan.Actions[0].PhaseID)
 	}
 }
 
@@ -441,15 +441,15 @@ func TestApply_CreatesBeads(t *testing.T) {
 	tmpDir := t.TempDir()
 	n.Dir = tmpDir
 
-	state := &State{Version: 1, Tasks: make(map[string]*TaskState)}
+	state := &State{Version: 1, Phases: make(map[string]*PhaseState)}
 	client := newMockBeadsClient()
 
 	plan := &Plan{
 		NebulaName: "test-nebula",
 		Actions: []Action{
-			{TaskID: "first-task", Type: ActionCreate, Reason: "new"},
-			{TaskID: "second-task", Type: ActionCreate, Reason: "new"},
-			{TaskID: "independent", Type: ActionCreate, Reason: "new"},
+			{PhaseID: "first-task", Type: ActionCreate, Reason: "new"},
+			{PhaseID: "second-task", Type: ActionCreate, Reason: "new"},
+			{PhaseID: "independent", Type: ActionCreate, Reason: "new"},
 		},
 	}
 
@@ -461,27 +461,27 @@ func TestApply_CreatesBeads(t *testing.T) {
 		t.Errorf("expected 3 beads created, got %d", len(client.created))
 	}
 
-	// State should have all 3 tasks.
-	if len(state.Tasks) != 3 {
-		t.Errorf("expected 3 tasks in state, got %d", len(state.Tasks))
+	// State should have all 3 phases.
+	if len(state.Phases) != 3 {
+		t.Errorf("expected 3 phases in state, got %d", len(state.Phases))
 	}
 
 	for _, id := range []string{"first-task", "second-task", "independent"} {
-		ts, ok := state.Tasks[id]
+		ps, ok := state.Phases[id]
 		if !ok {
-			t.Errorf("task %q not in state", id)
+			t.Errorf("phase %q not in state", id)
 			continue
 		}
-		if ts.Status != TaskStatusCreated {
-			t.Errorf("task %q status: %s, expected created", id, ts.Status)
+		if ps.Status != PhaseStatusCreated {
+			t.Errorf("phase %q status: %s, expected created", id, ps.Status)
 		}
-		if ts.BeadID == "" {
-			t.Errorf("task %q has empty bead ID", id)
+		if ps.BeadID == "" {
+			t.Errorf("phase %q has empty bead ID", id)
 		}
 	}
 }
 
-func TestApply_RetriesFailedTask(t *testing.T) {
+func TestApply_RetriesFailedPhase(t *testing.T) {
 	n, err := Load("testdata/valid")
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
@@ -494,8 +494,8 @@ func TestApply_RetriesFailedTask(t *testing.T) {
 	oldBeadID := "bead-old-failed"
 	state := &State{
 		Version: 1,
-		Tasks: map[string]*TaskState{
-			"first-task": {BeadID: oldBeadID, Status: TaskStatusFailed},
+		Phases: map[string]*PhaseState{
+			"first-task": {BeadID: oldBeadID, Status: PhaseStatusFailed},
 		},
 	}
 	client := newMockBeadsClient()
@@ -503,7 +503,7 @@ func TestApply_RetriesFailedTask(t *testing.T) {
 	plan := &Plan{
 		NebulaName: "test-nebula",
 		Actions: []Action{
-			{TaskID: "first-task", Type: ActionRetry, Reason: "retrying failed task"},
+			{PhaseID: "first-task", Type: ActionRetry, Reason: "retrying failed phase"},
 		},
 	}
 
@@ -516,22 +516,22 @@ func TestApply_RetriesFailedTask(t *testing.T) {
 		t.Errorf("expected 1 bead created for retry, got %d", len(client.created))
 	}
 
-	ts, ok := state.Tasks["first-task"]
+	ps, ok := state.Phases["first-task"]
 	if !ok {
-		t.Fatal("task 'first-task' not in state after retry")
+		t.Fatal("phase 'first-task' not in state after retry")
 	}
 
 	// The bead ID should be different from the old failed bead.
-	if ts.BeadID == oldBeadID {
+	if ps.BeadID == oldBeadID {
 		t.Errorf("expected new bead ID after retry, but still has old ID %q", oldBeadID)
 	}
-	if ts.BeadID == "" {
+	if ps.BeadID == "" {
 		t.Error("expected non-empty bead ID after retry")
 	}
 
 	// Status should be reset to created (not failed).
-	if ts.Status != TaskStatusCreated {
-		t.Errorf("expected status %q after retry, got %q", TaskStatusCreated, ts.Status)
+	if ps.Status != PhaseStatusCreated {
+		t.Errorf("expected status %q after retry, got %q", PhaseStatusCreated, ps.Status)
 	}
 }
 
@@ -540,11 +540,11 @@ func TestApply_RetriesFailedTask(t *testing.T) {
 type mockRunner struct {
 	calls      []string
 	err        error
-	result     *TaskRunnerResult
-	resultFunc func(beadID string) *TaskRunnerResult // optional per-call result
+	result     *PhaseRunnerResult
+	resultFunc func(beadID string) *PhaseRunnerResult // optional per-call result
 }
 
-func (m *mockRunner) RunExistingTask(ctx context.Context, beadID, taskDescription string, exec ResolvedExecution) (*TaskRunnerResult, error) {
+func (m *mockRunner) RunExistingPhase(ctx context.Context, beadID, phaseDescription string, exec ResolvedExecution) (*PhaseRunnerResult, error) {
 	m.calls = append(m.calls, beadID)
 	if m.resultFunc != nil {
 		return m.resultFunc(beadID), m.err
@@ -552,7 +552,7 @@ func (m *mockRunner) RunExistingTask(ctx context.Context, beadID, taskDescriptio
 	return m.result, m.err
 }
 
-func (m *mockRunner) GenerateCheckpoint(ctx context.Context, beadID, taskDescription string) (string, error) {
+func (m *mockRunner) GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error) {
 	return "checkpoint summary", nil
 }
 
@@ -560,17 +560,17 @@ func TestWorkerGroup_ExecutesDependencyOrder(t *testing.T) {
 	n := &Nebula{
 		Dir:      t.TempDir(),
 		Manifest: Manifest{Nebula: Info{Name: "test"}},
-		Tasks: []TaskSpec{
-			{ID: "a", Body: "task a"},
-			{ID: "b", Body: "task b", DependsOn: []string{"a"}},
+		Phases: []PhaseSpec{
+			{ID: "a", Body: "phase a"},
+			{ID: "b", Body: "phase b", DependsOn: []string{"a"}},
 		},
 	}
 
 	state := &State{
 		Version: 1,
-		Tasks: map[string]*TaskState{
-			"a": {BeadID: "bead-a", Status: TaskStatusCreated},
-			"b": {BeadID: "bead-b", Status: TaskStatusCreated},
+		Phases: map[string]*PhaseState{
+			"a": {BeadID: "bead-a", Status: PhaseStatusCreated},
+			"b": {BeadID: "bead-b", Status: PhaseStatusCreated},
 		},
 	}
 
@@ -600,11 +600,11 @@ func TestWorkerGroup_ExecutesDependencyOrder(t *testing.T) {
 	}
 
 	// State should reflect both done.
-	if state.Tasks["a"].Status != TaskStatusDone {
-		t.Errorf("task a status: %s, expected done", state.Tasks["a"].Status)
+	if state.Phases["a"].Status != PhaseStatusDone {
+		t.Errorf("phase a status: %s, expected done", state.Phases["a"].Status)
 	}
-	if state.Tasks["b"].Status != TaskStatusDone {
-		t.Errorf("task b status: %s, expected done", state.Tasks["b"].Status)
+	if state.Phases["b"].Status != PhaseStatusDone {
+		t.Errorf("phase b status: %s, expected done", state.Phases["b"].Status)
 	}
 }
 
@@ -612,17 +612,17 @@ func TestWorkerGroup_FailureBlocksDependents(t *testing.T) {
 	n := &Nebula{
 		Dir:      t.TempDir(),
 		Manifest: Manifest{Nebula: Info{Name: "test"}},
-		Tasks: []TaskSpec{
-			{ID: "a", Body: "task a"},
-			{ID: "b", Body: "task b", DependsOn: []string{"a"}},
+		Phases: []PhaseSpec{
+			{ID: "a", Body: "phase a"},
+			{ID: "b", Body: "phase b", DependsOn: []string{"a"}},
 		},
 	}
 
 	state := &State{
 		Version: 1,
-		Tasks: map[string]*TaskState{
-			"a": {BeadID: "bead-a", Status: TaskStatusCreated},
-			"b": {BeadID: "bead-b", Status: TaskStatusCreated},
+		Phases: map[string]*PhaseState{
+			"a": {BeadID: "bead-a", Status: PhaseStatusCreated},
+			"b": {BeadID: "bead-b", Status: PhaseStatusCreated},
 		},
 	}
 
@@ -643,39 +643,39 @@ func TestWorkerGroup_FailureBlocksDependents(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result (only a attempted), got %d", len(results))
 	}
-	if results[0].TaskID != "a" {
-		t.Errorf("expected result for task a, got %s", results[0].TaskID)
+	if results[0].PhaseID != "a" {
+		t.Errorf("expected result for phase a, got %s", results[0].PhaseID)
 	}
 	if results[0].Err == nil {
-		t.Error("expected error in result for task a")
+		t.Error("expected error in result for phase a")
 	}
 
-	if state.Tasks["a"].Status != TaskStatusFailed {
-		t.Errorf("task a status: %s, expected failed", state.Tasks["a"].Status)
+	if state.Phases["a"].Status != PhaseStatusFailed {
+		t.Errorf("phase a status: %s, expected failed", state.Phases["a"].Status)
 	}
 	// b should remain created (never touched).
-	if state.Tasks["b"].Status != TaskStatusCreated {
-		t.Errorf("task b status: %s, expected created (untouched)", state.Tasks["b"].Status)
+	if state.Phases["b"].Status != PhaseStatusCreated {
+		t.Errorf("phase b status: %s, expected created (untouched)", state.Phases["b"].Status)
 	}
 }
 
-func TestWorkerGroup_AccumulatesCostAcrossTasks(t *testing.T) {
+func TestWorkerGroup_AccumulatesCostAcrossPhases(t *testing.T) {
 	n := &Nebula{
 		Dir:      t.TempDir(),
 		Manifest: Manifest{Nebula: Info{Name: "test"}},
-		Tasks: []TaskSpec{
-			{ID: "a", Body: "task a"},
-			{ID: "b", Body: "task b"},
-			{ID: "c", Body: "task c", DependsOn: []string{"a"}},
+		Phases: []PhaseSpec{
+			{ID: "a", Body: "phase a"},
+			{ID: "b", Body: "phase b"},
+			{ID: "c", Body: "phase c", DependsOn: []string{"a"}},
 		},
 	}
 
 	state := &State{
 		Version: 1,
-		Tasks: map[string]*TaskState{
-			"a": {BeadID: "bead-a", Status: TaskStatusCreated},
-			"b": {BeadID: "bead-b", Status: TaskStatusCreated},
-			"c": {BeadID: "bead-c", Status: TaskStatusCreated},
+		Phases: map[string]*PhaseState{
+			"a": {BeadID: "bead-a", Status: PhaseStatusCreated},
+			"b": {BeadID: "bead-b", Status: PhaseStatusCreated},
+			"c": {BeadID: "bead-c", Status: PhaseStatusCreated},
 		},
 	}
 
@@ -686,8 +686,8 @@ func TestWorkerGroup_AccumulatesCostAcrossTasks(t *testing.T) {
 	}
 
 	runner := &mockRunner{
-		resultFunc: func(beadID string) *TaskRunnerResult {
-			return &TaskRunnerResult{TotalCostUSD: costs[beadID]}
+		resultFunc: func(beadID string) *PhaseRunnerResult {
+			return &PhaseRunnerResult{TotalCostUSD: costs[beadID]}
 		},
 	}
 
@@ -711,14 +711,14 @@ func TestWorkerGroup_AccumulatesCostAcrossTasks(t *testing.T) {
 		t.Fatalf("expected 3 results, got %d", len(results))
 	}
 
-	// Total cost should be sum of all tasks.
+	// Total cost should be sum of all phases.
 	expectedTotal := 0.50 + 1.25 + 0.75
 	if state.TotalCostUSD != expectedTotal {
 		t.Errorf("expected total cost $%.2f, got $%.2f", expectedTotal, state.TotalCostUSD)
 	}
 
 	// Progress callback should have been called with increasing costs.
-	// Each task triggers two progress calls (in_progress + done), so we check the final one.
+	// Each phase triggers two progress calls (in_progress + done), so we check the final one.
 	if len(progressCosts) == 0 {
 		t.Fatal("expected progress callbacks, got none")
 	}

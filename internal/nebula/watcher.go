@@ -12,19 +12,19 @@ import (
 type ChangeKind int
 
 const (
-	ChangeModified ChangeKind = iota // Task .md file edited
-	ChangeRemoved                    // Task .md file deleted
+	ChangeModified ChangeKind = iota // Phase .md file edited
+	ChangeRemoved                    // Phase .md file deleted
 	ChangeAdded                      // New .md file appeared
 )
 
 // Change represents a detected change in the nebula directory.
 type Change struct {
-	Kind   ChangeKind
-	TaskID string // Derived from parsing the file (or empty on removal)
-	File   string // Absolute path
+	Kind    ChangeKind
+	PhaseID string // Derived from parsing the file (or empty on removal)
+	File    string // Absolute path
 }
 
-// Watcher monitors a nebula directory for task file changes using fsnotify.
+// Watcher monitors a nebula directory for phase file changes using fsnotify.
 type Watcher struct {
 	Dir     string
 	Changes <-chan Change // Read-only external channel
@@ -89,7 +89,7 @@ func (w *Watcher) loop() {
 				return
 			}
 
-			if !w.isTaskFile(event.Name) {
+			if !w.isPhaseFile(event.Name) {
 				continue
 			}
 
@@ -118,12 +118,12 @@ func (w *Watcher) loop() {
 	}
 }
 
-func (w *Watcher) isTaskFile(name string) bool {
+func (w *Watcher) isPhaseFile(name string) bool {
 	base := filepath.Base(name)
 	if !strings.HasSuffix(base, ".md") {
 		return false
 	}
-	// Ignore non-task files.
+	// Ignore non-phase files.
 	if base == "nebula.toml" || base == "nebula.state.toml" {
 		return false
 	}
@@ -131,8 +131,8 @@ func (w *Watcher) isTaskFile(name string) bool {
 }
 
 func (w *Watcher) emitChange(file string) {
-	// Try to parse the file to get the task ID.
-	task, err := parseTaskFile(file, Defaults{})
+	// Try to parse the file to get the phase ID.
+	phase, err := parsePhaseFile(file, Defaults{})
 	if err != nil {
 		// File may have been removed.
 		w.changes <- Change{
@@ -143,8 +143,8 @@ func (w *Watcher) emitChange(file string) {
 	}
 
 	w.changes <- Change{
-		Kind:   ChangeModified,
-		TaskID: task.ID,
-		File:   file,
+		Kind:    ChangeModified,
+		PhaseID: phase.ID,
+		File:    file,
 	}
 }

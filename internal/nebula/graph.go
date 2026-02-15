@@ -2,39 +2,39 @@ package nebula
 
 import "fmt"
 
-// Graph is a dependency DAG over task IDs.
+// Graph is a dependency DAG over phase IDs.
 type Graph struct {
-	// adjacency maps taskID → set of task IDs it depends on.
+	// adjacency maps phaseID → set of phase IDs it depends on.
 	adjacency map[string]map[string]bool
-	// reverse maps taskID → set of task IDs that depend on it.
+	// reverse maps phaseID → set of phase IDs that depend on it.
 	reverse map[string]map[string]bool
 }
 
-// NewGraph builds a dependency graph from a list of task specs.
-func NewGraph(tasks []TaskSpec) *Graph {
+// NewGraph builds a dependency graph from a list of phase specs.
+func NewGraph(phases []PhaseSpec) *Graph {
 	g := &Graph{
 		adjacency: make(map[string]map[string]bool),
 		reverse:   make(map[string]map[string]bool),
 	}
-	for _, t := range tasks {
-		if g.adjacency[t.ID] == nil {
-			g.adjacency[t.ID] = make(map[string]bool)
+	for _, p := range phases {
+		if g.adjacency[p.ID] == nil {
+			g.adjacency[p.ID] = make(map[string]bool)
 		}
-		if g.reverse[t.ID] == nil {
-			g.reverse[t.ID] = make(map[string]bool)
+		if g.reverse[p.ID] == nil {
+			g.reverse[p.ID] = make(map[string]bool)
 		}
-		for _, dep := range t.DependsOn {
-			g.adjacency[t.ID][dep] = true
+		for _, dep := range p.DependsOn {
+			g.adjacency[p.ID][dep] = true
 			if g.reverse[dep] == nil {
 				g.reverse[dep] = make(map[string]bool)
 			}
-			g.reverse[dep][t.ID] = true
+			g.reverse[dep][p.ID] = true
 		}
 	}
 	return g
 }
 
-// Sort returns task IDs in topological order (dependencies first).
+// Sort returns phase IDs in topological order (dependencies first).
 // Returns an error if a cycle is detected.
 func (g *Graph) Sort() ([]string, error) {
 	// Kahn's algorithm.
@@ -65,14 +65,14 @@ func (g *Graph) Sort() ([]string, error) {
 	}
 
 	if len(sorted) != len(g.adjacency) {
-		return nil, fmt.Errorf("%w: not all tasks could be ordered", ErrDependencyCycle)
+		return nil, fmt.Errorf("%w: not all phases could be ordered", ErrDependencyCycle)
 	}
 
 	return sorted, nil
 }
 
-// Ready returns task IDs that have no unfinished dependencies.
-// done is the set of task IDs that are already completed.
+// Ready returns phase IDs that have no unfinished dependencies.
+// done is the set of phase IDs that are already completed.
 func (g *Graph) Ready(done map[string]bool) []string {
 	var ready []string
 	for id, deps := range g.adjacency {

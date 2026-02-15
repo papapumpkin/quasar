@@ -39,7 +39,7 @@ type Info struct {
 	Description string `toml:"description"`
 }
 
-// Defaults holds fallback values applied to tasks that omit those fields.
+// Defaults holds fallback values applied to phases that omit those fields.
 type Defaults struct {
 	Type     string   `toml:"type"`
 	Priority int      `toml:"priority"`
@@ -47,8 +47,8 @@ type Defaults struct {
 	Assignee string   `toml:"assignee"`
 }
 
-// TaskSpec is parsed from each *.md file's TOML frontmatter.
-type TaskSpec struct {
+// PhaseSpec is parsed from each *.md file's TOML frontmatter.
+type PhaseSpec struct {
 	ID              string   `toml:"id"`
 	Title           string   `toml:"title"`
 	Type            string   `toml:"type"`
@@ -67,32 +67,32 @@ type TaskSpec struct {
 type Nebula struct {
 	Dir      string
 	Manifest Manifest
-	Tasks    []TaskSpec
+	Phases   []PhaseSpec
 }
 
-// TaskStatus represents the lifecycle of a task within a nebula.
-type TaskStatus string
+// PhaseStatus represents the lifecycle of a phase within a nebula.
+type PhaseStatus string
 
 const (
-	TaskStatusPending    TaskStatus = "pending"
-	TaskStatusCreated    TaskStatus = "created"
-	TaskStatusInProgress TaskStatus = "in_progress"
-	TaskStatusDone       TaskStatus = "done"
-	TaskStatusFailed     TaskStatus = "failed"
+	PhaseStatusPending    PhaseStatus = "pending"
+	PhaseStatusCreated    PhaseStatus = "created"
+	PhaseStatusInProgress PhaseStatus = "in_progress"
+	PhaseStatusDone       PhaseStatus = "done"
+	PhaseStatusFailed     PhaseStatus = "failed"
 )
 
-// State is persisted in nebula.state.toml, mapping task IDs to bead IDs.
+// State is persisted in nebula.state.toml, mapping phase IDs to bead IDs.
 type State struct {
-	Version      int                   `toml:"version"`
-	NebulaName   string                `toml:"nebula_name"`
-	TotalCostUSD float64               `toml:"total_cost_usd,omitempty"`
-	Tasks        map[string]*TaskState `toml:"tasks"`
+	Version      int                    `toml:"version"`
+	NebulaName   string                 `toml:"nebula_name"`
+	TotalCostUSD float64                `toml:"total_cost_usd,omitempty"`
+	Phases       map[string]*PhaseState `toml:"phases"`
 }
 
-// TaskState tracks the current status and bead association for a single task.
-type TaskState struct {
+// PhaseState tracks the current status and bead association for a single phase.
+type PhaseState struct {
 	BeadID    string        `toml:"bead_id"`
-	Status    TaskStatus    `toml:"status"`
+	Status    PhaseStatus   `toml:"status"`
 	CreatedAt time.Time     `toml:"created_at"`
 	UpdatedAt time.Time     `toml:"updated_at"`
 	Report    *ReviewReport `toml:"report,omitempty"`
@@ -106,7 +106,7 @@ type ReviewReport struct {
 	Summary          string `toml:"summary"`
 }
 
-// ActionType describes what apply will do for a task.
+// ActionType describes what apply will do for a phase.
 type ActionType string
 
 const (
@@ -119,9 +119,9 @@ const (
 
 // Action is a single planned change.
 type Action struct {
-	TaskID string
-	Type   ActionType
-	Reason string // Human-readable explanation
+	PhaseID string
+	Type    ActionType
+	Reason  string // Human-readable explanation
 }
 
 // Plan is the diff between desired nebula state and actual beads state.
@@ -132,8 +132,8 @@ type Plan struct {
 
 // WorkerResult records the outcome of a single worker execution.
 type WorkerResult struct {
-	TaskID string
-	BeadID string
-	Err    error
-	Report *ReviewReport
+	PhaseID string
+	BeadID  string
+	Err     error
+	Report  *ReviewReport
 }

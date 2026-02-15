@@ -11,7 +11,7 @@ import (
 
 // CheckDependencies verifies that all external dependencies declared in the nebula are met.
 // For requires_beads: each bead must exist and be closed.
-// For requires_nebulae: each named nebula's state file must show all tasks done.
+// For requires_nebulae: each named nebula's state file must show all phases done.
 func CheckDependencies(ctx context.Context, deps Dependencies, nebulaDir string, client beads.Client) error {
 	var unmet []string
 
@@ -33,13 +33,13 @@ func CheckDependencies(ctx context.Context, deps Dependencies, nebulaDir string,
 			unmet = append(unmet, fmt.Sprintf("nebula %q: cannot load state: %v", name, err))
 			continue
 		}
-		if len(st.Tasks) == 0 {
-			unmet = append(unmet, fmt.Sprintf("nebula %q: no tasks found in state", name))
+		if len(st.Phases) == 0 {
+			unmet = append(unmet, fmt.Sprintf("nebula %q: no phases found in state", name))
 			continue
 		}
-		for taskID, ts := range st.Tasks {
-			if ts.Status != TaskStatusDone {
-				unmet = append(unmet, fmt.Sprintf("nebula %q: task %q is %s, not done", name, taskID, ts.Status))
+		for phaseID, ps := range st.Phases {
+			if ps.Status != PhaseStatusDone {
+				unmet = append(unmet, fmt.Sprintf("nebula %q: phase %q is %s, not done", name, phaseID, ps.Status))
 			}
 		}
 	}
@@ -65,98 +65,98 @@ func BuildPlan(ctx context.Context, n *Nebula, state *State, client beads.Client
 		NebulaName: n.Manifest.Nebula.Name,
 	}
 
-	// Build set of desired task IDs.
+	// Build set of desired phase IDs.
 	desired := make(map[string]bool)
-	for _, t := range n.Tasks {
-		desired[t.ID] = true
+	for _, p := range n.Phases {
+		desired[p.ID] = true
 	}
 
-	// Determine action for each task in the nebula.
-	for _, t := range n.Tasks {
-		ts, exists := state.Tasks[t.ID]
+	// Determine action for each phase in the nebula.
+	for _, p := range n.Phases {
+		ps, exists := state.Phases[p.ID]
 
 		if !exists {
 			plan.Actions = append(plan.Actions, Action{
-				TaskID: t.ID,
-				Type:   ActionCreate,
-				Reason: fmt.Sprintf("create bead for %q", t.Title),
+				PhaseID: p.ID,
+				Type:    ActionCreate,
+				Reason:  fmt.Sprintf("create bead for %q", p.Title),
 			})
 			continue
 		}
 
-		// Locked tasks (in_progress) are skipped.
-		if ts.Status == TaskStatusInProgress {
+		// Locked phases (in_progress) are skipped.
+		if ps.Status == PhaseStatusInProgress {
 			plan.Actions = append(plan.Actions, Action{
-				TaskID: t.ID,
-				Type:   ActionSkip,
-				Reason: "locked (in_progress)",
+				PhaseID: p.ID,
+				Type:    ActionSkip,
+				Reason:  "locked (in_progress)",
 			})
 			continue
 		}
 
-		// Already done tasks are skipped.
-		if ts.Status == TaskStatusDone {
+		// Already done phases are skipped.
+		if ps.Status == PhaseStatusDone {
 			plan.Actions = append(plan.Actions, Action{
-				TaskID: t.ID,
-				Type:   ActionSkip,
-				Reason: "already completed",
+				PhaseID: p.ID,
+				Type:    ActionSkip,
+				Reason:  "already completed",
 			})
 			continue
 		}
 
-		// Failed tasks are retried with a new bead.
-		if ts.Status == TaskStatusFailed {
+		// Failed phases are retried with a new bead.
+		if ps.Status == PhaseStatusFailed {
 			plan.Actions = append(plan.Actions, Action{
-				TaskID: t.ID,
-				Type:   ActionRetry,
-				Reason: fmt.Sprintf("retrying failed task (previous bead: %s)", ts.BeadID),
+				PhaseID: p.ID,
+				Type:    ActionRetry,
+				Reason:  fmt.Sprintf("retrying failed phase (previous bead: %s)", ps.BeadID),
 			})
 			continue
 		}
 
-		// Task exists in state but bead may need updating.
-		if ts.BeadID != "" {
+		// Phase exists in state but bead may need updating.
+		if ps.BeadID != "" {
 			// Verify bead still exists.
-			_, err := client.Show(ctx, ts.BeadID)
+			_, err := client.Show(ctx, ps.BeadID)
 			if err != nil {
 				// Bead missing — recreate.
 				plan.Actions = append(plan.Actions, Action{
-					TaskID: t.ID,
-					Type:   ActionCreate,
-					Reason: fmt.Sprintf("bead %s not found, recreating", ts.BeadID),
+					PhaseID: p.ID,
+					Type:    ActionCreate,
+					Reason:  fmt.Sprintf("bead %s not found, recreating", ps.BeadID),
 				})
 				continue
 			}
 
 			plan.Actions = append(plan.Actions, Action{
-				TaskID: t.ID,
-				Type:   ActionUpdate,
-				Reason: fmt.Sprintf("update bead %s", ts.BeadID),
+				PhaseID: p.ID,
+				Type:    ActionUpdate,
+				Reason:  fmt.Sprintf("update bead %s", ps.BeadID),
 			})
 			continue
 		}
 
 		// State entry without bead ID — create.
 		plan.Actions = append(plan.Actions, Action{
-			TaskID: t.ID,
-			Type:   ActionCreate,
-			Reason: fmt.Sprintf("create bead for %q (no bead ID in state)", t.Title),
+			PhaseID: p.ID,
+			Type:    ActionCreate,
+			Reason:  fmt.Sprintf("create bead for %q (no bead ID in state)", p.Title),
 		})
 	}
 
-	// Tasks in state that are no longer in the nebula → close.
-	for taskID, ts := range state.Tasks {
-		if desired[taskID] {
+	// Phases in state that are no longer in the nebula → close.
+	for phaseID, ps := range state.Phases {
+		if desired[phaseID] {
 			continue
 		}
-		if ts.Status == TaskStatusDone {
+		if ps.Status == PhaseStatusDone {
 			continue
 		}
-		if ts.BeadID != "" {
+		if ps.BeadID != "" {
 			plan.Actions = append(plan.Actions, Action{
-				TaskID: taskID,
-				Type:   ActionClose,
-				Reason: "task removed from nebula",
+				PhaseID: phaseID,
+				Type:    ActionClose,
+				Reason:  "phase removed from nebula",
 			})
 		}
 	}

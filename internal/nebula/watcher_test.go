@@ -10,11 +10,11 @@ import (
 func TestWatcher_DetectsChange(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create a task file.
-	taskContent := "+++\nid = \"test-task\"\ntitle = \"Test task\"\n+++\nTask body here.\n"
-	taskFile := filepath.Join(dir, "test-task.md")
-	if err := os.WriteFile(taskFile, []byte(taskContent), 0644); err != nil {
-		t.Fatalf("failed to create task file: %v", err)
+	// Create a phase file.
+	phaseContent := "+++\nid = \"test-phase\"\ntitle = \"Test phase\"\n+++\nPhase body here.\n"
+	phaseFile := filepath.Join(dir, "test-phase.md")
+	if err := os.WriteFile(phaseFile, []byte(phaseContent), 0644); err != nil {
+		t.Fatalf("failed to create phase file: %v", err)
 	}
 
 	w, err := NewWatcher(dir)
@@ -28,16 +28,16 @@ func TestWatcher_DetectsChange(t *testing.T) {
 	defer w.Stop()
 
 	// Modify the file.
-	updatedContent := "+++\nid = \"test-task\"\ntitle = \"Updated task\"\n+++\nUpdated body.\n"
-	if err := os.WriteFile(taskFile, []byte(updatedContent), 0644); err != nil {
-		t.Fatalf("failed to update task file: %v", err)
+	updatedContent := "+++\nid = \"test-phase\"\ntitle = \"Updated phase\"\n+++\nUpdated body.\n"
+	if err := os.WriteFile(phaseFile, []byte(updatedContent), 0644); err != nil {
+		t.Fatalf("failed to update phase file: %v", err)
 	}
 
 	// Wait for change with timeout.
 	select {
 	case change := <-w.Changes:
-		if change.TaskID != "test-task" {
-			t.Errorf("expected task ID 'test-task', got %q", change.TaskID)
+		if change.PhaseID != "test-phase" {
+			t.Errorf("expected phase ID 'test-phase', got %q", change.PhaseID)
 		}
 		if change.Kind != ChangeModified {
 			t.Errorf("expected ChangeModified, got %d", change.Kind)
@@ -77,10 +77,10 @@ func TestWatcher_IgnoresNonMDFiles(t *testing.T) {
 func TestWatcher_DetectsRemoval(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create a task file.
-	taskFile := filepath.Join(dir, "removable.md")
-	if err := os.WriteFile(taskFile, []byte("+++\nid = \"removable\"\ntitle = \"Remove me\"\n+++\nBody.\n"), 0644); err != nil {
-		t.Fatalf("failed to create task file: %v", err)
+	// Create a phase file.
+	phaseFile := filepath.Join(dir, "removable.md")
+	if err := os.WriteFile(phaseFile, []byte("+++\nid = \"removable\"\ntitle = \"Remove me\"\n+++\nBody.\n"), 0644); err != nil {
+		t.Fatalf("failed to create phase file: %v", err)
 	}
 
 	w, err := NewWatcher(dir)
@@ -94,8 +94,8 @@ func TestWatcher_DetectsRemoval(t *testing.T) {
 	defer w.Stop()
 
 	// Remove the file.
-	if err := os.Remove(taskFile); err != nil {
-		t.Fatalf("failed to remove task file: %v", err)
+	if err := os.Remove(phaseFile); err != nil {
+		t.Fatalf("failed to remove phase file: %v", err)
 	}
 
 	select {

@@ -8,26 +8,26 @@ import (
 	"sync"
 )
 
-// TaskRunnerResult holds the outcome of a single task execution.
-type TaskRunnerResult struct {
+// PhaseRunnerResult holds the outcome of a single phase execution.
+type PhaseRunnerResult struct {
 	TotalCostUSD float64
 	CyclesUsed   int
 	Report       *ReviewReport
 }
 
-// TaskRunner is the interface for executing a task (satisfied by loop.Loop).
-type TaskRunner interface {
-	RunExistingTask(ctx context.Context, beadID, taskDescription string, exec ResolvedExecution) (*TaskRunnerResult, error)
-	GenerateCheckpoint(ctx context.Context, beadID, taskDescription string) (string, error)
+// PhaseRunner is the interface for executing a phase (satisfied by loop.Loop).
+type PhaseRunner interface {
+	RunExistingPhase(ctx context.Context, beadID, phaseDescription string, exec ResolvedExecution) (*PhaseRunnerResult, error)
+	GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error)
 }
 
-// ProgressFunc is called after each task status change to report progress.
+// ProgressFunc is called after each phase status change to report progress.
 // Parameters: completed, total, openBeads, closedBeads, totalCostUSD.
 type ProgressFunc func(completed, total, openBeads, closedBeads int, totalCostUSD float64)
 
-// WorkerGroup executes tasks in dependency order using a pool of workers.
+// WorkerGroup executes phases in dependency order using a pool of workers.
 type WorkerGroup struct {
-	Runner       TaskRunner
+	Runner       PhaseRunner
 	Nebula       *Nebula
 	State        *State
 	MaxWorkers   int
@@ -41,10 +41,10 @@ type WorkerGroup struct {
 	results []WorkerResult
 }
 
-// buildTaskPrompt prepends nebula context (goals, constraints) to the task body.
-func buildTaskPrompt(task *TaskSpec, ctx *Context) string {
+// buildPhasePrompt prepends nebula context (goals, constraints) to the phase body.
+func buildPhasePrompt(phase *PhaseSpec, ctx *Context) string {
 	if ctx == nil || (len(ctx.Goals) == 0 && len(ctx.Constraints) == 0) {
-		return task.Body
+		return phase.Body
 	}
 
 	var sb strings.Builder
@@ -66,7 +66,7 @@ func buildTaskPrompt(task *TaskSpec, ctx *Context) string {
 		}
 	}
 	sb.WriteString("\nTASK:\n")
-	sb.WriteString(task.Body)
+	sb.WriteString(phase.Body)
 	return sb.String()
 }
 
@@ -76,50 +76,50 @@ func (wg *WorkerGroup) reportProgress() {
 	if wg.OnProgress == nil {
 		return
 	}
-	total := len(wg.Nebula.Tasks)
+	total := len(wg.Nebula.Phases)
 	var completed, open, closed int
-	for _, ts := range wg.State.Tasks {
-		switch ts.Status {
-		case TaskStatusDone:
+	for _, ps := range wg.State.Phases {
+		switch ps.Status {
+		case PhaseStatusDone:
 			closed++
 			completed++
-		case TaskStatusFailed:
+		case PhaseStatusFailed:
 			closed++
 			completed++
-		case TaskStatusInProgress, TaskStatusCreated:
+		case PhaseStatusInProgress, PhaseStatusCreated:
 			open++
-		case TaskStatusPending:
-			// Pending tasks have no bead yet — not counted in open or closed.
-			// They still contribute to total (via len(wg.Nebula.Tasks)).
+		case PhaseStatusPending:
+			// Pending phases have no bead yet — not counted in open or closed.
+			// They still contribute to total (via len(wg.Nebula.Phases)).
 		}
 	}
 	wg.OnProgress(completed, total, open, closed, wg.State.TotalCostUSD)
 }
 
-// initTaskState builds lookup maps from the current nebula and state.
-// It returns a task-spec index, and sets of already-done and already-failed task IDs.
-// Failed tasks are also marked done so that graph.Ready() can unblock dependents.
-func (wg *WorkerGroup) initTaskState() (tasksByID map[string]*TaskSpec, done, failed map[string]bool) {
-	tasksByID = make(map[string]*TaskSpec)
-	for i := range wg.Nebula.Tasks {
-		tasksByID[wg.Nebula.Tasks[i].ID] = &wg.Nebula.Tasks[i]
+// initPhaseState builds lookup maps from the current nebula and state.
+// It returns a phase-spec index, and sets of already-done and already-failed phase IDs.
+// Failed phases are also marked done so that graph.Ready() can unblock dependents.
+func (wg *WorkerGroup) initPhaseState() (phasesByID map[string]*PhaseSpec, done, failed map[string]bool) {
+	phasesByID = make(map[string]*PhaseSpec)
+	for i := range wg.Nebula.Phases {
+		phasesByID[wg.Nebula.Phases[i].ID] = &wg.Nebula.Phases[i]
 	}
 
 	done = make(map[string]bool)
 	failed = make(map[string]bool)
-	for id, ts := range wg.State.Tasks {
-		if ts.Status == TaskStatusDone {
+	for id, ps := range wg.State.Phases {
+		if ps.Status == PhaseStatusDone {
 			done[id] = true
 		}
-		if ts.Status == TaskStatusFailed {
+		if ps.Status == PhaseStatusFailed {
 			failed[id] = true
 			done[id] = true
 		}
 	}
-	return tasksByID, done, failed
+	return phasesByID, done, failed
 }
 
-// filterEligible returns task IDs from ready that are not in-flight, not failed,
+// filterEligible returns phase IDs from ready that are not in-flight, not failed,
 // and not blocked by a failed dependency.
 // Must be called with wg.mu held.
 func filterEligible(ready []string, inFlight, failed map[string]bool, graph *Graph) []string {
@@ -136,9 +136,9 @@ func filterEligible(ready []string, inFlight, failed map[string]bool, graph *Gra
 	return eligible
 }
 
-// hasFailedDep reports whether any direct dependency of taskID has failed.
-func hasFailedDep(taskID string, failed map[string]bool, graph *Graph) bool {
-	deps, ok := graph.adjacency[taskID]
+// hasFailedDep reports whether any direct dependency of phaseID has failed.
+func hasFailedDep(phaseID string, failed map[string]bool, graph *Graph) bool {
+	deps, ok := graph.adjacency[phaseID]
 	if !ok {
 		return false
 	}
@@ -150,66 +150,66 @@ func hasFailedDep(taskID string, failed map[string]bool, graph *Graph) bool {
 	return false
 }
 
-// executeTask runs a single task and records the result.
+// executePhase runs a single phase and records the result.
 // It is intended to be called as a goroutine from the dispatch loop.
-func (wg *WorkerGroup) executeTask(
+func (wg *WorkerGroup) executePhase(
 	ctx context.Context,
-	taskID string,
-	tasksByID map[string]*TaskSpec,
+	phaseID string,
+	phasesByID map[string]*PhaseSpec,
 	done, failed, inFlight map[string]bool,
 ) {
-	task := tasksByID[taskID]
-	ts := wg.State.Tasks[taskID]
-	if task == nil || ts == nil || ts.BeadID == "" {
-		wg.recordFailure(taskID, done, failed, inFlight)
+	phase := phasesByID[phaseID]
+	ps := wg.State.Phases[phaseID]
+	if phase == nil || ps == nil || ps.BeadID == "" {
+		wg.recordFailure(phaseID, done, failed, inFlight)
 		return
 	}
 
 	wg.mu.Lock()
-	wg.State.SetTaskState(taskID, ts.BeadID, TaskStatusInProgress)
+	wg.State.SetPhaseState(phaseID, ps.BeadID, PhaseStatusInProgress)
 	if err := SaveState(wg.Nebula.Dir, wg.State); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to save state: %v\n", err)
 	}
 	wg.reportProgress()
 	wg.mu.Unlock()
 
-	exec := ResolveExecution(wg.GlobalCycles, wg.GlobalBudget, wg.GlobalModel, &wg.Nebula.Manifest.Execution, task)
-	prompt := buildTaskPrompt(task, &wg.Nebula.Manifest.Context)
-	taskResult, err := wg.Runner.RunExistingTask(ctx, ts.BeadID, prompt, exec)
+	exec := ResolveExecution(wg.GlobalCycles, wg.GlobalBudget, wg.GlobalModel, &wg.Nebula.Manifest.Execution, phase)
+	prompt := buildPhasePrompt(phase, &wg.Nebula.Manifest.Context)
+	phaseResult, err := wg.Runner.RunExistingPhase(ctx, ps.BeadID, prompt, exec)
 
-	wg.recordResult(taskID, ts, taskResult, err, done, failed, inFlight)
+	wg.recordResult(phaseID, ps, phaseResult, err, done, failed, inFlight)
 }
 
-// recordResult updates state maps and persists state after a task execution.
+// recordResult updates state maps and persists state after a phase execution.
 // Must NOT be called with wg.mu held.
 func (wg *WorkerGroup) recordResult(
-	taskID string,
-	ts *TaskState,
-	taskResult *TaskRunnerResult,
+	phaseID string,
+	ps *PhaseState,
+	phaseResult *PhaseRunnerResult,
 	err error,
 	done, failed, inFlight map[string]bool,
 ) {
 	wg.mu.Lock()
 	defer wg.mu.Unlock()
 
-	delete(inFlight, taskID)
-	wr := WorkerResult{TaskID: taskID, BeadID: ts.BeadID, Err: err}
-	if taskResult != nil {
-		wg.State.TotalCostUSD += taskResult.TotalCostUSD
+	delete(inFlight, phaseID)
+	wr := WorkerResult{PhaseID: phaseID, BeadID: ps.BeadID, Err: err}
+	if phaseResult != nil {
+		wg.State.TotalCostUSD += phaseResult.TotalCostUSD
 	}
-	if err == nil && taskResult != nil && taskResult.Report != nil {
-		wr.Report = taskResult.Report
-		ts.Report = taskResult.Report
+	if err == nil && phaseResult != nil && phaseResult.Report != nil {
+		wr.Report = phaseResult.Report
+		ps.Report = phaseResult.Report
 	}
 	wg.results = append(wg.results, wr)
 
 	if err != nil {
-		failed[taskID] = true
-		done[taskID] = true // unblock dependents (blocked-by-failure filter skips them)
-		wg.State.SetTaskState(taskID, ts.BeadID, TaskStatusFailed)
+		failed[phaseID] = true
+		done[phaseID] = true // unblock dependents (blocked-by-failure filter skips them)
+		wg.State.SetPhaseState(phaseID, ps.BeadID, PhaseStatusFailed)
 	} else {
-		done[taskID] = true
-		wg.State.SetTaskState(taskID, ts.BeadID, TaskStatusDone)
+		done[phaseID] = true
+		wg.State.SetPhaseState(phaseID, ps.BeadID, PhaseStatusDone)
 	}
 	if err := SaveState(wg.Nebula.Dir, wg.State); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to save state: %v\n", err)
@@ -217,28 +217,28 @@ func (wg *WorkerGroup) recordResult(
 	wg.reportProgress()
 }
 
-// recordFailure marks a task as failed when it has no valid bead ID.
+// recordFailure marks a phase as failed when it has no valid bead ID.
 // Must NOT be called with wg.mu held.
-func (wg *WorkerGroup) recordFailure(taskID string, done, failed, inFlight map[string]bool) {
+func (wg *WorkerGroup) recordFailure(phaseID string, done, failed, inFlight map[string]bool) {
 	wg.mu.Lock()
-	failed[taskID] = true
-	done[taskID] = true
-	delete(inFlight, taskID)
+	failed[phaseID] = true
+	done[phaseID] = true
+	delete(inFlight, phaseID)
 	wg.results = append(wg.results, WorkerResult{
-		TaskID: taskID,
-		Err:    fmt.Errorf("no bead ID for task %q", taskID),
+		PhaseID: phaseID,
+		Err:     fmt.Errorf("no bead ID for phase %q", phaseID),
 	})
 	wg.mu.Unlock()
 }
 
-// Run dispatches tasks respecting dependency order.
-// It returns after all eligible tasks have been executed or the context is canceled.
+// Run dispatches phases respecting dependency order.
+// It returns after all eligible phases have been executed or the context is canceled.
 func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	if wg.MaxWorkers <= 0 {
 		wg.MaxWorkers = 1
 	}
-	tasksByID, done, failed := wg.initTaskState()
-	graph := NewGraph(wg.Nebula.Tasks)
+	phasesByID, done, failed := wg.initPhaseState()
+	graph := NewGraph(wg.Nebula.Phases)
 	inFlight := make(map[string]bool)
 	sem := make(chan struct{}, wg.MaxWorkers)
 	var wgSync sync.WaitGroup
@@ -267,12 +267,12 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 
 			sem <- struct{}{}
 			wgSync.Add(1)
-			go func(taskID string) {
+			go func(phaseID string) {
 				defer func() { <-sem; wgSync.Done() }()
-				wg.executeTask(ctx, taskID, tasksByID, done, failed, inFlight)
+				wg.executePhase(ctx, phaseID, phasesByID, done, failed, inFlight)
 			}(id)
 		}
-		wgSync.Wait() // wait for batch before looking for more ready tasks
+		wgSync.Wait() // wait for batch before looking for more ready phases
 	}
 	wgSync.Wait()
 

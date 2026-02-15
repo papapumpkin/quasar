@@ -9,7 +9,7 @@ import (
 	toml "github.com/pelletier/go-toml/v2"
 )
 
-// Load reads a nebula directory, parsing nebula.toml and all *.md task files.
+// Load reads a nebula directory, parsing nebula.toml and all *.md phase files.
 func Load(dir string) (*Nebula, error) {
 	manifestPath := filepath.Join(dir, "nebula.toml")
 	data, err := os.ReadFile(manifestPath)
@@ -30,63 +30,63 @@ func Load(dir string) (*Nebula, error) {
 		return nil, fmt.Errorf("reading nebula directory: %w", err)
 	}
 
-	var tasks []TaskSpec
+	var phases []PhaseSpec
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
 			continue
 		}
 
-		task, err := parseTaskFile(filepath.Join(dir, e.Name()), manifest.Defaults)
+		phase, err := parsePhaseFile(filepath.Join(dir, e.Name()), manifest.Defaults)
 		if err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", e.Name(), err)
 		}
-		task.SourceFile = e.Name()
-		tasks = append(tasks, task)
+		phase.SourceFile = e.Name()
+		phases = append(phases, phase)
 	}
 
 	return &Nebula{
 		Dir:      dir,
 		Manifest: manifest,
-		Tasks:    tasks,
+		Phases:   phases,
 	}, nil
 }
 
-// parseTaskFile reads a markdown file with +++ TOML frontmatter.
-func parseTaskFile(path string, defaults Defaults) (TaskSpec, error) {
+// parsePhaseFile reads a markdown file with +++ TOML frontmatter.
+func parsePhaseFile(path string, defaults Defaults) (PhaseSpec, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return TaskSpec{}, err
+		return PhaseSpec{}, err
 	}
 
 	content := string(data)
 	frontmatter, body, err := splitFrontmatter(content)
 	if err != nil {
-		return TaskSpec{}, err
+		return PhaseSpec{}, err
 	}
 
-	var task TaskSpec
-	if err := toml.Unmarshal([]byte(frontmatter), &task); err != nil {
-		return TaskSpec{}, fmt.Errorf("parsing TOML frontmatter: %w", err)
+	var phase PhaseSpec
+	if err := toml.Unmarshal([]byte(frontmatter), &phase); err != nil {
+		return PhaseSpec{}, fmt.Errorf("parsing TOML frontmatter: %w", err)
 	}
 
-	task.Body = strings.TrimSpace(body)
+	phase.Body = strings.TrimSpace(body)
 
 	// Apply defaults for zero-valued fields.
-	if task.Type == "" {
-		task.Type = defaults.Type
+	if phase.Type == "" {
+		phase.Type = defaults.Type
 	}
-	if task.Priority == 0 {
-		task.Priority = defaults.Priority
+	if phase.Priority == 0 {
+		phase.Priority = defaults.Priority
 	}
-	if len(task.Labels) == 0 && len(defaults.Labels) > 0 {
-		task.Labels = make([]string, len(defaults.Labels))
-		copy(task.Labels, defaults.Labels)
+	if len(phase.Labels) == 0 && len(defaults.Labels) > 0 {
+		phase.Labels = make([]string, len(defaults.Labels))
+		copy(phase.Labels, defaults.Labels)
 	}
-	if task.Assignee == "" {
-		task.Assignee = defaults.Assignee
+	if phase.Assignee == "" {
+		phase.Assignee = defaults.Assignee
 	}
 
-	return task, nil
+	return phase, nil
 }
 
 // splitFrontmatter splits content on +++ delimiters.

@@ -18,46 +18,46 @@ func Validate(n *Nebula) []ValidationError {
 	seen := make(map[string]string) // id → source file
 	ids := make(map[string]bool)
 
-	for _, t := range n.Tasks {
+	for _, p := range n.Phases {
 		// Required fields.
-		if t.ID == "" {
+		if p.ID == "" {
 			errs = append(errs, ValidationError{
-				SourceFile: t.SourceFile,
+				SourceFile: p.SourceFile,
 				Field:      "id",
 				Err:        fmt.Errorf("%w: id", ErrMissingField),
 			})
 			continue
 		}
-		if t.Title == "" {
+		if p.Title == "" {
 			errs = append(errs, ValidationError{
-				TaskID:     t.ID,
-				SourceFile: t.SourceFile,
+				PhaseID:    p.ID,
+				SourceFile: p.SourceFile,
 				Field:      "title",
 				Err:        fmt.Errorf("%w: title", ErrMissingField),
 			})
 		}
 
 		// Duplicate IDs.
-		if prev, ok := seen[t.ID]; ok {
+		if prev, ok := seen[p.ID]; ok {
 			errs = append(errs, ValidationError{
-				TaskID:     t.ID,
-				SourceFile: t.SourceFile,
-				Err:        fmt.Errorf("%w: %q already defined in %s", ErrDuplicateID, t.ID, prev),
+				PhaseID:    p.ID,
+				SourceFile: p.SourceFile,
+				Err:        fmt.Errorf("%w: %q already defined in %s", ErrDuplicateID, p.ID, prev),
 			})
 		}
-		seen[t.ID] = t.SourceFile
-		ids[t.ID] = true
+		seen[p.ID] = p.SourceFile
+		ids[p.ID] = true
 	}
 
 	// Validate dependencies reference known IDs.
-	for _, t := range n.Tasks {
-		for _, dep := range t.DependsOn {
+	for _, p := range n.Phases {
+		for _, dep := range p.DependsOn {
 			if !ids[dep] {
 				errs = append(errs, ValidationError{
-					TaskID:     t.ID,
-					SourceFile: t.SourceFile,
+					PhaseID:    p.ID,
+					SourceFile: p.SourceFile,
 					Field:      "depends_on",
-					Err:        fmt.Errorf("%w: %q depends on unknown task %q", ErrUnknownDep, t.ID, dep),
+					Err:        fmt.Errorf("%w: %q depends on unknown phase %q", ErrUnknownDep, p.ID, dep),
 				})
 			}
 		}
@@ -80,22 +80,22 @@ func Validate(n *Nebula) []ValidationError {
 		})
 	}
 
-	// Validate per-task execution overrides.
-	for _, t := range n.Tasks {
-		if t.MaxReviewCycles < 0 {
+	// Validate per-phase execution overrides.
+	for _, p := range n.Phases {
+		if p.MaxReviewCycles < 0 {
 			errs = append(errs, ValidationError{
-				TaskID:     t.ID,
-				SourceFile: t.SourceFile,
+				PhaseID:    p.ID,
+				SourceFile: p.SourceFile,
 				Field:      "max_review_cycles",
-				Err:        fmt.Errorf("max_review_cycles must be >= 0, got %d", t.MaxReviewCycles),
+				Err:        fmt.Errorf("max_review_cycles must be >= 0, got %d", p.MaxReviewCycles),
 			})
 		}
-		if t.MaxBudgetUSD < 0 {
+		if p.MaxBudgetUSD < 0 {
 			errs = append(errs, ValidationError{
-				TaskID:     t.ID,
-				SourceFile: t.SourceFile,
+				PhaseID:    p.ID,
+				SourceFile: p.SourceFile,
 				Field:      "max_budget_usd",
-				Err:        fmt.Errorf("max_budget_usd must be >= 0, got %f", t.MaxBudgetUSD),
+				Err:        fmt.Errorf("max_budget_usd must be >= 0, got %f", p.MaxBudgetUSD),
 			})
 		}
 	}
@@ -122,7 +122,7 @@ func Validate(n *Nebula) []ValidationError {
 
 	// Cycle detection via topological sort.
 	if len(errs) == 0 {
-		g := NewGraph(n.Tasks)
+		g := NewGraph(n.Phases)
 		if _, err := g.Sort(); err != nil {
 			errs = append(errs, ValidationError{
 				SourceFile: "nebula.toml",

@@ -13,16 +13,16 @@ import (
 func Apply(ctx context.Context, plan *Plan, n *Nebula, state *State, client beads.Client) error {
 	state.NebulaName = plan.NebulaName
 
-	tasksByID := make(map[string]*TaskSpec)
-	for i := range n.Tasks {
-		tasksByID[n.Tasks[i].ID] = &n.Tasks[i]
+	phasesByID := make(map[string]*PhaseSpec)
+	for i := range n.Phases {
+		phasesByID[n.Phases[i].ID] = &n.Phases[i]
 	}
 
 	for _, action := range plan.Actions {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if err := applyAction(ctx, action, tasksByID, n.Dir, state, client); err != nil {
+		if err := applyAction(ctx, action, phasesByID, n.Dir, state, client); err != nil {
 			return err
 		}
 	}
@@ -30,77 +30,77 @@ func Apply(ctx context.Context, plan *Plan, n *Nebula, state *State, client bead
 }
 
 // applyAction dispatches a single plan action to the appropriate handler.
-func applyAction(ctx context.Context, action Action, tasksByID map[string]*TaskSpec, dir string, state *State, client beads.Client) error {
+func applyAction(ctx context.Context, action Action, phasesByID map[string]*PhaseSpec, dir string, state *State, client beads.Client) error {
 	switch action.Type {
 	case ActionSkip:
 		return nil
 	case ActionCreate, ActionRetry:
-		task := tasksByID[action.TaskID]
-		if task == nil {
+		phase := phasesByID[action.PhaseID]
+		if phase == nil {
 			return nil
 		}
-		return applyCreateBead(ctx, client, task, state, dir)
+		return applyCreateBead(ctx, client, phase, state, dir)
 	case ActionUpdate:
-		return applyUpdateBead(ctx, client, tasksByID[action.TaskID], state, dir)
+		return applyUpdateBead(ctx, client, phasesByID[action.PhaseID], state, dir)
 	case ActionClose:
 		return applyCloseBead(ctx, client, action, state, dir)
 	}
 	return nil
 }
 
-// applyCreateBead creates a new bead for a task and persists state.
+// applyCreateBead creates a new bead for a phase and persists state.
 // Used for both ActionCreate and ActionRetry.
-func applyCreateBead(ctx context.Context, client beads.Client, task *TaskSpec, state *State, dir string) error {
-	beadID, err := client.Create(ctx, task.Title, beads.CreateOpts{
-		Description: task.Body,
-		Type:        task.Type,
-		Labels:      task.Labels,
-		Assignee:    task.Assignee,
-		Priority:    priorityStr(task.Priority),
+func applyCreateBead(ctx context.Context, client beads.Client, phase *PhaseSpec, state *State, dir string) error {
+	beadID, err := client.Create(ctx, phase.Title, beads.CreateOpts{
+		Description: phase.Body,
+		Type:        phase.Type,
+		Labels:      phase.Labels,
+		Assignee:    phase.Assignee,
+		Priority:    priorityStr(phase.Priority),
 	})
 	if err != nil {
-		return fmt.Errorf("creating bead for task %q: %w", task.ID, err)
+		return fmt.Errorf("creating bead for phase %q: %w", phase.ID, err)
 	}
-	state.SetTaskState(task.ID, beadID, TaskStatusCreated)
+	state.SetPhaseState(phase.ID, beadID, PhaseStatusCreated)
 	if err := SaveState(dir, state); err != nil {
-		return fmt.Errorf("saving state after creating %q: %w", task.ID, err)
+		return fmt.Errorf("saving state after creating %q: %w", phase.ID, err)
 	}
 	return nil
 }
 
 // applyUpdateBead updates an existing bead's assignee and persists state.
-func applyUpdateBead(ctx context.Context, client beads.Client, task *TaskSpec, state *State, dir string) error {
-	if task == nil {
+func applyUpdateBead(ctx context.Context, client beads.Client, phase *PhaseSpec, state *State, dir string) error {
+	if phase == nil {
 		return nil
 	}
-	ts := state.Tasks[task.ID]
-	if ts == nil || ts.BeadID == "" {
+	ps := state.Phases[phase.ID]
+	if ps == nil || ps.BeadID == "" {
 		return nil
 	}
-	if task.Assignee != "" {
-		if err := client.Update(ctx, ts.BeadID, beads.UpdateOpts{Assignee: task.Assignee}); err != nil {
-			return fmt.Errorf("updating bead %s for task %q: %w", ts.BeadID, task.ID, err)
+	if phase.Assignee != "" {
+		if err := client.Update(ctx, ps.BeadID, beads.UpdateOpts{Assignee: phase.Assignee}); err != nil {
+			return fmt.Errorf("updating bead %s for phase %q: %w", ps.BeadID, phase.ID, err)
 		}
 	}
-	state.SetTaskState(task.ID, ts.BeadID, ts.Status)
+	state.SetPhaseState(phase.ID, ps.BeadID, ps.Status)
 	if err := SaveState(dir, state); err != nil {
-		return fmt.Errorf("saving state after updating %q: %w", task.ID, err)
+		return fmt.Errorf("saving state after updating %q: %w", phase.ID, err)
 	}
 	return nil
 }
 
 // applyCloseBead closes an existing bead and persists state.
 func applyCloseBead(ctx context.Context, client beads.Client, action Action, state *State, dir string) error {
-	ts := state.Tasks[action.TaskID]
-	if ts == nil || ts.BeadID == "" {
+	ps := state.Phases[action.PhaseID]
+	if ps == nil || ps.BeadID == "" {
 		return nil
 	}
-	if err := client.Close(ctx, ts.BeadID, action.Reason); err != nil {
-		return fmt.Errorf("closing bead %s for task %q: %w", ts.BeadID, action.TaskID, err)
+	if err := client.Close(ctx, ps.BeadID, action.Reason); err != nil {
+		return fmt.Errorf("closing bead %s for phase %q: %w", ps.BeadID, action.PhaseID, err)
 	}
-	state.SetTaskState(action.TaskID, ts.BeadID, TaskStatusDone)
+	state.SetPhaseState(action.PhaseID, ps.BeadID, PhaseStatusDone)
 	if err := SaveState(dir, state); err != nil {
-		return fmt.Errorf("saving state after closing %q: %w", action.TaskID, err)
+		return fmt.Errorf("saving state after closing %q: %w", action.PhaseID, err)
 	}
 	return nil
 }

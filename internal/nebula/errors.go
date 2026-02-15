@@ -6,12 +6,12 @@ import "errors"
 var (
 	// ErrNoManifest indicates no nebula.toml was found in the nebula directory.
 	ErrNoManifest = errors.New("nebula.toml not found in nebula directory")
-	// ErrDuplicateID indicates two or more tasks share the same ID.
-	ErrDuplicateID = errors.New("duplicate task ID")
-	// ErrDependencyCycle indicates a circular dependency among tasks.
+	// ErrDuplicateID indicates two or more phases share the same ID.
+	ErrDuplicateID = errors.New("duplicate phase ID")
+	// ErrDependencyCycle indicates a circular dependency among phases.
 	ErrDependencyCycle = errors.New("dependency cycle detected")
-	// ErrUnknownDep indicates a task depends on a task ID that does not exist.
-	ErrUnknownDep = errors.New("task depends on unknown task ID")
+	// ErrUnknownDep indicates a phase depends on a phase ID that does not exist.
+	ErrUnknownDep = errors.New("phase depends on unknown phase ID")
 	// ErrMissingField indicates a required field (e.g. id, title) is empty.
 	ErrMissingField = errors.New("required field missing")
 	// ErrUnmetDependency indicates an external dependency (bead or nebula) is not satisfied.
@@ -20,16 +20,16 @@ var (
 
 // ValidationError records a validation problem with source context.
 type ValidationError struct {
-	TaskID     string
+	PhaseID    string
 	SourceFile string
 	Field      string
 	Err        error
 }
 
-// Error returns a human-readable string including source file and task context.
+// Error returns a human-readable string including source file and phase context.
 func (e *ValidationError) Error() string {
-	if e.TaskID != "" {
-		return e.SourceFile + ": task " + e.TaskID + ": " + e.Err.Error()
+	if e.PhaseID != "" {
+		return e.SourceFile + ": phase " + e.PhaseID + ": " + e.Err.Error()
 	}
 	return e.SourceFile + ": " + e.Err.Error()
 }
