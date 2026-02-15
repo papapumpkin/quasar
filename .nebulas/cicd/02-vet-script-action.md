@@ -27,6 +27,7 @@ go vet ./...
 ### `.github/actions/vet/action.yml`
 
 A composite action that:
+
 1. Checks out code via `actions/checkout@v4`
 2. Sets up Go via `actions/setup-go@v5` with `go-version-file: go.mod`
 3. Runs `scripts/vet.sh`

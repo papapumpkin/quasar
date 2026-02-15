@@ -27,6 +27,7 @@ golangci-lint run ./...
 ### `.github/actions/lint/action.yml`
 
 A composite action that:
+
 1. Checks out code via `actions/checkout@v4`
 2. Sets up Go via `actions/setup-go@v5` with `go-version-file: go.mod`
 3. Installs golangci-lint via `golangci/golangci-lint-action@v6` with `args: --version` (install only, no run)
