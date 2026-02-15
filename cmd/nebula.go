@@ -233,6 +233,13 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		WorkDir:      workDir,
 	}
 
+	// Detect TTY for dashboard rendering mode.
+	isTTY := false
+	if fi, err := os.Stderr.Stat(); err == nil {
+		isTTY = (fi.Mode() & os.ModeCharDevice) != 0
+	}
+	dashboard := nebula.NewDashboard(os.Stderr, n, state, cfg.MaxBudgetUSD, isTTY)
+
 	wg := &nebula.WorkerGroup{
 		Runner:       &loopAdapter{loop: taskLoop},
 		Nebula:       n,
@@ -241,7 +248,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		GlobalCycles: cfg.MaxReviewCycles,
 		GlobalBudget: cfg.MaxBudgetUSD,
 		GlobalModel:  cfg.Model,
-		OnProgress:   printer.NebulaProgressBar,
+		OnProgress:   dashboard.ProgressCallback(),
 	}
 
 	// Always create a watcher for intervention file detection (PAUSE/STOP).

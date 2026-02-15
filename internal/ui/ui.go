@@ -21,6 +21,17 @@ const (
 	magenta = "\033[35m"
 )
 
+// Exported ANSI cursor movement helpers for use by dashboard and other packages.
+const (
+	// ANSIClearLine clears the entire current line.
+	ANSIClearLine = "\033[2K"
+)
+
+// ANSICursorUp returns an ANSI escape sequence to move the cursor up n lines.
+func ANSICursorUp(n int) string {
+	return fmt.Sprintf("\033[%dA", n)
+}
+
 // UI defines the interface for user-facing output during a coder-reviewer loop.
 // Consumers (e.g. loop.Loop) depend on this interface rather than the concrete Printer.
 type UI interface {
