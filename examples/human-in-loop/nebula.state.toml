@@ -1,0 +1,112 @@
+version = 1
+nebula_name = 'Human-in-the-Loop'
+total_cost_usd = 33.59484775
+
+[tasks]
+[tasks.approve-mode-plan-gate]
+bead_id = 'quasar-6tq'
+status = 'done'
+created_at = 2026-02-15T15:18:15.993336-05:00
+updated_at = 2026-02-15T16:31:10.219721-05:00
+
+[tasks.approve-mode-plan-gate.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean implementation that fixes dual-prompt bug by making RenderPlan display-only and teaching Gater.Prompt to show plan-specific options, with thorough tests covering all gate modes and edge cases.'
+
+[tasks.checkpoint-diffs]
+bead_id = 'quasar-c96'
+status = 'done'
+created_at = 2026-02-15T15:18:15.785129-05:00
+updated_at = 2026-02-15T16:08:48.448798-05:00
+
+[tasks.checkpoint-diffs.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented checkpoint struct and renderer for structured phase diffs, with solid tests, correct error handling, and clean integration into the worker pipeline.'
+
+[tasks.gate-mode-implementation]
+bead_id = 'quasar-7ql'
+status = 'done'
+created_at = 2026-02-15T15:18:15.890183-05:00
+updated_at = 2026-02-15T16:19:15.890048-05:00
+
+[tasks.gate-mode-implementation.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented gate behavior system with Gater interface, terminal I/O, and proper worker integration including nil-safety, non-TTY degradation, and comprehensive test coverage.'
+
+[tasks.gate-mode-types-config]
+bead_id = 'quasar-lpk'
+status = 'done'
+created_at = 2026-02-15T15:18:15.55592-05:00
+updated_at = 2026-02-15T15:49:59.651011-05:00
+
+[tasks.gate-mode-types-config.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Introduces GateMode enum with config parsing, inheritance resolution, and validation — all cleanly integrated into the existing nebula subsystem with thorough tests.'
+
+[tasks.git-commit-phase-boundaries]
+bead_id = 'quasar-gkw'
+status = 'done'
+created_at = 2026-02-15T15:18:15.666961-05:00
+updated_at = 2026-02-15T15:54:27.893607-05:00
+
+[tasks.git-commit-phase-boundaries.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented GitCommitter with clean interface, proper nil-safety, exec.CommandContext cancellation support, and thorough tests using real git repos; three minor polish items noted (Diff untracked file visibility, intervention file exclusion, idiomatic int parsing in tests).'
+
+[tasks.intervention-hooks]
+bead_id = 'quasar-6b4'
+status = 'done'
+created_at = 2026-02-15T15:18:16.097136-05:00
+updated_at = 2026-02-15T15:46:38.619024-05:00
+
+[tasks.intervention-hooks.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented intervention file system (PAUSE/STOP) for the nebula watcher and worker, with non-blocking channel sends, proper error logging, clean UX messages on stderr, and thorough test coverage — all following project conventions.'
+
+[tasks.live-progress-dashboard]
+bead_id = 'quasar-uwj'
+status = 'done'
+created_at = 2026-02-15T15:18:16.20219-05:00
+updated_at = 2026-02-15T16:02:20.84378-05:00
+
+[tasks.live-progress-dashboard.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, well-tested live dashboard implementation with minor dead code in ui.go and non-deterministic dependency ordering in suffix display.'
+
+[tasks.rename-task-to-phase]
+bead_id = 'quasar-ilh'
+status = 'done'
+created_at = 2026-02-15T15:18:15.447167-05:00
+updated_at = 2026-02-15T15:34:57.537121-05:00
+
+[tasks.rename-task-to-phase.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, thorough rename of task→phase within the nebula subsystem with proper backward compatibility, deprecation warning, and comprehensive test coverage including the new legacy TOML loading test.'
+
+[tasks.watch-mode]
+bead_id = 'quasar-m1y'
+status = 'done'
+created_at = 2026-02-15T15:18:16.30569-05:00
+updated_at = 2026-02-15T16:37:44.254128-05:00
+
+[tasks.watch-mode.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Watch mode implementation correctly streams checkpoint diffs without blocking, uses mutex to prevent interleaved output from concurrent phases, and includes comprehensive tests — all cleanly integrated with existing gate infrastructure.'
