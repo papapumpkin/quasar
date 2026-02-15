@@ -26,6 +26,12 @@ type PhaseRunner interface {
 // Parameters: completed, total, openBeads, closedBeads, totalCostUSD.
 type ProgressFunc func(completed, total, openBeads, closedBeads int, totalCostUSD float64)
 
+// gateSignal communicates a gate decision from a worker goroutine back to the dispatch loop.
+type gateSignal struct {
+	phaseID string
+	action  GateAction
+}
+
 // WorkerGroup executes phases in dependency order using a pool of workers.
 type WorkerGroup struct {
 	Runner       PhaseRunner
@@ -34,13 +40,15 @@ type WorkerGroup struct {
 	MaxWorkers   int
 	Watcher      *Watcher      // nil = no in-flight editing
 	Committer    GitCommitter   // nil = no phase-boundary commits
+	Gater        Gater          // nil = trust mode (no prompts)
 	GlobalCycles int
 	GlobalBudget float64
 	GlobalModel  string
 	OnProgress   ProgressFunc // optional progress callback
 
-	mu      sync.Mutex
-	results []WorkerResult
+	mu          sync.Mutex
+	results     []WorkerResult
+	gateSignals []gateSignal // collected after each batch
 }
 
 // buildPhasePrompt prepends nebula context (goals, constraints) to the phase body.
@@ -152,6 +160,50 @@ func hasFailedDep(phaseID string, failed map[string]bool, graph *Graph) bool {
 	return false
 }
 
+// resolveGateMode determines the effective gate mode for a phase.
+// Returns GateModeTrust if no Gater is configured (nil-safe).
+func (wg *WorkerGroup) resolveGateMode(phase *PhaseSpec) GateMode {
+	if wg.Gater == nil {
+		return GateModeTrust
+	}
+	return ResolveGate(wg.Nebula.Manifest.Execution, *phase)
+}
+
+// applyGate handles the gate check after a phase completes successfully.
+// It resolves the gate mode, optionally renders the checkpoint, and prompts the
+// human if required. Returns the GateAction taken.
+func (wg *WorkerGroup) applyGate(ctx context.Context, phase *PhaseSpec, cp *Checkpoint) GateAction {
+	mode := wg.resolveGateMode(phase)
+
+	switch mode {
+	case GateModeTrust:
+		return GateActionAccept
+
+	case GateModeWatch:
+		// Render checkpoint but don't block.
+		if cp != nil {
+			RenderCheckpoint(os.Stderr, cp)
+		}
+		return GateActionAccept
+
+	case GateModeReview, GateModeApprove:
+		// Render checkpoint and prompt for decision.
+		if cp != nil {
+			RenderCheckpoint(os.Stderr, cp)
+		}
+		action, err := wg.Gater.Prompt(ctx, cp)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: gate prompt failed: %v (defaulting to accept)\n", err)
+			return GateActionAccept
+		}
+		return action
+
+	default:
+		// Unknown gate mode — treat as trust.
+		return GateActionAccept
+	}
+}
+
 // executePhase runs a single phase and records the result.
 // It is intended to be called as a goroutine from the dispatch loop.
 func (wg *WorkerGroup) executePhase(
@@ -186,14 +238,51 @@ func (wg *WorkerGroup) executePhase(
 		}
 	}
 
-	// Build and render checkpoint after successful phase completion.
+	// Build checkpoint after successful phase completion.
+	var cp *Checkpoint
 	if err == nil && phaseResult != nil && wg.Committer != nil {
-		cp, cpErr := BuildCheckpoint(ctx, wg.Committer, phaseID, *phaseResult, wg.Nebula)
+		var cpErr error
+		cp, cpErr = BuildCheckpoint(ctx, wg.Committer, phaseID, *phaseResult, wg.Nebula)
 		if cpErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to build checkpoint for %q: %v\n", phaseID, cpErr)
-		} else {
-			RenderCheckpoint(os.Stderr, cp)
 		}
+	}
+
+	// Apply gate logic after successful phase completion.
+	if err == nil {
+		action := wg.applyGate(ctx, phase, cp)
+		switch action {
+		case GateActionAccept:
+			// Continue normally — fall through to recordResult.
+		case GateActionReject:
+			// Mark as failed and signal stop.
+			wg.recordResult(phaseID, ps, phaseResult, fmt.Errorf("phase %q rejected at gate", phaseID), done, failed, inFlight)
+			wg.mu.Lock()
+			wg.gateSignals = append(wg.gateSignals, gateSignal{phaseID: phaseID, action: GateActionReject})
+			wg.mu.Unlock()
+			return
+		case GateActionRetry:
+			// Undo the in-flight/done marking so the phase can be re-queued.
+			wg.mu.Lock()
+			delete(inFlight, phaseID)
+			wg.State.SetPhaseState(phaseID, ps.BeadID, PhaseStatusInProgress)
+			if saveErr := SaveState(wg.Nebula.Dir, wg.State); saveErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: failed to save state: %v\n", saveErr)
+			}
+			wg.gateSignals = append(wg.gateSignals, gateSignal{phaseID: phaseID, action: GateActionRetry})
+			wg.mu.Unlock()
+			return
+		case GateActionSkip:
+			// Record success for this phase but signal stop.
+			wg.recordResult(phaseID, ps, phaseResult, nil, done, failed, inFlight)
+			wg.mu.Lock()
+			wg.gateSignals = append(wg.gateSignals, gateSignal{phaseID: phaseID, action: GateActionSkip})
+			wg.mu.Unlock()
+			return
+		}
+	} else if cp != nil {
+		// Phase failed but we have a checkpoint — render it for visibility.
+		RenderCheckpoint(os.Stderr, cp)
 	}
 
 	wg.recordResult(phaseID, ps, phaseResult, err, done, failed, inFlight)
@@ -248,6 +337,31 @@ func (wg *WorkerGroup) recordFailure(phaseID string, done, failed, inFlight map[
 		Err:     fmt.Errorf("no bead ID for phase %q", phaseID),
 	})
 	wg.mu.Unlock()
+}
+
+// markRemainingSkipped sets all pending/created phases to skipped status.
+// Must be called with wg.mu held.
+func (wg *WorkerGroup) markRemainingSkipped(done map[string]bool) {
+	for _, phase := range wg.Nebula.Phases {
+		if done[phase.ID] {
+			continue
+		}
+		ps := wg.State.Phases[phase.ID]
+		if ps == nil {
+			continue
+		}
+		if ps.Status == PhaseStatusPending || ps.Status == PhaseStatusCreated {
+			wg.State.SetPhaseState(phase.ID, ps.BeadID, PhaseStatusSkipped)
+		}
+	}
+}
+
+// drainGateSignals returns and clears any pending gate signals.
+// Must be called with wg.mu held.
+func (wg *WorkerGroup) drainGateSignals() []gateSignal {
+	signals := wg.gateSignals
+	wg.gateSignals = nil
+	return signals
 }
 
 // checkInterventions drains the intervention channel and returns the most
@@ -322,6 +436,7 @@ func (wg *WorkerGroup) handleStop() {
 // Run dispatches phases respecting dependency order.
 // It returns after all eligible phases have been executed or the context is canceled.
 // If a STOP file is detected, it returns ErrManualStop after finishing current phases.
+// Gate signals (reject, skip) from phase boundaries also cause graceful termination.
 func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	if wg.MaxWorkers <= 0 {
 		wg.MaxWorkers = 1
@@ -363,6 +478,12 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 				break
 			}
 			wgSync.Wait()
+
+			// Process gate signals after batch completes.
+			stop, retErr := wg.processGateSignals(done)
+			if stop {
+				return wg.collectResults(), retErr
+			}
 			continue
 		}
 
@@ -382,6 +503,12 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 			}(id)
 		}
 		wgSync.Wait() // wait for batch before looking for more ready phases
+
+		// Process gate signals after batch completes.
+		stop, retErr := wg.processGateSignals(done)
+		if stop {
+			return wg.collectResults(), retErr
+		}
 	}
 	wgSync.Wait()
 
@@ -389,4 +516,47 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	results := wg.results
 	wg.mu.Unlock()
 	return results, nil
+}
+
+// processGateSignals handles pending gate signals after a batch completes.
+// Returns true if the dispatch loop should stop, along with any error.
+// Must NOT be called with wg.mu held.
+func (wg *WorkerGroup) processGateSignals(done map[string]bool) (stop bool, err error) {
+	wg.mu.Lock()
+	signals := wg.drainGateSignals()
+	wg.mu.Unlock()
+
+	for _, sig := range signals {
+		switch sig.action {
+		case GateActionReject:
+			wg.mu.Lock()
+			wg.markRemainingSkipped(done)
+			if saveErr := SaveState(wg.Nebula.Dir, wg.State); saveErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: failed to save state: %v\n", saveErr)
+			}
+			wg.mu.Unlock()
+			return true, fmt.Errorf("phase %q rejected at gate", sig.phaseID)
+
+		case GateActionSkip:
+			wg.mu.Lock()
+			wg.markRemainingSkipped(done)
+			if saveErr := SaveState(wg.Nebula.Dir, wg.State); saveErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: failed to save state: %v\n", saveErr)
+			}
+			wg.mu.Unlock()
+			return true, nil
+
+		case GateActionRetry:
+			// Phase was already removed from inFlight in executePhase.
+			// It will be re-eligible in the next iteration.
+		}
+	}
+	return false, nil
+}
+
+// collectResults returns a snapshot of the current results.
+func (wg *WorkerGroup) collectResults() []WorkerResult {
+	wg.mu.Lock()
+	defer wg.mu.Unlock()
+	return wg.results
 }

@@ -13,10 +13,11 @@ type Manifest struct {
 
 // Execution holds default execution parameters for the nebula.
 type Execution struct {
-	MaxWorkers      int     `toml:"max_workers"`
-	MaxReviewCycles int     `toml:"max_review_cycles"`
-	MaxBudgetUSD    float64 `toml:"max_budget_usd"`
-	Model           string  `toml:"model"`
+	MaxWorkers      int      `toml:"max_workers"`
+	MaxReviewCycles int      `toml:"max_review_cycles"`
+	MaxBudgetUSD    float64  `toml:"max_budget_usd"`
+	Model           string   `toml:"model"`
+	Gate            GateMode `toml:"gate"` // Default gate mode for all phases
 }
 
 // Context provides project-level information injected into agent prompts.
@@ -59,6 +60,7 @@ type PhaseSpec struct {
 	MaxReviewCycles int      `toml:"max_review_cycles"` // 0 = use default
 	MaxBudgetUSD    float64  `toml:"max_budget_usd"`    // 0 = use default
 	Model           string   `toml:"model"`             // "" = use default
+	Gate            GateMode `toml:"gate"`              // "" = inherit from manifest
 	Body            string   // Markdown body after +++ block
 	SourceFile      string   // Relative path for error context
 }
@@ -70,6 +72,28 @@ type Nebula struct {
 	Phases   []PhaseSpec
 }
 
+// GateMode controls how human involvement is handled between phases.
+type GateMode string
+
+const (
+	// GateModeTrust runs fully autonomously with no pauses.
+	GateModeTrust GateMode = "trust"
+	// GateModeReview pauses after each phase, shows diff, and awaits approval.
+	GateModeReview GateMode = "review"
+	// GateModeApprove gates the plan AND each phase for human approval.
+	GateModeApprove GateMode = "approve"
+	// GateModeWatch streams diffs in real time without blocking execution.
+	GateModeWatch GateMode = "watch"
+)
+
+// ValidGateModes is the set of recognized gate mode values.
+var ValidGateModes = map[GateMode]bool{
+	GateModeTrust:   true,
+	GateModeReview:  true,
+	GateModeApprove: true,
+	GateModeWatch:   true,
+}
+
 // PhaseStatus represents the lifecycle of a phase within a nebula.
 type PhaseStatus string
 
@@ -79,6 +103,7 @@ const (
 	PhaseStatusInProgress PhaseStatus = "in_progress"
 	PhaseStatusDone       PhaseStatus = "done"
 	PhaseStatusFailed     PhaseStatus = "failed"
+	PhaseStatusSkipped    PhaseStatus = "skipped"
 )
 
 // State is persisted in nebula.state.toml, mapping phase IDs to bead IDs.
