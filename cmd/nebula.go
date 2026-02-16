@@ -318,7 +318,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	if useTUI {
-		// Populate the phase table before starting.
+		// Build phase info for the TUI init message.
 		phases := make([]tui.PhaseInfo, 0, len(n.Phases))
 		for _, p := range n.Phases {
 			phases = append(phases, tui.PhaseInfo{
@@ -327,13 +327,13 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				DependsOn: p.DependsOn,
 			})
 		}
-		tuiProgram.Send(tui.MsgNebulaInit{
-			Name:   n.Manifest.Nebula.Name,
-			Phases: phases,
-		})
 
-		// Run workers in a goroutine; block on TUI.
+		// Run workers in a goroutine; Send must happen after Run() starts.
 		go func() {
+			tuiProgram.Send(tui.MsgNebulaInit{
+				Name:   n.Manifest.Nebula.Name,
+				Phases: phases,
+			})
 			results, runErr := wg.Run(ctx)
 			tuiProgram.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
 		}()
