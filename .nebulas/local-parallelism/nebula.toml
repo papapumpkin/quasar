@@ -1,11 +1,11 @@
 [nebula]
-name = "galaxy"
-description = "Add scope-aware validation and coordination to nebula for octree-inspired conflict avoidance"
+name = "local-parallelism"
+description = "Add scope-aware validation and in-process coordination to nebula for safe parallel phase execution"
 
 [defaults]
 type = "feature"
 priority = 2
-labels = ["quasar", "nebula", "galaxy"]
+labels = ["quasar", "nebula", "relativity"]
 
 [execution]
 max_workers = 1
