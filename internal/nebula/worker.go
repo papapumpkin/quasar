@@ -500,7 +500,9 @@ func (wg *WorkerGroup) gatePlan(ctx context.Context, graph *Graph) error {
 	}
 }
 
-// Run dispatches phases respecting dependency order.
+// Run dispatches phases respecting dependency order with per-wave semaphore sizing.
+// It computes waves upfront and sizes the worker semaphore per wave using
+// EffectiveParallelism, which accounts for scope overlaps between phases.
 // It returns after all eligible phases have been executed or the context is canceled.
 // If a STOP file is detected, it returns ErrManualStop after finishing current phases.
 // Gate signals (reject, skip) from phase boundaries also cause graceful termination.
@@ -518,71 +520,98 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		return nil, err
 	}
 
+	// Compute waves upfront for per-wave semaphore sizing.
+	waves, err := graph.ComputeWaves()
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute waves: %w", err)
+	}
+
 	inFlight := make(map[string]bool)
-	sem := make(chan struct{}, wg.MaxWorkers)
 	var wgSync sync.WaitGroup
 
-	for ctx.Err() == nil {
-		// Check for interventions between batches.
-		switch wg.checkInterventions() {
-		case InterventionStop:
-			wg.handleStop()
-			wg.mu.Lock()
-			results := wg.results
-			wg.mu.Unlock()
-			return results, ErrManualStop
-		case InterventionPause:
-			wg.handlePause()
-			// After resume, re-check for stop.
-			if wg.checkInterventions() == InterventionStop {
+	for _, wave := range waves {
+		if ctx.Err() != nil {
+			break
+		}
+
+		// Compute effective parallelism for this wave based on scope overlaps.
+		ep := EffectiveParallelism(wave, wg.Nebula.Phases, graph, wg.MaxWorkers)
+		workerCount := ep
+		if workerCount > wg.MaxWorkers {
+			workerCount = wg.MaxWorkers
+		}
+		if workerCount <= 0 {
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "Wave %d: %d workers (effective parallelism: %d/%d)\n",
+			wave.Number, workerCount, ep, len(wave.PhaseIDs))
+
+		sem := make(chan struct{}, workerCount)
+
+		// Dispatch loop within the wave: keep looking for eligible phases
+		// until all wave phases are done or in-flight.
+		for ctx.Err() == nil {
+			// Check for interventions between batches.
+			switch wg.checkInterventions() {
+			case InterventionStop:
 				wg.handleStop()
 				wg.mu.Lock()
 				results := wg.results
 				wg.mu.Unlock()
 				return results, ErrManualStop
+			case InterventionPause:
+				wg.handlePause()
+				// After resume, re-check for stop.
+				if wg.checkInterventions() == InterventionStop {
+					wg.handleStop()
+					wg.mu.Lock()
+					results := wg.results
+					wg.mu.Unlock()
+					return results, ErrManualStop
+				}
 			}
-		}
 
-		wg.mu.Lock()
-		eligible := filterEligible(graph.Ready(done), inFlight, failed, graph)
-		anyInFlight := len(inFlight) > 0
-		wg.mu.Unlock()
+			wg.mu.Lock()
+			eligible := filterEligible(graph.Ready(done), inFlight, failed, graph)
+			anyInFlight := len(inFlight) > 0
+			wg.mu.Unlock()
 
-		if len(eligible) == 0 {
-			if !anyInFlight {
-				break
+			if len(eligible) == 0 {
+				if !anyInFlight {
+					break
+				}
+				wgSync.Wait()
+
+				// Process gate signals after batch completes.
+				stop, retErr := wg.processGateSignals(done)
+				if stop {
+					return wg.collectResults(), retErr
+				}
+				continue
 			}
-			wgSync.Wait()
+
+			for _, id := range eligible {
+				if ctx.Err() != nil {
+					break
+				}
+				wg.mu.Lock()
+				inFlight[id] = true
+				wg.mu.Unlock()
+
+				sem <- struct{}{}
+				wgSync.Add(1)
+				go func(phaseID string) {
+					defer func() { <-sem; wgSync.Done() }()
+					wg.executePhase(ctx, phaseID, phasesByID, done, failed, inFlight)
+				}(id)
+			}
+			wgSync.Wait() // wait for batch before looking for more ready phases
 
 			// Process gate signals after batch completes.
 			stop, retErr := wg.processGateSignals(done)
 			if stop {
 				return wg.collectResults(), retErr
 			}
-			continue
-		}
-
-		for _, id := range eligible {
-			if ctx.Err() != nil {
-				break
-			}
-			wg.mu.Lock()
-			inFlight[id] = true
-			wg.mu.Unlock()
-
-			sem <- struct{}{}
-			wgSync.Add(1)
-			go func(phaseID string) {
-				defer func() { <-sem; wgSync.Done() }()
-				wg.executePhase(ctx, phaseID, phasesByID, done, failed, inFlight)
-			}(id)
-		}
-		wgSync.Wait() // wait for batch before looking for more ready phases
-
-		// Process gate signals after batch completes.
-		stop, retErr := wg.processGateSignals(done)
-		if stop {
-			return wg.collectResults(), retErr
 		}
 	}
 	wgSync.Wait()
