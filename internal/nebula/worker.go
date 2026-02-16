@@ -198,7 +198,11 @@ func (wg *WorkerGroup) applyGate(ctx context.Context, phase *PhaseSpec, cp *Chec
 			}
 			RenderCheckpoint(os.Stderr, cp)
 			if wg.Dashboard != nil {
+				// Hold wg.mu so the Dashboard.Render triggered by Resume
+				// doesn't race with concurrent State mutations in recordResult.
+				wg.mu.Lock()
 				wg.Dashboard.Resume()
+				wg.mu.Unlock()
 			}
 			wg.outputMu.Unlock()
 		}
