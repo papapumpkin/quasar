@@ -536,10 +536,7 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 
 		// Compute effective parallelism for this wave based on scope overlaps.
 		ep := EffectiveParallelism(wave, wg.Nebula.Phases, graph, wg.MaxWorkers)
-		workerCount := ep
-		if workerCount > wg.MaxWorkers {
-			workerCount = wg.MaxWorkers
-		}
+		workerCount := ep // Already capped at maxWorkers by EffectiveParallelism.
 		if workerCount <= 0 {
 			continue
 		}
@@ -547,6 +544,15 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 			wave.Number, workerCount, ep, len(wave.PhaseIDs))
 
 		sem := make(chan struct{}, workerCount)
+
+		// Build a set of phase IDs belonging to this wave so the inner
+		// dispatch loop only considers phases from the current wave.
+		// Without this filter, graph.Ready(done) would return phases from
+		// future waves once their dependencies are satisfied.
+		wavePhaseSet := make(map[string]bool, len(wave.PhaseIDs))
+		for _, id := range wave.PhaseIDs {
+			wavePhaseSet[id] = true
+		}
 
 		// Dispatch loop within the wave: keep looking for eligible phases
 		// until all wave phases are done or in-flight.
@@ -573,7 +579,23 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 
 			wg.mu.Lock()
 			eligible := filterEligible(graph.Ready(done), inFlight, failed, graph)
-			anyInFlight := len(inFlight) > 0
+			// Restrict to phases belonging to this wave. graph.Ready returns
+			// all phases whose dependencies are met, which may include phases
+			// from later waves once earlier waves complete.
+			var waveEligible []string
+			for _, id := range eligible {
+				if wavePhaseSet[id] {
+					waveEligible = append(waveEligible, id)
+				}
+			}
+			eligible = waveEligible
+			anyInFlight := false
+			for id := range inFlight {
+				if wavePhaseSet[id] {
+					anyInFlight = true
+					break
+				}
+			}
 			wg.mu.Unlock()
 
 			if len(eligible) == 0 {

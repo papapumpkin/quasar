@@ -1,0 +1,76 @@
+version = 1
+nebula_name = 'local-parallelism'
+total_cost_usd = 9.4638055
+
+[phases]
+[phases.effective-parallelism]
+bead_id = 'quasar-sks'
+status = 'done'
+created_at = 2026-02-15T23:44:03.627326-05:00
+updated_at = 2026-02-16T00:04:23.926486-05:00
+
+[phases.effective-parallelism.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'New parallelism.go correctly implements wave-aware effective parallelism computation with greedy MIS, comprehensive tests, and clean reuse of existing scope overlap logic.'
+
+[phases.graph-has-path]
+bead_id = 'quasar-boe'
+status = 'done'
+created_at = 2026-02-15T23:44:03.164951-05:00
+updated_at = 2026-02-15T23:45:54.892037-05:00
+
+[phases.graph-has-path.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean BFS-based HasPath and Connected methods added to Graph with comprehensive table-driven tests — correct, idiomatic, and well-covered.'
+
+[phases.scope-fields]
+bead_id = 'quasar-1z9'
+status = 'done'
+created_at = 2026-02-15T23:44:03.047807-05:00
+updated_at = 2026-02-15T23:49:49.203628-05:00
+
+[phases.scope-fields.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Added Scope/AllowScopeOverlap fields to PhaseSpec and ErrScopeOverlap sentinel — clean, correct, minimal changes with no risk to existing functionality.'
+
+[phases.scope-tests]
+bead_id = 'quasar-8ac'
+status = 'done'
+created_at = 2026-02-15T23:44:03.401089-05:00
+updated_at = 2026-02-16T00:01:07.818028-05:00
+
+[phases.scope-tests.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Comprehensive table-driven tests for scope overlap validation and graph connectivity, with good edge case coverage and proper parallel test execution — all passing cleanly.'
+
+[phases.scope-validation]
+bead_id = 'quasar-d3w'
+status = 'done'
+created_at = 2026-02-15T23:44:03.283692-05:00
+updated_at = 2026-02-15T23:57:13.545922-05:00
+
+[phases.scope-validation.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Scope overlap validation correctly detects parallel phase file conflicts with proper error reporting, conservative glob matching, and comprehensive test coverage.'
+
+[phases.worker-integration]
+bead_id = 'quasar-957'
+status = 'done'
+created_at = 2026-02-15T23:44:03.516762-05:00
+updated_at = 2026-02-16T00:11:48.989391-05:00
+
+[phases.worker-integration.report]
+satisfaction = 'high'
+risk = 'medium'
+needs_human_review = false
+summary = 'Per-wave semaphore sizing correctly replaces the flat semaphore, with proper wave-scoped filtering to prevent cross-wave dispatch leakage and clean backward compatibility for unscoped phases.'
