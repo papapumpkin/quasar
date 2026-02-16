@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Checking formatting..." >&2
-unformatted=$(gofmt -l .)
-if [ -n "$unformatted" ]; then
-    echo "The following files need formatting:" >&2
-    echo "$unformatted" >&2
-    exit 1
+echo "Formatting Go files..." >&2
+changed=$(gofmt -l .)
+if [ -n "$changed" ]; then
+    echo "Reformatting:" >&2
+    echo "$changed" >&2
+    gofmt -w .
+    echo "Done." >&2
+else
+    echo "All files already formatted." >&2
 fi
-echo "All files formatted correctly." >&2
