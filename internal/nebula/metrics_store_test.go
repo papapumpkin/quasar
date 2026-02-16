@@ -24,6 +24,14 @@ func TestSaveAndLoadMetrics(t *testing.T) {
 	m.RecordLockWait("p1", 50*time.Millisecond)
 	m.RecordWaveComplete(0, 4, 2)
 
+	// Set agentmail coordination fields on the wave to verify round-trip.
+	applyAgentmailMetrics(m, AgentmailMetrics{
+		ConflictCount: 0, // don't double-count; just testing wave fields
+		ChangeVolume:  42,
+		ActiveClaims:  7,
+		AvgClaimAge:   15 * time.Second,
+	})
+
 	if err := SaveMetrics(dir, m); err != nil {
 		t.Fatalf("SaveMetrics: %v", err)
 	}
@@ -103,6 +111,15 @@ func TestSaveAndLoadMetrics(t *testing.T) {
 	}
 	if lw.Conflicts != sw.Conflicts {
 		t.Errorf("Wave.Conflicts = %d, want %d", lw.Conflicts, sw.Conflicts)
+	}
+	if lw.ChangeVolume != sw.ChangeVolume {
+		t.Errorf("Wave.ChangeVolume = %d, want %d", lw.ChangeVolume, sw.ChangeVolume)
+	}
+	if lw.ActiveClaims != sw.ActiveClaims {
+		t.Errorf("Wave.ActiveClaims = %d, want %d", lw.ActiveClaims, sw.ActiveClaims)
+	}
+	if lw.AvgClaimAge != sw.AvgClaimAge {
+		t.Errorf("Wave.AvgClaimAge = %v, want %v", lw.AvgClaimAge, sw.AvgClaimAge)
 	}
 }
 
