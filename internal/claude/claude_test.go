@@ -119,6 +119,48 @@ func TestBuildArgs_BaseFlags(t *testing.T) {
 	}
 }
 
+func TestBuildArgs_MCPConfigPresent(t *testing.T) {
+	a := agent.Agent{
+		MCP: &agent.MCPConfig{ConfigPath: "/tmp/mcp-config.json"},
+	}
+	args := buildArgs(a, "do stuff")
+
+	found := false
+	for i, arg := range args {
+		if arg == "--mcp-config" && i+1 < len(args) && args[i+1] == "/tmp/mcp-config.json" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected --mcp-config /tmp/mcp-config.json in args, got: %v", args)
+	}
+}
+
+func TestBuildArgs_MCPConfigAbsent(t *testing.T) {
+	a := agent.Agent{} // MCP is nil
+	args := buildArgs(a, "do stuff")
+
+	for _, arg := range args {
+		if arg == "--mcp-config" {
+			t.Fatal("expected no --mcp-config flag when MCP is nil")
+		}
+	}
+}
+
+func TestBuildArgs_MCPConfigEmptyPath(t *testing.T) {
+	a := agent.Agent{
+		MCP: &agent.MCPConfig{ConfigPath: ""},
+	}
+	args := buildArgs(a, "do stuff")
+
+	for _, arg := range args {
+		if arg == "--mcp-config" {
+			t.Fatal("expected no --mcp-config flag when ConfigPath is empty")
+		}
+	}
+}
+
 func TestBuildEnv_StripsCLAUDECODE(t *testing.T) {
 	base := []string{"PATH=/usr/bin", "CLAUDECODE=something", "HOME=/home/user"}
 	env := buildEnv(base)

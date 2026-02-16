@@ -18,6 +18,8 @@ type Execution struct {
 	MaxBudgetUSD    float64  `toml:"max_budget_usd"`
 	Model           string   `toml:"model"`
 	Gate            GateMode `toml:"gate"` // Default gate mode for all phases
+	AgentMail       bool     `toml:"agentmail"`        // Enable agentmail MCP server
+	AgentMailPort   int      `toml:"agentmail_port"`   // Override agentmail port
 }
 
 // Context provides project-level information injected into agent prompts.

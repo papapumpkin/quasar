@@ -12,13 +12,19 @@ const (
 	RoleReviewer Role = "reviewer"
 )
 
+// MCPConfig holds optional MCP server configuration for an agent invocation.
+type MCPConfig struct {
+	ConfigPath string // path to generated MCP config JSON
+}
+
 // Agent describes the configuration for a single agent invocation.
 type Agent struct {
 	Role         Role
 	SystemPrompt string
 	Model        string
 	MaxBudgetUSD float64
-	AllowedTools []string // Tool permissions for this agent (passed as --allowedTools flags)
+	AllowedTools []string   // Tool permissions for this agent (passed as --allowedTools flags)
+	MCP          *MCPConfig // Optional MCP server configuration
 }
 
 // InvocationResult holds the output and cost metrics from a single agent invocation.

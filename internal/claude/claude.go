@@ -55,6 +55,10 @@ func buildArgs(a agent.Agent, prompt string) []string {
 		args = append(args, "--allowedTools", tool)
 	}
 
+	if a.MCP != nil && a.MCP.ConfigPath != "" {
+		args = append(args, "--mcp-config", a.MCP.ConfigPath)
+	}
+
 	return args
 }
 

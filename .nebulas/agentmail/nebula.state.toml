@@ -1,69 +1,136 @@
 version = 1
 nebula_name = 'agentmail'
+total_cost_usd = 22.755587749999997
 
 [phases]
 [phases.agent-lifecycle]
 bead_id = 'quasar-4yx'
-status = 'created'
+status = 'done'
 created_at = 2026-02-15T21:59:27.760928-05:00
-updated_at = 2026-02-15T21:59:27.760928-05:00
+updated_at = 2026-02-15T22:44:25.800967-05:00
+
+[phases.agent-lifecycle.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Agent lifecycle MCP tools (register, heartbeat) and stale cleanup goroutine implemented with proper validation, FK-safe ordering, configurable timeouts, and comprehensive integration tests covering all 5 required scenarios.'
 
 [phases.change-tools]
 bead_id = 'quasar-ct8'
-status = 'created'
+status = 'done'
 created_at = 2026-02-15T21:59:27.654018-05:00
-updated_at = 2026-02-15T21:59:27.654018-05:00
+updated_at = 2026-02-15T22:36:38.985198-05:00
+
+[phases.change-tools.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-structured implementation of announce_change and get_changes MCP tools that closely mirrors the existing mailbox tool patterns, with comprehensive test coverage.'
 
 [phases.docs]
 bead_id = 'quasar-v7m'
-status = 'created'
+status = 'done'
 created_at = 2026-02-15T21:59:28.081862-05:00
-updated_at = 2026-02-15T21:59:28.081862-05:00
+updated_at = 2026-02-15T22:59:19.935447-05:00
+
+[phases.docs.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Accurate and comprehensive agentmail MCP server documentation that faithfully reflects the implementation across all tools, schemas, and configuration.'
 
 [phases.dolt-client]
 bead_id = 'quasar-b1m'
-status = 'created'
+status = 'done'
 created_at = 2026-02-15T21:59:27.224862-05:00
-updated_at = 2026-02-15T21:59:27.224862-05:00
+updated_at = 2026-02-15T22:26:12.77777-05:00
+
+[phases.dolt-client.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Solid SQL store layer with parameterized queries, proper transaction handling, comprehensive tests, and clean idiomatic Go — ready to merge.'
 
 [phases.dolt-schema]
 bead_id = 'quasar-63k'
-status = 'created'
+status = 'done'
 created_at = 2026-02-15T21:59:26.998325-05:00
-updated_at = 2026-02-15T21:59:26.998325-05:00
+updated_at = 2026-02-15T22:08:02.639618-05:00
+
+[phases.dolt-schema.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented SQL schema and Go initialization code for agentmail coordination database with proper context support, idempotency, and comprehensive tests.'
 
 [phases.file-claim-tools]
 bead_id = 'quasar-3wv'
-status = 'created'
+status = 'done'
 created_at = 2026-02-15T21:59:27.54924-05:00
-updated_at = 2026-02-15T21:59:27.54924-05:00
+updated_at = 2026-02-15T22:48:30.503733-05:00
+
+[phases.file-claim-tools.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented file claim MCP tools with clean delegation to Store, proper path normalization, validation, error wrapping, and thorough integration tests covering all specified scenarios.'
 
 [phases.go-module]
 bead_id = 'quasar-6tp'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-15T21:59:27.112397-05:00
-updated_at = 2026-02-15T21:59:28.149167-05:00
+updated_at = 2026-02-15T22:03:22.805023-05:00
+
+[phases.go-module.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Straightforward package scaffolding for agentmail MCP server — correct structure, dependencies added, builds cleanly, follows project conventions.'
 
 [phases.integration-tests]
 bead_id = 'quasar-7f0'
-status = 'created'
+status = 'done'
 created_at = 2026-02-15T21:59:27.972183-05:00
-updated_at = 2026-02-15T21:59:27.972183-05:00
+updated_at = 2026-02-15T22:54:14.881951-05:00
+
+[phases.integration-tests.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, well-structured integration tests covering all four required coordination scenarios with proper build tags, error handling, and test isolation — low risk test-only addition.'
 
 [phases.mailbox-tools]
 bead_id = 'quasar-xjx'
-status = 'created'
+status = 'done'
 created_at = 2026-02-15T21:59:27.444127-05:00
-updated_at = 2026-02-15T21:59:27.444127-05:00
+updated_at = 2026-02-15T22:33:59.602863-05:00
+
+[phases.mailbox-tools.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented send_message and read_messages MCP tools with comprehensive integration tests, proper validation, and clean store delegation.'
 
 [phases.mcp-skeleton]
 bead_id = 'quasar-eda'
-status = 'created'
+status = 'done'
 created_at = 2026-02-15T21:59:27.337348-05:00
-updated_at = 2026-02-15T21:59:27.337348-05:00
+updated_at = 2026-02-15T22:21:57.772552-05:00
+
+[phases.mcp-skeleton.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-structured MCP server setup with SSE transport, 9 stub tools, CLI entry point with graceful shutdown, and good test coverage — all following project conventions cleanly.'
 
 [phases.quasar-mcp-wiring]
 bead_id = 'quasar-1dq'
-status = 'created'
+status = 'done'
 created_at = 2026-02-15T21:59:27.866295-05:00
-updated_at = 2026-02-15T21:59:27.866295-05:00
+updated_at = 2026-02-15T22:17:38.704049-05:00
+
+[phases.quasar-mcp-wiring.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'MCP config wiring from agentmail server lifecycle through to Claude CLI invocations is clean, additive, well-tested, and compiles without issues.'

@@ -227,7 +227,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("agentmail binary not found: %w", lookErr)
 		}
 
-		srv := &agentmail.Server{BinaryPath: amBinary, Port: amPort, DoltDSN: amDSN}
+		srv := &agentmail.ProcessManager{BinaryPath: amBinary, Port: amPort, DoltDSN: amDSN}
 		printer.Info(fmt.Sprintf("starting agentmail server on port %d...", amPort))
 		if startErr := srv.Start(ctx); startErr != nil {
 			printer.Error(fmt.Sprintf("agentmail server failed to start: %v", startErr))

@@ -132,8 +132,15 @@ func TestCleanupStaleAgents(t *testing.T) {
 	}
 
 	// Cleanup should release the file claim.
-	if err := store.CleanupStaleAgents(ctx, 1*time.Second); err != nil {
+	staleAgents, err := store.CleanupStaleAgents(ctx, 1*time.Second)
+	if err != nil {
 		t.Fatalf("CleanupStaleAgents: %v", err)
+	}
+	if len(staleAgents) != 1 {
+		t.Fatalf("expected 1 stale agent, got %d", len(staleAgents))
+	}
+	if staleAgents[0].Name != "stale-agent" {
+		t.Errorf("stale agent name = %q, want %q", staleAgents[0].Name, "stale-agent")
 	}
 
 	claims, err := store.GetFileClaims(ctx, []string{"stale.go"})

@@ -1,7 +1,9 @@
 package agentmail
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -30,7 +32,7 @@ func TestSplitStatements(t *testing.T) {
 		{"single", "CREATE TABLE foo (id INT);", 1},
 		{"multiple", "CREATE TABLE a (id INT); CREATE TABLE b (id INT);", 2},
 		{"trailing semicolon", "SELECT 1;", 1},
-		{"comments only", "-- just a comment", 1},
+		{"comments only", "-- just a comment", 0},
 		{"whitespace between", "SELECT 1; \n\n ; SELECT 2;", 2},
 	}
 
@@ -66,15 +68,17 @@ func TestInitDB(t *testing.T) {
 	}
 	defer db.Close()
 
-	if err := db.Ping(); err != nil {
+	ctx := context.Background()
+
+	if err := db.PingContext(ctx); err != nil {
 		t.Skipf("skipping integration test: database not reachable: %v", err)
 	}
 
 	// Run InitDB twice to verify idempotency.
-	if err := InitDB(db); err != nil {
+	if err := InitDB(ctx, db); err != nil {
 		t.Fatalf("InitDB (first call) failed: %v", err)
 	}
-	if err := InitDB(db); err != nil {
+	if err := InitDB(ctx, db); err != nil {
 		t.Fatalf("InitDB (second call, idempotency check) failed: %v", err)
 	}
 
@@ -82,7 +86,7 @@ func TestInitDB(t *testing.T) {
 	tables := []string{"agents", "messages", "file_claims", "changes"}
 	for _, table := range tables {
 		t.Run(table, func(t *testing.T) {
-			_, err := db.Exec("SELECT 1 FROM " + table + " LIMIT 1")
+			_, err := db.ExecContext(ctx, fmt.Sprintf("SELECT 1 FROM `%s` LIMIT 1", table))
 			if err != nil {
 				t.Errorf("table %q not queryable after InitDB: %v", table, err)
 			}

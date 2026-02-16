@@ -2,14 +2,16 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
-	_ "github.com/aaronsalm/quasar/internal/agentmail"
+	"github.com/aaronsalm/quasar/internal/agentmail"
 	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func main() {
@@ -17,20 +19,38 @@ func main() {
 	doltDSN := flag.String("dolt-dsn", "root@tcp(127.0.0.1:3306)/agentmail", "Dolt database DSN")
 	flag.Parse()
 
-	// TODO: implement full MCP server using doltDSN for persistence.
-	_ = *doltDSN
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	addr := fmt.Sprintf(":%d", *port)
-	fmt.Fprintf(os.Stderr, "agentmail: listening on %s (stub — MCP handlers not yet implemented)\n", addr)
+	db, err := sql.Open("mysql", *doltDSN)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "agentmail: failed to open database: %v\n", err)
+		os.Exit(1)
+	}
+	defer db.Close()
 
-	// Serve a minimal SSE endpoint so the health check succeeds.
-	http.HandleFunc("/sse", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
-	})
-
-	if err := http.ListenAndServe(addr, nil); err != nil {
+	if err := agentmail.InitDB(ctx, db); err != nil {
 		fmt.Fprintf(os.Stderr, "agentmail: %v\n", err)
 		os.Exit(1)
 	}
+
+	store := agentmail.NewStore(db)
+	srv := agentmail.NewServer(store, *port, nil)
+
+	fmt.Fprintf(os.Stderr, "agentmail: starting MCP server on port %d\n", *port)
+	if err := srv.Start(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "agentmail: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Block until signal.
+	<-ctx.Done()
+	fmt.Fprintf(os.Stderr, "agentmail: shutting down...\n")
+
+	if err := srv.Stop(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "agentmail: shutdown error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Fprintf(os.Stderr, "agentmail: stopped\n")
 }

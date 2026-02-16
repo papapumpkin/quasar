@@ -94,17 +94,85 @@ func (s *Store) Heartbeat(ctx context.Context, agentID string) error {
 	return nil
 }
 
-// CleanupStaleAgents releases all file claims for agents whose last_heartbeat
-// is older than timeout ago.
-func (s *Store) CleanupStaleAgents(ctx context.Context, timeout time.Duration) error {
-	_, err := s.db.ExecContext(ctx,
-		`DELETE FROM file_claims WHERE agent_id IN (
-			SELECT id FROM agents WHERE last_heartbeat < NOW() - INTERVAL ? SECOND
-		)`, int(timeout.Seconds()))
+// AgentExists returns true if an agent with the given ID exists in the agents
+// table.
+func (s *Store) AgentExists(ctx context.Context, agentID string) (bool, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM agents WHERE id = ?", agentID).Scan(&n)
 	if err != nil {
-		return fmt.Errorf("cleaning up stale agents: %w", err)
+		return false, fmt.Errorf("checking agent existence: %w", err)
+	}
+	return n > 0, nil
+}
+
+// StaleAgent contains metadata about an agent removed during stale cleanup.
+type StaleAgent struct {
+	ID   string
+	Name string
+	Role string
+}
+
+// FindStaleAgents returns agents whose last_heartbeat is older than timeout ago.
+func (s *Store) FindStaleAgents(ctx context.Context, timeout time.Duration) ([]StaleAgent, error) {
+	rows, err := s.db.QueryContext(ctx,
+		"SELECT id, name, role FROM agents WHERE last_heartbeat < NOW() - INTERVAL ? SECOND",
+		int(timeout.Seconds()))
+	if err != nil {
+		return nil, fmt.Errorf("finding stale agents: %w", err)
+	}
+	defer rows.Close()
+
+	var stale []StaleAgent
+	for rows.Next() {
+		var a StaleAgent
+		if err := rows.Scan(&a.ID, &a.Name, &a.Role); err != nil {
+			return nil, fmt.Errorf("scanning stale agent: %w", err)
+		}
+		stale = append(stale, a)
+	}
+	return stale, rows.Err()
+}
+
+// ReleaseAllAgentClaims removes all file claims held by the given agent.
+func (s *Store) ReleaseAllAgentClaims(ctx context.Context, agentID string) error {
+	_, err := s.db.ExecContext(ctx,
+		"DELETE FROM file_claims WHERE agent_id = ?", agentID)
+	if err != nil {
+		return fmt.Errorf("releasing all claims for agent %q: %w", agentID, err)
 	}
 	return nil
+}
+
+// DeleteAgent removes an agent from the agents table.
+func (s *Store) DeleteAgent(ctx context.Context, agentID string) error {
+	_, err := s.db.ExecContext(ctx,
+		"DELETE FROM agents WHERE id = ?", agentID)
+	if err != nil {
+		return fmt.Errorf("deleting agent %q: %w", agentID, err)
+	}
+	return nil
+}
+
+// CleanupStaleAgents finds agents whose last_heartbeat is older than timeout
+// ago, releases their file claims, and deletes them. It returns metadata about
+// each removed agent.
+func (s *Store) CleanupStaleAgents(ctx context.Context, timeout time.Duration) ([]StaleAgent, error) {
+	stale, err := s.FindStaleAgents(ctx, timeout)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, a := range stale {
+		if err := s.ReleaseAllAgentClaims(ctx, a.ID); err != nil {
+			return nil, err
+		}
+		if err := s.DeleteAgent(ctx, a.ID); err != nil {
+			return nil, err
+		}
+	}
+
+	return stale, nil
 }
 
 // SendMessage inserts a message into the messages table and returns the
