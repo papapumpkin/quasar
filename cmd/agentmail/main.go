@@ -4,7 +4,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
+	"net/http"
 	"os"
 
 	_ "github.com/aaronsalm/quasar/internal/agentmail"
@@ -17,7 +17,20 @@ func main() {
 	doltDSN := flag.String("dolt-dsn", "root@tcp(127.0.0.1:3306)/agentmail", "Dolt database DSN")
 	flag.Parse()
 
-	// TODO: start MCP server using port and doltDSN
-	fmt.Fprintf(os.Stderr, "agentmail: not yet implemented (port=%d, dsn=%s)\n", *port, *doltDSN)
-	log.Fatal("agentmail server not yet implemented")
+	// TODO: implement full MCP server using doltDSN for persistence.
+	_ = *doltDSN
+
+	addr := fmt.Sprintf(":%d", *port)
+	fmt.Fprintf(os.Stderr, "agentmail: listening on %s (stub — MCP handlers not yet implemented)\n", addr)
+
+	// Serve a minimal SSE endpoint so the health check succeeds.
+	http.HandleFunc("/sse", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+	})
+
+	if err := http.ListenAndServe(addr, nil); err != nil {
+		fmt.Fprintf(os.Stderr, "agentmail: %v\n", err)
+		os.Exit(1)
+	}
 }

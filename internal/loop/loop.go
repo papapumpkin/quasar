@@ -21,6 +21,7 @@ type Loop struct {
 	CoderPrompt  string
 	ReviewPrompt string
 	WorkDir      string
+	MCP          *agent.MCPConfig // Optional MCP server config passed to agents.
 }
 
 // TaskResult holds the outcome of a completed task loop.
@@ -151,6 +152,7 @@ func (l *Loop) coderAgent(budget float64) agent.Agent {
 			"Read", "Edit", "Write", "Glob", "Grep",
 			"Bash(go *)", "Bash(git diff *)", "Bash(git status)", "Bash(git log *)",
 		},
+		MCP: l.MCP,
 	}
 }
 
@@ -165,6 +167,7 @@ func (l *Loop) reviewerAgent(budget float64) agent.Agent {
 			"Read", "Glob", "Grep",
 			"Bash(go vet *)", "Bash(git diff *)", "Bash(git log *)",
 		},
+		MCP: l.MCP,
 	}
 }
 
