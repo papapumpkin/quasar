@@ -49,6 +49,7 @@ type UI interface {
 	BudgetExceeded(spent, limit float64)
 	Error(msg string)
 	Info(msg string)
+	AgentOutput(role string, cycle int, output string)
 }
 
 // Verify that *Printer satisfies the UI interface at compile time.
@@ -128,6 +129,10 @@ func (p *Printer) Error(msg string) {
 func (p *Printer) Info(msg string) {
 	fmt.Fprintf(os.Stderr, dim+"%s"+reset+"\n", msg)
 }
+
+// AgentOutput is a no-op for the stderr printer; agent output is only
+// displayed in the TUI drill-down view.
+func (p *Printer) AgentOutput(role string, cycle int, output string) {}
 
 // TaskStarted prints a status line when a task begins.
 func (p *Printer) TaskStarted(beadID, title string) {

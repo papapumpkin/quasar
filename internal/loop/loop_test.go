@@ -24,6 +24,7 @@ func (n *noopUI) MaxCyclesReached(int)             {}
 func (n *noopUI) BudgetExceeded(float64, float64)  {}
 func (n *noopUI) Error(string)                     {}
 func (n *noopUI) Info(string)                      {}
+func (n *noopUI) AgentOutput(string, int, string)  {}
 
 func TestParseReviewFindings(t *testing.T) {
 	tests := []struct {

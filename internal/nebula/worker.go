@@ -3,6 +3,7 @@ package nebula
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,6 +49,7 @@ type WorkerGroup struct {
 	GlobalModel  string
 	OnProgress   ProgressFunc // optional progress callback
 	Metrics      *Metrics     // optional; nil = no collection
+	Logger       io.Writer    // optional; nil = os.Stderr
 
 	mu          sync.Mutex
 	outputMu    sync.Mutex // serializes checkpoint + dashboard output in watch mode
@@ -86,6 +88,14 @@ func buildPhasePrompt(phase *PhaseSpec, ctx *Context) string {
 
 // reportProgress calls the OnProgress callback (if set) with current counts.
 // Must be called with wg.mu held.
+// logger returns the effective log writer (os.Stderr if Logger is nil).
+func (wg *WorkerGroup) logger() io.Writer {
+	if wg.Logger != nil {
+		return wg.Logger
+	}
+	return os.Stderr
+}
+
 func (wg *WorkerGroup) reportProgress() {
 	if wg.OnProgress == nil {
 		return
@@ -198,7 +208,7 @@ func (wg *WorkerGroup) applyGate(ctx context.Context, phase *PhaseSpec, cp *Chec
 			if wg.Dashboard != nil {
 				wg.Dashboard.Pause()
 			}
-			RenderCheckpoint(os.Stderr, cp)
+			RenderCheckpoint(wg.logger(), cp)
 			if wg.Dashboard != nil {
 				// Hold wg.mu so the Dashboard.Render triggered by Resume
 				// doesn't race with concurrent State mutations in recordResult.
@@ -213,11 +223,11 @@ func (wg *WorkerGroup) applyGate(ctx context.Context, phase *PhaseSpec, cp *Chec
 	case GateModeReview, GateModeApprove:
 		// Render checkpoint and prompt for decision.
 		if cp != nil {
-			RenderCheckpoint(os.Stderr, cp)
+			RenderCheckpoint(wg.logger(), cp)
 		}
 		action, err := wg.Gater.Prompt(ctx, cp)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: gate prompt failed: %v (defaulting to accept)\n", err)
+			fmt.Fprintf(wg.logger(), "warning: gate prompt failed: %v (defaulting to accept)\n", err)
 			return GateActionAccept
 		}
 		return action
@@ -251,7 +261,7 @@ func (wg *WorkerGroup) executePhase(
 	wg.mu.Lock()
 	wg.State.SetPhaseState(phaseID, ps.BeadID, PhaseStatusInProgress)
 	if err := SaveState(wg.Nebula.Dir, wg.State); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to save state: %v\n", err)
+		fmt.Fprintf(wg.logger(), "warning: failed to save state: %v\n", err)
 	}
 	wg.reportProgress()
 	wg.mu.Unlock()
@@ -267,7 +277,7 @@ func (wg *WorkerGroup) executePhase(
 	// Commit phase changes on success so reviewers see clean diffs.
 	if err == nil && wg.Committer != nil {
 		if commitErr := wg.Committer.CommitPhase(ctx, wg.Nebula.Manifest.Nebula.Name, phaseID); commitErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to commit phase %q: %v\n", phaseID, commitErr)
+			fmt.Fprintf(wg.logger(), "warning: failed to commit phase %q: %v\n", phaseID, commitErr)
 		}
 	}
 
@@ -277,7 +287,7 @@ func (wg *WorkerGroup) executePhase(
 		var cpErr error
 		cp, cpErr = BuildCheckpoint(ctx, wg.Committer, phaseID, *phaseResult, wg.Nebula)
 		if cpErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to build checkpoint for %q: %v\n", phaseID, cpErr)
+			fmt.Fprintf(wg.logger(), "warning: failed to build checkpoint for %q: %v\n", phaseID, cpErr)
 		}
 	}
 
@@ -300,7 +310,7 @@ func (wg *WorkerGroup) executePhase(
 			delete(inFlight, phaseID)
 			wg.State.SetPhaseState(phaseID, ps.BeadID, PhaseStatusInProgress)
 			if saveErr := SaveState(wg.Nebula.Dir, wg.State); saveErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: failed to save state: %v\n", saveErr)
+				fmt.Fprintf(wg.logger(), "warning: failed to save state: %v\n", saveErr)
 			}
 			wg.gateSignals = append(wg.gateSignals, gateSignal{phaseID: phaseID, action: GateActionRetry})
 			wg.mu.Unlock()
@@ -350,7 +360,7 @@ func (wg *WorkerGroup) recordResult(
 		wg.State.SetPhaseState(phaseID, ps.BeadID, PhaseStatusDone)
 	}
 	if err := SaveState(wg.Nebula.Dir, wg.State); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to save state: %v\n", err)
+		fmt.Fprintf(wg.logger(), "warning: failed to save state: %v\n", err)
 	}
 	wg.reportProgress()
 }
@@ -421,10 +431,10 @@ func (wg *WorkerGroup) checkInterventions() InterventionKind {
 // It watches the Interventions channel for a resume signal.
 func (wg *WorkerGroup) handlePause() {
 	pausePath := filepath.Join(wg.Nebula.Dir, "PAUSE")
-	fmt.Fprintf(os.Stderr, "\n── Nebula paused ──────────────────────────────────\n")
-	fmt.Fprintf(os.Stderr, "   Remove the PAUSE file to continue:\n")
-	fmt.Fprintf(os.Stderr, "   rm %s\n", pausePath)
-	fmt.Fprintf(os.Stderr, "───────────────────────────────────────────────────\n\n")
+	fmt.Fprintf(wg.logger(), "\n── Nebula paused ──────────────────────────────────\n")
+	fmt.Fprintf(wg.logger(), "   Remove the PAUSE file to continue:\n")
+	fmt.Fprintf(wg.logger(), "   rm %s\n", pausePath)
+	fmt.Fprintf(wg.logger(), "───────────────────────────────────────────────────\n\n")
 
 	// Check if PAUSE was already removed before we started waiting.
 	if _, err := os.Stat(pausePath); os.IsNotExist(err) {
@@ -448,19 +458,19 @@ func (wg *WorkerGroup) handlePause() {
 func (wg *WorkerGroup) handleStop() {
 	wg.mu.Lock()
 	if err := SaveState(wg.Nebula.Dir, wg.State); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to save state: %v\n", err)
+		fmt.Fprintf(wg.logger(), "warning: failed to save state: %v\n", err)
 	}
 	wg.mu.Unlock()
 
 	// Clean up the STOP file.
 	stopPath := filepath.Join(wg.Nebula.Dir, "STOP")
 	if err := os.Remove(stopPath); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to remove STOP file: %v\n", err)
+		fmt.Fprintf(wg.logger(), "warning: failed to remove STOP file: %v\n", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "\n── Nebula stopped by user ─────────────────────────\n")
-	fmt.Fprintf(os.Stderr, "   State saved. Resume with: quasar nebula apply\n")
-	fmt.Fprintf(os.Stderr, "───────────────────────────────────────────────────\n\n")
+	fmt.Fprintf(wg.logger(), "\n── Nebula stopped by user ─────────────────────────\n")
+	fmt.Fprintf(wg.logger(), "   State saved. Resume with: quasar nebula apply\n")
+	fmt.Fprintf(wg.logger(), "───────────────────────────────────────────────────\n\n")
 }
 
 // globalGateMode returns the effective gate mode from the manifest execution config.
@@ -489,7 +499,7 @@ func (wg *WorkerGroup) gatePlan(ctx context.Context, graph *Graph) error {
 		return fmt.Errorf("failed to compute execution waves: %w", err)
 	}
 
-	RenderPlan(os.Stderr, wg.Nebula.Manifest.Nebula.Name, waves, len(wg.Nebula.Phases), wg.GlobalBudget, mode)
+	RenderPlan(wg.logger(), wg.Nebula.Manifest.Nebula.Name, waves, len(wg.Nebula.Phases), wg.GlobalBudget, mode)
 
 	// Build a plan-level checkpoint (no diff, just plan metadata).
 	cp := &Checkpoint{
@@ -551,7 +561,7 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		if workerCount <= 0 {
 			continue
 		}
-		fmt.Fprintf(os.Stderr, "Wave %d: %d workers (effective parallelism: %d/%d)\n",
+		fmt.Fprintf(wg.logger(), "Wave %d: %d workers (effective parallelism: %d/%d)\n",
 			wave.Number, workerCount, ep, len(wave.PhaseIDs))
 
 		sem := make(chan struct{}, workerCount)
@@ -688,7 +698,7 @@ func (wg *WorkerGroup) processGateSignals(done map[string]bool) (stop bool, err 
 			wg.mu.Lock()
 			wg.markRemainingSkipped(done)
 			if saveErr := SaveState(wg.Nebula.Dir, wg.State); saveErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: failed to save state: %v\n", saveErr)
+				fmt.Fprintf(wg.logger(), "warning: failed to save state: %v\n", saveErr)
 			}
 			wg.mu.Unlock()
 			return true, fmt.Errorf("phase %q rejected at gate", sig.phaseID)
@@ -697,7 +707,7 @@ func (wg *WorkerGroup) processGateSignals(done map[string]bool) (stop bool, err 
 			wg.mu.Lock()
 			wg.markRemainingSkipped(done)
 			if saveErr := SaveState(wg.Nebula.Dir, wg.State); saveErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: failed to save state: %v\n", saveErr)
+				fmt.Fprintf(wg.logger(), "warning: failed to save state: %v\n", saveErr)
 			}
 			wg.mu.Unlock()
 			return true, nil

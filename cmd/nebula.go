@@ -19,6 +19,7 @@ import (
 	"github.com/aaronsalm/quasar/internal/config"
 	"github.com/aaronsalm/quasar/internal/loop"
 	"github.com/aaronsalm/quasar/internal/nebula"
+	"github.com/aaronsalm/quasar/internal/tui"
 	"github.com/aaronsalm/quasar/internal/ui"
 )
 
@@ -66,6 +67,7 @@ func init() {
 	nebulaApplyCmd.Flags().Bool("auto", false, "automatically start workers for ready phases")
 	nebulaApplyCmd.Flags().Bool("watch", false, "watch for phase file changes during execution (with --auto)")
 	nebulaApplyCmd.Flags().Int("max-workers", 1, "maximum concurrent workers (with --auto)")
+	nebulaApplyCmd.Flags().Bool("no-tui", false, "disable TUI even on a TTY (use stderr output)")
 
 	nebulaStatusCmd.Flags().Bool("json", false, "output metrics as JSON to stdout")
 
@@ -234,10 +236,21 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		workDir = wd
 	}
 
+	noTUI, _ := cmd.Flags().GetBool("no-tui")
+	useTUI := !noTUI && isStderrTTY()
+
+	// Determine the UI handler: TUI bridge or stderr printer.
+	var uiHandler ui.UI = printer
+	var tuiProgram *tui.Program
+	if useTUI {
+		tuiProgram = tui.NewProgramRaw(tui.ModeNebula)
+		uiHandler = tui.NewUIBridge(tuiProgram)
+	}
+
 	taskLoop := &loop.Loop{
 		Invoker:      claudeInv,
 		Beads:        client,
-		UI:           printer,
+		UI:           uiHandler,
 		MaxCycles:    cfg.MaxReviewCycles,
 		MaxBudgetUSD: cfg.MaxBudgetUSD,
 		Model:        cfg.Model,
@@ -247,33 +260,42 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		MCP:          nil,
 	}
 
-	// Detect TTY for dashboard rendering mode.
-	isTTY := false
-	if fi, err := os.Stderr.Stat(); err == nil {
-		isTTY = (fi.Mode() & os.ModeCharDevice) != 0
-	}
-	dashboard := nebula.NewDashboard(os.Stderr, n, state, cfg.MaxBudgetUSD, isTTY)
-
-	// Enable append-only dashboard when the global gate mode is watch.
-	// This avoids cursor movement so checkpoint blocks remain visible in scroll-back.
-	if n.Manifest.Execution.Gate == nebula.GateModeWatch {
-		dashboard.AppendOnly = true
-	}
-
+	// Build the WorkerGroup.
 	wg := &nebula.WorkerGroup{
 		Runner:       &loopAdapter{loop: taskLoop},
 		Nebula:       n,
 		State:        state,
 		MaxWorkers:   maxWorkers,
-		Dashboard:    dashboard,
 		GlobalCycles: cfg.MaxReviewCycles,
 		GlobalBudget: cfg.MaxBudgetUSD,
 		GlobalModel:  cfg.Model,
-		OnProgress:   dashboard.ProgressCallback(),
+	}
+
+	if useTUI {
+		// TUI mode: no dashboard, use TUI gater, silence stderr.
+		wg.Logger = io.Discard
+		wg.Gater = tui.NewTUIGater(tuiProgram)
+		wg.OnProgress = func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
+			tuiProgram.Send(tui.MsgNebulaProgress{
+				Completed:    completed,
+				Total:        total,
+				OpenBeads:    openBeads,
+				ClosedBeads:  closedBeads,
+				TotalCostUSD: totalCostUSD,
+			})
+		}
+	} else {
+		// Stderr path: use dashboard and terminal gater.
+		isTTY := isStderrTTY()
+		dashboard := nebula.NewDashboard(os.Stderr, n, state, cfg.MaxBudgetUSD, isTTY)
+		if n.Manifest.Execution.Gate == nebula.GateModeWatch {
+			dashboard.AppendOnly = true
+		}
+		wg.Dashboard = dashboard
+		wg.OnProgress = dashboard.ProgressCallback()
 	}
 
 	// Always create a watcher for intervention file detection (PAUSE/STOP).
-	// The --watch flag additionally enables phase file change monitoring.
 	w, err := nebula.NewWatcher(dir)
 	if err != nil {
 		printer.Error(fmt.Sprintf("failed to create watcher: %v", err))
@@ -291,11 +313,31 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		printer.Info("watching for phase file changes...")
 	}
 
+	if useTUI {
+		// Run workers in a goroutine; block on TUI.
+		go func() {
+			results, runErr := wg.Run(ctx)
+			tuiProgram.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
+		}()
+
+		finalModel, tuiErr := tuiProgram.Run()
+		if tuiErr != nil {
+			return fmt.Errorf("TUI error: %w", tuiErr)
+		}
+		if m, ok := finalModel.(tui.AppModel); ok && m.DoneErr != nil {
+			if !errors.Is(m.DoneErr, nebula.ErrManualStop) {
+				printer.Error(m.DoneErr.Error())
+			}
+			return m.DoneErr
+		}
+		return nil
+	}
+
+	// Stderr path.
 	printer.Info(fmt.Sprintf("starting workers (max %d)...", maxWorkers))
 	results, err := wg.Run(ctx)
 	printer.NebulaProgressBarDone()
 	if errors.Is(err, nebula.ErrManualStop) {
-		// Manual stop is not a failure — return results but no error.
 		printer.NebulaWorkerResults(results)
 		return nil
 	}

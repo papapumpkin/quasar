@@ -17,6 +17,7 @@ import (
 	"github.com/aaronsalm/quasar/internal/claude"
 	"github.com/aaronsalm/quasar/internal/config"
 	"github.com/aaronsalm/quasar/internal/loop"
+	"github.com/aaronsalm/quasar/internal/tui"
 	"github.com/aaronsalm/quasar/internal/ui"
 )
 
@@ -32,6 +33,7 @@ func init() {
 	runCmd.Flags().String("coder-prompt-file", "", "file containing custom coder system prompt")
 	runCmd.Flags().String("reviewer-prompt-file", "", "file containing custom reviewer system prompt")
 	runCmd.Flags().Bool("auto", false, "run a single task from stdin and exit (non-interactive)")
+	runCmd.Flags().Bool("no-tui", false, "disable TUI even on a TTY (use stderr printer)")
 
 	rootCmd.AddCommand(runCmd)
 }
@@ -47,6 +49,14 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	auto, _ := cmd.Flags().GetBool("auto")
+	noTUI, _ := cmd.Flags().GetBool("no-tui")
+
+	// TUI path: auto mode on a TTY without --no-tui.
+	if auto && !noTUI && isStderrTTY() {
+		return runAutoTUI(cfg, printer, coderPrompt, reviewerPrompt, args)
+	}
+
 	taskLoop, err := buildLoop(&cfg, printer, coderPrompt, reviewerPrompt)
 	if err != nil {
 		return err
@@ -55,10 +65,55 @@ func runRun(cmd *cobra.Command, args []string) error {
 	ctx, cancel := setupSignalContext(printer)
 	defer cancel()
 
-	if auto, _ := cmd.Flags().GetBool("auto"); auto {
+	if auto {
 		return runAutoMode(ctx, taskLoop, printer, args)
 	}
 	return runREPL(ctx, taskLoop, printer, &cfg)
+}
+
+// runAutoTUI launches the BubbleTea TUI for a single auto-mode task.
+func runAutoTUI(cfg config.Config, printer *ui.Printer, coderPrompt, reviewerPrompt string, args []string) error {
+	task := strings.Join(args, " ")
+	if task == "" {
+		scanner := bufio.NewScanner(os.Stdin)
+		if scanner.Scan() {
+			task = scanner.Text()
+		}
+	}
+	if task == "" {
+		return fmt.Errorf("no task provided in auto mode")
+	}
+
+	p := tui.NewProgram(tui.ModeLoop)
+	bridge := tui.NewUIBridge(p)
+
+	taskLoop, err := buildLoop(&cfg, bridge, coderPrompt, reviewerPrompt)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Run the loop in a background goroutine; report completion to the TUI.
+	go func() {
+		_, loopErr := taskLoop.RunTask(ctx, task)
+		p.Send(tui.MsgLoopDone{Err: loopErr})
+	}()
+
+	finalModel, err := p.Run()
+	if err != nil {
+		return fmt.Errorf("TUI error: %w", err)
+	}
+
+	// After TUI exits, report result to stderr.
+	if m, ok := finalModel.(tui.AppModel); ok && m.DoneErr != nil {
+		if !errors.Is(m.DoneErr, loop.ErrMaxCycles) && !errors.Is(m.DoneErr, loop.ErrBudgetExceeded) {
+			printer.Error(m.DoneErr.Error())
+		}
+		return m.DoneErr
+	}
+	return nil
 }
 
 // applyFlagOverrides applies CLI flag values to the loaded config.
@@ -104,16 +159,16 @@ func loadPrompts(cmd *cobra.Command, cfg *config.Config) (coder, reviewer string
 
 // buildLoop validates dependencies, resolves the working directory, and
 // constructs a Loop ready to execute tasks.
-func buildLoop(cfg *config.Config, printer *ui.Printer, coderPrompt, reviewerPrompt string) (*loop.Loop, error) {
+func buildLoop(cfg *config.Config, uiHandler ui.UI, coderPrompt, reviewerPrompt string) (*loop.Loop, error) {
 	claudeInv := &claude.Invoker{ClaudePath: cfg.ClaudePath, Verbose: cfg.Verbose}
 	if err := claudeInv.Validate(); err != nil {
-		printer.Error(fmt.Sprintf("claude not available: %v", err))
+		uiHandler.Error(fmt.Sprintf("claude not available: %v", err))
 		return nil, err
 	}
 
 	beadsClient := &beads.CLI{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
 	if err := beadsClient.Validate(); err != nil {
-		printer.Error(fmt.Sprintf("beads not available: %v", err))
+		uiHandler.Error(fmt.Sprintf("beads not available: %v", err))
 		return nil, err
 	}
 
@@ -125,7 +180,7 @@ func buildLoop(cfg *config.Config, printer *ui.Printer, coderPrompt, reviewerPro
 	return &loop.Loop{
 		Invoker:      claudeInv,
 		Beads:        beadsClient,
-		UI:           printer,
+		UI:           uiHandler,
 		MaxCycles:    cfg.MaxReviewCycles,
 		MaxBudgetUSD: cfg.MaxBudgetUSD,
 		Model:        cfg.Model,
@@ -147,6 +202,15 @@ func resolveWorkDir(workDir string) (string, error) {
 	return wd, nil
 }
 
+// isStderrTTY reports whether stderr is connected to a terminal.
+func isStderrTTY() bool {
+	fi, err := os.Stderr.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
+}
+
 // setupSignalContext returns a context that is canceled on SIGINT or SIGTERM.
 func setupSignalContext(printer *ui.Printer) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -160,7 +224,7 @@ func setupSignalContext(printer *ui.Printer) (context.Context, context.CancelFun
 	return ctx, cancel
 }
 
-// runAutoMode reads a task from args or stdin and runs it once.
+// runAutoMode reads a task from args or stdin and runs it once (stderr printer path).
 func runAutoMode(ctx context.Context, taskLoop *loop.Loop, printer *ui.Printer, args []string) error {
 	task := strings.Join(args, " ")
 	if task == "" {
