@@ -37,7 +37,7 @@ const (
 type AppModel struct {
 	Mode       Mode
 	StatusBar  StatusBar
-	LoopView   LoopView  // used in loop mode (single task)
+	LoopView   LoopView // used in loop mode (single task)
 	NebulaView NebulaView
 	Detail     DetailPanel
 	Gate       *GatePrompt
@@ -50,8 +50,8 @@ type AppModel struct {
 	Messages   []string // recent info/error messages
 
 	// Nebula navigation state.
-	Depth        ViewDepth          // current navigation depth
-	FocusedPhase string             // phase ID we're drilled into
+	Depth        ViewDepth            // current navigation depth
+	FocusedPhase string               // phase ID we're drilled into
 	PhaseLoops   map[string]*LoopView // per-phase cycle timelines
 }
 
