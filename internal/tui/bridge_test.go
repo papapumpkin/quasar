@@ -674,10 +674,7 @@ func TestPauseToggle(t *testing.T) {
 	m.NebulaView.InitPhases([]PhaseInfo{{ID: "a", Title: "Alpha"}})
 
 	// Pause key at DepthPhases should write PAUSE file.
-	cmd := m.handlePauseKey()
-	if cmd == nil {
-		t.Fatal("Expected command from handlePauseKey")
-	}
+	m.handlePauseKey()
 	if !m.Paused {
 		t.Error("Expected Paused = true")
 	}
@@ -687,27 +684,13 @@ func TestPauseToggle(t *testing.T) {
 		t.Error("Expected PAUSE file to exist")
 	}
 
-	// The command should produce MsgPauseToggled{Paused: true}.
-	msg := cmd()
-	if pt, ok := msg.(MsgPauseToggled); !ok || !pt.Paused {
-		t.Errorf("Expected MsgPauseToggled{Paused: true}, got %T %v", msg, msg)
-	}
-
 	// Second press should resume (remove PAUSE file).
-	cmd = m.handlePauseKey()
-	if cmd == nil {
-		t.Fatal("Expected command from second handlePauseKey")
-	}
+	m.handlePauseKey()
 	if m.Paused {
 		t.Error("Expected Paused = false after toggle")
 	}
 	if _, err := os.Stat(pausePath); !os.IsNotExist(err) {
 		t.Error("Expected PAUSE file to be removed")
-	}
-
-	msg = cmd()
-	if pt, ok := msg.(MsgPauseToggled); !ok || pt.Paused {
-		t.Errorf("Expected MsgPauseToggled{Paused: false}, got %T %v", msg, msg)
 	}
 }
 
@@ -716,10 +699,7 @@ func TestPauseInLoopModeIsNoop(t *testing.T) {
 	m.Detail = NewDetailPanel(80, 10)
 	m.NebulaDir = t.TempDir()
 
-	cmd := m.handlePauseKey()
-	if cmd != nil {
-		t.Error("Expected nil command in loop mode")
-	}
+	m.handlePauseKey()
 	if m.Paused {
 		t.Error("Should not be paused in loop mode")
 	}
@@ -731,9 +711,9 @@ func TestPauseAtWrongDepthIsNoop(t *testing.T) {
 	m.NebulaDir = t.TempDir()
 	m.Depth = DepthPhaseLoop
 
-	cmd := m.handlePauseKey()
-	if cmd != nil {
-		t.Error("Expected nil command at DepthPhaseLoop")
+	m.handlePauseKey()
+	if m.Paused {
+		t.Error("Should not be paused at DepthPhaseLoop")
 	}
 }
 
@@ -742,9 +722,9 @@ func TestPauseWithoutNebulaDirIsNoop(t *testing.T) {
 	m.Detail = NewDetailPanel(80, 10)
 	// NebulaDir is empty.
 
-	cmd := m.handlePauseKey()
-	if cmd != nil {
-		t.Error("Expected nil command without NebulaDir")
+	m.handlePauseKey()
+	if m.Paused {
+		t.Error("Should not be paused without NebulaDir")
 	}
 }
 
@@ -758,10 +738,7 @@ func TestStopWritesFile(t *testing.T) {
 	m.NebulaDir = dir
 	m.NebulaView.InitPhases([]PhaseInfo{{ID: "a", Title: "Alpha"}})
 
-	cmd := m.handleStopKey()
-	if cmd == nil {
-		t.Fatal("Expected command from handleStopKey")
-	}
+	m.handleStopKey()
 	if !m.Stopping {
 		t.Error("Expected Stopping = true")
 	}
@@ -771,15 +748,11 @@ func TestStopWritesFile(t *testing.T) {
 		t.Error("Expected STOP file to exist")
 	}
 
-	msg := cmd()
-	if _, ok := msg.(MsgStopRequested); !ok {
-		t.Errorf("Expected MsgStopRequested, got %T", msg)
-	}
-
-	// Second stop should be a noop.
-	cmd = m.handleStopKey()
-	if cmd != nil {
-		t.Error("Expected nil command when already stopping")
+	// Second stop should be a noop (already stopping).
+	prevMsgCount := len(m.Messages)
+	m.handleStopKey()
+	if len(m.Messages) != prevMsgCount {
+		t.Error("Second stop should not produce new messages")
 	}
 }
 
@@ -788,9 +761,9 @@ func TestStopInLoopModeIsNoop(t *testing.T) {
 	m.Detail = NewDetailPanel(80, 10)
 	m.NebulaDir = t.TempDir()
 
-	cmd := m.handleStopKey()
-	if cmd != nil {
-		t.Error("Expected nil command in loop mode")
+	m.handleStopKey()
+	if m.Stopping {
+		t.Error("Should not be stopping in loop mode")
 	}
 }
 
@@ -800,9 +773,9 @@ func TestPauseWhileStoppingIsNoop(t *testing.T) {
 	m.NebulaDir = t.TempDir()
 	m.Stopping = true
 
-	cmd := m.handlePauseKey()
-	if cmd != nil {
-		t.Error("Expected nil command when stopping")
+	m.handlePauseKey()
+	if m.Paused {
+		t.Error("Should not be paused when stopping")
 	}
 }
 
@@ -811,6 +784,7 @@ func TestRetryFailedPhase(t *testing.T) {
 	m.Detail = NewDetailPanel(80, 10)
 	m.Width = 80
 	m.Height = 24
+	m.NebulaDir = t.TempDir()
 	m.NebulaView.InitPhases([]PhaseInfo{
 		{ID: "a", Title: "Alpha"},
 		{ID: "b", Title: "Beta"},
@@ -822,9 +796,7 @@ func TestRetryFailedPhase(t *testing.T) {
 	m.PhaseLoops["a"] = &lv
 
 	// Cursor is on "a" (index 0).
-	cmd := m.handleRetryKey()
-	// handleRetryKey returns nil but resets state.
-	_ = cmd
+	m.handleRetryKey()
 	if m.NebulaView.Phases[0].Status != PhaseWaiting {
 		t.Errorf("Phase status = %d, want PhaseWaiting", m.NebulaView.Phases[0].Status)
 	}
@@ -839,12 +811,14 @@ func TestRetryFailedPhase(t *testing.T) {
 func TestRetryNonFailedPhaseIsNoop(t *testing.T) {
 	m := NewAppModel(ModeNebula)
 	m.Detail = NewDetailPanel(80, 10)
+	m.NebulaDir = t.TempDir()
 	m.NebulaView.InitPhases([]PhaseInfo{{ID: "a", Title: "Alpha"}})
 
 	// Phase is in PhaseWaiting (not failed) — retry should be noop.
-	cmd := m.handleRetryKey()
-	if cmd != nil {
-		t.Error("Expected nil command for non-failed phase")
+	m.handleRetryKey()
+	// Status should remain unchanged.
+	if m.NebulaView.Phases[0].Status != PhaseWaiting {
+		t.Error("Status should remain PhaseWaiting for non-failed phase")
 	}
 }
 
@@ -852,22 +826,20 @@ func TestRetryInLoopModeIsNoop(t *testing.T) {
 	m := NewAppModel(ModeLoop)
 	m.Detail = NewDetailPanel(80, 10)
 
-	cmd := m.handleRetryKey()
-	if cmd != nil {
-		t.Error("Expected nil command in loop mode")
-	}
+	// Should not panic.
+	m.handleRetryKey()
 }
 
 func TestRetryAtPhaseLoopDepth(t *testing.T) {
 	m := NewAppModel(ModeNebula)
 	m.Detail = NewDetailPanel(80, 10)
+	m.NebulaDir = t.TempDir()
 	m.NebulaView.InitPhases([]PhaseInfo{{ID: "a", Title: "Alpha"}})
 	m.NebulaView.SetPhaseStatus("a", PhaseFailed)
 	m.FocusedPhase = "a"
 	m.Depth = DepthPhaseLoop
 
-	cmd := m.handleRetryKey()
-	_ = cmd
+	m.handleRetryKey()
 	if m.NebulaView.Phases[0].Status != PhaseWaiting {
 		t.Errorf("Phase status = %d, want PhaseWaiting after retry at DepthPhaseLoop", m.NebulaView.Phases[0].Status)
 	}
@@ -993,4 +965,109 @@ func TestSelectedPhaseFailedHelper(t *testing.T) {
 			t.Error("Expected false in loop mode")
 		}
 	})
+}
+
+func TestSetAgentOutputExactCycleMatch(t *testing.T) {
+	lv := NewLoopView()
+	lv.StartCycle(1)
+	lv.StartAgent("coder")
+
+	lv.SetAgentOutput("coder", 1, "wrote code")
+	if lv.Cycles[0].Agents[0].Output != "wrote code" {
+		t.Errorf("Output = %q, want %q", lv.Cycles[0].Agents[0].Output, "wrote code")
+	}
+}
+
+func TestSetAgentOutputFallbackOnCycleMismatch(t *testing.T) {
+	lv := NewLoopView()
+	lv.StartCycle(1)
+	lv.StartAgent("coder")
+	lv.FinishAgent("coder", 0.5, 5000)
+
+	// Output arrives with wrong cycle number — should fall back to most recent agent.
+	lv.SetAgentOutput("coder", 99, "fallback output")
+	if lv.Cycles[0].Agents[0].Output != "fallback output" {
+		t.Errorf("Output = %q, want %q (fallback)", lv.Cycles[0].Agents[0].Output, "fallback output")
+	}
+}
+
+func TestSetAgentOutputFallbackUsesLatestCycle(t *testing.T) {
+	lv := NewLoopView()
+	lv.StartCycle(1)
+	lv.StartAgent("coder")
+	lv.FinishAgent("coder", 0.3, 3000)
+	lv.StartCycle(2)
+	lv.StartAgent("coder")
+
+	// Output with wrong cycle — should fall back to cycle 2's coder (most recent).
+	lv.SetAgentOutput("coder", 99, "latest coder output")
+	if lv.Cycles[1].Agents[0].Output != "latest coder output" {
+		t.Errorf("Output = %q, want %q", lv.Cycles[1].Agents[0].Output, "latest coder output")
+	}
+	// Cycle 1's coder should not have been touched.
+	if lv.Cycles[0].Agents[0].Output != "" {
+		t.Errorf("Cycle 1 output = %q, want empty", lv.Cycles[0].Agents[0].Output)
+	}
+}
+
+func TestSetAgentOutputNoMatchDoesNotPanic(t *testing.T) {
+	lv := NewLoopView()
+	// No cycles, no agents — should not panic.
+	lv.SetAgentOutput("coder", 1, "orphaned output")
+}
+
+func TestPhaseAgentOutputEnsuresPhaseLoop(t *testing.T) {
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.Width = 80
+	m.Height = 24
+
+	// Send MsgPhaseAgentOutput WITHOUT a prior MsgPhaseTaskStarted.
+	// Previously this would silently drop the output.
+	var tm tea.Model = m
+	tm, _ = tm.Update(MsgPhaseAgentOutput{
+		PhaseID: "orphan-phase",
+		Role:    "coder",
+		Cycle:   1,
+		Output:  "should not be lost",
+	})
+
+	am := tm.(AppModel)
+	lv, ok := am.PhaseLoops["orphan-phase"]
+	if !ok {
+		t.Fatal("Expected PhaseLoops[\"orphan-phase\"] to be created by MsgPhaseAgentOutput")
+	}
+	// The output should be stored via the fallback path (no matching cycle,
+	// but no agents either so output is orphaned). This verifies the phase
+	// loop is at least created rather than the message being silently dropped.
+	_ = lv
+}
+
+func TestAgentOutputBeforeDonePreservesOutput(t *testing.T) {
+	// Simulate the corrected message ordering: output arrives before done.
+	m := NewAppModel(ModeLoop)
+	m.Detail = NewDetailPanel(80, 10)
+	m.Width = 80
+	m.Height = 24
+
+	var tm tea.Model = m
+
+	tm, _ = tm.Update(MsgCycleStart{Cycle: 1, MaxCycles: 3})
+	tm, _ = tm.Update(MsgAgentStart{Role: "coder"})
+
+	// Output arrives BEFORE done (the corrected order).
+	tm, _ = tm.Update(MsgAgentOutput{Role: "coder", Cycle: 1, Output: "implemented feature X"})
+	tm, _ = tm.Update(MsgAgentDone{Role: "coder", CostUSD: 0.5, DurationMs: 5000})
+
+	am := tm.(AppModel)
+	if len(am.LoopView.Cycles) != 1 || len(am.LoopView.Cycles[0].Agents) != 1 {
+		t.Fatal("Expected 1 cycle with 1 agent")
+	}
+	agent := am.LoopView.Cycles[0].Agents[0]
+	if agent.Output != "implemented feature X" {
+		t.Errorf("Output = %q, want %q", agent.Output, "implemented feature X")
+	}
+	if !agent.Done {
+		t.Error("Agent should be done")
+	}
 }

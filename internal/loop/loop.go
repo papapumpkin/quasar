@@ -185,8 +185,8 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	state.CoderOutput = result.ResultText
 	state.TotalCostUSD += result.CostUSD
 	state.Phase = PhaseCodeComplete
-	l.UI.AgentDone("coder", result.CostUSD, result.DurationMs)
 	l.UI.AgentOutput("coder", state.Cycle, result.ResultText)
+	l.UI.AgentDone("coder", result.CostUSD, result.DurationMs)
 	l.emitCycleSummary(state, PhaseCodeComplete, result)
 
 	if err := l.Beads.AddComment(ctx, state.TaskBeadID,
@@ -215,8 +215,8 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	state.ReviewOutput = result.ResultText
 	state.TotalCostUSD += result.CostUSD
 	state.Phase = PhaseReviewComplete
-	l.UI.AgentDone("reviewer", result.CostUSD, result.DurationMs)
 	l.UI.AgentOutput("reviewer", state.Cycle, result.ResultText)
+	l.UI.AgentDone("reviewer", result.CostUSD, result.DurationMs)
 	if err := l.Beads.AddComment(ctx, state.TaskBeadID,
 		fmt.Sprintf("[reviewer cycle %d]\n%s", state.Cycle, truncate(result.ResultText, 2000))); err != nil {
 		l.UI.Error(fmt.Sprintf("failed to add bead comment: %v", err))

@@ -3,8 +3,10 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // AgentEntry represents one agent invocation within a cycle.
@@ -15,6 +17,7 @@ type AgentEntry struct {
 	DurationMs int64
 	IssueCount int
 	Output     string
+	StartedAt  time.Time
 }
 
 // CycleEntry represents one coder-reviewer cycle.
@@ -35,7 +38,8 @@ type LoopView struct {
 // NewLoopView creates an empty loop view.
 func NewLoopView() LoopView {
 	s := spinner.New()
-	s.Spinner = spinner.Dot
+	s.Spinner = spinner.MiniDot
+	s.Style = lipgloss.NewStyle().Foreground(colorBlue)
 	return LoopView{
 		Spinner: s,
 	}
@@ -67,6 +71,22 @@ func (lv LoopView) SelectedAgent() *AgentEntry {
 	return nil
 }
 
+// SelectedCycleNumber returns the cycle number for the currently selected agent.
+// Returns 0 if no agent is selected.
+func (lv LoopView) SelectedCycleNumber() int {
+	idx := 0
+	for i := range lv.Cycles {
+		idx++ // skip cycle header
+		for range lv.Cycles[i].Agents {
+			if idx == lv.Cursor {
+				return lv.Cycles[i].Number
+			}
+			idx++
+		}
+	}
+	return 0
+}
+
 // StartCycle begins a new cycle.
 func (lv *LoopView) StartCycle(number int) {
 	lv.Cycles = append(lv.Cycles, CycleEntry{Number: number})
@@ -78,7 +98,7 @@ func (lv *LoopView) StartAgent(role string) {
 		return
 	}
 	c := &lv.Cycles[len(lv.Cycles)-1]
-	c.Agents = append(c.Agents, AgentEntry{Role: role})
+	c.Agents = append(c.Agents, AgentEntry{Role: role, StartedAt: time.Now()})
 }
 
 // FinishAgent marks the last agent in the current cycle as done.
@@ -98,7 +118,12 @@ func (lv *LoopView) FinishAgent(role string, costUSD float64, durationMs int64) 
 }
 
 // SetAgentOutput stores agent output for drill-down.
+// It first tries to find an exact cycle+role match. If no match is found
+// (e.g. due to message ordering or off-by-one), it falls back to the most
+// recent agent with the given role across all cycles, ensuring output is
+// never silently dropped.
 func (lv *LoopView) SetAgentOutput(role string, cycle int, output string) {
+	// Try exact cycle match first.
 	for i := range lv.Cycles {
 		if lv.Cycles[i].Number != cycle {
 			continue
@@ -106,6 +131,17 @@ func (lv *LoopView) SetAgentOutput(role string, cycle int, output string) {
 		for j := range lv.Cycles[i].Agents {
 			if lv.Cycles[i].Agents[j].Role == role {
 				lv.Cycles[i].Agents[j].Output = output
+				return
+			}
+		}
+	}
+
+	// Fallback: store on the most recent agent with this role.
+	for i := len(lv.Cycles) - 1; i >= 0; i-- {
+		for j := len(lv.Cycles[i].Agents) - 1; j >= 0; j-- {
+			if lv.Cycles[i].Agents[j].Role == role {
+				lv.Cycles[i].Agents[j].Output = output
+				return
 			}
 		}
 	}
@@ -187,7 +223,9 @@ func (lv LoopView) View() string {
 				}
 			} else {
 				icon := styleRowWorking.Render(iconWorking)
-				line = fmt.Sprintf("%s%s%s %s  working…  %s", indicator, indent, icon, a.Role, lv.Spinner.View())
+				elapsed := formatElapsed(a.StartedAt)
+				spinnerStr := roleColoredSpinner(a.Role, lv.Spinner)
+				line = fmt.Sprintf("%s%s%s %s  working… %s  %s", indicator, indent, icon, a.Role, elapsed, spinnerStr)
 				b.WriteString(styleRowWorking.Render(line))
 			}
 			b.WriteString("\n")
@@ -195,4 +233,31 @@ func (lv LoopView) View() string {
 		}
 	}
 	return b.String()
+}
+
+// formatElapsed returns a human-readable elapsed time string from a start time.
+// Returns an empty string if the start time is zero.
+func formatElapsed(start time.Time) string {
+	if start.IsZero() {
+		return ""
+	}
+	d := time.Since(start).Truncate(time.Second)
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	m := int(d.Minutes())
+	s := int(d.Seconds()) % 60
+	return fmt.Sprintf("%dm%02ds", m, s)
+}
+
+// roleColoredSpinner renders the spinner frame with a color matching the agent role.
+// Coder gets blue, reviewer gets yellow/gold.
+func roleColoredSpinner(role string, s spinner.Model) string {
+	frame := s.View()
+	switch role {
+	case "reviewer":
+		return lipgloss.NewStyle().Foreground(colorReviewer).Render(frame)
+	default:
+		return lipgloss.NewStyle().Foreground(colorBlue).Render(frame)
+	}
 }
