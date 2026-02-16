@@ -11,6 +11,7 @@ labels = ["quasar", "nebula", "relativity"]
 max_workers = 1
 max_review_cycles = 5
 max_budget_usd = 40.0
+gate = "watch"
 
 [context]
 repo = "github.com/papapumpkin/quasar"
