@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -282,6 +283,339 @@ func TestPhaseUIBridgeImplementsInterface(t *testing.T) {
 	p := tea.NewProgram(model, tea.WithoutSignalHandler())
 	var iface ui.UI = NewPhaseUIBridge(p, "test-phase")
 	_ = iface
+}
+
+func TestNewNebulaModelPrePopulated(t *testing.T) {
+	// Verify that creating a nebula model with pre-populated phases
+	// results in the correct initial state (what NewNebulaProgram does).
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.StatusBar.Name = "test-neb"
+	phases := []PhaseInfo{
+		{ID: "a", Title: "Phase A"},
+		{ID: "b", Title: "Phase B", DependsOn: []string{"a"}},
+		{ID: "c", Title: "Phase C", DependsOn: []string{"a", "b"}},
+	}
+	m.StatusBar.Total = len(phases)
+	m.NebulaView.InitPhases(phases)
+
+	if m.Mode != ModeNebula {
+		t.Errorf("Mode = %d, want ModeNebula", m.Mode)
+	}
+	if m.StatusBar.Name != "test-neb" {
+		t.Errorf("Name = %q, want %q", m.StatusBar.Name, "test-neb")
+	}
+	if m.StatusBar.Total != 3 {
+		t.Errorf("Total = %d, want 3", m.StatusBar.Total)
+	}
+	if len(m.NebulaView.Phases) != 3 {
+		t.Fatalf("Phases = %d, want 3", len(m.NebulaView.Phases))
+	}
+	if m.NebulaView.Phases[0].ID != "a" {
+		t.Errorf("Phase[0].ID = %q, want %q", m.NebulaView.Phases[0].ID, "a")
+	}
+	// All phases should start in PhaseWaiting.
+	for i, p := range m.NebulaView.Phases {
+		if p.Status != PhaseWaiting {
+			t.Errorf("Phase[%d].Status = %d, want PhaseWaiting", i, p.Status)
+		}
+	}
+	// PhaseLoops should be empty initially.
+	if len(m.PhaseLoops) != 0 {
+		t.Errorf("PhaseLoops = %d, want 0", len(m.PhaseLoops))
+	}
+}
+
+func TestNebulaViewInitPhases(t *testing.T) {
+	nv := NewNebulaView()
+	nv.InitPhases([]PhaseInfo{
+		{ID: "x", Title: "X Phase"},
+		{ID: "y", Title: "Y Phase", DependsOn: []string{"x"}},
+		{ID: "z", Title: "Z Phase", DependsOn: []string{"x", "y"}},
+	})
+
+	if len(nv.Phases) != 3 {
+		t.Fatalf("Phases = %d, want 3", len(nv.Phases))
+	}
+	if nv.Phases[0].ID != "x" || nv.Phases[0].Status != PhaseWaiting {
+		t.Errorf("Phase[0] = {%q, %d}, want {x, PhaseWaiting}", nv.Phases[0].ID, nv.Phases[0].Status)
+	}
+	if nv.Phases[1].BlockedBy != "x" {
+		t.Errorf("Phase[1].BlockedBy = %q, want %q", nv.Phases[1].BlockedBy, "x")
+	}
+	// z depends on x and y — should show "x +1"
+	if nv.Phases[2].BlockedBy != "x +1" {
+		t.Errorf("Phase[2].BlockedBy = %q, want %q", nv.Phases[2].BlockedBy, "x +1")
+	}
+}
+
+func TestNebulaViewSetPhaseStatus(t *testing.T) {
+	nv := NewNebulaView()
+	nv.InitPhases([]PhaseInfo{
+		{ID: "a", Title: "A"},
+		{ID: "b", Title: "B"},
+	})
+
+	nv.SetPhaseStatus("a", PhaseWorking)
+	if nv.Phases[0].Status != PhaseWorking {
+		t.Errorf("Status = %d, want PhaseWorking", nv.Phases[0].Status)
+	}
+	nv.SetPhaseStatus("a", PhaseDone)
+	if nv.Phases[0].Status != PhaseDone {
+		t.Errorf("Status = %d, want PhaseDone", nv.Phases[0].Status)
+	}
+	// Unknown phase ID — should not panic.
+	nv.SetPhaseStatus("unknown", PhaseFailed)
+}
+
+func TestNebulaViewSetPhaseCostAndCycles(t *testing.T) {
+	nv := NewNebulaView()
+	nv.InitPhases([]PhaseInfo{{ID: "p", Title: "P"}})
+
+	nv.SetPhaseCost("p", 1.23)
+	if nv.Phases[0].CostUSD != 1.23 {
+		t.Errorf("CostUSD = %f, want 1.23", nv.Phases[0].CostUSD)
+	}
+	nv.SetPhaseCycles("p", 3)
+	if nv.Phases[0].Cycles != 3 {
+		t.Errorf("Cycles = %d, want 3", nv.Phases[0].Cycles)
+	}
+	// Unknown phase — should not panic.
+	nv.SetPhaseCost("nope", 0.5)
+	nv.SetPhaseCycles("nope", 1)
+}
+
+func TestNebulaViewCursorNavigation(t *testing.T) {
+	nv := NewNebulaView()
+	nv.InitPhases([]PhaseInfo{
+		{ID: "a", Title: "A"},
+		{ID: "b", Title: "B"},
+		{ID: "c", Title: "C"},
+	})
+
+	if nv.Cursor != 0 {
+		t.Fatalf("initial cursor = %d, want 0", nv.Cursor)
+	}
+
+	nv.MoveDown()
+	if nv.Cursor != 1 {
+		t.Errorf("after MoveDown: cursor = %d, want 1", nv.Cursor)
+	}
+	nv.MoveDown()
+	if nv.Cursor != 2 {
+		t.Errorf("after second MoveDown: cursor = %d, want 2", nv.Cursor)
+	}
+	// Can't go past end.
+	nv.MoveDown()
+	if nv.Cursor != 2 {
+		t.Errorf("at end: cursor = %d, want 2", nv.Cursor)
+	}
+
+	nv.MoveUp()
+	if nv.Cursor != 1 {
+		t.Errorf("after MoveUp: cursor = %d, want 1", nv.Cursor)
+	}
+	// Can't go above 0.
+	nv.MoveUp()
+	nv.MoveUp()
+	if nv.Cursor != 0 {
+		t.Errorf("at start: cursor = %d, want 0", nv.Cursor)
+	}
+
+	// SelectedPhase at cursor.
+	p := nv.SelectedPhase()
+	if p == nil || p.ID != "a" {
+		t.Errorf("SelectedPhase = %v, want phase a", p)
+	}
+}
+
+func TestAppModelQuitKey(t *testing.T) {
+	m := NewAppModel(ModeLoop)
+	m.Detail = NewDetailPanel(80, 10)
+	m.Width = 80
+	m.Height = 24
+
+	// q should return tea.Quit.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if cmd == nil {
+		t.Fatal("Expected tea.Quit command from q key")
+	}
+
+	// ctrl+c should also return tea.Quit.
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Fatal("Expected tea.Quit command from ctrl+c")
+	}
+}
+
+func TestAppModelPhaseErrorSetsStatus(t *testing.T) {
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.Width = 80
+	m.Height = 24
+
+	var tm tea.Model = m
+
+	tm, _ = tm.Update(MsgNebulaInit{
+		Name:   "err-test",
+		Phases: []PhaseInfo{{ID: "fail-phase", Title: "Failing"}},
+	})
+	tm, _ = tm.Update(MsgPhaseTaskStarted{PhaseID: "fail-phase", BeadID: "b-1", Title: "Failing"})
+	tm, _ = tm.Update(MsgPhaseError{PhaseID: "fail-phase", Msg: "something broke"})
+
+	am := tm.(AppModel)
+	if am.NebulaView.Phases[0].Status != PhaseFailed {
+		t.Errorf("Status = %d, want PhaseFailed(%d)", am.NebulaView.Phases[0].Status, PhaseFailed)
+	}
+	if len(am.Messages) == 0 {
+		t.Error("Expected error message in Messages")
+	}
+}
+
+func TestAppModelDoneSignals(t *testing.T) {
+	t.Run("MsgLoopDone", func(t *testing.T) {
+		m := NewAppModel(ModeLoop)
+		m.Detail = NewDetailPanel(80, 10)
+		var tm tea.Model = m
+		tm, _ = tm.Update(MsgLoopDone{Err: nil})
+		am := tm.(AppModel)
+		if !am.Done {
+			t.Error("Expected Done = true after MsgLoopDone")
+		}
+	})
+
+	t.Run("MsgNebulaDone", func(t *testing.T) {
+		m := NewAppModel(ModeNebula)
+		m.Detail = NewDetailPanel(80, 10)
+		var tm tea.Model = m
+		tm, _ = tm.Update(MsgNebulaDone{Err: nil})
+		am := tm.(AppModel)
+		if !am.Done {
+			t.Error("Expected Done = true after MsgNebulaDone")
+		}
+	})
+
+	t.Run("MsgNebulaDone with error", func(t *testing.T) {
+		m := NewAppModel(ModeNebula)
+		m.Detail = NewDetailPanel(80, 10)
+		err := fmt.Errorf("workers failed")
+		var tm tea.Model = m
+		tm, _ = tm.Update(MsgNebulaDone{Err: err})
+		am := tm.(AppModel)
+		if !am.Done {
+			t.Error("Expected Done = true")
+		}
+		if am.DoneErr == nil || am.DoneErr.Error() != "workers failed" {
+			t.Errorf("DoneErr = %v, want 'workers failed'", am.DoneErr)
+		}
+	})
+}
+
+func TestAppModelViewDoesNotPanic(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func() AppModel
+	}{
+		{
+			name: "loop mode empty",
+			setup: func() AppModel {
+				m := NewAppModel(ModeLoop)
+				m.Detail = NewDetailPanel(80, 10)
+				m.Width = 80
+				m.Height = 24
+				return m
+			},
+		},
+		{
+			name: "nebula mode with phases",
+			setup: func() AppModel {
+				m := NewAppModel(ModeNebula)
+				m.Detail = NewDetailPanel(80, 10)
+				m.Width = 80
+				m.Height = 24
+				m.NebulaView.InitPhases([]PhaseInfo{
+					{ID: "a", Title: "A"},
+					{ID: "b", Title: "B", DependsOn: []string{"a"}},
+				})
+				return m
+			},
+		},
+		{
+			name: "nebula drilled into phase",
+			setup: func() AppModel {
+				m := NewAppModel(ModeNebula)
+				m.Detail = NewDetailPanel(80, 10)
+				m.Width = 80
+				m.Height = 24
+				m.NebulaView.InitPhases([]PhaseInfo{{ID: "x", Title: "X"}})
+				lv := NewLoopView()
+				lv.StartCycle(1)
+				lv.StartAgent("coder")
+				m.PhaseLoops["x"] = &lv
+				m.FocusedPhase = "x"
+				m.Depth = DepthPhaseLoop
+				return m
+			},
+		},
+		{
+			name: "nebula at agent output depth",
+			setup: func() AppModel {
+				m := NewAppModel(ModeNebula)
+				m.Detail = NewDetailPanel(80, 10)
+				m.Width = 80
+				m.Height = 24
+				m.NebulaView.InitPhases([]PhaseInfo{{ID: "x", Title: "X"}})
+				lv := NewLoopView()
+				lv.StartCycle(1)
+				lv.StartAgent("coder")
+				lv.FinishAgent("coder", 0.5, 5000)
+				m.PhaseLoops["x"] = &lv
+				m.FocusedPhase = "x"
+				m.Depth = DepthAgentOutput
+				return m
+			},
+		},
+		{
+			name: "zero width (initializing)",
+			setup: func() AppModel {
+				m := NewAppModel(ModeLoop)
+				m.Detail = NewDetailPanel(80, 10)
+				return m
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := tt.setup()
+			// Should not panic.
+			_ = m.View()
+		})
+	}
+}
+
+func TestFooterBindings(t *testing.T) {
+	km := DefaultKeyMap()
+
+	loop := LoopFooterBindings(km)
+	if len(loop) != 4 {
+		t.Errorf("LoopFooterBindings = %d bindings, want 4", len(loop))
+	}
+
+	neb := NebulaFooterBindings(km)
+	if len(neb) != 6 {
+		t.Errorf("NebulaFooterBindings = %d bindings, want 6", len(neb))
+	}
+
+	detail := NebulaDetailFooterBindings(km)
+	if len(detail) != 5 {
+		t.Errorf("NebulaDetailFooterBindings = %d bindings, want 5", len(detail))
+	}
+
+	gate := GateFooterBindings(km)
+	if len(gate) != 4 {
+		t.Errorf("GateFooterBindings = %d bindings, want 4", len(gate))
+	}
 }
 
 func TestLoopViewCursorNavigation(t *testing.T) {
