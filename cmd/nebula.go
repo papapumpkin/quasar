@@ -252,7 +252,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				DependsOn: p.DependsOn,
 			})
 		}
-		tuiProgram = tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases)
+		tuiProgram = tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir)
 		// Per-phase loops with PhaseUIBridge for hierarchical TUI tracking.
 		wg.Runner = &tuiLoopAdapter{
 			program:      tuiProgram,

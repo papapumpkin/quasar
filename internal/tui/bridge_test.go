@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -659,4 +661,336 @@ func TestLoopViewCursorNavigation(t *testing.T) {
 	if lv.Cursor != 0 {
 		t.Errorf("Cursor = %d, want 0 after multiple MoveUp", lv.Cursor)
 	}
+}
+
+func TestPauseToggle(t *testing.T) {
+	dir := t.TempDir()
+
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.Width = 80
+	m.Height = 24
+	m.NebulaDir = dir
+	m.NebulaView.InitPhases([]PhaseInfo{{ID: "a", Title: "Alpha"}})
+
+	// Pause key at DepthPhases should write PAUSE file.
+	cmd := m.handlePauseKey()
+	if cmd == nil {
+		t.Fatal("Expected command from handlePauseKey")
+	}
+	if !m.Paused {
+		t.Error("Expected Paused = true")
+	}
+
+	pausePath := dir + "/PAUSE"
+	if _, err := os.Stat(pausePath); os.IsNotExist(err) {
+		t.Error("Expected PAUSE file to exist")
+	}
+
+	// The command should produce MsgPauseToggled{Paused: true}.
+	msg := cmd()
+	if pt, ok := msg.(MsgPauseToggled); !ok || !pt.Paused {
+		t.Errorf("Expected MsgPauseToggled{Paused: true}, got %T %v", msg, msg)
+	}
+
+	// Second press should resume (remove PAUSE file).
+	cmd = m.handlePauseKey()
+	if cmd == nil {
+		t.Fatal("Expected command from second handlePauseKey")
+	}
+	if m.Paused {
+		t.Error("Expected Paused = false after toggle")
+	}
+	if _, err := os.Stat(pausePath); !os.IsNotExist(err) {
+		t.Error("Expected PAUSE file to be removed")
+	}
+
+	msg = cmd()
+	if pt, ok := msg.(MsgPauseToggled); !ok || pt.Paused {
+		t.Errorf("Expected MsgPauseToggled{Paused: false}, got %T %v", msg, msg)
+	}
+}
+
+func TestPauseInLoopModeIsNoop(t *testing.T) {
+	m := NewAppModel(ModeLoop)
+	m.Detail = NewDetailPanel(80, 10)
+	m.NebulaDir = t.TempDir()
+
+	cmd := m.handlePauseKey()
+	if cmd != nil {
+		t.Error("Expected nil command in loop mode")
+	}
+	if m.Paused {
+		t.Error("Should not be paused in loop mode")
+	}
+}
+
+func TestPauseAtWrongDepthIsNoop(t *testing.T) {
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.NebulaDir = t.TempDir()
+	m.Depth = DepthPhaseLoop
+
+	cmd := m.handlePauseKey()
+	if cmd != nil {
+		t.Error("Expected nil command at DepthPhaseLoop")
+	}
+}
+
+func TestPauseWithoutNebulaDirIsNoop(t *testing.T) {
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	// NebulaDir is empty.
+
+	cmd := m.handlePauseKey()
+	if cmd != nil {
+		t.Error("Expected nil command without NebulaDir")
+	}
+}
+
+func TestStopWritesFile(t *testing.T) {
+	dir := t.TempDir()
+
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.Width = 80
+	m.Height = 24
+	m.NebulaDir = dir
+	m.NebulaView.InitPhases([]PhaseInfo{{ID: "a", Title: "Alpha"}})
+
+	cmd := m.handleStopKey()
+	if cmd == nil {
+		t.Fatal("Expected command from handleStopKey")
+	}
+	if !m.Stopping {
+		t.Error("Expected Stopping = true")
+	}
+
+	stopPath := dir + "/STOP"
+	if _, err := os.Stat(stopPath); os.IsNotExist(err) {
+		t.Error("Expected STOP file to exist")
+	}
+
+	msg := cmd()
+	if _, ok := msg.(MsgStopRequested); !ok {
+		t.Errorf("Expected MsgStopRequested, got %T", msg)
+	}
+
+	// Second stop should be a noop.
+	cmd = m.handleStopKey()
+	if cmd != nil {
+		t.Error("Expected nil command when already stopping")
+	}
+}
+
+func TestStopInLoopModeIsNoop(t *testing.T) {
+	m := NewAppModel(ModeLoop)
+	m.Detail = NewDetailPanel(80, 10)
+	m.NebulaDir = t.TempDir()
+
+	cmd := m.handleStopKey()
+	if cmd != nil {
+		t.Error("Expected nil command in loop mode")
+	}
+}
+
+func TestPauseWhileStoppingIsNoop(t *testing.T) {
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.NebulaDir = t.TempDir()
+	m.Stopping = true
+
+	cmd := m.handlePauseKey()
+	if cmd != nil {
+		t.Error("Expected nil command when stopping")
+	}
+}
+
+func TestRetryFailedPhase(t *testing.T) {
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.Width = 80
+	m.Height = 24
+	m.NebulaView.InitPhases([]PhaseInfo{
+		{ID: "a", Title: "Alpha"},
+		{ID: "b", Title: "Beta"},
+	})
+
+	// Mark phase "a" as failed.
+	m.NebulaView.SetPhaseStatus("a", PhaseFailed)
+	lv := NewLoopView()
+	m.PhaseLoops["a"] = &lv
+
+	// Cursor is on "a" (index 0).
+	cmd := m.handleRetryKey()
+	// handleRetryKey returns nil but resets state.
+	_ = cmd
+	if m.NebulaView.Phases[0].Status != PhaseWaiting {
+		t.Errorf("Phase status = %d, want PhaseWaiting", m.NebulaView.Phases[0].Status)
+	}
+	if _, ok := m.PhaseLoops["a"]; ok {
+		t.Error("Expected PhaseLoops[\"a\"] to be removed after retry")
+	}
+	if len(m.Messages) == 0 || !strings.Contains(m.Messages[len(m.Messages)-1], "retrying phase a") {
+		t.Error("Expected retry message")
+	}
+}
+
+func TestRetryNonFailedPhaseIsNoop(t *testing.T) {
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.NebulaView.InitPhases([]PhaseInfo{{ID: "a", Title: "Alpha"}})
+
+	// Phase is in PhaseWaiting (not failed) — retry should be noop.
+	cmd := m.handleRetryKey()
+	if cmd != nil {
+		t.Error("Expected nil command for non-failed phase")
+	}
+}
+
+func TestRetryInLoopModeIsNoop(t *testing.T) {
+	m := NewAppModel(ModeLoop)
+	m.Detail = NewDetailPanel(80, 10)
+
+	cmd := m.handleRetryKey()
+	if cmd != nil {
+		t.Error("Expected nil command in loop mode")
+	}
+}
+
+func TestRetryAtPhaseLoopDepth(t *testing.T) {
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.NebulaView.InitPhases([]PhaseInfo{{ID: "a", Title: "Alpha"}})
+	m.NebulaView.SetPhaseStatus("a", PhaseFailed)
+	m.FocusedPhase = "a"
+	m.Depth = DepthPhaseLoop
+
+	cmd := m.handleRetryKey()
+	_ = cmd
+	if m.NebulaView.Phases[0].Status != PhaseWaiting {
+		t.Errorf("Phase status = %d, want PhaseWaiting after retry at DepthPhaseLoop", m.NebulaView.Phases[0].Status)
+	}
+}
+
+func TestStatusBarShowsPausedIndicator(t *testing.T) {
+	s := StatusBar{
+		Name:      "test",
+		Total:     5,
+		Completed: 2,
+		Width:     80,
+		Paused:    true,
+	}
+	view := s.View()
+	if !strings.Contains(view, "PAUSED") {
+		t.Error("Expected PAUSED in status bar view")
+	}
+}
+
+func TestStatusBarShowsStoppingIndicator(t *testing.T) {
+	s := StatusBar{
+		Name:      "test",
+		Total:     5,
+		Completed: 2,
+		Width:     80,
+		Stopping:  true,
+	}
+	view := s.View()
+	if !strings.Contains(view, "STOPPING") {
+		t.Error("Expected STOPPING in status bar view")
+	}
+}
+
+func TestStatusBarStoppingOverridesPaused(t *testing.T) {
+	s := StatusBar{
+		Name:      "test",
+		Total:     5,
+		Completed: 2,
+		Width:     80,
+		Paused:    true,
+		Stopping:  true,
+	}
+	view := s.View()
+	if !strings.Contains(view, "STOPPING") {
+		t.Error("Expected STOPPING in status bar view")
+	}
+	// PAUSED should not be shown when stopping.
+	if strings.Contains(view, "PAUSED") {
+		t.Error("Expected PAUSED to NOT be in status bar when stopping")
+	}
+}
+
+func TestFooterShowsRetryForFailedPhase(t *testing.T) {
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.Width = 80
+	m.Height = 24
+	m.NebulaView.InitPhases([]PhaseInfo{{ID: "a", Title: "Alpha"}})
+	m.NebulaView.SetPhaseStatus("a", PhaseFailed)
+
+	f := m.buildFooter()
+	found := false
+	for _, b := range f.Bindings {
+		h := b.Help()
+		if h.Desc == "retry" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected retry binding in footer for failed phase")
+	}
+}
+
+func TestFooterNoRetryForNonFailedPhase(t *testing.T) {
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.Width = 80
+	m.Height = 24
+	m.NebulaView.InitPhases([]PhaseInfo{{ID: "a", Title: "Alpha"}})
+	// Phase is PhaseWaiting — no retry.
+
+	f := m.buildFooter()
+	for _, b := range f.Bindings {
+		h := b.Help()
+		if h.Desc == "retry" {
+			t.Error("Should not have retry binding for non-failed phase")
+		}
+	}
+}
+
+func TestSelectedPhaseFailedHelper(t *testing.T) {
+	t.Run("at DepthPhases", func(t *testing.T) {
+		m := NewAppModel(ModeNebula)
+		m.NebulaView.InitPhases([]PhaseInfo{
+			{ID: "a", Title: "A"},
+			{ID: "b", Title: "B"},
+		})
+		m.NebulaView.SetPhaseStatus("a", PhaseFailed)
+		if !m.selectedPhaseFailed() {
+			t.Error("Expected true for failed selected phase")
+		}
+		m.NebulaView.MoveDown() // move to "b"
+		if m.selectedPhaseFailed() {
+			t.Error("Expected false for non-failed selected phase")
+		}
+	})
+
+	t.Run("at DepthPhaseLoop", func(t *testing.T) {
+		m := NewAppModel(ModeNebula)
+		m.NebulaView.InitPhases([]PhaseInfo{{ID: "x", Title: "X"}})
+		m.NebulaView.SetPhaseStatus("x", PhaseFailed)
+		m.FocusedPhase = "x"
+		m.Depth = DepthPhaseLoop
+		if !m.selectedPhaseFailed() {
+			t.Error("Expected true for failed focused phase at DepthPhaseLoop")
+		}
+	})
+
+	t.Run("loop mode", func(t *testing.T) {
+		m := NewAppModel(ModeLoop)
+		if m.selectedPhaseFailed() {
+			t.Error("Expected false in loop mode")
+		}
+	})
 }

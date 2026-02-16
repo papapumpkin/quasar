@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -53,6 +55,11 @@ type AppModel struct {
 	Depth        ViewDepth            // current navigation depth
 	FocusedPhase string               // phase ID we're drilled into
 	PhaseLoops   map[string]*LoopView // per-phase cycle timelines
+
+	// Execution control state (nebula mode).
+	Paused    bool   // whether execution is paused
+	Stopping  bool   // whether a stop has been requested
+	NebulaDir string // path to nebula directory for intervention files
 }
 
 // NewAppModel creates a root model configured for the given mode.
@@ -217,6 +224,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.NebulaView.SetPhaseStatus(msg.Checkpoint.PhaseID, PhaseGate)
 		}
 
+	// --- Execution control ---
+	case MsgPauseToggled:
+		m.Paused = msg.Paused
+	case MsgStopRequested:
+		m.Stopping = true
+
 	// --- Done signals ---
 	case MsgLoopDone:
 		m.Done = true
@@ -250,6 +263,21 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.Keys.Quit):
 		return m, tea.Quit
 
+	case key.Matches(msg, m.Keys.Pause):
+		if cmd := m.handlePauseKey(); cmd != nil {
+			return m, cmd
+		}
+
+	case key.Matches(msg, m.Keys.Stop):
+		if cmd := m.handleStopKey(); cmd != nil {
+			return m, cmd
+		}
+
+	case key.Matches(msg, m.Keys.Retry):
+		if cmd := m.handleRetryKey(); cmd != nil {
+			return m, cmd
+		}
+
 	case key.Matches(msg, m.Keys.Up):
 		m.moveUp()
 
@@ -264,6 +292,91 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// handlePauseKey toggles pause state by writing/removing the PAUSE intervention file.
+// Only active in nebula mode at the phase table level.
+func (m *AppModel) handlePauseKey() tea.Cmd {
+	if m.Mode != ModeNebula || m.Depth != DepthPhases || m.NebulaDir == "" {
+		return nil
+	}
+	if m.Stopping {
+		return nil // can't pause while stopping
+	}
+
+	pausePath := filepath.Join(m.NebulaDir, "PAUSE")
+	if m.Paused {
+		// Resume: remove the PAUSE file.
+		_ = os.Remove(pausePath)
+		m.Paused = false
+	} else {
+		// Pause: create the PAUSE file.
+		if err := os.WriteFile(pausePath, []byte("paused by TUI\n"), 0644); err != nil {
+			m.addMessage("failed to write PAUSE file: %s", err)
+			return nil
+		}
+		m.Paused = true
+	}
+	return func() tea.Msg {
+		return MsgPauseToggled{Paused: m.Paused}
+	}
+}
+
+// handleStopKey writes the STOP intervention file.
+// Only active in nebula mode at the phase table level.
+func (m *AppModel) handleStopKey() tea.Cmd {
+	if m.Mode != ModeNebula || m.Depth != DepthPhases || m.NebulaDir == "" {
+		return nil
+	}
+	if m.Stopping {
+		return nil // already stopping
+	}
+
+	stopPath := filepath.Join(m.NebulaDir, "STOP")
+	if err := os.WriteFile(stopPath, []byte("stopped by TUI\n"), 0644); err != nil {
+		m.addMessage("failed to write STOP file: %s", err)
+		return nil
+	}
+	m.Stopping = true
+	return func() tea.Msg {
+		return MsgStopRequested{}
+	}
+}
+
+// handleRetryKey retries a failed phase by resetting its status.
+// Only active in nebula mode when viewing a failed phase.
+func (m *AppModel) handleRetryKey() tea.Cmd {
+	if m.Mode != ModeNebula {
+		return nil
+	}
+
+	// Determine which phase to retry based on depth.
+	var phaseID string
+	switch m.Depth {
+	case DepthPhases:
+		if p := m.NebulaView.SelectedPhase(); p != nil && p.Status == PhaseFailed {
+			phaseID = p.ID
+		}
+	case DepthPhaseLoop:
+		if m.FocusedPhase != "" {
+			for i := range m.NebulaView.Phases {
+				if m.NebulaView.Phases[i].ID == m.FocusedPhase && m.NebulaView.Phases[i].Status == PhaseFailed {
+					phaseID = m.FocusedPhase
+				}
+			}
+		}
+	}
+
+	if phaseID == "" {
+		return nil // no failed phase selected
+	}
+
+	// Reset the phase to waiting so the worker group can re-dispatch it.
+	m.NebulaView.SetPhaseStatus(phaseID, PhaseWaiting)
+	// Clear the per-phase loop view so it starts fresh.
+	delete(m.PhaseLoops, phaseID)
+	m.addMessage("retrying phase %s", phaseID)
+	return nil
 }
 
 // drillDown navigates deeper into the hierarchy.
@@ -442,7 +555,9 @@ func (m AppModel) View() string {
 
 	var sections []string
 
-	// Status bar.
+	// Status bar — sync execution control state.
+	m.StatusBar.Paused = m.Paused
+	m.StatusBar.Stopping = m.Stopping
 	sections = append(sections, m.StatusBar.View())
 
 	// Breadcrumb (nebula drill-down).
@@ -518,11 +633,39 @@ func (m AppModel) buildFooter() Footer {
 	} else if m.Mode == ModeNebula {
 		if m.Depth > DepthPhases {
 			f.Bindings = NebulaDetailFooterBindings(m.Keys)
+			// Add retry if the focused phase is failed.
+			if m.selectedPhaseFailed() {
+				f.Bindings = append(f.Bindings, m.Keys.Retry)
+			}
 		} else {
 			f.Bindings = NebulaFooterBindings(m.Keys)
+			// Add retry if the selected phase is failed.
+			if m.selectedPhaseFailed() {
+				f.Bindings = append(f.Bindings, m.Keys.Retry)
+			}
 		}
 	} else {
 		f.Bindings = LoopFooterBindings(m.Keys)
 	}
 	return f
+}
+
+// selectedPhaseFailed reports whether the currently selected/focused phase is in PhaseFailed state.
+func (m AppModel) selectedPhaseFailed() bool {
+	if m.Mode != ModeNebula {
+		return false
+	}
+	switch m.Depth {
+	case DepthPhases:
+		if p := m.NebulaView.SelectedPhase(); p != nil {
+			return p.Status == PhaseFailed
+		}
+	case DepthPhaseLoop:
+		for i := range m.NebulaView.Phases {
+			if m.NebulaView.Phases[i].ID == m.FocusedPhase {
+				return m.NebulaView.Phases[i].Status == PhaseFailed
+			}
+		}
+	}
+	return false
 }

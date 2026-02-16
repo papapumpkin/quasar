@@ -34,12 +34,15 @@ func NewProgramRaw(mode Mode) *Program {
 
 // NewNebulaProgram creates a nebula-mode TUI with the phase table pre-populated.
 // This avoids needing to Send a MsgNebulaInit before Run() starts.
-func NewNebulaProgram(name string, phases []PhaseInfo) *Program {
+// nebulaDir is the path to the nebula directory, used for writing intervention
+// files (PAUSE/STOP) from TUI keyboard shortcuts.
+func NewNebulaProgram(name string, phases []PhaseInfo, nebulaDir string) *Program {
 	model := NewAppModel(ModeNebula)
 	model.Detail = NewDetailPanel(80, 10)
 	model.StatusBar.Name = name
 	model.StatusBar.Total = len(phases)
 	model.NebulaView.InitPhases(phases)
+	model.NebulaDir = nebulaDir
 	return tea.NewProgram(model, tea.WithAltScreen())
 }
 

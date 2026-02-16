@@ -16,6 +16,8 @@ var (
 	colorSurfaceBright = lipgloss.Color("#2A2A3C") // Lighter surface — breadcrumb bg
 	colorSurfaceDim    = lipgloss.Color("#181825") // Darkest surface — footer bg
 	colorBlue          = lipgloss.Color("#5B8DEF") // Blue — working/active
+	colorBudgetWarn    = lipgloss.Color("#FFA726") // Orange — budget warning
+	colorReviewer      = lipgloss.Color("#FFD54F") // Yellow — reviewer spinner
 )
 
 // Selection indicator prepended to the active row.
@@ -48,6 +50,14 @@ var (
 
 	styleStatusCost = lipgloss.NewStyle().
 			Foreground(colorAccent)
+
+	styleStatusPaused = lipgloss.NewStyle().
+				Foreground(colorAccent).
+				Bold(true)
+
+	styleStatusStopping = lipgloss.NewStyle().
+				Foreground(colorDanger).
+				Bold(true)
 )
 
 // Breadcrumb bar style — subtle tinted background, dimmer than status bar.

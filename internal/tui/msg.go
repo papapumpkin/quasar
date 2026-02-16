@@ -210,3 +210,11 @@ type MsgNebulaDone struct {
 	Results []nebula.WorkerResult
 	Err     error
 }
+
+// MsgPauseToggled is sent when the user toggles pause state via the TUI.
+type MsgPauseToggled struct {
+	Paused bool
+}
+
+// MsgStopRequested is sent when the user requests a stop via the TUI.
+type MsgStopRequested struct{}
