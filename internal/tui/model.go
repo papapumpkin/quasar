@@ -125,7 +125,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case MsgTick:
-		cmds = append(cmds, tickCmd())
+		if !m.Done {
+			cmds = append(cmds, tickCmd())
+		}
 
 	// --- Loop mode (single task) ---
 	case MsgTaskStarted:
@@ -198,9 +200,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			lv.FinishAgent(msg.Role, msg.CostUSD, msg.DurationMs)
 		}
 	case MsgPhaseAgentOutput:
-		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
-			lv.SetAgentOutput(msg.Role, msg.Cycle, msg.Output)
-		}
+		lv := m.ensurePhaseLoop(msg.PhaseID)
+		lv.SetAgentOutput(msg.Role, msg.Cycle, msg.Output)
 		// If we're focused on this phase, refresh detail.
 		if m.FocusedPhase == msg.PhaseID {
 			m.updateDetailFromSelection()
@@ -241,11 +242,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgLoopDone:
 		m.Done = true
 		m.DoneErr = msg.Err
+		m.StatusBar.FinalElapsed = time.Since(m.StartTime).Truncate(time.Second)
 		m.Overlay = NewCompletionFromLoopDone(msg, time.Since(m.StartTime), m.StatusBar.CostUSD)
 	case MsgNebulaDone:
 		m.Done = true
 		m.DoneErr = msg.Err
-		m.Overlay = NewCompletionFromNebulaDone(msg, time.Since(m.StartTime), m.StatusBar.CostUSD)
+		m.StatusBar.FinalElapsed = time.Since(m.StartTime).Truncate(time.Second)
+		m.Overlay = NewCompletionFromNebulaDone(msg, time.Since(m.StartTime), m.StatusBar.CostUSD, len(m.NebulaView.Phases))
 
 	// --- Toast auto-dismiss ---
 	case MsgToastExpired:
@@ -727,9 +730,11 @@ func (m AppModel) View() string {
 
 	base := lipgloss.JoinVertical(lipgloss.Left, sections...)
 
-	// Completion overlay — rendered over a dimmed placeholder background.
+	// Completion overlay — rendered over a dimmed background.
 	if m.Overlay != nil {
-		return m.Overlay.View(m.Width, m.Height)
+		dimmed := styleOverlayDimmed.Width(m.Width).Height(m.Height).Render(base)
+		overlayBox := m.Overlay.View(m.Width, m.Height)
+		return compositeOverlay(dimmed, overlayBox, m.Width, m.Height)
 	}
 
 	return base

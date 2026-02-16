@@ -10,18 +10,19 @@ import (
 
 // StatusBar renders the persistent top bar with task name, progress, budget, elapsed.
 type StatusBar struct {
-	Name      string
-	BeadID    string
-	Cycle     int
-	MaxCycles int
-	Completed int
-	Total     int
-	CostUSD   float64
-	BudgetUSD float64
-	StartTime time.Time
-	Width     int
-	Paused    bool
-	Stopping  bool
+	Name         string
+	BeadID       string
+	Cycle        int
+	MaxCycles    int
+	Completed    int
+	Total        int
+	CostUSD      float64
+	BudgetUSD    float64
+	StartTime    time.Time
+	FinalElapsed time.Duration
+	Width        int
+	Paused       bool
+	Stopping     bool
 }
 
 // View renders the status bar as a single line.
@@ -84,8 +85,13 @@ func (s StatusBar) View() string {
 		right = styleStatusCost.Render(fmt.Sprintf("$%.2f", s.CostUSD))
 	}
 
-	if !s.StartTime.IsZero() {
-		elapsed := time.Since(s.StartTime).Truncate(time.Second)
+	var elapsed time.Duration
+	if s.FinalElapsed > 0 {
+		elapsed = s.FinalElapsed
+	} else if !s.StartTime.IsZero() {
+		elapsed = time.Since(s.StartTime).Truncate(time.Second)
+	}
+	if elapsed > 0 {
 		right += fmt.Sprintf("  %s", elapsed)
 	}
 	right += " "
