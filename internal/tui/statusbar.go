@@ -26,75 +26,41 @@ type StatusBar struct {
 }
 
 // View renders the status bar as a single line.
-// Adapts to narrow terminals by truncating the name and using compact progress bars.
+// Adapts to narrow terminals by truncating the name and dropping low-priority
+// segments (elapsed → cost → progress) to guarantee single-line rendering.
 func (s StatusBar) View() string {
 	compact := s.Width < CompactWidth
 
-	var left string
-	if s.Total > 0 {
-		// Nebula mode: show progress bar.
-		name := s.Name
-		if compact {
-			name = TruncateWithEllipsis(name, 12)
-		}
-		if compact {
-			// Compact: percentage only, no bar graphic.
-			pct := 0
-			if s.Total > 0 {
-				pct = s.Completed * 100 / s.Total
-			}
-			left = " " + Logo() + "  " +
-				styleStatusValue.Render(fmt.Sprintf("%s %d%%", name, pct))
-		} else {
-			bar := renderProgressBar(s.Completed, s.Total, 12)
-			left = " " + Logo() + "  " +
-				styleStatusValue.Render(fmt.Sprintf("nebula: %s  %s %d/%d", name, bar, s.Completed, s.Total))
-		}
-	} else if s.BeadID != "" {
-		// Loop mode: show cycle mini-bar.
-		if compact {
-			left = " " + Logo() + "  " +
-				styleStatusValue.Render(fmt.Sprintf("%d/%d", s.Cycle, s.MaxCycles))
-		} else {
-			cycleBar := renderCycleBar(s.Cycle, s.MaxCycles)
-			left = " " + Logo() + "  " +
-				styleStatusValue.Render(fmt.Sprintf("task %s  cycle %d/%d %s", s.BeadID, s.Cycle, s.MaxCycles, cycleBar))
-		}
-	} else {
-		left = " " + Logo()
-	}
+	// Build the right-side segments first so we know how much space remains for the name.
+	rightSegments := s.buildRightSegments(compact)
+	right := joinSegments(rightSegments)
 
-	// Show execution state indicators.
-	if s.Stopping {
-		left += "  " + styleStatusStopping.Render("STOPPING")
-	} else if s.Paused {
-		left += "  " + styleStatusPaused.Render("PAUSED")
-	}
+	// Build the fixed left prefix (logo + mode label).
+	logo := " " + Logo() + "  "
+	logoWidth := lipgloss.Width(logo)
 
-	var right string
-	if s.BudgetUSD > 0 {
-		if compact {
-			right = styleStatusCost.Render(fmt.Sprintf("$%.2f", s.CostUSD))
-		} else {
-			budgetBar := renderBudgetBar(s.CostUSD, s.BudgetUSD, 10)
-			right = styleStatusCost.Render(fmt.Sprintf("$%.2f", s.CostUSD)) + " " +
-				budgetBar + " " +
-				styleStatusCost.Render(fmt.Sprintf("$%.2f", s.BudgetUSD))
-		}
-	} else {
-		right = styleStatusCost.Render(fmt.Sprintf("$%.2f", s.CostUSD))
-	}
+	// State indicator (STOPPING / PAUSED) — appended after the name.
+	stateIndicator := s.renderStateIndicator()
 
-	var elapsed time.Duration
-	if s.FinalElapsed > 0 {
-		elapsed = s.FinalElapsed
-	} else if !s.StartTime.IsZero() {
-		elapsed = time.Since(s.StartTime).Truncate(time.Second)
+	// Compute available width for the name segment.
+	rightWidth := lipgloss.Width(right)
+	stateWidth := lipgloss.Width(stateIndicator)
+	fixedLeft := s.buildFixedLeftPrefix(compact)
+	fixedLeftWidth := logoWidth + lipgloss.Width(fixedLeft)
+
+	// Minimum padding between left and right.
+	const minGap = 1
+	availableForName := s.Width - fixedLeftWidth - stateWidth - rightWidth - minGap - 2 // 2 for bar padding
+
+	// Build the name segment, truncated to fit.
+	nameSegment := s.buildNameSegment(compact, availableForName)
+
+	// If even after truncation we overflow, drop right segments progressively.
+	left := logo + fixedLeft + nameSegment + stateIndicator
+	if lipgloss.Width(left)+rightWidth+minGap > s.Width {
+		rightSegments = dropSegments(rightSegments, s.Width-lipgloss.Width(left)-minGap)
+		right = joinSegments(rightSegments)
 	}
-	if elapsed > 0 {
-		right += fmt.Sprintf("  %s", elapsed)
-	}
-	right += " "
 
 	// Pad the gap between left and right.
 	gap := s.Width - lipgloss.Width(left) - lipgloss.Width(right)
@@ -105,6 +71,179 @@ func (s StatusBar) View() string {
 
 	line := left + padding + right
 	return styleStatusBar.Width(s.Width).Render(line)
+}
+
+// statusSegment represents a styled segment of the status bar with a drop priority.
+// Lower priority values are dropped first when the terminal is too narrow.
+type statusSegment struct {
+	text     string
+	priority int // higher = keep longer; elapsed=1, cost=2, progress=3
+}
+
+// buildRightSegments assembles the right-side segments in display order.
+func (s StatusBar) buildRightSegments(compact bool) []statusSegment {
+	var segments []statusSegment
+
+	// Cost segment (priority 2).
+	if s.BudgetUSD > 0 && !compact {
+		budgetBar := renderBudgetBar(s.CostUSD, s.BudgetUSD, 10)
+		costText := styleStatusCost.Render(fmt.Sprintf("$%.2f", s.CostUSD)) + " " +
+			budgetBar + " " +
+			styleStatusCost.Render(fmt.Sprintf("$%.2f", s.BudgetUSD))
+		segments = append(segments, statusSegment{text: costText, priority: 2})
+	} else {
+		segments = append(segments, statusSegment{
+			text:     styleStatusCost.Render(fmt.Sprintf("$%.2f", s.CostUSD)),
+			priority: 2,
+		})
+	}
+
+	// Elapsed segment (priority 1 — dropped first).
+	var elapsed time.Duration
+	if s.FinalElapsed > 0 {
+		elapsed = s.FinalElapsed
+	} else if !s.StartTime.IsZero() {
+		elapsed = time.Since(s.StartTime).Truncate(time.Second)
+	}
+	if elapsed > 0 {
+		segments = append(segments, statusSegment{
+			text:     styleStatusElapsed.Render(fmt.Sprintf("  %s", elapsed)),
+			priority: 1,
+		})
+	}
+
+	return segments
+}
+
+// buildFixedLeftPrefix returns the mode label + progress text (without the name).
+func (s StatusBar) buildFixedLeftPrefix(compact bool) string {
+	if s.Total > 0 {
+		// Nebula mode.
+		if compact {
+			pct := 0
+			if s.Total > 0 {
+				pct = s.Completed * 100 / s.Total
+			}
+			progStyle := styleStatusProgress
+			if s.Completed > 0 {
+				progStyle = styleStatusProgressActive
+			}
+			return styleStatusMode.Render("nebula: ") + progStyle.Render(fmt.Sprintf("%d%% ", pct))
+		}
+		return styleStatusMode.Render("nebula: ")
+	}
+	if s.BeadID != "" {
+		if compact {
+			return styleStatusMode.Render("task ")
+		}
+		return styleStatusMode.Render("task ")
+	}
+	return ""
+}
+
+// buildNameSegment returns the name/ID segment, truncated to fit maxWidth.
+func (s StatusBar) buildNameSegment(compact bool, maxWidth int) string {
+	if maxWidth < 0 {
+		maxWidth = 0
+	}
+
+	if s.Total > 0 {
+		// Nebula mode: name + progress bar + counts.
+		name := s.Name
+		if compact {
+			name = TruncateWithEllipsis(name, min(12, maxWidth))
+			return styleStatusName.Render(name)
+		}
+
+		// Full mode: "name  ━━━━░░░░ 2/5"
+		progStyle := styleStatusProgress
+		if s.Completed > 0 {
+			progStyle = styleStatusProgressActive
+		}
+		suffix := fmt.Sprintf(" %d/%d", s.Completed, s.Total)
+		bar := renderProgressBar(s.Completed, s.Total, 12)
+		fullSuffix := "  " + bar + progStyle.Render(suffix)
+		suffixWidth := lipgloss.Width(fullSuffix)
+
+		availableForName := maxWidth - suffixWidth
+		if availableForName < 4 {
+			availableForName = 4
+		}
+		name = TruncateWithEllipsis(name, availableForName)
+		return styleStatusName.Render(name) + fullSuffix
+	}
+
+	if s.BeadID != "" {
+		// Loop mode: "bead-id  cycle 2/5 [██░░░]"
+		if compact {
+			progText := fmt.Sprintf("%d/%d", s.Cycle, s.MaxCycles)
+			return styleStatusProgress.Render(progText)
+		}
+		cycleBar := renderCycleBar(s.Cycle, s.MaxCycles)
+		suffix := fmt.Sprintf("  cycle %d/%d %s", s.Cycle, s.MaxCycles, cycleBar)
+		suffixWidth := lipgloss.Width(suffix)
+
+		availableForID := maxWidth - suffixWidth
+		if availableForID < 4 {
+			availableForID = 4
+		}
+		beadID := TruncateWithEllipsis(s.BeadID, availableForID)
+		return styleStatusName.Render(beadID) +
+			styleStatusMode.Render("  cycle ") +
+			styleStatusProgress.Render(fmt.Sprintf("%d/%d ", s.Cycle, s.MaxCycles)) +
+			cycleBar
+	}
+
+	return ""
+}
+
+// renderStateIndicator returns the styled STOPPING/PAUSED indicator, or empty string.
+func (s StatusBar) renderStateIndicator() string {
+	if s.Stopping {
+		return "  " + styleStatusStopping.Render("STOPPING")
+	}
+	if s.Paused {
+		return "  " + styleStatusPaused.Render("PAUSED")
+	}
+	return ""
+}
+
+// joinSegments concatenates segment text with trailing space.
+func joinSegments(segments []statusSegment) string {
+	var b strings.Builder
+	for _, seg := range segments {
+		b.WriteString(seg.text)
+	}
+	b.WriteString(" ")
+	return b.String()
+}
+
+// dropSegments removes lowest-priority segments until the combined width fits within maxWidth.
+func dropSegments(segments []statusSegment, maxWidth int) []statusSegment {
+	result := make([]statusSegment, len(segments))
+	copy(result, segments)
+
+	for totalWidth(result) > maxWidth && len(result) > 0 {
+		minIdx := 0
+		minPri := result[0].priority
+		for i, seg := range result {
+			if seg.priority < minPri {
+				minPri = seg.priority
+				minIdx = i
+			}
+		}
+		result = append(result[:minIdx], result[minIdx+1:]...)
+	}
+	return result
+}
+
+// totalWidth computes the rendered width of all segments plus trailing space.
+func totalWidth(segments []statusSegment) int {
+	w := 1 // trailing space from joinSegments
+	for _, seg := range segments {
+		w += lipgloss.Width(seg.text)
+	}
+	return w
 }
 
 // renderProgressBar creates a filled/empty bar showing completed/total progress.

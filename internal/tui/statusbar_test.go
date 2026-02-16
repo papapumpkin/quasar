@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestStatusBarView(t *testing.T) {
@@ -81,6 +83,172 @@ func TestStatusBarView(t *testing.T) {
 		}
 		if !strings.Contains(view, "2/5") {
 			t.Errorf("expected cycle 2/5 in view, got: %s", view)
+		}
+	})
+
+	t.Run("single line output never exceeds width", func(t *testing.T) {
+		t.Parallel()
+		for _, width := range []int{40, 60, 80, 120, 200} {
+			sb := StatusBar{
+				Name:      "very-long-nebula-task-name-that-should-be-truncated",
+				Total:     10,
+				Completed: 3,
+				CostUSD:   1.24,
+				BudgetUSD: 10.00,
+				StartTime: time.Now().Add(-5 * time.Minute),
+				Width:     width,
+			}
+			view := sb.View()
+			lines := strings.Split(view, "\n")
+			for i, line := range lines {
+				w := lipgloss.Width(line)
+				if w > width {
+					t.Errorf("width=%d: line %d has width %d > %d: %q", width, i, w, width, line)
+				}
+			}
+		}
+	})
+
+	t.Run("narrow width truncates name with ellipsis", func(t *testing.T) {
+		t.Parallel()
+		sb := StatusBar{
+			Name:      "extremely-long-name-that-exceeds-any-reasonable-width",
+			Total:     3,
+			Completed: 1,
+			Width:     50,
+		}
+		view := sb.View()
+		if !strings.Contains(view, "...") {
+			t.Errorf("expected truncation ellipsis in narrow view, got: %s", view)
+		}
+	})
+
+	t.Run("stopping indicator shown", func(t *testing.T) {
+		t.Parallel()
+		sb := StatusBar{
+			Width:    120,
+			Stopping: true,
+		}
+		view := sb.View()
+		if !strings.Contains(view, "STOPPING") {
+			t.Errorf("expected STOPPING indicator in view, got: %s", view)
+		}
+	})
+
+	t.Run("paused indicator shown", func(t *testing.T) {
+		t.Parallel()
+		sb := StatusBar{
+			Width:  120,
+			Paused: true,
+		}
+		view := sb.View()
+		if !strings.Contains(view, "PAUSED") {
+			t.Errorf("expected PAUSED indicator in view, got: %s", view)
+		}
+	})
+
+	t.Run("budget bar shown when budget set", func(t *testing.T) {
+		t.Parallel()
+		sb := StatusBar{
+			CostUSD:   2.50,
+			BudgetUSD: 10.00,
+			Width:     120,
+		}
+		view := sb.View()
+		if !strings.Contains(view, "$2.50") {
+			t.Errorf("expected cost $2.50 in view, got: %s", view)
+		}
+		if !strings.Contains(view, "$10.00") {
+			t.Errorf("expected budget $10.00 in view, got: %s", view)
+		}
+	})
+}
+
+func TestDropSegments(t *testing.T) {
+	t.Parallel()
+
+	t.Run("drops lowest priority first", func(t *testing.T) {
+		t.Parallel()
+		segments := []statusSegment{
+			{text: "cost", priority: 2},
+			{text: "elapsed", priority: 1},
+		}
+		// totalWidth = len("cost") + len("elapsed") + 1 = 12; allow only 6 → must drop one.
+		result := dropSegments(segments, 6)
+		if len(result) != 1 {
+			t.Fatalf("expected 1 segment after drop, got %d", len(result))
+		}
+		if result[0].text != "cost" {
+			t.Errorf("expected cost to survive (higher priority), got: %s", result[0].text)
+		}
+	})
+
+	t.Run("keeps all when within budget", func(t *testing.T) {
+		t.Parallel()
+		segments := []statusSegment{
+			{text: "a", priority: 2},
+			{text: "b", priority: 1},
+		}
+		result := dropSegments(segments, 100)
+		if len(result) != 2 {
+			t.Errorf("expected 2 segments when plenty of space, got %d", len(result))
+		}
+	})
+
+	t.Run("empty segments", func(t *testing.T) {
+		t.Parallel()
+		result := dropSegments(nil, 10)
+		if len(result) != 0 {
+			t.Errorf("expected 0 segments from nil input, got %d", len(result))
+		}
+	})
+}
+
+func TestTotalWidth(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty segments", func(t *testing.T) {
+		t.Parallel()
+		w := totalWidth(nil)
+		if w != 1 { // trailing space
+			t.Errorf("expected width 1 for empty segments, got %d", w)
+		}
+	})
+
+	t.Run("plain text segments", func(t *testing.T) {
+		t.Parallel()
+		segments := []statusSegment{
+			{text: "abc"},
+			{text: "de"},
+		}
+		w := totalWidth(segments)
+		// "abc" + "de" + trailing space = 6
+		if w != 6 {
+			t.Errorf("expected width 6, got %d", w)
+		}
+	})
+}
+
+func TestJoinSegments(t *testing.T) {
+	t.Parallel()
+
+	t.Run("joins with trailing space", func(t *testing.T) {
+		t.Parallel()
+		segments := []statusSegment{
+			{text: "hello"},
+			{text: " world"},
+		}
+		result := joinSegments(segments)
+		if result != "hello world " {
+			t.Errorf("expected 'hello world ', got: %q", result)
+		}
+	})
+
+	t.Run("empty segments returns space", func(t *testing.T) {
+		t.Parallel()
+		result := joinSegments(nil)
+		if result != " " {
+			t.Errorf("expected single space, got: %q", result)
 		}
 	})
 }

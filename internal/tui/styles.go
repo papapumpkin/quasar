@@ -2,22 +2,25 @@ package tui
 
 import "github.com/charmbracelet/lipgloss"
 
-// Semantic color palette.
+// Semantic color palette — galactic theme.
 var (
-	colorPrimary       = lipgloss.Color("#00BFFF") // Cyan — primary accent
-	colorAccent        = lipgloss.Color("#FFD700") // Gold — attention/gate
-	colorSuccess       = lipgloss.Color("#00E676") // Green — completed
-	colorDanger        = lipgloss.Color("#FF5252") // Red — errors/failures
-	colorMuted         = lipgloss.Color("#636363") // Gray — de-emphasized
-	colorMutedLight    = lipgloss.Color("#8C8C8C") // Lighter gray — normal text
-	colorWhite         = lipgloss.Color("#EEEEEE") // Off-white — primary text
+	colorPrimary       = lipgloss.Color("#58A6FF") // Starlight blue — primary accent
+	colorAccent        = lipgloss.Color("#FFA657") // Supernova orange — attention/gate
+	colorSuccess       = lipgloss.Color("#00E676") // Green — completed (unchanged)
+	colorDanger        = lipgloss.Color("#FF7B72") // Supernova red — errors/failures
+	colorMuted         = lipgloss.Color("#484F58") // Space dust gray — de-emphasized
+	colorMutedLight    = lipgloss.Color("#8B949E") // Cosmic dust — normal text
+	colorWhite         = lipgloss.Color("#E6EDF3") // Distant starlight — primary text
 	colorBrightWhite   = lipgloss.Color("#FFFFFF") // Pure white — emphatic text
-	colorSurface       = lipgloss.Color("#1E1E2E") // Dark surface — status bar bg
-	colorSurfaceBright = lipgloss.Color("#2A2A3C") // Lighter surface — breadcrumb bg
-	colorSurfaceDim    = lipgloss.Color("#181825") // Darkest surface — footer bg
-	colorBlue          = lipgloss.Color("#5B8DEF") // Blue — working/active
-	colorBudgetWarn    = lipgloss.Color("#FFA726") // Orange — budget warning
-	colorReviewer      = lipgloss.Color("#FFD54F") // Yellow — reviewer spinner
+	colorSurface       = lipgloss.Color("#1A1A40") // Deep indigo — status bar bg (clearly tinted)
+	colorSurfaceBright = lipgloss.Color("#161B22") // Nebula dust — breadcrumb bg
+	colorSurfaceDim    = lipgloss.Color("#080B10") // Void black — footer bg
+	colorBlue          = lipgloss.Color("#79C0FF") // Stellar blue — working/active
+	colorBudgetWarn    = lipgloss.Color("#FFA657") // Supernova orange — budget warning
+	colorReviewer      = lipgloss.Color("#E3B341") // Star yellow — reviewer spinner
+	colorStarYellow    = lipgloss.Color("#E3B341") // Star yellow — highlights, sparkle accents
+	colorNebula        = lipgloss.Color("#BC8CFF") // Nebula purple — breadcrumbs, secondary UI
+	colorNebulaDeep    = lipgloss.Color("#8B5CF6") // Deep nebula — selected backgrounds, borders
 )
 
 // Selection indicator prepended to the active row.
@@ -48,8 +51,29 @@ var (
 	styleStatusValue = lipgloss.NewStyle().
 				Foreground(colorWhite)
 
+	// styleStatusMode renders mode labels ("nebula:", "task") in a dimmer secondary color.
+	styleStatusMode = lipgloss.NewStyle().
+			Foreground(colorMutedLight)
+
+	// styleStatusName renders the task/nebula name in bright white for maximum readability.
+	styleStatusName = lipgloss.NewStyle().
+			Foreground(colorBrightWhite).
+			Bold(true)
+
+	// styleStatusProgress renders progress text; switches to green when completed > 0.
+	styleStatusProgress = lipgloss.NewStyle().
+				Foreground(colorMuted)
+
+	// styleStatusProgressActive renders progress text when some items are completed.
+	styleStatusProgressActive = lipgloss.NewStyle().
+					Foreground(colorSuccess)
+
 	styleStatusCost = lipgloss.NewStyle().
 			Foreground(colorAccent)
+
+	// styleStatusElapsed renders the elapsed time in muted gray.
+	styleStatusElapsed = lipgloss.NewStyle().
+				Foreground(colorMuted)
 
 	styleStatusPaused = lipgloss.NewStyle().
 				Foreground(colorAccent).
@@ -63,7 +87,7 @@ var (
 // Breadcrumb bar style — subtle tinted background, dimmer than status bar.
 var styleBreadcrumb = lipgloss.NewStyle().
 	Background(colorSurfaceBright).
-	Foreground(colorMutedLight).
+	Foreground(colorNebula).
 	Padding(0, 1)
 
 // styleBreadcrumbSep styles the separator between breadcrumb segments.
