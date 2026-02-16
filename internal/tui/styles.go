@@ -112,6 +112,6 @@ var (
 // Section border for separating view regions.
 var (
 	styleSectionBorder = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder(), true, false, false, false).
-				BorderForeground(colorDim)
+		Border(lipgloss.NormalBorder(), true, false, false, false).
+		BorderForeground(colorDim)
 )

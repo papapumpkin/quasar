@@ -22,30 +22,30 @@ const (
 
 // AppModel is the root BubbleTea model composing all sub-views.
 type AppModel struct {
-	Mode        Mode
-	StatusBar   StatusBar
-	LoopView    LoopView
-	NebulaView  NebulaView
-	Detail      DetailPanel
-	Gate        *GatePrompt
-	Keys        KeyMap
-	Width       int
-	Height      int
-	StartTime   time.Time
-	Done        bool
-	DoneErr     error
-	Messages    []string // recent info/error messages for detail
-	showDetail  bool
+	Mode       Mode
+	StatusBar  StatusBar
+	LoopView   LoopView
+	NebulaView NebulaView
+	Detail     DetailPanel
+	Gate       *GatePrompt
+	Keys       KeyMap
+	Width      int
+	Height     int
+	StartTime  time.Time
+	Done       bool
+	DoneErr    error
+	Messages   []string // recent info/error messages for detail
+	showDetail bool
 }
 
 // NewAppModel creates a root model configured for the given mode.
 func NewAppModel(mode Mode) AppModel {
 	m := AppModel{
-		Mode:      mode,
-		LoopView:  NewLoopView(),
+		Mode:       mode,
+		LoopView:   NewLoopView(),
 		NebulaView: NewNebulaView(),
-		Keys:      DefaultKeyMap(),
-		StartTime: time.Now(),
+		Keys:       DefaultKeyMap(),
+		StartTime:  time.Now(),
 	}
 	m.StatusBar.StartTime = m.StartTime
 	return m

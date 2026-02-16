@@ -4,17 +4,17 @@ import "github.com/charmbracelet/bubbles/key"
 
 // KeyMap defines all keybindings for the TUI.
 type KeyMap struct {
-	Up      key.Binding
-	Down    key.Binding
-	Enter   key.Binding
-	Back    key.Binding
-	Pause   key.Binding
-	Stop    key.Binding
-	Retry   key.Binding
-	Quit    key.Binding
-	Accept  key.Binding
-	Reject  key.Binding
-	Skip    key.Binding
+	Up     key.Binding
+	Down   key.Binding
+	Enter  key.Binding
+	Back   key.Binding
+	Pause  key.Binding
+	Stop   key.Binding
+	Retry  key.Binding
+	Quit   key.Binding
+	Accept key.Binding
+	Reject key.Binding
+	Skip   key.Binding
 }
 
 // DefaultKeyMap returns the default keybinding configuration.

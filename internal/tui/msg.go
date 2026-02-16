@@ -23,7 +23,7 @@ type MsgTaskComplete struct {
 
 // MsgCycleStart is sent at the beginning of each coder-reviewer cycle.
 type MsgCycleStart struct {
-	Cycle    int
+	Cycle     int
 	MaxCycles int
 }
 

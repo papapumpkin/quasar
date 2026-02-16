@@ -12,6 +12,15 @@ internal/
   ui/         - Stderr-based UI printer (ANSI colors)
 ```
 
+## TUI
+- `internal/tui/` — BubbleTea-based terminal UI (bridge pattern)
+- Bridge: `UIBridge` implements `ui.UI` via `tea.Program.Send()`
+- Loop needs zero changes — bridge converts imperative UI calls to messages
+- `TUIGater` implements `nebula.Gater` via msg+channel pattern
+- TTY auto-detection: `--auto` on TTY → TUI; piped → stderr printer
+- `--no-tui` flag forces stderr output on both `run` and `nebula apply`
+- `WorkerGroup.Logger` field controls worker stderr output (nil=os.Stderr, io.Discard in TUI mode)
+
 ## Conventions
 - All UI output → stderr; stdout reserved for structured output
 - Cobra + Viper for CLI; config via `.quasar.yaml` / env `QUASAR_*`
