@@ -123,8 +123,6 @@ func InterventionFileNames() []string {
 func GitExcludePatterns() []string {
 	names := InterventionFileNames()
 	patterns := make([]string, len(names))
-	for i, name := range names {
-		patterns[i] = name
-	}
+	copy(patterns, names)
 	return patterns
 }

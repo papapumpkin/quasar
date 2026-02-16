@@ -10,8 +10,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/aaronsalm/quasar/internal/agentmail"
 	_ "github.com/go-sql-driver/mysql"
+
+	"github.com/aaronsalm/quasar/internal/agentmail"
 )
 
 func main() {

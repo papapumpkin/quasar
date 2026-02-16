@@ -71,7 +71,7 @@ func (g *terminalGater) isTTYInput() bool {
 
 // Prompt displays a gate prompt and waits for user input.
 // In non-TTY environments, it defaults to accept with a warning.
-// If the context is cancelled, it returns GateActionSkip.
+// If the context is canceled, it returns GateActionSkip.
 func (g *terminalGater) Prompt(ctx context.Context, cp *Checkpoint) (GateAction, error) {
 	// Non-TTY: auto-accept with warning.
 	if !g.isTTYInput() {
@@ -120,14 +120,14 @@ func (g *terminalGater) Prompt(ctx context.Context, cp *Checkpoint) (GateAction,
 // parseGateInput maps a single-character (or word) input to a GateAction.
 func parseGateInput(input string) GateAction {
 	s := strings.TrimSpace(strings.ToLower(input))
-	switch {
-	case s == "a" || s == "accept":
+	switch s {
+	case "a", "accept":
 		return GateActionAccept
-	case s == "r" || s == "reject":
+	case "r", "reject":
 		return GateActionReject
-	case s == "t" || s == "retry":
+	case "t", "retry":
 		return GateActionRetry
-	case s == "s" || s == "skip":
+	case "s", "skip":
 		return GateActionSkip
 	default:
 		return GateActionAccept // default to accept for unrecognized input

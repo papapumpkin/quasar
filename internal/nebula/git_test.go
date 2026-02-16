@@ -17,23 +17,23 @@ func initTestRepo(t *testing.T) string {
 	ctx := context.Background()
 
 	// Initialize repo.
-	run(t, ctx, dir, "git", "init")
-	run(t, ctx, dir, "git", "config", "user.email", "test@test.com")
-	run(t, ctx, dir, "git", "config", "user.name", "Test")
+	run(ctx, t, dir, "git", "init")
+	run(ctx, t, dir, "git", "config", "user.email", "test@test.com")
+	run(ctx, t, dir, "git", "config", "user.name", "Test")
 
 	// Create initial commit so HEAD exists.
 	initial := filepath.Join(dir, "README.md")
 	if err := os.WriteFile(initial, []byte("# test\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	run(t, ctx, dir, "git", "add", "-A")
-	run(t, ctx, dir, "git", "commit", "-m", "initial")
+	run(ctx, t, dir, "git", "add", "-A")
+	run(ctx, t, dir, "git", "commit", "-m", "initial")
 
 	return dir
 }
 
 // run executes a command in the given directory and fails the test on error.
-func run(t *testing.T, ctx context.Context, dir string, name string, args ...string) {
+func run(ctx context.Context, t *testing.T, dir string, name string, args ...string) {
 	t.Helper()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
@@ -44,7 +44,7 @@ func run(t *testing.T, ctx context.Context, dir string, name string, args ...str
 }
 
 // commitCount returns the number of commits in the repo.
-func commitCount(t *testing.T, ctx context.Context, dir string) int {
+func commitCount(ctx context.Context, t *testing.T, dir string) int {
 	t.Helper()
 	cmd := exec.CommandContext(ctx, "git", "-C", dir, "rev-list", "--count", "HEAD")
 	out, err := cmd.Output()
@@ -60,7 +60,7 @@ func commitCount(t *testing.T, ctx context.Context, dir string) int {
 }
 
 // lastCommitMessage returns the message of the most recent commit.
-func lastCommitMessage(t *testing.T, ctx context.Context, dir string) string {
+func lastCommitMessage(ctx context.Context, t *testing.T, dir string) string {
 	t.Helper()
 	cmd := exec.CommandContext(ctx, "git", "-C", dir, "log", "-1", "--format=%s")
 	out, err := cmd.Output()
@@ -106,7 +106,7 @@ func TestGitCommitter_CommitPhase(t *testing.T) {
 			t.Fatalf("CommitPhase: %v", err)
 		}
 
-		msg := lastCommitMessage(t, ctx, dir)
+		msg := lastCommitMessage(ctx, t, dir)
 		want := "nebula(CI/CD Pipeline): test-script-action"
 		if msg != want {
 			t.Errorf("commit message = %q, want %q", msg, want)
@@ -121,11 +121,11 @@ func TestGitCommitter_CommitPhase(t *testing.T) {
 			t.Fatal("expected non-nil committer")
 		}
 
-		before := commitCount(t, ctx, dir)
+		before := commitCount(ctx, t, dir)
 		if err := gc.CommitPhase(ctx, "test", "phase-1"); err != nil {
 			t.Fatalf("CommitPhase: %v", err)
 		}
-		after := commitCount(t, ctx, dir)
+		after := commitCount(ctx, t, dir)
 
 		if after != before {
 			t.Errorf("commit count changed from %d to %d on clean tree", before, after)

@@ -110,7 +110,7 @@ func (s *ProcessManager) waitHealthy(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("agentmail health check cancelled: %w", ctx.Err())
+			return fmt.Errorf("agentmail health check canceled: %w", ctx.Err())
 		case <-deadline:
 			return fmt.Errorf("agentmail server failed to become healthy at %s within 10s", url)
 		case <-ticker.C:

@@ -138,7 +138,7 @@ func (s *Server) Stop(ctx context.Context) error {
 }
 
 // runCleanupLoop periodically runs CleanupStaleAgents and broadcasts a message
-// for each removed agent. It stops when the context is cancelled.
+// for each removed agent. It stops when the context is canceled.
 func (s *Server) runCleanupLoop(ctx context.Context) {
 	defer close(s.cleanupDone)
 
