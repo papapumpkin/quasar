@@ -25,18 +25,40 @@ type StatusBar struct {
 }
 
 // View renders the status bar as a single line.
+// Adapts to narrow terminals by truncating the name and using compact progress bars.
 func (s StatusBar) View() string {
+	compact := s.Width < CompactWidth
+
 	var left string
 	if s.Total > 0 {
 		// Nebula mode: show progress bar.
-		bar := renderProgressBar(s.Completed, s.Total, 12)
-		left = " " + styleStatusLabel.Render("QUASAR") + "  " +
-			styleStatusValue.Render(fmt.Sprintf("nebula: %s  %s %d/%d", s.Name, bar, s.Completed, s.Total))
+		name := s.Name
+		if compact {
+			name = TruncateWithEllipsis(name, 12)
+		}
+		if compact {
+			// Compact: percentage only, no bar graphic.
+			pct := 0
+			if s.Total > 0 {
+				pct = s.Completed * 100 / s.Total
+			}
+			left = " " + styleStatusLabel.Render("QUASAR") + "  " +
+				styleStatusValue.Render(fmt.Sprintf("%s %d%%", name, pct))
+		} else {
+			bar := renderProgressBar(s.Completed, s.Total, 12)
+			left = " " + styleStatusLabel.Render("QUASAR") + "  " +
+				styleStatusValue.Render(fmt.Sprintf("nebula: %s  %s %d/%d", name, bar, s.Completed, s.Total))
+		}
 	} else if s.BeadID != "" {
 		// Loop mode: show cycle mini-bar.
-		cycleBar := renderCycleBar(s.Cycle, s.MaxCycles)
-		left = " " + styleStatusLabel.Render("QUASAR") + "  " +
-			styleStatusValue.Render(fmt.Sprintf("task %s  cycle %d/%d %s", s.BeadID, s.Cycle, s.MaxCycles, cycleBar))
+		if compact {
+			left = " " + styleStatusLabel.Render("QUASAR") + "  " +
+				styleStatusValue.Render(fmt.Sprintf("%d/%d", s.Cycle, s.MaxCycles))
+		} else {
+			cycleBar := renderCycleBar(s.Cycle, s.MaxCycles)
+			left = " " + styleStatusLabel.Render("QUASAR") + "  " +
+				styleStatusValue.Render(fmt.Sprintf("task %s  cycle %d/%d %s", s.BeadID, s.Cycle, s.MaxCycles, cycleBar))
+		}
 	} else {
 		left = " " + styleStatusLabel.Render("QUASAR")
 	}
@@ -50,10 +72,14 @@ func (s StatusBar) View() string {
 
 	var right string
 	if s.BudgetUSD > 0 {
-		budgetBar := renderBudgetBar(s.CostUSD, s.BudgetUSD, 10)
-		right = styleStatusCost.Render(fmt.Sprintf("$%.2f", s.CostUSD)) + " " +
-			budgetBar + " " +
-			styleStatusCost.Render(fmt.Sprintf("$%.2f", s.BudgetUSD))
+		if compact {
+			right = styleStatusCost.Render(fmt.Sprintf("$%.2f", s.CostUSD))
+		} else {
+			budgetBar := renderBudgetBar(s.CostUSD, s.BudgetUSD, 10)
+			right = styleStatusCost.Render(fmt.Sprintf("$%.2f", s.CostUSD)) + " " +
+				budgetBar + " " +
+				styleStatusCost.Render(fmt.Sprintf("$%.2f", s.BudgetUSD))
+		}
 	} else {
 		right = styleStatusCost.Render(fmt.Sprintf("$%.2f", s.CostUSD))
 	}

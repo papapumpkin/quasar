@@ -13,17 +13,30 @@ type Footer struct {
 }
 
 // View renders the footer as a single line of keybinding hints.
+// In compact mode (narrow terminals), shows only key hints without descriptions.
 func (f Footer) View() string {
+	compact := f.Width < CompactWidth
+
 	var parts []string
 	for _, b := range f.Bindings {
 		if !b.Enabled() {
 			continue
 		}
 		help := b.Help()
-		part := styleFooterKey.Render(help.Key) + styleFooterSep.Render(":") + styleFooterDesc.Render(help.Desc)
+		var part string
+		if compact {
+			// Compact: key only, no description.
+			part = styleFooterKey.Render(help.Key)
+		} else {
+			part = styleFooterKey.Render(help.Key) + styleFooterSep.Render(":") + styleFooterDesc.Render(help.Desc)
+		}
 		parts = append(parts, part)
 	}
-	line := strings.Join(parts, styleFooterSep.Render("  "))
+	sep := styleFooterSep.Render("  ")
+	if compact {
+		sep = styleFooterSep.Render(" ")
+	}
+	line := strings.Join(parts, sep)
 	return styleFooter.Width(f.Width).Render(line)
 }
 

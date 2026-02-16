@@ -43,6 +43,8 @@ type AppModel struct {
 	NebulaView NebulaView
 	Detail     DetailPanel
 	Gate       *GatePrompt
+	Overlay    *CompletionOverlay
+	Toasts     []Toast
 	Keys       KeyMap
 	Width      int
 	Height     int
@@ -104,6 +106,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		detailHeight := m.detailHeight()
 		m.Detail.SetSize(msg.Width-2, detailHeight)
 
+		// Clamp cursors so they remain valid after a resize that may shrink lists.
+		clampCursors(&m)
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 
@@ -151,6 +156,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateDetailFromSelection()
 	case MsgError:
 		m.addMessage("error: %s", msg.Msg)
+		toast, cmd := NewToast("error: "+msg.Msg, true)
+		m.Toasts = append(m.Toasts, toast)
+		cmds = append(cmds, cmd)
 	case MsgInfo:
 		m.addMessage("%s", msg.Msg)
 
@@ -212,6 +220,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgPhaseError:
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseFailed)
 		m.addMessage("[%s] %s", msg.PhaseID, msg.Msg)
+		toast, cmd := NewToast(fmt.Sprintf("[%s] %s", msg.PhaseID, msg.Msg), true)
+		m.Toasts = append(m.Toasts, toast)
+		cmds = append(cmds, cmd)
 	case MsgPhaseInfo:
 		// Informational — don't change phase status.
 
@@ -224,19 +235,19 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.NebulaView.SetPhaseStatus(msg.Checkpoint.PhaseID, PhaseGate)
 		}
 
-	// --- Execution control ---
-	case MsgPauseToggled:
-		m.Paused = msg.Paused
-	case MsgStopRequested:
-		m.Stopping = true
-
 	// --- Done signals ---
 	case MsgLoopDone:
 		m.Done = true
 		m.DoneErr = msg.Err
+		m.Overlay = NewCompletionFromLoopDone(msg, time.Since(m.StartTime), m.StatusBar.CostUSD)
 	case MsgNebulaDone:
 		m.Done = true
 		m.DoneErr = msg.Err
+		m.Overlay = NewCompletionFromNebulaDone(msg, time.Since(m.StartTime), m.StatusBar.CostUSD)
+
+	// --- Toast auto-dismiss ---
+	case MsgToastExpired:
+		m.Toasts = removeToast(m.Toasts, msg.ID)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -252,8 +263,49 @@ func (m *AppModel) ensurePhaseLoop(phaseID string) *LoopView {
 	return &lv
 }
 
+// clampCursors ensures all cursors remain within valid bounds.
+// This prevents panics after a resize or data change that shrinks a list.
+func clampCursors(m *AppModel) {
+	// Clamp NebulaView cursor.
+	if max := len(m.NebulaView.Phases) - 1; max >= 0 {
+		if m.NebulaView.Cursor > max {
+			m.NebulaView.Cursor = max
+		}
+	} else {
+		m.NebulaView.Cursor = 0
+	}
+
+	// Clamp LoopView cursor.
+	if max := m.LoopView.TotalEntries() - 1; max >= 0 {
+		if m.LoopView.Cursor > max {
+			m.LoopView.Cursor = max
+		}
+	} else {
+		m.LoopView.Cursor = 0
+	}
+
+	// Clamp per-phase LoopView cursors.
+	for _, lv := range m.PhaseLoops {
+		if max := lv.TotalEntries() - 1; max >= 0 {
+			if lv.Cursor > max {
+				lv.Cursor = max
+			}
+		} else {
+			lv.Cursor = 0
+		}
+	}
+}
+
 // handleKey processes keyboard input.
 func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Completion overlay takes precedence — only q to exit.
+	if m.Overlay != nil {
+		if key.Matches(msg, m.Keys.Quit) {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	// Gate mode overrides normal keys.
 	if m.Gate != nil {
 		return m.handleGateKey(msg)
@@ -264,19 +316,13 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case key.Matches(msg, m.Keys.Pause):
-		if cmd := m.handlePauseKey(); cmd != nil {
-			return m, cmd
-		}
+		m.handlePauseKey()
 
 	case key.Matches(msg, m.Keys.Stop):
-		if cmd := m.handleStopKey(); cmd != nil {
-			return m, cmd
-		}
+		m.handleStopKey()
 
 	case key.Matches(msg, m.Keys.Retry):
-		if cmd := m.handleRetryKey(); cmd != nil {
-			return m, cmd
-		}
+		m.handleRetryKey()
 
 	case key.Matches(msg, m.Keys.Up):
 		m.moveUp()
@@ -296,58 +342,57 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handlePauseKey toggles pause state by writing/removing the PAUSE intervention file.
 // Only active in nebula mode at the phase table level.
-func (m *AppModel) handlePauseKey() tea.Cmd {
+func (m *AppModel) handlePauseKey() {
 	if m.Mode != ModeNebula || m.Depth != DepthPhases || m.NebulaDir == "" {
-		return nil
+		return
 	}
 	if m.Stopping {
-		return nil // can't pause while stopping
+		return // can't pause while stopping
 	}
 
 	pausePath := filepath.Join(m.NebulaDir, "PAUSE")
 	if m.Paused {
 		// Resume: remove the PAUSE file.
-		_ = os.Remove(pausePath)
+		if err := os.Remove(pausePath); err != nil {
+			m.addMessage("failed to remove PAUSE file: %s", err)
+			return
+		}
 		m.Paused = false
 	} else {
 		// Pause: create the PAUSE file.
 		if err := os.WriteFile(pausePath, []byte("paused by TUI\n"), 0644); err != nil {
 			m.addMessage("failed to write PAUSE file: %s", err)
-			return nil
+			return
 		}
 		m.Paused = true
-	}
-	return func() tea.Msg {
-		return MsgPauseToggled{Paused: m.Paused}
 	}
 }
 
 // handleStopKey writes the STOP intervention file.
 // Only active in nebula mode at the phase table level.
-func (m *AppModel) handleStopKey() tea.Cmd {
+func (m *AppModel) handleStopKey() {
 	if m.Mode != ModeNebula || m.Depth != DepthPhases || m.NebulaDir == "" {
-		return nil
+		return
 	}
 	if m.Stopping {
-		return nil // already stopping
+		return // already stopping
 	}
 
 	stopPath := filepath.Join(m.NebulaDir, "STOP")
 	if err := os.WriteFile(stopPath, []byte("stopped by TUI\n"), 0644); err != nil {
 		m.addMessage("failed to write STOP file: %s", err)
-		return nil
+		return
 	}
 	m.Stopping = true
-	return func() tea.Msg {
-		return MsgStopRequested{}
-	}
 }
 
-// handleRetryKey retries a failed phase by resetting its status.
+// handleRetryKey retries a failed phase by writing a RETRY intervention file
+// and resetting the TUI's visual state. The WorkerGroup picks up the RETRY
+// file and re-dispatches the phase.
 // Only active in nebula mode when viewing a failed phase.
-func (m *AppModel) handleRetryKey() tea.Cmd {
-	if m.Mode != ModeNebula {
-		return nil
+func (m *AppModel) handleRetryKey() {
+	if m.Mode != ModeNebula || m.NebulaDir == "" {
+		return
 	}
 
 	// Determine which phase to retry based on depth.
@@ -362,21 +407,29 @@ func (m *AppModel) handleRetryKey() tea.Cmd {
 			for i := range m.NebulaView.Phases {
 				if m.NebulaView.Phases[i].ID == m.FocusedPhase && m.NebulaView.Phases[i].Status == PhaseFailed {
 					phaseID = m.FocusedPhase
+					break
 				}
 			}
 		}
 	}
 
 	if phaseID == "" {
-		return nil // no failed phase selected
+		return // no failed phase selected
 	}
 
-	// Reset the phase to waiting so the worker group can re-dispatch it.
+	// Write a RETRY intervention file containing the phase ID.
+	// The WorkerGroup monitors for this file and re-dispatches the phase.
+	retryPath := filepath.Join(m.NebulaDir, "RETRY")
+	if err := os.WriteFile(retryPath, []byte(phaseID+"\n"), 0644); err != nil {
+		m.addMessage("failed to write RETRY file: %s", err)
+		return
+	}
+
+	// Reset the TUI's visual state so it starts fresh.
 	m.NebulaView.SetPhaseStatus(phaseID, PhaseWaiting)
 	// Clear the per-phase loop view so it starts fresh.
 	delete(m.PhaseLoops, phaseID)
 	m.addMessage("retrying phase %s", phaseID)
-	return nil
 }
 
 // drillDown navigates deeper into the hierarchy.
@@ -397,6 +450,7 @@ func (m *AppModel) drillDown() {
 			if p := m.NebulaView.SelectedPhase(); p != nil {
 				m.FocusedPhase = p.ID
 				m.Depth = DepthPhaseLoop
+				m.updateDetailFromSelection()
 			}
 		case DepthPhaseLoop:
 			// Drill into agent output.
@@ -491,32 +545,107 @@ func (m *AppModel) moveDown() {
 func (m *AppModel) updateDetailFromSelection() {
 	switch m.Mode {
 	case ModeLoop:
-		if agent := m.LoopView.SelectedAgent(); agent != nil {
-			content := agent.Output
-			if content == "" {
-				content = "(output will appear when agent completes)"
-			}
-			m.Detail.SetContent(agent.Role+" output", content)
+		agent := m.LoopView.SelectedAgent()
+		if agent == nil {
+			m.Detail.SetEmpty("Press enter to expand details")
+			return
 		}
+		header := FormatAgentHeader(AgentContext{
+			Role:       agent.Role,
+			Cycle:      m.LoopView.SelectedCycleNumber(),
+			DurationMs: agent.DurationMs,
+			CostUSD:    agent.CostUSD,
+			IssueCount: agent.IssueCount,
+			Done:       agent.Done,
+		})
+		if agent.Output == "" {
+			m.Detail.SetContentWithHeader(
+				agent.Role+" output", header,
+				"(output will appear when agent completes)",
+			)
+			return
+		}
+		body := FormatAgentOutput(agent.Output)
+		m.Detail.SetContentWithHeader(agent.Role+" output", header, body)
+
 	case ModeNebula:
-		if m.Depth >= DepthPhaseLoop {
-			// Show agent output from the focused phase's loop view.
-			if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
-				if agent := lv.SelectedAgent(); agent != nil {
-					content := agent.Output
-					if content == "" {
-						content = "(output will appear when agent completes)"
-					}
-					m.Detail.SetContent(
-						fmt.Sprintf("%s → %s output", m.FocusedPhase, agent.Role),
-						content,
-					)
-					return
-				}
-			}
-			m.Detail.SetContent(m.FocusedPhase, "(select an agent row to view output)")
+		m.updateNebulaDetail()
+	}
+}
+
+// updateNebulaDetail updates the detail panel for nebula mode based on depth.
+func (m *AppModel) updateNebulaDetail() {
+	// Build phase context header if we have a focused phase.
+	var phaseHeader string
+	if m.FocusedPhase != "" {
+		if p := m.findPhase(m.FocusedPhase); p != nil {
+			phaseHeader = FormatPhaseHeader(PhaseContext{
+				ID:        p.ID,
+				Title:     p.Title,
+				Status:    p.Status,
+				CostUSD:   p.CostUSD,
+				Cycles:    p.Cycles,
+				BlockedBy: p.BlockedBy,
+			})
 		}
 	}
+
+	switch m.Depth {
+	case DepthPhaseLoop:
+		// Show phase summary card in the detail panel.
+		if phaseHeader != "" {
+			m.Detail.SetContentWithHeader(m.FocusedPhase+" summary", phaseHeader, "(select an agent row and press enter to view output)")
+		} else {
+			m.Detail.SetEmpty("(select an agent row to view output)")
+		}
+
+	case DepthAgentOutput:
+		lv := m.PhaseLoops[m.FocusedPhase]
+		if lv == nil {
+			m.Detail.SetEmpty("(no activity for this phase yet)")
+			return
+		}
+		agent := lv.SelectedAgent()
+		if agent == nil {
+			m.Detail.SetContentWithHeader(m.FocusedPhase, phaseHeader, "(select an agent row to view output)")
+			return
+		}
+
+		// Build combined header: phase context + agent context.
+		agentHeader := FormatAgentHeader(AgentContext{
+			Role:       agent.Role,
+			Cycle:      lv.SelectedCycleNumber(),
+			DurationMs: agent.DurationMs,
+			CostUSD:    agent.CostUSD,
+			IssueCount: agent.IssueCount,
+			Done:       agent.Done,
+		})
+		header := agentHeader
+		if phaseHeader != "" {
+			header = phaseHeader + "\n" + agentHeader
+		}
+
+		title := fmt.Sprintf("%s → %s output", m.FocusedPhase, agent.Role)
+		if agent.Output == "" {
+			m.Detail.SetContentWithHeader(title, header, "(output will appear when agent completes)")
+			return
+		}
+		body := FormatAgentOutput(agent.Output)
+		m.Detail.SetContentWithHeader(title, header, body)
+
+	default:
+		m.Detail.SetEmpty("Press enter to expand details")
+	}
+}
+
+// findPhase returns the PhaseEntry for a given phase ID, or nil.
+func (m *AppModel) findPhase(phaseID string) *PhaseEntry {
+	for i := range m.NebulaView.Phases {
+		if m.NebulaView.Phases[i].ID == phaseID {
+			return &m.NebulaView.Phases[i]
+		}
+	}
+	return nil
 }
 
 // addMessage appends a formatted message to the messages log.
@@ -543,14 +672,19 @@ func (m AppModel) showDetailPanel() bool {
 	if m.Mode == ModeLoop {
 		return m.Depth == DepthAgentOutput
 	}
-	// In nebula mode, show detail when drilled into agent output.
-	return m.Depth == DepthAgentOutput
+	// In nebula mode, show detail at phase loop (summary) and agent output.
+	return m.Depth >= DepthPhaseLoop
 }
 
 // View renders the full TUI.
 func (m AppModel) View() string {
 	if m.Width == 0 {
 		return "initializing..."
+	}
+
+	// Terminal too small — show a centered message instead of broken layout.
+	if m.Width < MinWidth || m.Height < MinHeight {
+		return m.renderTooSmall()
 	}
 
 	var sections []string
@@ -560,16 +694,16 @@ func (m AppModel) View() string {
 	m.StatusBar.Stopping = m.Stopping
 	sections = append(sections, m.StatusBar.View())
 
-	// Breadcrumb (nebula drill-down).
-	if m.Mode == ModeNebula && m.Depth > DepthPhases {
+	// Breadcrumb (nebula drill-down) — hide if too narrow.
+	if m.Mode == ModeNebula && m.Depth > DepthPhases && m.Width >= CompactWidth {
 		sections = append(sections, m.renderBreadcrumb())
 	}
 
 	// Main view.
 	sections = append(sections, m.renderMainView())
 
-	// Detail panel (when drilled into agent output).
-	if m.showDetailPanel() {
+	// Detail panel (when drilled into agent output) — auto-collapse on short terminals.
+	if m.showDetailPanel() && m.Height >= DetailCollapseHeight {
 		sep := styleSectionBorder.Width(m.Width).Render("")
 		sections = append(sections, sep)
 		sections = append(sections, m.Detail.View())
@@ -580,24 +714,59 @@ func (m AppModel) View() string {
 		sections = append(sections, m.Gate.View())
 	}
 
+	// Toast notifications (above footer).
+	if len(m.Toasts) > 0 {
+		sections = append(sections, RenderToasts(m.Toasts, m.Width))
+	}
+
 	// Footer.
 	footer := m.buildFooter()
 	sections = append(sections, footer.View())
 
-	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+	base := lipgloss.JoinVertical(lipgloss.Left, sections...)
+
+	// Completion overlay — rendered over a dimmed placeholder background.
+	if m.Overlay != nil {
+		return m.Overlay.View(m.Width, m.Height)
+	}
+
+	return base
+}
+
+// renderTooSmall renders a centered "Terminal too small" message.
+func (m AppModel) renderTooSmall() string {
+	msg := fmt.Sprintf("Terminal too small (%dx%d)\nMinimum: %dx%d", m.Width, m.Height, MinWidth, MinHeight)
+	style := lipgloss.NewStyle().
+		Foreground(colorMuted).
+		Align(lipgloss.Center).
+		Width(m.Width).
+		Height(m.Height)
+	return style.Render(msg)
 }
 
 // renderBreadcrumb renders the navigation path for drill-down.
+// Phase IDs are truncated with ellipsis if the breadcrumb would exceed the terminal width.
 func (m AppModel) renderBreadcrumb() string {
+	sep := " › "
 	parts := []string{"phases"}
 	if m.FocusedPhase != "" {
-		parts = append(parts, m.FocusedPhase)
+		// Reserve space for "phases › " + " › output" (if applicable) + padding.
+		overhead := len("phases") + len(sep)
+		if m.Depth == DepthAgentOutput {
+			overhead += len(sep) + len("output")
+		}
+		// Leave 4 chars padding for the breadcrumb style padding.
+		available := m.Width - overhead - 4
+		if available < 4 {
+			available = 4
+		}
+		parts = append(parts, TruncateWithEllipsis(m.FocusedPhase, available))
 	}
 	if m.Depth == DepthAgentOutput {
 		parts = append(parts, "output")
 	}
-	sep := styleBreadcrumbSep.Render(" › ")
-	path := strings.Join(parts, sep)
+	renderedSep := styleBreadcrumbSep.Render(sep)
+	path := strings.Join(parts, renderedSep)
 	return styleBreadcrumb.Width(m.Width).Render(path)
 }
 

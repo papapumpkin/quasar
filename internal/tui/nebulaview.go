@@ -3,8 +3,10 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // PhaseStatus represents the display state of a nebula phase.
@@ -28,6 +30,7 @@ type PhaseEntry struct {
 	CostUSD   float64
 	Cycles    int
 	BlockedBy string
+	StartedAt time.Time
 }
 
 // NebulaView renders the phase table for multi-task orchestration.
@@ -41,8 +44,9 @@ type NebulaView struct {
 // NewNebulaView creates an empty nebula view.
 func NewNebulaView() NebulaView {
 	s := spinner.New()
-	s.Spinner = spinner.Dot
-	return NebulaView{}
+	s.Spinner = spinner.MiniDot
+	s.Style = lipgloss.NewStyle().Foreground(colorBlue)
+	return NebulaView{Spinner: s}
 }
 
 // SelectedPhase returns the phase entry at the cursor.
@@ -95,6 +99,9 @@ func (nv *NebulaView) InitPhases(phases []PhaseInfo) {
 func (nv *NebulaView) SetPhaseStatus(phaseID string, status PhaseStatus) {
 	for i := range nv.Phases {
 		if nv.Phases[i].ID == phaseID {
+			if status == PhaseWorking && nv.Phases[i].StartedAt.IsZero() {
+				nv.Phases[i].StartedAt = time.Now()
+			}
 			nv.Phases[i].Status = status
 			return
 		}
@@ -162,12 +169,25 @@ func (nv NebulaView) View() string {
 		if p.Status == PhaseDone {
 			detail = fmt.Sprintf("W%d  $%.2f  %d cycle(s)", p.Wave, p.CostUSD, p.Cycles)
 		} else if p.Status == PhaseWorking {
-			detail = fmt.Sprintf("W%d  working…", p.Wave)
+			elapsed := formatElapsed(p.StartedAt)
+			detail = fmt.Sprintf("W%d  working… %s", p.Wave, elapsed)
 		} else if p.BlockedBy != "" {
 			detail = fmt.Sprintf("blocked: %s", p.BlockedBy)
 		}
 
-		line := fmt.Sprintf("%s%s %-24s %s", indicator, statusIcon, p.ID, detail)
+		// Truncate phase ID to fit available width.
+		phaseID := p.ID
+		idWidth := 24
+		if nv.Width < CompactWidth && nv.Width > 0 {
+			// In compact mode, shrink the ID column proportionally.
+			idWidth = nv.Width / 3
+			if idWidth < 8 {
+				idWidth = 8
+			}
+		}
+		phaseID = TruncateWithEllipsis(phaseID, idWidth)
+
+		line := fmt.Sprintf("%s%s %-*s %s", indicator, statusIcon, idWidth, phaseID, detail)
 		b.WriteString(style.Render(line))
 		b.WriteString("\n")
 	}
