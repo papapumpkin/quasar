@@ -12,8 +12,8 @@ import (
 
 // claimFilesInput is the input schema for the claim_files tool.
 type claimFilesInput struct {
-	AgentID string   `json:"agent_id" jsonschema:"description=Claiming agent's ID"`
-	Files   []string `json:"files" jsonschema:"description=File paths to claim"`
+	AgentID string   `json:"agent_id" jsonschema:"Claiming agent's ID"`
+	Files   []string `json:"files" jsonschema:"File paths to claim"`
 }
 
 // conflictEntry describes a file that could not be claimed because another
@@ -31,8 +31,8 @@ type claimFilesOutput struct {
 
 // releaseFilesInput is the input schema for the release_files tool.
 type releaseFilesInput struct {
-	AgentID string   `json:"agent_id" jsonschema:"description=Releasing agent's ID"`
-	Files   []string `json:"files" jsonschema:"description=File paths to release"`
+	AgentID string   `json:"agent_id" jsonschema:"Releasing agent's ID"`
+	Files   []string `json:"files" jsonschema:"File paths to release"`
 }
 
 // releaseFilesOutput is the output schema for the release_files tool.
@@ -42,7 +42,7 @@ type releaseFilesOutput struct {
 
 // getFileClaimsInput is the input schema for the get_file_claims tool.
 type getFileClaimsInput struct {
-	Files []string `json:"files,omitempty" jsonschema:"description=Specific files to check (all if omitted)"`
+	Files []string `json:"files,omitempty" jsonschema:"Specific files to check (all if omitted)"`
 }
 
 // fileClaimEntry is a single claim in the get_file_claims response.

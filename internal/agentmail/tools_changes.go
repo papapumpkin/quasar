@@ -10,9 +10,9 @@ import (
 
 // announceChangeInput is the input schema for the announce_change tool.
 type announceChangeInput struct {
-	AgentID  string `json:"agent_id" jsonschema:"description=Agent announcing the change"`
-	FilePath string `json:"file_path" jsonschema:"description=Path of the modified file"`
-	Summary  string `json:"summary" jsonschema:"description=Human-readable description of the change"`
+	AgentID  string `json:"agent_id" jsonschema:"Agent announcing the change"`
+	FilePath string `json:"file_path" jsonschema:"Path of the modified file"`
+	Summary  string `json:"summary" jsonschema:"Human-readable description of the change"`
 }
 
 // announceChangeOutput is the output schema for the announce_change tool.
@@ -22,8 +22,8 @@ type announceChangeOutput struct {
 
 // getChangesInput is the input schema for the get_changes tool.
 type getChangesInput struct {
-	Since   string `json:"since,omitempty" jsonschema:"description=ISO 8601 timestamp — only changes after this"`
-	AgentID string `json:"agent_id,omitempty" jsonschema:"description=Filter to changes by a specific agent"`
+	Since   string `json:"since,omitempty" jsonschema:"ISO 8601 timestamp — only changes after this"`
+	AgentID string `json:"agent_id,omitempty" jsonschema:"Filter to changes by a specific agent"`
 }
 
 // changeEntry is a single change in the get_changes response.

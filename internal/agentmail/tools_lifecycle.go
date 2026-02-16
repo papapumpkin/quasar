@@ -9,8 +9,8 @@ import (
 
 // registerInput is the input schema for the register tool.
 type registerInput struct {
-	Name string `json:"name" jsonschema:"description=Human-readable agent name (e.g. coder-1)"`
-	Role string `json:"role" jsonschema:"description=Agent role (e.g. coder or reviewer)"`
+	Name string `json:"name" jsonschema:"Human-readable agent name (e.g. coder-1)"`
+	Role string `json:"role" jsonschema:"Agent role (e.g. coder or reviewer)"`
 }
 
 // registerOutput is the output schema for the register tool.
@@ -20,7 +20,7 @@ type registerOutput struct {
 
 // heartbeatInput is the input schema for the heartbeat tool.
 type heartbeatInput struct {
-	AgentID string `json:"agent_id" jsonschema:"description=The agent's ID"`
+	AgentID string `json:"agent_id" jsonschema:"The agent's ID"`
 }
 
 // heartbeatOutput is the output schema for the heartbeat tool.

@@ -10,10 +10,10 @@ import (
 
 // sendMessageInput is the input schema for the send_message tool.
 type sendMessageInput struct {
-	AgentID string `json:"agent_id" jsonschema:"description=Sender's agent ID"`
-	Channel string `json:"channel,omitempty" jsonschema:"description=Target channel (default: broadcast)"`
-	Subject string `json:"subject" jsonschema:"description=Message subject"`
-	Body    string `json:"body" jsonschema:"description=Message body"`
+	AgentID string `json:"agent_id" jsonschema:"Sender's agent ID"`
+	Channel string `json:"channel,omitempty" jsonschema:"Target channel (default: broadcast)"`
+	Subject string `json:"subject" jsonschema:"Message subject"`
+	Body    string `json:"body" jsonschema:"Message body"`
 }
 
 // sendMessageOutput is the output schema for the send_message tool.
@@ -23,9 +23,9 @@ type sendMessageOutput struct {
 
 // readMessagesInput is the input schema for the read_messages tool.
 type readMessagesInput struct {
-	AgentID string `json:"agent_id" jsonschema:"description=Requesting agent ID (for auth)"`
-	Since   string `json:"since,omitempty" jsonschema:"description=ISO 8601 timestamp — only return messages after this"`
-	Channel string `json:"channel,omitempty" jsonschema:"description=Filter to specific channel"`
+	AgentID string `json:"agent_id" jsonschema:"Requesting agent ID (for auth)"`
+	Since   string `json:"since,omitempty" jsonschema:"ISO 8601 timestamp — only return messages after this"`
+	Channel string `json:"channel,omitempty" jsonschema:"Filter to specific channel"`
 }
 
 // messageEntry is a single message in the read_messages response.
