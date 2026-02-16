@@ -517,14 +517,15 @@ func (p *Printer) NebulaStatus(n *nebula.Nebula, state *nebula.State, m *nebula.
 		}
 	}
 
-	// History.
+	// History — entries are oldest-first, so take from the end for most recent.
 	if len(history) > 0 {
 		limit := 3
 		if len(history) < limit {
 			limit = len(history)
 		}
-		fmt.Fprintf(os.Stderr, "\n  History (last %d runs):\n", limit)
-		for _, h := range history[:limit] {
+		recent := history[len(history)-limit:]
+		fmt.Fprintf(os.Stderr, "\n  History (last %d run%s):\n", limit, pluralS(limit))
+		for _, h := range recent {
 			fmt.Fprintf(os.Stderr, "    %s  %d phases  $%.2f  %s  %d conflict%s\n",
 				h.StartedAt.Format("2006-01-02 15:04"),
 				h.TotalPhases, h.TotalCostUSD,
@@ -554,8 +555,13 @@ func formatDuration(d time.Duration) string {
 	if d < time.Minute {
 		return fmt.Sprintf("%ds", int(d.Seconds()))
 	}
-	m := int(d.Minutes())
-	s := int(d.Seconds()) - m*60
+	totalSeconds := int(d.Seconds())
+	h := totalSeconds / 3600
+	m := (totalSeconds % 3600) / 60
+	s := totalSeconds % 60
+	if h > 0 {
+		return fmt.Sprintf("%dh%02dm%02ds", h, m, s)
+	}
 	return fmt.Sprintf("%dm%02ds", m, s)
 }
 
