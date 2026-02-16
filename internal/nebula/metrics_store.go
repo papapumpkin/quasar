@@ -60,6 +60,9 @@ type waveRecord struct {
 	PhaseCount           int   `toml:"phase_count"`
 	TotalDurationNs      int64 `toml:"total_duration_ns"`
 	Conflicts            int   `toml:"conflicts"`
+	ChangeVolume         int   `toml:"change_volume,omitempty"`
+	ActiveClaims         int   `toml:"active_claims,omitempty"`
+	AvgClaimAgeNs        int64 `toml:"avg_claim_age_ns,omitempty"`
 }
 
 // historySummary captures a condensed record of a previous run.
@@ -140,6 +143,49 @@ func LoadMetrics(dir string) (*Metrics, error) {
 	return recordToMetrics(file.Current), nil
 }
 
+// HistorySummary is an exported snapshot of a previous nebula run.
+type HistorySummary struct {
+	NebulaName     string
+	StartedAt      time.Time
+	CompletedAt    time.Time
+	TotalCostUSD   float64
+	Duration       time.Duration
+	TotalPhases    int
+	TotalConflicts int
+	TotalRestarts  int
+}
+
+// LoadMetricsWithHistory loads the current metrics and up to maxHistoryEntries
+// previous run summaries from the nebula directory. If no metrics file exists,
+// both return values are nil (no error).
+func LoadMetricsWithHistory(dir string) (*Metrics, []HistorySummary, error) {
+	file, err := loadMetricsFile(dir)
+	if err != nil {
+		return nil, nil, err
+	}
+	if file == nil {
+		return nil, nil, nil
+	}
+
+	current := recordToMetrics(file.Current)
+
+	history := make([]HistorySummary, len(file.History))
+	for i, h := range file.History {
+		history[i] = HistorySummary{
+			NebulaName:     h.NebulaName,
+			StartedAt:      h.StartedAt,
+			CompletedAt:    h.CompletedAt,
+			TotalCostUSD:   h.TotalCostUSD,
+			Duration:       time.Duration(h.DurationNs),
+			TotalPhases:    h.TotalPhases,
+			TotalConflicts: h.TotalConflicts,
+			TotalRestarts:  h.TotalRestarts,
+		}
+	}
+
+	return current, history, nil
+}
+
 // loadMetricsFile reads and parses the raw metrics file.
 // Returns nil, nil if the file does not exist.
 func loadMetricsFile(dir string) (*metricsFile, error) {
@@ -188,6 +234,9 @@ func metricsToRecord(m *Metrics) metricsRecord {
 			PhaseCount:           w.PhaseCount,
 			TotalDurationNs:      int64(w.TotalDuration),
 			Conflicts:            w.Conflicts,
+			ChangeVolume:         w.ChangeVolume,
+			ActiveClaims:         w.ActiveClaims,
+			AvgClaimAgeNs:        int64(w.AvgClaimAge),
 		}
 	}
 
@@ -233,6 +282,9 @@ func recordToMetrics(r metricsRecord) *Metrics {
 			PhaseCount:           w.PhaseCount,
 			TotalDuration:        time.Duration(w.TotalDurationNs),
 			Conflicts:            w.Conflicts,
+			ChangeVolume:         w.ChangeVolume,
+			ActiveClaims:         w.ActiveClaims,
+			AvgClaimAge:          time.Duration(w.AvgClaimAgeNs),
 		}
 	}
 

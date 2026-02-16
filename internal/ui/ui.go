@@ -3,7 +3,9 @@ package ui
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/aaronsalm/quasar/internal/nebula"
 )
@@ -416,4 +418,151 @@ func (p *Printer) NebulaProgressBar(completed, total, openBeads, closedBeads int
 // subsequent output doesn't overwrite it.
 func (p *Printer) NebulaProgressBarDone() {
 	fmt.Fprintln(os.Stderr)
+}
+
+// NebulaStatus renders a metrics summary for a nebula run to stderr.
+// It gracefully handles nil metrics by falling back to state-only information.
+func (p *Printer) NebulaStatus(n *nebula.Nebula, state *nebula.State, m *nebula.Metrics, history []nebula.HistorySummary) {
+	name := n.Manifest.Nebula.Name
+
+	if m != nil && !m.CompletedAt.IsZero() {
+		fmt.Fprintf(os.Stderr, bold+cyan+"nebula %q"+reset+" — last run %s\n\n", name, m.CompletedAt.Format(time.RFC3339))
+	} else if m != nil && !m.StartedAt.IsZero() {
+		fmt.Fprintf(os.Stderr, bold+cyan+"nebula %q"+reset+" — started %s (in progress)\n\n", name, m.StartedAt.Format(time.RFC3339))
+	} else {
+		fmt.Fprintf(os.Stderr, bold+cyan+"nebula %q"+reset+" — no metrics recorded\n\n", name)
+	}
+
+	// Phase counts from state.
+	completed, failed := 0, 0
+	for _, ps := range state.Phases {
+		switch ps.Status {
+		case nebula.PhaseStatusDone:
+			completed++
+		case nebula.PhaseStatusFailed:
+			failed++
+		}
+	}
+
+	restarts := 0
+	if m != nil {
+		restarts = m.TotalRestarts
+	}
+	fmt.Fprintf(os.Stderr, "  Phases:  %d completed, %d failed, %d restarts\n", completed, failed, restarts)
+
+	// Waves.
+	if m != nil && len(m.Waves) > 0 {
+		avgParallelism := nebulaAvgParallelism(m.Waves)
+		fmt.Fprintf(os.Stderr, "  Waves:   %d (avg effective parallelism: %.1f)\n", len(m.Waves), avgParallelism)
+	} else {
+		fmt.Fprintf(os.Stderr, "  Waves:   0\n")
+	}
+
+	// Cost.
+	totalCost := state.TotalCostUSD
+	if m != nil && m.TotalCostUSD > 0 {
+		totalCost = m.TotalCostUSD
+	}
+	totalPhases := len(n.Phases)
+	avgCost := 0.0
+	if totalPhases > 0 {
+		avgCost = totalCost / float64(totalPhases)
+	}
+	fmt.Fprintf(os.Stderr, "  Cost:    $%.2f (avg $%.2f/phase)\n", totalCost, avgCost)
+
+	// Duration.
+	if m != nil && !m.StartedAt.IsZero() && !m.CompletedAt.IsZero() {
+		dur := m.CompletedAt.Sub(m.StartedAt)
+		fmt.Fprintf(os.Stderr, "  Duration: %s (wall-clock)\n", formatDuration(dur))
+	}
+
+	// Conflicts.
+	if m != nil {
+		fmt.Fprintf(os.Stderr, "  Conflicts: %d\n", m.TotalConflicts)
+	}
+
+	// Wave breakdown.
+	if m != nil && len(m.Waves) > 0 {
+		fmt.Fprintf(os.Stderr, "\n  Wave breakdown:\n")
+		for _, w := range m.Waves {
+			note := ""
+			if w.EffectiveParallelism < w.PhaseCount {
+				note = " (scope serialization)"
+			}
+			fmt.Fprintf(os.Stderr, "    Wave %d: %d phases, parallelism %d/%d%s, %s\n",
+				w.WaveNumber, w.PhaseCount, w.EffectiveParallelism, w.PhaseCount, note,
+				formatDuration(w.TotalDuration))
+		}
+	}
+
+	// Slowest phases.
+	if m != nil && len(m.Phases) > 0 {
+		sorted := make([]nebula.PhaseMetrics, len(m.Phases))
+		copy(sorted, m.Phases)
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].Duration > sorted[j].Duration
+		})
+		limit := 5
+		if len(sorted) < limit {
+			limit = len(sorted)
+		}
+		fmt.Fprintf(os.Stderr, "\n  Slowest phases:\n")
+		for _, pm := range sorted[:limit] {
+			sat := pm.Satisfaction
+			if sat == "" {
+				sat = "-"
+			}
+			fmt.Fprintf(os.Stderr, "    %-24s %s  $%.2f  %d cycles  satisfaction: %s\n",
+				pm.PhaseID, formatDuration(pm.Duration), pm.CostUSD, pm.CyclesUsed, sat)
+		}
+	}
+
+	// History.
+	if len(history) > 0 {
+		limit := 3
+		if len(history) < limit {
+			limit = len(history)
+		}
+		fmt.Fprintf(os.Stderr, "\n  History (last %d runs):\n", limit)
+		for _, h := range history[:limit] {
+			fmt.Fprintf(os.Stderr, "    %s  %d phases  $%.2f  %s  %d conflict%s\n",
+				h.StartedAt.Format("2006-01-02 15:04"),
+				h.TotalPhases, h.TotalCostUSD,
+				formatDuration(h.Duration),
+				h.TotalConflicts, pluralS(h.TotalConflicts))
+		}
+	}
+
+	fmt.Fprintln(os.Stderr)
+}
+
+// nebulaAvgParallelism computes the average effective parallelism across waves.
+func nebulaAvgParallelism(waves []nebula.WaveMetrics) float64 {
+	if len(waves) == 0 {
+		return 0
+	}
+	total := 0
+	for _, w := range waves {
+		total += w.EffectiveParallelism
+	}
+	return float64(total) / float64(len(waves))
+}
+
+// formatDuration formats a duration as a human-readable string like "4m32s".
+func formatDuration(d time.Duration) string {
+	d = d.Round(time.Second)
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	m := int(d.Minutes())
+	s := int(d.Seconds()) - m*60
+	return fmt.Sprintf("%dm%02ds", m, s)
+}
+
+// pluralS returns "s" if n != 1, for simple English pluralization.
+func pluralS(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
