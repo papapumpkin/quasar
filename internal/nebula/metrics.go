@@ -28,6 +28,11 @@ type WaveMetrics struct {
 	PhaseCount           int
 	TotalDuration        time.Duration // wall-clock time for the wave
 	Conflicts            int
+
+	// Agentmail coordination signals (populated when agentmail is configured).
+	ChangeVolume int           // changes announced during this wave
+	ActiveClaims int           // file claims held at wave end
+	AvgClaimAge  time.Duration // mean age of active claims at wave end
 }
 
 // Metrics captures all runtime measurements for a nebula execution.

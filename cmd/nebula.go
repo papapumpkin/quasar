@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/aaronsalm/quasar/internal/agent"
-	"github.com/aaronsalm/quasar/internal/agentmail"
 	"github.com/aaronsalm/quasar/internal/beads"
 	"github.com/aaronsalm/quasar/internal/claude"
 	"github.com/aaronsalm/quasar/internal/config"
@@ -222,50 +221,6 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Agentmail MCP server lifecycle.
-	// Enabled via .quasar.yaml (agentmail.enabled) or nebula [execution] (agentmail = true).
-	var mcpCfg *agent.MCPConfig
-	amEnabled := cfg.AgentMail.Enabled || n.Manifest.Execution.AgentMail
-	if amEnabled {
-		amPort := cfg.AgentMail.Port
-		if n.Manifest.Execution.AgentMailPort > 0 {
-			amPort = n.Manifest.Execution.AgentMailPort
-		}
-		amDSN := cfg.AgentMail.DoltDSN
-
-		amBinary, lookErr := exec.LookPath("agentmail")
-		if lookErr != nil {
-			printer.Error("agentmail binary not found in PATH; build with: go build -o agentmail ./cmd/agentmail")
-			return fmt.Errorf("agentmail binary not found: %w", lookErr)
-		}
-
-		srv := &agentmail.ProcessManager{BinaryPath: amBinary, Port: amPort, DoltDSN: amDSN}
-		printer.Info(fmt.Sprintf("starting agentmail server on port %d...", amPort))
-		if startErr := srv.Start(ctx); startErr != nil {
-			printer.Error(fmt.Sprintf("agentmail server failed to start: %v", startErr))
-			return startErr
-		}
-		defer func() {
-			printer.Info("stopping agentmail server...")
-			if stopErr := srv.Stop(); stopErr != nil {
-				printer.Error(fmt.Sprintf("agentmail stop: %v", stopErr))
-			}
-		}()
-
-		tmpDir, tmpErr := os.MkdirTemp("", "quasar-mcp-*")
-		if tmpErr != nil {
-			return fmt.Errorf("failed to create temp dir for MCP config: %w", tmpErr)
-		}
-		defer os.RemoveAll(tmpDir)
-
-		cfgPath, genErr := agentmail.GenerateMCPConfig(tmpDir, amPort)
-		if genErr != nil {
-			return genErr
-		}
-		mcpCfg = &agent.MCPConfig{ConfigPath: cfgPath}
-		printer.Info(fmt.Sprintf("agentmail MCP config: %s", cfgPath))
-	}
-
 	workDir := cfg.WorkDir
 	// Nebula context.working_dir overrides global if set.
 	if n.Manifest.Context.WorkingDir != "" {
@@ -289,7 +244,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		CoderPrompt:  coderPrompt,
 		ReviewPrompt: reviewerPrompt,
 		WorkDir:      workDir,
-		MCP:          mcpCfg,
+		MCP:          nil,
 	}
 
 	// Detect TTY for dashboard rendering mode.
@@ -489,7 +444,7 @@ type statusRunJSON struct {
 }
 
 // writeStatusJSON encodes the nebula status as JSON to the given writer.
-func writeStatusJSON(w *os.File, n *nebula.Nebula, state *nebula.State, m *nebula.Metrics, history []nebula.HistorySummary) error {
+func writeStatusJSON(w io.Writer, n *nebula.Nebula, state *nebula.State, m *nebula.Metrics, history []nebula.HistorySummary) error {
 	out := statusJSON{
 		Name:        n.Manifest.Nebula.Name,
 		TotalPhases: len(n.Phases),

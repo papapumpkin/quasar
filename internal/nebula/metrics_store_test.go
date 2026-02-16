@@ -24,13 +24,10 @@ func TestSaveAndLoadMetrics(t *testing.T) {
 	m.RecordLockWait("p1", 50*time.Millisecond)
 	m.RecordWaveComplete(0, 4, 2)
 
-	// Set agentmail coordination fields on the wave to verify round-trip.
-	applyAgentmailMetrics(m, AgentmailMetrics{
-		ConflictCount: 0, // don't double-count; just testing wave fields
-		ChangeVolume:  42,
-		ActiveClaims:  7,
-		AvgClaimAge:   15 * time.Second,
-	})
+	// Set coordination fields on the wave directly to verify round-trip.
+	m.Waves[0].ChangeVolume = 42
+	m.Waves[0].ActiveClaims = 7
+	m.Waves[0].AvgClaimAge = 15 * time.Second
 
 	if err := SaveMetrics(dir, m); err != nil {
 		t.Fatalf("SaveMetrics: %v", err)
@@ -282,6 +279,85 @@ func TestLoadMetricsCorruptFile(t *testing.T) {
 	_, err := LoadMetrics(dir)
 	if err == nil {
 		t.Fatal("LoadMetrics on corrupt file should return error")
+	}
+}
+
+func TestLoadMetricsWithHistory_NoFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	m, history, err := LoadMetricsWithHistory(dir)
+	if err != nil {
+		t.Fatalf("LoadMetricsWithHistory on empty dir: %v", err)
+	}
+	if m != nil {
+		t.Errorf("expected nil metrics when no file, got %+v", m)
+	}
+	if history != nil {
+		t.Errorf("expected nil history when no file, got %+v", history)
+	}
+}
+
+func TestLoadMetricsWithHistory_WithHistory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	// Save 4 runs so we get 3 history entries.
+	for i := 0; i < 4; i++ {
+		m := NewMetrics("history-load")
+		m.TotalCostUSD = float64(i) + 1.0
+		m.TotalPhases = i + 1
+		m.TotalConflicts = i
+		m.TotalRestarts = i
+		m.CompletedAt = m.StartedAt.Add(time.Duration(i+1) * time.Minute)
+		if err := SaveMetrics(dir, m); err != nil {
+			t.Fatalf("SaveMetrics run %d: %v", i, err)
+		}
+	}
+
+	current, history, err := LoadMetricsWithHistory(dir)
+	if err != nil {
+		t.Fatalf("LoadMetricsWithHistory: %v", err)
+	}
+
+	// Current should be the last run (i=3).
+	if current == nil {
+		t.Fatal("expected non-nil current metrics")
+	}
+	if current.TotalPhases != 4 {
+		t.Errorf("current.TotalPhases = %d, want 4", current.TotalPhases)
+	}
+	if current.TotalCostUSD != 4.0 {
+		t.Errorf("current.TotalCostUSD = %f, want 4.0", current.TotalCostUSD)
+	}
+
+	// History should have 3 entries (runs 0, 1, 2).
+	if len(history) != 3 {
+		t.Fatalf("len(history) = %d, want 3", len(history))
+	}
+
+	// History is oldest-first.
+	if history[0].TotalPhases != 1 {
+		t.Errorf("history[0].TotalPhases = %d, want 1 (oldest)", history[0].TotalPhases)
+	}
+	if history[2].TotalPhases != 3 {
+		t.Errorf("history[2].TotalPhases = %d, want 3 (newest)", history[2].TotalPhases)
+	}
+
+	// Verify HistorySummary field conversion.
+	h := history[0]
+	if h.NebulaName != "history-load" {
+		t.Errorf("history[0].NebulaName = %q, want %q", h.NebulaName, "history-load")
+	}
+	if h.TotalCostUSD != 1.0 {
+		t.Errorf("history[0].TotalCostUSD = %f, want 1.0", h.TotalCostUSD)
+	}
+	if h.Duration != time.Minute {
+		t.Errorf("history[0].Duration = %v, want %v", h.Duration, time.Minute)
+	}
+	if h.TotalConflicts != 0 {
+		t.Errorf("history[0].TotalConflicts = %d, want 0", h.TotalConflicts)
 	}
 }
 

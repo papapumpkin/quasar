@@ -8,7 +8,7 @@ priority = 2
 labels = ["quasar", "nebula", "relativity"]
 
 [execution]
-max_workers = 1 
+max_workers = 3 
 max_review_cycles = 5
 max_budget_usd = 50.0
 gate = "watch"

@@ -1695,6 +1695,284 @@ func TestWorkerGroup_ApproveMode_PlanRejectedWithReject(t *testing.T) {
 	}
 }
 
+// --- Metrics instrumentation tests ---
+
+func TestWorkerGroup_NilMetrics_NoPanics(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		phases     []PhaseSpec
+		maxWorkers int
+	}{
+		{
+			name: "single phase",
+			phases: []PhaseSpec{
+				{ID: "a", Body: "phase a"},
+			},
+			maxWorkers: 1,
+		},
+		{
+			name: "multiple phases with dependency",
+			phases: []PhaseSpec{
+				{ID: "a", Body: "phase a"},
+				{ID: "b", Body: "phase b", DependsOn: []string{"a"}},
+			},
+			maxWorkers: 2,
+		},
+		{
+			name: "parallel independent phases",
+			phases: []PhaseSpec{
+				{ID: "a", Body: "phase a"},
+				{ID: "b", Body: "phase b"},
+				{ID: "c", Body: "phase c"},
+			},
+			maxWorkers: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			n := &Nebula{
+				Dir:      dir,
+				Manifest: Manifest{Nebula: Info{Name: "nil-metrics-test"}},
+				Phases:   tt.phases,
+			}
+
+			phases := make(map[string]*PhaseState)
+			for _, p := range tt.phases {
+				phases[p.ID] = &PhaseState{BeadID: "bead-" + p.ID, Status: PhaseStatusCreated}
+			}
+			state := &State{Version: 1, Phases: phases}
+
+			runner := &mockRunner{}
+			wg := &WorkerGroup{
+				Runner:     runner,
+				Nebula:     n,
+				State:      state,
+				MaxWorkers: tt.maxWorkers,
+				Metrics:    nil, // explicitly nil
+			}
+
+			results, err := wg.Run(context.Background())
+			if err != nil {
+				t.Fatalf("WorkerGroup.Run with nil Metrics failed: %v", err)
+			}
+
+			if len(results) != len(tt.phases) {
+				t.Errorf("expected %d results, got %d", len(tt.phases), len(results))
+			}
+
+			// All phases should complete successfully.
+			for _, r := range results {
+				if r.Err != nil {
+					t.Errorf("phase %q failed: %v", r.PhaseID, r.Err)
+				}
+			}
+		})
+	}
+}
+
+func TestWorkerGroup_WithMetrics_PhaseMetricsPopulated(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		phases     []PhaseSpec
+		costs      map[string]float64
+		cycles     map[string]int
+		wantPhases int
+		wantCost   float64
+	}{
+		{
+			name: "single phase records metrics",
+			phases: []PhaseSpec{
+				{ID: "a", Body: "phase a"},
+			},
+			costs:      map[string]float64{"bead-a": 0.50},
+			cycles:     map[string]int{"bead-a": 3},
+			wantPhases: 1,
+			wantCost:   0.50,
+		},
+		{
+			name: "multiple phases accumulate cost",
+			phases: []PhaseSpec{
+				{ID: "a", Body: "phase a"},
+				{ID: "b", Body: "phase b"},
+			},
+			costs:      map[string]float64{"bead-a": 0.25, "bead-b": 0.75},
+			cycles:     map[string]int{"bead-a": 2, "bead-b": 4},
+			wantPhases: 2,
+			wantCost:   1.00,
+		},
+		{
+			name: "dependent phases with metrics",
+			phases: []PhaseSpec{
+				{ID: "a", Body: "phase a"},
+				{ID: "b", Body: "phase b", DependsOn: []string{"a"}},
+			},
+			costs:      map[string]float64{"bead-a": 0.25, "bead-b": 0.50},
+			cycles:     map[string]int{"bead-a": 1, "bead-b": 2},
+			wantPhases: 2,
+			wantCost:   0.75,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			n := &Nebula{
+				Dir:      dir,
+				Manifest: Manifest{Nebula: Info{Name: "metrics-test"}},
+				Phases:   tt.phases,
+			}
+
+			phases := make(map[string]*PhaseState)
+			for _, p := range tt.phases {
+				phases[p.ID] = &PhaseState{BeadID: "bead-" + p.ID, Status: PhaseStatusCreated}
+			}
+			state := &State{Version: 1, Phases: phases}
+
+			runner := &mockRunner{
+				resultFunc: func(beadID string) *PhaseRunnerResult {
+					return &PhaseRunnerResult{
+						TotalCostUSD: tt.costs[beadID],
+						CyclesUsed:   tt.cycles[beadID],
+					}
+				},
+			}
+
+			metrics := NewMetrics("metrics-test")
+			wg := &WorkerGroup{
+				Runner:     runner,
+				Nebula:     n,
+				State:      state,
+				MaxWorkers: 1,
+				Metrics:    metrics,
+			}
+
+			results, err := wg.Run(context.Background())
+			if err != nil {
+				t.Fatalf("WorkerGroup.Run failed: %v", err)
+			}
+
+			if len(results) != tt.wantPhases {
+				t.Fatalf("expected %d results, got %d", tt.wantPhases, len(results))
+			}
+
+			snap := metrics.Snapshot()
+
+			// Verify total phase count.
+			if snap.TotalPhases != tt.wantPhases {
+				t.Errorf("TotalPhases = %d, want %d", snap.TotalPhases, tt.wantPhases)
+			}
+
+			// Verify total cost.
+			if snap.TotalCostUSD != tt.wantCost {
+				t.Errorf("TotalCostUSD = %f, want %f", snap.TotalCostUSD, tt.wantCost)
+			}
+
+			// Verify per-phase metrics.
+			if len(snap.Phases) != tt.wantPhases {
+				t.Fatalf("len(Phases) = %d, want %d", len(snap.Phases), tt.wantPhases)
+			}
+
+			for _, pm := range snap.Phases {
+				if pm.PhaseID == "" {
+					t.Error("PhaseMetrics.PhaseID should not be empty")
+				}
+				if pm.Duration <= 0 {
+					t.Errorf("PhaseMetrics[%s].Duration = %v, want > 0", pm.PhaseID, pm.Duration)
+				}
+				if pm.CompletedAt.IsZero() {
+					t.Errorf("PhaseMetrics[%s].CompletedAt should be set", pm.PhaseID)
+				}
+				if pm.StartedAt.IsZero() {
+					t.Errorf("PhaseMetrics[%s].StartedAt should be set", pm.PhaseID)
+				}
+
+				expectedCost := tt.costs["bead-"+pm.PhaseID]
+				if pm.CostUSD != expectedCost {
+					t.Errorf("PhaseMetrics[%s].CostUSD = %f, want %f", pm.PhaseID, pm.CostUSD, expectedCost)
+				}
+
+				expectedCycles := tt.cycles["bead-"+pm.PhaseID]
+				if pm.CyclesUsed != expectedCycles {
+					t.Errorf("PhaseMetrics[%s].CyclesUsed = %d, want %d", pm.PhaseID, pm.CyclesUsed, expectedCycles)
+				}
+			}
+
+			// Verify at least one wave was recorded.
+			if snap.TotalWaves == 0 {
+				t.Error("TotalWaves should be > 0 after Run completes")
+			}
+			if len(snap.Waves) == 0 {
+				t.Error("Waves should not be empty after Run completes")
+			}
+		})
+	}
+}
+
+func TestWorkerGroup_WithMetrics_FailedPhaseRecorded(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	n := &Nebula{
+		Dir:      dir,
+		Manifest: Manifest{Nebula: Info{Name: "fail-metrics-test"}},
+		Phases: []PhaseSpec{
+			{ID: "a", Body: "phase a"},
+			{ID: "b", Body: "phase b", DependsOn: []string{"a"}},
+		},
+	}
+
+	state := &State{
+		Version: 1,
+		Phases: map[string]*PhaseState{
+			"a": {BeadID: "bead-a", Status: PhaseStatusCreated},
+			"b": {BeadID: "bead-b", Status: PhaseStatusCreated},
+		},
+	}
+
+	runner := &mockRunner{err: errors.New("simulated failure")}
+	metrics := NewMetrics("fail-metrics-test")
+	wg := &WorkerGroup{
+		Runner:     runner,
+		Nebula:     n,
+		State:      state,
+		MaxWorkers: 1,
+		Metrics:    metrics,
+	}
+
+	_, err := wg.Run(context.Background())
+	if err != nil {
+		t.Fatalf("WorkerGroup.Run failed: %v", err)
+	}
+
+	snap := metrics.Snapshot()
+
+	// Phase a was started (should have a start record).
+	if snap.TotalPhases == 0 {
+		t.Error("TotalPhases should be > 0 even with failures")
+	}
+
+	// Phase a was started and should appear in Phases.
+	foundA := false
+	for _, pm := range snap.Phases {
+		if pm.PhaseID == "a" {
+			foundA = true
+		}
+	}
+	if !foundA {
+		t.Error("expected phase 'a' to appear in metrics even after failure")
+	}
+}
+
 func TestWorkerGroup_NilGater_NoPlanGate(t *testing.T) {
 	dir := t.TempDir()
 	n := &Nebula{
