@@ -40,11 +40,12 @@ func (d *DetailPanel) Update(msg tea.Msg) {
 	d.viewport, _ = d.viewport.Update(msg)
 }
 
-// View renders the detail panel.
+// View renders the detail panel with a rounded border.
 func (d DetailPanel) View() string {
 	header := ""
 	if d.title != "" {
 		header = styleDetailTitle.Render(d.title) + "\n"
 	}
-	return header + d.viewport.View()
+	content := header + d.viewport.View()
+	return styleDetailBorder.Render(content)
 }

@@ -26,19 +26,21 @@ func (s StatusBar) View() string {
 	var left string
 	if s.Total > 0 {
 		// Nebula mode.
-		left = fmt.Sprintf(" QUASAR  nebula: %s  %d/%d done", s.Name, s.Completed, s.Total)
+		left = " " + styleStatusLabel.Render("QUASAR") + "  " +
+			styleStatusValue.Render(fmt.Sprintf("nebula: %s  %d/%d done", s.Name, s.Completed, s.Total))
 	} else if s.BeadID != "" {
 		// Loop mode.
-		left = fmt.Sprintf(" QUASAR  task %s  cycle %d/%d", s.BeadID, s.Cycle, s.MaxCycles)
+		left = " " + styleStatusLabel.Render("QUASAR") + "  " +
+			styleStatusValue.Render(fmt.Sprintf("task %s  cycle %d/%d", s.BeadID, s.Cycle, s.MaxCycles))
 	} else {
-		left = " QUASAR"
+		left = " " + styleStatusLabel.Render("QUASAR")
 	}
 
 	var right string
 	if s.BudgetUSD > 0 {
-		right = fmt.Sprintf("$%.2f / $%.2f", s.CostUSD, s.BudgetUSD)
+		right = styleStatusCost.Render(fmt.Sprintf("$%.2f / $%.2f", s.CostUSD, s.BudgetUSD))
 	} else {
-		right = fmt.Sprintf("$%.2f", s.CostUSD)
+		right = styleStatusCost.Render(fmt.Sprintf("$%.2f", s.CostUSD))
 	}
 
 	if !s.StartTime.IsZero() {

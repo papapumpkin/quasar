@@ -12,10 +12,8 @@ func TestSemanticColorsDefined(t *testing.T) {
 	// Verify all semantic colors are non-empty strings.
 	colors := map[string]lipgloss.Color{
 		"colorPrimary":       colorPrimary,
-		"colorPrimaryBright": colorPrimaryBright,
 		"colorAccent":        colorAccent,
 		"colorSuccess":       colorSuccess,
-		"colorSuccessDim":    colorSuccessDim,
 		"colorDanger":        colorDanger,
 		"colorMuted":         colorMuted,
 		"colorMutedLight":    colorMutedLight,
@@ -25,7 +23,6 @@ func TestSemanticColorsDefined(t *testing.T) {
 		"colorSurfaceBright": colorSurfaceBright,
 		"colorSurfaceDim":    colorSurfaceDim,
 		"colorBlue":          colorBlue,
-		"colorMagenta":       colorMagenta,
 	}
 	for name, c := range colors {
 		if string(c) == "" {
@@ -187,17 +184,17 @@ func TestLoopViewUnselectedRowHasNoIndicator(t *testing.T) {
 
 	output := lv.View()
 	lines := strings.Split(output, "\n")
-	// Lines beyond the first should not start with the indicator.
-	for i, line := range lines {
-		if i == 0 {
-			continue // cursor is here
+
+	// Count how many lines contain the selection indicator.
+	// Only the cursor row (line 0) should have it.
+	indicatorCount := 0
+	for _, line := range lines {
+		if strings.Contains(line, selectionIndicator) {
+			indicatorCount++
 		}
-		trimmed := strings.TrimLeft(line, " ")
-		if strings.HasPrefix(trimmed, selectionIndicator) && i > 0 {
-			// Only the cursor row should have the indicator
-			// (but we can't easily check line-by-line with ANSI,
-			// so just verify at least one line has it).
-		}
+	}
+	if indicatorCount != 1 {
+		t.Errorf("expected exactly 1 line with selection indicator, got %d", indicatorCount)
 	}
 }
 

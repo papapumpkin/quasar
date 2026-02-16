@@ -5,10 +5,8 @@ import "github.com/charmbracelet/lipgloss"
 // Semantic color palette.
 var (
 	colorPrimary       = lipgloss.Color("#00BFFF") // Cyan — primary accent
-	colorPrimaryBright = lipgloss.Color("#5BC0EB") // Lighter cyan for highlights
 	colorAccent        = lipgloss.Color("#FFD700") // Gold — attention/gate
 	colorSuccess       = lipgloss.Color("#00E676") // Green — completed
-	colorSuccessDim    = lipgloss.Color("#2E7D32") // Muted green for backgrounds
 	colorDanger        = lipgloss.Color("#FF5252") // Red — errors/failures
 	colorMuted         = lipgloss.Color("#636363") // Gray — de-emphasized
 	colorMutedLight    = lipgloss.Color("#8C8C8C") // Lighter gray — normal text
@@ -18,7 +16,6 @@ var (
 	colorSurfaceBright = lipgloss.Color("#2A2A3C") // Lighter surface — breadcrumb bg
 	colorSurfaceDim    = lipgloss.Color("#181825") // Darkest surface — footer bg
 	colorBlue          = lipgloss.Color("#5B8DEF") // Blue — working/active
-	colorMagenta       = lipgloss.Color("#FF87FF") // Magenta — special accents
 )
 
 // Selection indicator prepended to the active row.
@@ -137,6 +134,7 @@ var (
 var (
 	styleFooter = lipgloss.NewStyle().
 			Foreground(colorMuted).
+			Background(colorSurfaceDim).
 			Border(lipgloss.NormalBorder(), true, false, false, false).
 			BorderForeground(colorMuted)
 
