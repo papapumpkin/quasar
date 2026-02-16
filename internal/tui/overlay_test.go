@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/aaronsalm/quasar/internal/loop"
 	"github.com/aaronsalm/quasar/internal/nebula"
 )
 
@@ -155,7 +157,7 @@ func TestNewCompletionFromLoopDone(t *testing.T) {
 	t.Run("max cycles error", func(t *testing.T) {
 		t.Parallel()
 		o := NewCompletionFromLoopDone(
-			MsgLoopDone{Err: errors.New("max cycles reached")},
+			MsgLoopDone{Err: loop.ErrMaxCycles},
 			10*time.Second, 1.0,
 		)
 
@@ -164,10 +166,22 @@ func TestNewCompletionFromLoopDone(t *testing.T) {
 		}
 	})
 
+	t.Run("wrapped max cycles error", func(t *testing.T) {
+		t.Parallel()
+		o := NewCompletionFromLoopDone(
+			MsgLoopDone{Err: fmt.Errorf("loop failed: %w", loop.ErrMaxCycles)},
+			10*time.Second, 1.0,
+		)
+
+		if o.Kind != CompletionMaxCycles {
+			t.Errorf("expected CompletionMaxCycles for wrapped error, got %d", o.Kind)
+		}
+	})
+
 	t.Run("budget exceeded error", func(t *testing.T) {
 		t.Parallel()
 		o := NewCompletionFromLoopDone(
-			MsgLoopDone{Err: errors.New("budget exceeded")},
+			MsgLoopDone{Err: loop.ErrBudgetExceeded},
 			10*time.Second, 1.0,
 		)
 
@@ -205,7 +219,7 @@ func TestNewCompletionFromNebulaDone(t *testing.T) {
 				{PhaseID: "b"},
 			},
 		}
-		o := NewCompletionFromNebulaDone(msg, 10*time.Second, 2.0)
+		o := NewCompletionFromNebulaDone(msg, 10*time.Second, 2.0, 2)
 
 		if o.Kind != CompletionSuccess {
 			t.Errorf("expected CompletionSuccess, got %d", o.Kind)
@@ -226,7 +240,7 @@ func TestNewCompletionFromNebulaDone(t *testing.T) {
 				{PhaseID: "b", Err: errors.New("failed")},
 			},
 		}
-		o := NewCompletionFromNebulaDone(msg, 10*time.Second, 2.0)
+		o := NewCompletionFromNebulaDone(msg, 10*time.Second, 2.0, 2)
 
 		if o.Kind != CompletionError {
 			t.Errorf("expected CompletionError when failures present, got %d", o.Kind)
@@ -247,13 +261,202 @@ func TestNewCompletionFromNebulaDone(t *testing.T) {
 				{PhaseID: "a"},
 			},
 		}
-		o := NewCompletionFromNebulaDone(msg, 10*time.Second, 2.0)
+		o := NewCompletionFromNebulaDone(msg, 10*time.Second, 2.0, 1)
 
 		if o.Kind != CompletionError {
 			t.Errorf("expected CompletionError, got %d", o.Kind)
 		}
 		if o.Message != "nebula failed" {
 			t.Errorf("expected error message, got %q", o.Message)
+		}
+	})
+
+	t.Run("computes skipped phases from total", func(t *testing.T) {
+		t.Parallel()
+		msg := MsgNebulaDone{
+			Results: []nebula.WorkerResult{
+				{PhaseID: "a"},
+				{PhaseID: "b", Err: errors.New("failed")},
+			},
+		}
+		o := NewCompletionFromNebulaDone(msg, 10*time.Second, 2.0, 5)
+
+		if o.DoneCount != 1 {
+			t.Errorf("expected DoneCount=1, got %d", o.DoneCount)
+		}
+		if o.FailedCount != 1 {
+			t.Errorf("expected FailedCount=1, got %d", o.FailedCount)
+		}
+		if o.SkippedCount != 3 {
+			t.Errorf("expected SkippedCount=3, got %d", o.SkippedCount)
+		}
+	})
+}
+
+// --- Nebula picker tests ---
+
+func TestCompletionOverlayNebulaPicker(t *testing.T) {
+	t.Parallel()
+
+	choices := []NebulaChoice{
+		{Name: "auth-feature", Path: "/tmp/auth", Status: "ready", Phases: 5, Done: 0},
+		{Name: "tui-visual", Path: "/tmp/tui", Status: "in_progress", Phases: 7, Done: 3},
+		{Name: "backend-api", Path: "/tmp/api", Status: "done", Phases: 4, Done: 4},
+	}
+
+	t.Run("shows nebula list when choices available", func(t *testing.T) {
+		t.Parallel()
+		o := &CompletionOverlay{
+			Kind:          CompletionSuccess,
+			NebulaChoices: choices,
+			PickerCursor:  0,
+		}
+
+		view := o.View(80, 30)
+
+		if !strings.Contains(view, "Run another nebula?") {
+			t.Error("expected picker header")
+		}
+		if !strings.Contains(view, "auth-feature") {
+			t.Error("expected auth-feature in list")
+		}
+		if !strings.Contains(view, "tui-visual") {
+			t.Error("expected tui-visual in list")
+		}
+		if !strings.Contains(view, "backend-api") {
+			t.Error("expected backend-api in list")
+		}
+		if !strings.Contains(view, "enter:launch") {
+			t.Error("expected launch hint")
+		}
+	})
+
+	t.Run("shows cursor indicator on selected item", func(t *testing.T) {
+		t.Parallel()
+		o := &CompletionOverlay{
+			Kind:          CompletionSuccess,
+			NebulaChoices: choices,
+			PickerCursor:  1,
+		}
+
+		view := o.View(80, 30)
+
+		if !strings.Contains(view, "▎") {
+			t.Error("expected cursor indicator in view")
+		}
+	})
+
+	t.Run("no picker when no choices", func(t *testing.T) {
+		t.Parallel()
+		o := &CompletionOverlay{
+			Kind: CompletionSuccess,
+		}
+
+		view := o.View(80, 24)
+
+		if strings.Contains(view, "Run another nebula?") {
+			t.Error("should not show picker header without choices")
+		}
+		if !strings.Contains(view, "q to exit") {
+			t.Error("expected standard exit hint")
+		}
+	})
+}
+
+func TestOverlayPickerKeyHandling(t *testing.T) {
+	t.Parallel()
+
+	choices := []NebulaChoice{
+		{Name: "first", Path: "/tmp/first", Status: "ready", Phases: 3},
+		{Name: "second", Path: "/tmp/second", Status: "ready", Phases: 2},
+	}
+
+	t.Run("down key moves cursor in picker", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeNebula)
+		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, NebulaChoices: choices}
+		m.AvailableNebulae = choices
+		m.PickerCursor = 0
+		m.Width = 80
+		m.Height = 24
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		rm := result.(AppModel)
+
+		if rm.PickerCursor != 1 {
+			t.Errorf("expected cursor at 1, got %d", rm.PickerCursor)
+		}
+	})
+
+	t.Run("up key moves cursor up in picker", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeNebula)
+		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, NebulaChoices: choices}
+		m.AvailableNebulae = choices
+		m.PickerCursor = 1
+		m.Width = 80
+		m.Height = 24
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
+		rm := result.(AppModel)
+
+		if rm.PickerCursor != 0 {
+			t.Errorf("expected cursor at 0, got %d", rm.PickerCursor)
+		}
+	})
+
+	t.Run("cursor does not go below list", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeNebula)
+		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, NebulaChoices: choices}
+		m.AvailableNebulae = choices
+		m.PickerCursor = 1
+		m.Width = 80
+		m.Height = 24
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		rm := result.(AppModel)
+
+		if rm.PickerCursor != 1 {
+			t.Errorf("expected cursor clamped at 1, got %d", rm.PickerCursor)
+		}
+	})
+
+	t.Run("cursor does not go above 0", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeNebula)
+		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, NebulaChoices: choices}
+		m.AvailableNebulae = choices
+		m.PickerCursor = 0
+		m.Width = 80
+		m.Height = 24
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
+		rm := result.(AppModel)
+
+		if rm.PickerCursor != 0 {
+			t.Errorf("expected cursor clamped at 0, got %d", rm.PickerCursor)
+		}
+	})
+
+	t.Run("enter selects nebula and quits", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeNebula)
+		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, NebulaChoices: choices}
+		m.AvailableNebulae = choices
+		m.PickerCursor = 1
+		m.Width = 80
+		m.Height = 24
+
+		result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		rm := result.(AppModel)
+
+		if rm.NextNebula != "/tmp/second" {
+			t.Errorf("expected NextNebula='/tmp/second', got %q", rm.NextNebula)
+		}
+		// cmd should be tea.Quit.
+		if cmd == nil {
+			t.Error("expected quit command")
 		}
 	})
 }
@@ -407,7 +610,7 @@ func TestOverlayAppearsOnLoopDone(t *testing.T) {
 		m.Width = 80
 		m.Height = 24
 
-		updated, _ := m.Update(MsgLoopDone{Err: errors.New("max cycles reached")})
+		updated, _ := m.Update(MsgLoopDone{Err: loop.ErrMaxCycles})
 		model := updated.(AppModel)
 
 		if model.Overlay == nil {
@@ -619,26 +822,105 @@ func TestCenterOverlay(t *testing.T) {
 	})
 }
 
+func TestCompositeOverlay(t *testing.T) {
+	t.Parallel()
+
+	t.Run("overlay replaces background lines", func(t *testing.T) {
+		t.Parallel()
+		bg := "line1\nline2\nline3\nline4\nline5"
+		overlay := "OVR"
+
+		result := compositeOverlay(bg, overlay, 10, 5)
+		lines := strings.Split(result, "\n")
+
+		if len(lines) != 5 {
+			t.Fatalf("expected 5 lines, got %d", len(lines))
+		}
+		// Overlay should replace the center line.
+		found := false
+		for _, line := range lines {
+			if strings.Contains(line, "OVR") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("expected overlay content to appear in composited output")
+		}
+	})
+
+	t.Run("background lines are preserved around overlay", func(t *testing.T) {
+		t.Parallel()
+		bg := "bg0\nbg1\nbg2\nbg3\nbg4\nbg5\nbg6\nbg7\nbg8\nbg9"
+		overlay := "X"
+
+		result := compositeOverlay(bg, overlay, 10, 10)
+		lines := strings.Split(result, "\n")
+
+		// First line should still be the background.
+		if !strings.Contains(lines[0], "bg0") {
+			t.Errorf("expected first line to be background, got %q", lines[0])
+		}
+	})
+}
+
 func TestBuildNebulaResultCounts(t *testing.T) {
 	t.Parallel()
 
-	results := []nebula.WorkerResult{
-		{PhaseID: "a"},
-		{PhaseID: "b", Err: errors.New("fail")},
-		{PhaseID: "c"},
-	}
+	t.Run("counts done and failed", func(t *testing.T) {
+		t.Parallel()
+		results := []nebula.WorkerResult{
+			{PhaseID: "a"},
+			{PhaseID: "b", Err: errors.New("fail")},
+			{PhaseID: "c"},
+		}
 
-	done, failed, skipped := buildNebulaResultCounts(results)
+		done, failed, skipped := buildNebulaResultCounts(results, 3)
 
-	if done != 2 {
-		t.Errorf("expected done=2, got %d", done)
-	}
-	if failed != 1 {
-		t.Errorf("expected failed=1, got %d", failed)
-	}
-	if skipped != 0 {
-		t.Errorf("expected skipped=0, got %d", skipped)
-	}
+		if done != 2 {
+			t.Errorf("expected done=2, got %d", done)
+		}
+		if failed != 1 {
+			t.Errorf("expected failed=1, got %d", failed)
+		}
+		if skipped != 0 {
+			t.Errorf("expected skipped=0, got %d", skipped)
+		}
+	})
+
+	t.Run("computes skipped from total phases", func(t *testing.T) {
+		t.Parallel()
+		results := []nebula.WorkerResult{
+			{PhaseID: "a"},
+			{PhaseID: "b", Err: errors.New("fail")},
+		}
+
+		done, failed, skipped := buildNebulaResultCounts(results, 5)
+
+		if done != 1 {
+			t.Errorf("expected done=1, got %d", done)
+		}
+		if failed != 1 {
+			t.Errorf("expected failed=1, got %d", failed)
+		}
+		if skipped != 3 {
+			t.Errorf("expected skipped=3, got %d", skipped)
+		}
+	})
+
+	t.Run("skipped never negative", func(t *testing.T) {
+		t.Parallel()
+		results := []nebula.WorkerResult{
+			{PhaseID: "a"},
+			{PhaseID: "b"},
+		}
+
+		_, _, skipped := buildNebulaResultCounts(results, 0)
+
+		if skipped != 0 {
+			t.Errorf("expected skipped=0 when totalPhases=0, got %d", skipped)
+		}
+	})
 }
 
 // Ensure the q key binding matches.

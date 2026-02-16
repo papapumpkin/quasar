@@ -1,13 +1,16 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/aaronsalm/quasar/internal/loop"
 	"github.com/aaronsalm/quasar/internal/nebula"
 )
 
@@ -21,6 +24,9 @@ type CompletionOverlay struct {
 	DoneCount    int
 	FailedCount  int
 	SkippedCount int
+	// Nebula picker state.
+	NebulaChoices []NebulaChoice
+	PickerCursor  int
 }
 
 // CompletionKind classifies the completion outcome for styling.
@@ -67,9 +73,22 @@ func (o *CompletionOverlay) View(width, height int) string {
 		b.WriteString("\n")
 	}
 
+	// Nebula picker (if available).
+	if len(o.NebulaChoices) > 0 {
+		b.WriteString("\n")
+		b.WriteString(styleOverlayHint.Render("Run another nebula?"))
+		b.WriteString("\n\n")
+		b.WriteString(o.renderNebulaPicker())
+		b.WriteString("\n")
+	}
+
 	// Exit hint.
 	b.WriteString("\n")
-	b.WriteString(styleOverlayHint.Render("Press q to exit"))
+	if len(o.NebulaChoices) > 0 {
+		b.WriteString(styleOverlayHint.Render("enter:launch  q:quit"))
+	} else {
+		b.WriteString(styleOverlayHint.Render("Press q to exit"))
+	}
 
 	// Render the box.
 	boxContent := style.Render(b.String())
@@ -136,30 +155,29 @@ func NewCompletionFromLoopDone(msg MsgLoopDone, duration time.Duration, costUSD 
 		return o
 	}
 
-	errMsg := msg.Err.Error()
 	switch {
-	case strings.Contains(errMsg, "max cycles"):
+	case errors.Is(msg.Err, loop.ErrMaxCycles):
 		o.Kind = CompletionMaxCycles
-		o.Message = errMsg
-	case strings.Contains(errMsg, "budget"):
+		o.Message = msg.Err.Error()
+	case errors.Is(msg.Err, loop.ErrBudgetExceeded):
 		o.Kind = CompletionBudgetExceeded
-		o.Message = errMsg
+		o.Message = msg.Err.Error()
 	default:
 		o.Kind = CompletionError
-		o.Message = errMsg
+		o.Message = msg.Err.Error()
 	}
 	return o
 }
 
 // NewCompletionFromNebulaDone creates a CompletionOverlay from a MsgNebulaDone.
-func NewCompletionFromNebulaDone(msg MsgNebulaDone, duration time.Duration, costUSD float64) *CompletionOverlay {
+func NewCompletionFromNebulaDone(msg MsgNebulaDone, duration time.Duration, costUSD float64, totalPhases int) *CompletionOverlay {
 	o := &CompletionOverlay{
 		Duration: duration,
 		CostUSD:  costUSD,
 	}
 
 	// Count results by outcome.
-	o.DoneCount, o.FailedCount, o.SkippedCount = buildNebulaResultCounts(msg.Results)
+	o.DoneCount, o.FailedCount, o.SkippedCount = buildNebulaResultCounts(msg.Results, totalPhases)
 
 	if msg.Err != nil {
 		o.Kind = CompletionError
@@ -171,6 +189,42 @@ func NewCompletionFromNebulaDone(msg MsgNebulaDone, duration time.Duration, cost
 	}
 
 	return o
+}
+
+// renderNebulaPicker renders the selectable list of available nebulae.
+func (o *CompletionOverlay) renderNebulaPicker() string {
+	var b strings.Builder
+	for i, c := range o.NebulaChoices {
+		prefix := "  "
+		if i == o.PickerCursor {
+			prefix = "▎ "
+		}
+
+		// Format status label.
+		var statusLabel string
+		switch c.Status {
+		case "ready":
+			statusLabel = fmt.Sprintf("%d/%d ready", c.Done, c.Phases)
+		case "in_progress":
+			statusLabel = fmt.Sprintf("%d/%d in_progress", c.Done, c.Phases)
+		case "done":
+			statusLabel = "done"
+		default:
+			statusLabel = c.Status
+		}
+
+		line := fmt.Sprintf("%s%-20s %s", prefix, c.Name, statusLabel)
+		if i == o.PickerCursor {
+			line = lipgloss.NewStyle().Bold(true).Render(line)
+		} else {
+			line = styleDetailDim.Render(line)
+		}
+		b.WriteString(line)
+		if i < len(o.NebulaChoices)-1 {
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
 }
 
 // centerOverlay places content in the center of the given dimensions.
@@ -200,6 +254,36 @@ func centerOverlay(content string, width, height int) string {
 		Render(content)
 }
 
+// compositeOverlay renders the overlay box on top of the dimmed background.
+// It splits both into lines and replaces the background lines where the
+// overlay content appears, producing a layered visual effect.
+func compositeOverlay(bg, overlay string, _, height int) string {
+	bgLines := strings.Split(bg, "\n")
+	olLines := strings.Split(overlay, "\n")
+
+	// Pad background to fill the terminal height.
+	for len(bgLines) < height {
+		bgLines = append(bgLines, "")
+	}
+
+	// Compute vertical offset to center the overlay.
+	olHeight := len(olLines)
+	topOffset := 0
+	if olHeight < height {
+		topOffset = (height - olHeight) / 2
+	}
+
+	// Replace background lines with overlay lines.
+	for i, olLine := range olLines {
+		row := topOffset + i
+		if row >= 0 && row < len(bgLines) {
+			bgLines[row] = olLine
+		}
+	}
+
+	return strings.Join(bgLines[:height], "\n")
+}
+
 // Toast represents a brief notification displayed at the bottom of the screen.
 type Toast struct {
 	ID      int
@@ -210,14 +294,13 @@ type Toast struct {
 // toastDismissDelay is how long a toast stays visible.
 const toastDismissDelay = 5 * time.Second
 
-// nextToastID is a simple counter for toast IDs.
-var nextToastID int
+// nextToastID is an atomic counter for toast IDs, safe for concurrent use in tests.
+var nextToastID atomic.Int32
 
 // NewToast creates a new toast notification and returns it along with
 // a tea.Cmd that will fire MsgToastExpired after the dismiss delay.
 func NewToast(message string, isError bool) (Toast, tea.Cmd) {
-	nextToastID++
-	id := nextToastID
+	id := int(nextToastID.Add(1))
 	t := Toast{
 		ID:      id,
 		Message: message,
@@ -260,13 +343,18 @@ func removeToast(toasts []Toast, id int) []Toast {
 }
 
 // buildNebulaResultCounts counts done, failed, and skipped phases from worker results.
-func buildNebulaResultCounts(results []nebula.WorkerResult) (done, failed, skipped int) {
+// Skipped is inferred as totalPhases minus the phases that reported a result (done + failed).
+func buildNebulaResultCounts(results []nebula.WorkerResult, totalPhases int) (done, failed, skipped int) {
 	for _, r := range results {
 		if r.Err != nil {
 			failed++
 		} else {
 			done++
 		}
+	}
+	skipped = totalPhases - done - failed
+	if skipped < 0 {
+		skipped = 0
 	}
 	return done, failed, skipped
 }

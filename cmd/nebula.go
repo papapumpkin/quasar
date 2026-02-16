@@ -319,25 +319,128 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	if useTUI {
-		// Run workers in a goroutine; block on TUI.
-		go func() {
-			results, runErr := wg.Run(ctx)
-			tuiProgram.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
-		}()
+		for {
+			// Run workers in a goroutine; block on TUI.
+			go func() {
+				results, runErr := wg.Run(ctx)
+				tuiProgram.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
+			}()
 
-		finalModel, tuiErr := tuiProgram.Run()
-		// TUI exited — cancel context to stop any running workers.
-		cancel()
-		if tuiErr != nil {
-			return fmt.Errorf("TUI error: %w", tuiErr)
-		}
-		if m, ok := finalModel.(tui.AppModel); ok && m.DoneErr != nil {
-			if !errors.Is(m.DoneErr, nebula.ErrManualStop) {
-				printer.Error(m.DoneErr.Error())
+			finalModel, tuiErr := tuiProgram.Run()
+			// TUI exited — cancel context to stop any running workers.
+			cancel()
+			if tuiErr != nil {
+				return fmt.Errorf("TUI error: %w", tuiErr)
 			}
-			return m.DoneErr
+
+			appModel, ok := finalModel.(tui.AppModel)
+			if !ok {
+				return nil
+			}
+
+			// If the user selected a next nebula, re-launch with it.
+			if appModel.NextNebula != "" {
+				nextDir := appModel.NextNebula
+
+				nextN, loadErr := nebula.Load(nextDir)
+				if loadErr != nil {
+					printer.Error(fmt.Sprintf("failed to load nebula: %v", loadErr))
+					return loadErr
+				}
+				nextState, loadErr := nebula.LoadState(nextDir)
+				if loadErr != nil {
+					printer.Error(fmt.Sprintf("failed to load state: %v", loadErr))
+					return loadErr
+				}
+
+				// Rebuild context and worker group for the new nebula.
+				ctx, cancel = context.WithCancel(context.Background())
+				defer cancel() //nolint:gocritic // deferred cancel is fine in a bounded loop
+
+				nextPlan, planErr := nebula.BuildPlan(ctx, nextN, nextState, client)
+				if planErr != nil {
+					printer.Error(fmt.Sprintf("failed to build plan: %v", planErr))
+					return planErr
+				}
+				if nextPlan.HasChanges() {
+					if applyErr := nebula.Apply(ctx, nextPlan, nextN, nextState, client); applyErr != nil {
+						printer.Error(fmt.Sprintf("failed to apply: %v", applyErr))
+						return applyErr
+					}
+				}
+
+				// Determine work dir for next nebula.
+				nextWorkDir := workDir
+				if nextN.Manifest.Context.WorkingDir != "" {
+					nextWorkDir = nextN.Manifest.Context.WorkingDir
+				}
+
+				phases := make([]tui.PhaseInfo, 0, len(nextN.Phases))
+				for _, p := range nextN.Phases {
+					phases = append(phases, tui.PhaseInfo{
+						ID:        p.ID,
+						Title:     p.Title,
+						DependsOn: p.DependsOn,
+					})
+				}
+				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir)
+
+				wg = &nebula.WorkerGroup{
+					Nebula:       nextN,
+					State:        nextState,
+					MaxWorkers:   maxWorkers,
+					GlobalCycles: cfg.MaxReviewCycles,
+					GlobalBudget: cfg.MaxBudgetUSD,
+					GlobalModel:  cfg.Model,
+					Runner: &tuiLoopAdapter{
+						program:      tuiProgram,
+						invoker:      claudeInv,
+						beads:        client,
+						maxCycles:    cfg.MaxReviewCycles,
+						maxBudget:    cfg.MaxBudgetUSD,
+						model:        cfg.Model,
+						coderPrompt:  coderPrompt,
+						reviewPrompt: reviewerPrompt,
+						workDir:      nextWorkDir,
+					},
+					Logger: io.Discard,
+					Gater:  tui.NewTUIGater(tuiProgram),
+				}
+				wg.OnProgress = func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
+					tuiProgram.Send(tui.MsgNebulaProgress{
+						Completed:    completed,
+						Total:        total,
+						OpenBeads:    openBeads,
+						ClosedBeads:  closedBeads,
+						TotalCostUSD: totalCostUSD,
+					})
+				}
+
+				// Create a new watcher for the next nebula.
+				if w != nil {
+					w.Stop()
+				}
+				newW, watchErr := nebula.NewWatcher(nextDir)
+				if watchErr == nil {
+					if startErr := newW.Start(); startErr == nil {
+						wg.Watcher = newW
+						w = newW
+					}
+				}
+
+				dir = nextDir
+				n = nextN
+				continue
+			}
+
+			if appModel.DoneErr != nil {
+				if !errors.Is(appModel.DoneErr, nebula.ErrManualStop) {
+					printer.Error(appModel.DoneErr.Error())
+				}
+				return appModel.DoneErr
+			}
+			return nil
 		}
-		return nil
 	}
 
 	// Stderr path: install signal handler for graceful shutdown.

@@ -1,0 +1,32 @@
+[nebula]
+name = "Live Nebula Editing"
+description = "Dynamic phase editing during nebula execution: refactor in-progress phases with graceful shutdown, hot-add new phases into the live DAG, and a nebula architect agent that walks users through creation."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "nebula", "live-editing"]
+
+[execution]
+max_workers = 2
+max_review_cycles = 5
+max_budget_usd = 30.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Allow users to edit in-progress phase files with graceful cycle completion and context re-injection",
+    "Allow users to add brand new phase files to a running nebula with dynamic DAG insertion",
+    "Provide a nebula architect agent that helps users create and refactor phases interactively",
+    "Make the detail panel properly scrollable for content larger than the viewport",
+    "Keep as much logic in code as possible — the architect agent focuses on creation, code handles DAG placement",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "Build on existing Watcher infrastructure (ChangeAdded/ChangeModified events)",
+    "Graceful shutdown means the current cycle completes — never kill a running agent",
+    "The loop and nebula packages must not import internal/tui",
+    "All new code must have tests",
+    "Use only charmbracelet ecosystem for TUI — no other TUI deps",
+]

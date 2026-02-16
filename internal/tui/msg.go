@@ -211,6 +211,11 @@ type MsgNebulaDone struct {
 	Err     error
 }
 
+// MsgNebulaChoicesLoaded delivers available nebulae after discovery completes.
+type MsgNebulaChoicesLoaded struct {
+	Choices []NebulaChoice
+}
+
 // MsgToastExpired signals that a toast notification should be dismissed.
 type MsgToastExpired struct {
 	ID int

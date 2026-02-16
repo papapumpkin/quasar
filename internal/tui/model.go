@@ -62,6 +62,11 @@ type AppModel struct {
 	Paused    bool   // whether execution is paused
 	Stopping  bool   // whether a stop has been requested
 	NebulaDir string // path to nebula directory for intervention files
+
+	// Nebula picker state (post-completion).
+	AvailableNebulae []NebulaChoice // populated on MsgNebulaDone via discovery
+	NextNebula       string         // set when user selects one; read after Run() returns
+	PickerCursor     int            // cursor position in the nebula picker list
 }
 
 // NewAppModel creates a root model configured for the given mode.
@@ -249,6 +254,20 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.DoneErr = msg.Err
 		m.StatusBar.FinalElapsed = time.Since(m.StartTime).Truncate(time.Second)
 		m.Overlay = NewCompletionFromNebulaDone(msg, time.Since(m.StartTime), m.StatusBar.CostUSD, len(m.NebulaView.Phases))
+		// Discover sibling nebulae in background.
+		if m.NebulaDir != "" {
+			nebulaDir := m.NebulaDir
+			cmds = append(cmds, func() tea.Msg {
+				choices, _ := DiscoverNebulae(nebulaDir)
+				return MsgNebulaChoicesLoaded{Choices: choices}
+			})
+		}
+
+	case MsgNebulaChoicesLoaded:
+		m.AvailableNebulae = msg.Choices
+		if m.Overlay != nil {
+			m.Overlay.NebulaChoices = msg.Choices
+		}
 
 	// --- Toast auto-dismiss ---
 	case MsgToastExpired:
@@ -303,10 +322,26 @@ func clampCursors(m *AppModel) {
 
 // handleKey processes keyboard input.
 func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Completion overlay takes precedence — only q to exit.
+	// Completion overlay takes precedence — q to exit, arrow keys for picker.
 	if m.Overlay != nil {
-		if key.Matches(msg, m.Keys.Quit) {
+		switch {
+		case key.Matches(msg, m.Keys.Quit):
 			return m, tea.Quit
+		case key.Matches(msg, m.Keys.Up):
+			if len(m.AvailableNebulae) > 0 && m.PickerCursor > 0 {
+				m.PickerCursor--
+				m.Overlay.PickerCursor = m.PickerCursor
+			}
+		case key.Matches(msg, m.Keys.Down):
+			if len(m.AvailableNebulae) > 0 && m.PickerCursor < len(m.AvailableNebulae)-1 {
+				m.PickerCursor++
+				m.Overlay.PickerCursor = m.PickerCursor
+			}
+		case key.Matches(msg, m.Keys.Enter):
+			if len(m.AvailableNebulae) > 0 && m.PickerCursor < len(m.AvailableNebulae) {
+				m.NextNebula = m.AvailableNebulae[m.PickerCursor].Path
+				return m, tea.Quit
+			}
 		}
 		return m, nil
 	}
