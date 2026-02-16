@@ -52,19 +52,21 @@ type Defaults struct {
 
 // PhaseSpec is parsed from each *.md file's TOML frontmatter.
 type PhaseSpec struct {
-	ID              string   `toml:"id"`
-	Title           string   `toml:"title"`
-	Type            string   `toml:"type"`
-	Priority        int      `toml:"priority"`
-	DependsOn       []string `toml:"depends_on"`
-	Labels          []string `toml:"labels"`
-	Assignee        string   `toml:"assignee"`
-	MaxReviewCycles int      `toml:"max_review_cycles"` // 0 = use default
-	MaxBudgetUSD    float64  `toml:"max_budget_usd"`    // 0 = use default
-	Model           string   `toml:"model"`             // "" = use default
-	Gate            GateMode `toml:"gate"`              // "" = inherit from manifest
-	Body            string   // Markdown body after +++ block
-	SourceFile      string   // Relative path for error context
+	ID                string   `toml:"id"`
+	Title             string   `toml:"title"`
+	Type              string   `toml:"type"`
+	Priority          int      `toml:"priority"`
+	DependsOn         []string `toml:"depends_on"`
+	Labels            []string `toml:"labels"`
+	Assignee          string   `toml:"assignee"`
+	MaxReviewCycles   int      `toml:"max_review_cycles"`   // 0 = use default
+	MaxBudgetUSD      float64  `toml:"max_budget_usd"`      // 0 = use default
+	Model             string   `toml:"model"`               // "" = use default
+	Gate              GateMode `toml:"gate"`                // "" = inherit from manifest
+	Scope             []string `toml:"scope"`               // Glob patterns for owned files/dirs
+	AllowScopeOverlap bool     `toml:"allow_scope_overlap"` // Override: permit overlap
+	Body              string   // Markdown body after +++ block
+	SourceFile        string   // Relative path for error context
 }
 
 // Nebula is the fully parsed representation of a nebula directory.

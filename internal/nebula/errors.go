@@ -22,6 +22,8 @@ var (
 	ErrInvalidGate = errors.New("invalid gate mode")
 	// ErrPlanRejected indicates the human rejected the execution plan before any phases ran.
 	ErrPlanRejected = errors.New("execution plan rejected")
+	// ErrScopeOverlap indicates two or more phases declare overlapping file ownership scopes.
+	ErrScopeOverlap = errors.New("scope overlap")
 )
 
 // ValidationError records a validation problem with source context.

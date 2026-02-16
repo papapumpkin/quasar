@@ -148,3 +148,33 @@ func (g *Graph) ComputeWaves() ([]Wave, error) {
 
 	return waves, nil
 }
+
+// HasPath reports whether there is a directed path from 'from' to 'to'
+// in the dependency graph (i.e., 'from' transitively depends on 'to').
+func (g *Graph) HasPath(from, to string) bool {
+	if from == to {
+		return false
+	}
+	visited := make(map[string]bool)
+	queue := []string{from}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for dep := range g.adjacency[cur] {
+			if dep == to {
+				return true
+			}
+			if !visited[dep] {
+				visited[dep] = true
+				queue = append(queue, dep)
+			}
+		}
+	}
+	return false
+}
+
+// Connected reports whether a and b are connected in either direction
+// (i.e., one transitively depends on the other).
+func (g *Graph) Connected(a, b string) bool {
+	return g.HasPath(a, b) || g.HasPath(b, a)
+}
