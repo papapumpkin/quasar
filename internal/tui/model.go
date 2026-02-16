@@ -116,10 +116,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.LoopView.Spinner, cmd = m.LoopView.Spinner.Update(msg)
 		cmds = append(cmds, cmd)
-		m.NebulaView.Spinner, _ = m.NebulaView.Spinner.Update(msg)
+		m.NebulaView.Spinner, cmd = m.NebulaView.Spinner.Update(msg)
+		cmds = append(cmds, cmd)
 		// Update spinners in per-phase loop views.
 		for _, lv := range m.PhaseLoops {
-			lv.Spinner, _ = lv.Spinner.Update(msg)
+			lv.Spinner, cmd = lv.Spinner.Update(msg)
+			cmds = append(cmds, cmd)
 		}
 
 	case MsgTick:

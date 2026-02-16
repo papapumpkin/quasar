@@ -211,10 +211,7 @@ type MsgNebulaDone struct {
 	Err     error
 }
 
-// MsgPauseToggled is sent when the user toggles pause state via the TUI.
-type MsgPauseToggled struct {
-	Paused bool
+// MsgToastExpired signals that a toast notification should be dismissed.
+type MsgToastExpired struct {
+	ID int
 }
-
-// MsgStopRequested is sent when the user requests a stop via the TUI.
-type MsgStopRequested struct{}

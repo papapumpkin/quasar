@@ -115,6 +115,43 @@ var (
 
 	styleDetailDim = lipgloss.NewStyle().
 			Foreground(colorMuted)
+
+	// styleDetailHeader styles the contextual header block above content.
+	styleDetailHeader = lipgloss.NewStyle().
+				Foreground(colorMutedLight)
+
+	// styleDetailHeaderLabel styles labels in the header (e.g. "role:", "cost:").
+	styleDetailHeaderLabel = lipgloss.NewStyle().
+				Foreground(colorPrimary).
+				Bold(true)
+
+	// styleDetailHeaderValue styles values in the header.
+	styleDetailHeaderValue = lipgloss.NewStyle().
+				Foreground(colorWhite)
+
+	// styleHighlightApproved styles "APPROVED" matches in agent output.
+	styleHighlightApproved = lipgloss.NewStyle().
+				Foreground(colorSuccess).
+				Bold(true)
+
+	// styleHighlightIssue styles "ISSUE:" matches in agent output.
+	styleHighlightIssue = lipgloss.NewStyle().
+				Foreground(colorAccent).
+				Bold(true)
+
+	// styleHighlightCritical styles "SEVERITY: critical" matches in agent output.
+	styleHighlightCritical = lipgloss.NewStyle().
+				Foreground(colorDanger).
+				Bold(true)
+
+	// styleScrollIndicator styles the scroll up/down hints.
+	styleScrollIndicator = lipgloss.NewStyle().
+				Foreground(colorMuted).
+				Italic(true)
+
+	// styleDetailSep styles the separator between header and body.
+	styleDetailSep = lipgloss.NewStyle().
+			Foreground(colorMuted)
 )
 
 // Gate prompt styles.
@@ -163,3 +200,38 @@ var (
 var styleSectionBorder = lipgloss.NewStyle().
 	Border(lipgloss.NormalBorder(), true, false, false, false).
 	BorderForeground(colorMuted)
+
+// Completion overlay styles.
+var (
+	styleOverlaySuccess = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(colorSuccess).
+				Padding(1, 3)
+
+	styleOverlayWarning = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(colorAccent).
+				Padding(1, 3)
+
+	styleOverlayError = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(colorDanger).
+				Padding(1, 3)
+
+	styleOverlayTitle = lipgloss.NewStyle().
+				Bold(true)
+
+	styleOverlayHint = lipgloss.NewStyle().
+				Foreground(colorMuted).
+				Italic(true)
+
+	styleOverlayDimmed = lipgloss.NewStyle().
+				Foreground(colorMuted)
+)
+
+// Toast notification styles.
+var styleToast = lipgloss.NewStyle().
+	Background(colorDanger).
+	Foreground(colorBrightWhite).
+	Bold(true).
+	Padding(0, 1)
