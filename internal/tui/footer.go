@@ -20,7 +20,7 @@ func (f Footer) View() string {
 			continue
 		}
 		help := b.Help()
-		part := styleFooterKey.Render(help.Key) + styleFooterSep.Render(":") + styleFooter.Render(help.Desc)
+		part := styleFooterKey.Render(help.Key) + styleFooterSep.Render(":") + styleFooterDesc.Render(help.Desc)
 		parts = append(parts, part)
 	}
 	line := strings.Join(parts, styleFooterSep.Render("  "))

@@ -2,116 +2,156 @@ package tui
 
 import "github.com/charmbracelet/lipgloss"
 
-// Color palette.
+// Semantic color palette.
 var (
-	colorCyan    = lipgloss.Color("#00BFFF")
-	colorBlue    = lipgloss.Color("#5B8DEF")
-	colorYellow  = lipgloss.Color("#FFD700")
-	colorGreen   = lipgloss.Color("#00FF87")
-	colorRed     = lipgloss.Color("#FF5F5F")
-	colorMagenta = lipgloss.Color("#FF87FF")
-	colorDim     = lipgloss.Color("#666666")
-	colorWhite   = lipgloss.Color("#FFFFFF")
+	colorPrimary       = lipgloss.Color("#00BFFF") // Cyan — primary accent
+	colorPrimaryBright = lipgloss.Color("#5BC0EB") // Lighter cyan for highlights
+	colorAccent        = lipgloss.Color("#FFD700") // Gold — attention/gate
+	colorSuccess       = lipgloss.Color("#00E676") // Green — completed
+	colorSuccessDim    = lipgloss.Color("#2E7D32") // Muted green for backgrounds
+	colorDanger        = lipgloss.Color("#FF5252") // Red — errors/failures
+	colorMuted         = lipgloss.Color("#636363") // Gray — de-emphasized
+	colorMutedLight    = lipgloss.Color("#8C8C8C") // Lighter gray — normal text
+	colorWhite         = lipgloss.Color("#EEEEEE") // Off-white — primary text
+	colorBrightWhite   = lipgloss.Color("#FFFFFF") // Pure white — emphatic text
+	colorSurface       = lipgloss.Color("#1E1E2E") // Dark surface — status bar bg
+	colorSurfaceBright = lipgloss.Color("#2A2A3C") // Lighter surface — breadcrumb bg
+	colorSurfaceDim    = lipgloss.Color("#181825") // Darkest surface — footer bg
+	colorBlue          = lipgloss.Color("#5B8DEF") // Blue — working/active
+	colorMagenta       = lipgloss.Color("#FF87FF") // Magenta — special accents
 )
 
-// Status bar styles.
+// Selection indicator prepended to the active row.
+const selectionIndicator = "▎"
+
+// Status icons for phase/agent states.
+const (
+	iconDone    = "✓"
+	iconFailed  = "✗"
+	iconWorking = "◎"
+	iconWaiting = "·"
+	iconGate    = "⊘"
+	iconSkipped = "–"
+)
+
+// Status bar styles — visually dominant with solid background.
 var (
 	styleStatusBar = lipgloss.NewStyle().
-			Background(lipgloss.Color("#333333")).
+			Background(colorSurface).
 			Foreground(colorWhite).
 			Bold(true).
 			Padding(0, 1)
 
 	styleStatusLabel = lipgloss.NewStyle().
-				Foreground(colorCyan).
+				Foreground(colorPrimary).
 				Bold(true)
 
 	styleStatusValue = lipgloss.NewStyle().
 				Foreground(colorWhite)
 
 	styleStatusCost = lipgloss.NewStyle().
-			Foreground(colorYellow)
+			Foreground(colorAccent)
 )
+
+// Breadcrumb bar style — subtle tinted background, dimmer than status bar.
+var styleBreadcrumb = lipgloss.NewStyle().
+	Background(colorSurfaceBright).
+	Foreground(colorMutedLight).
+	Padding(0, 1)
+
+// styleBreadcrumbSep styles the separator between breadcrumb segments.
+var styleBreadcrumbSep = lipgloss.NewStyle().
+	Foreground(colorMuted)
 
 // Phase/cycle row styles.
 var (
 	styleRowSelected = lipgloss.NewStyle().
-				Foreground(colorWhite).
+				Foreground(colorBrightWhite).
 				Bold(true)
 
 	styleRowNormal = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#AAAAAA"))
+			Foreground(colorMutedLight)
 
 	styleRowDone = lipgloss.NewStyle().
-			Foreground(colorGreen)
+			Foreground(colorSuccess)
 
 	styleRowWorking = lipgloss.NewStyle().
 			Foreground(colorBlue)
 
 	styleRowFailed = lipgloss.NewStyle().
-			Foreground(colorRed)
+			Foreground(colorDanger).
+			Bold(true)
 
 	styleRowGate = lipgloss.NewStyle().
-			Foreground(colorYellow)
+			Foreground(colorAccent).
+			Bold(true)
 
 	styleRowWaiting = lipgloss.NewStyle().
-			Foreground(colorDim)
+			Foreground(colorMuted)
+
+	// styleSelectionIndicator styles the left-edge indicator for the selected row.
+	styleSelectionIndicator = lipgloss.NewStyle().
+				Foreground(colorPrimary).
+				Bold(true)
 )
 
-// Detail panel styles.
+// Detail panel styles — rounded border, styled title.
 var (
 	styleDetailBorder = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(colorDim).
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(colorMuted).
 				Padding(0, 1)
 
 	styleDetailTitle = lipgloss.NewStyle().
-				Foreground(colorCyan).
+				Foreground(colorPrimary).
 				Bold(true)
 
 	styleDetailDim = lipgloss.NewStyle().
-			Foreground(colorDim)
+			Foreground(colorMuted)
 )
 
 // Gate prompt styles.
 var (
 	styleGateOverlay = lipgloss.NewStyle().
 				Border(lipgloss.DoubleBorder()).
-				BorderForeground(colorYellow).
+				BorderForeground(colorAccent).
 				Padding(1, 2).
 				Bold(true)
 
 	styleGateAction = lipgloss.NewStyle().
-			Foreground(colorYellow).
+			Foreground(colorAccent).
 			Bold(true)
 
 	styleGateSelected = lipgloss.NewStyle().
-				Foreground(colorWhite).
-				Background(colorYellow).
+				Foreground(colorBrightWhite).
+				Background(colorAccent).
 				Bold(true).
 				Padding(0, 1)
 
 	styleGateNormal = lipgloss.NewStyle().
-			Foreground(colorDim).
+			Foreground(colorMuted).
 			Padding(0, 1)
 )
 
-// Footer styles.
+// Footer styles — top border, clear key/desc contrast.
 var (
 	styleFooter = lipgloss.NewStyle().
-			Foreground(colorDim)
+			Foreground(colorMuted).
+			Border(lipgloss.NormalBorder(), true, false, false, false).
+			BorderForeground(colorMuted)
 
 	styleFooterKey = lipgloss.NewStyle().
-			Foreground(colorWhite).
+			Foreground(colorPrimary).
 			Bold(true)
 
 	styleFooterSep = lipgloss.NewStyle().
-			Foreground(colorDim)
+			Foreground(colorMuted)
+
+	styleFooterDesc = lipgloss.NewStyle().
+			Foreground(colorMutedLight)
 )
 
 // Section border for separating view regions.
-var (
-	styleSectionBorder = lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder(), true, false, false, false).
-		BorderForeground(colorDim)
-)
+var styleSectionBorder = lipgloss.NewStyle().
+	Border(lipgloss.NormalBorder(), true, false, false, false).
+	BorderForeground(colorMuted)

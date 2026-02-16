@@ -149,12 +149,13 @@ func (lv LoopView) View() string {
 	idx := 0
 	for _, c := range lv.Cycles {
 		// Cycle header.
-		prefix := "  "
-		if idx == lv.Cursor {
-			prefix = "> "
+		selected := idx == lv.Cursor
+		indicator := "  "
+		if selected {
+			indicator = styleSelectionIndicator.Render(selectionIndicator) + " "
 		}
-		header := fmt.Sprintf("%sCycle %d", prefix, c.Number)
-		if idx == lv.Cursor {
+		header := fmt.Sprintf("%sCycle %d", indicator, c.Number)
+		if selected {
 			b.WriteString(styleRowSelected.Render(header))
 		} else {
 			b.WriteString(styleRowNormal.Render(header))
@@ -164,25 +165,29 @@ func (lv LoopView) View() string {
 
 		// Agent entries.
 		for _, a := range c.Agents {
-			prefix = "    "
-			if idx == lv.Cursor {
-				prefix = "  > "
+			selected = idx == lv.Cursor
+			indent := "  "
+			indicator = "  "
+			if selected {
+				indicator = styleSelectionIndicator.Render(selectionIndicator) + " "
 			}
 
 			var line string
 			if a.Done {
 				secs := float64(a.DurationMs) / 1000.0
-				line = fmt.Sprintf("%s%s %s  %.1fs  $%.4f", prefix, "✓", a.Role, secs, a.CostUSD)
+				icon := styleRowDone.Render(iconDone)
+				line = fmt.Sprintf("%s%s%s %s  %.1fs  $%.4f", indicator, indent, icon, a.Role, secs, a.CostUSD)
 				if a.Role == "reviewer" && a.IssueCount > 0 {
 					line += fmt.Sprintf("  → %d issue(s)", a.IssueCount)
 				}
-				if idx == lv.Cursor {
+				if selected {
 					b.WriteString(styleRowSelected.Render(line))
 				} else {
 					b.WriteString(styleRowDone.Render(line))
 				}
 			} else {
-				line = fmt.Sprintf("%s%s %s  working…  %s", prefix, "◎", a.Role, lv.Spinner.View())
+				icon := styleRowWorking.Render(iconWorking)
+				line = fmt.Sprintf("%s%s%s %s  working…  %s", indicator, indent, icon, a.Role, lv.Spinner.View())
 				b.WriteString(styleRowWorking.Render(line))
 			}
 			b.WriteString("\n")

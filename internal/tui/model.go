@@ -481,8 +481,9 @@ func (m AppModel) renderBreadcrumb() string {
 	if m.Depth == DepthAgentOutput {
 		parts = append(parts, "output")
 	}
-	path := strings.Join(parts, " › ")
-	return styleDetailDim.Render(" " + path)
+	sep := styleBreadcrumbSep.Render(" › ")
+	path := strings.Join(parts, sep)
+	return styleBreadcrumb.Width(m.Width).Render(path)
 }
 
 // renderMainView renders the appropriate view for the current depth.

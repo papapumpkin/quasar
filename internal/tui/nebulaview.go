@@ -125,35 +125,36 @@ func (nv *NebulaView) SetPhaseCycles(phaseID string, cycles int) {
 func (nv NebulaView) View() string {
 	var b strings.Builder
 	for i, p := range nv.Phases {
-		prefix := "  "
-		if i == nv.Cursor {
-			prefix = "> "
+		selected := i == nv.Cursor
+		indicator := "  "
+		if selected {
+			indicator = styleSelectionIndicator.Render(selectionIndicator) + " "
 		}
 
 		var statusIcon string
 		var style = styleRowNormal
 		switch p.Status {
 		case PhaseDone:
-			statusIcon = "[done]"
+			statusIcon = styleRowDone.Render(iconDone)
 			style = styleRowDone
 		case PhaseWorking:
-			statusIcon = "[" + nv.Spinner.View() + "  ]"
+			statusIcon = styleRowWorking.Render(iconWorking) + " " + nv.Spinner.View()
 			style = styleRowWorking
 		case PhaseFailed:
-			statusIcon = "[fail]"
+			statusIcon = styleRowFailed.Render(iconFailed)
 			style = styleRowFailed
 		case PhaseGate:
-			statusIcon = "[gate]"
+			statusIcon = styleRowGate.Render(iconGate)
 			style = styleRowGate
 		case PhaseSkipped:
-			statusIcon = "[skip]"
+			statusIcon = styleRowWaiting.Render(iconSkipped)
 			style = styleRowWaiting
 		default:
-			statusIcon = "[wait]"
+			statusIcon = styleRowWaiting.Render(iconWaiting)
 			style = styleRowWaiting
 		}
 
-		if i == nv.Cursor {
+		if selected {
 			style = styleRowSelected
 		}
 
@@ -166,7 +167,7 @@ func (nv NebulaView) View() string {
 			detail = fmt.Sprintf("blocked: %s", p.BlockedBy)
 		}
 
-		line := fmt.Sprintf("%s%s %-24s %s", prefix, statusIcon, p.ID, detail)
+		line := fmt.Sprintf("%s%s %-24s %s", indicator, statusIcon, p.ID, detail)
 		b.WriteString(style.Render(line))
 		b.WriteString("\n")
 	}
