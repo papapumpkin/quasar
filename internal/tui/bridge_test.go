@@ -169,6 +169,121 @@ func TestAppModelNebulaProgress(t *testing.T) {
 	}
 }
 
+func TestNebulaPhaseLifecycle(t *testing.T) {
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.Width = 80
+	m.Height = 24
+
+	var tm tea.Model = m
+
+	// Initialize with phases.
+	tm, _ = tm.Update(MsgNebulaInit{
+		Name: "test-nebula",
+		Phases: []PhaseInfo{
+			{ID: "setup", Title: "Setup models"},
+			{ID: "auth", Title: "Auth middleware", DependsOn: []string{"setup"}},
+		},
+	})
+	am := tm.(AppModel)
+	if len(am.NebulaView.Phases) != 2 {
+		t.Fatalf("Phases = %d, want 2", len(am.NebulaView.Phases))
+	}
+	if am.NebulaView.Phases[0].ID != "setup" {
+		t.Errorf("Phase[0].ID = %q, want %q", am.NebulaView.Phases[0].ID, "setup")
+	}
+
+	// Start a phase — should create a per-phase LoopView.
+	tm, _ = tm.Update(MsgPhaseTaskStarted{PhaseID: "setup", BeadID: "b-1", Title: "Setup"})
+	am = tm.(AppModel)
+	if am.NebulaView.Phases[0].Status != PhaseWorking {
+		t.Errorf("Phase status = %d, want PhaseWorking(%d)", am.NebulaView.Phases[0].Status, PhaseWorking)
+	}
+	if _, ok := am.PhaseLoops["setup"]; !ok {
+		t.Error("Expected PhaseLoops[\"setup\"] to exist")
+	}
+
+	// Phase cycle + agent events.
+	tm, _ = tm.Update(MsgPhaseCycleStart{PhaseID: "setup", Cycle: 1, MaxCycles: 3})
+	tm, _ = tm.Update(MsgPhaseAgentStart{PhaseID: "setup", Role: "coder"})
+	tm, _ = tm.Update(MsgPhaseAgentDone{PhaseID: "setup", Role: "coder", CostUSD: 0.5, DurationMs: 5000})
+	am = tm.(AppModel)
+	lv := am.PhaseLoops["setup"]
+	if lv == nil || len(lv.Cycles) != 1 {
+		t.Fatal("Expected 1 cycle in setup LoopView")
+	}
+	if len(lv.Cycles[0].Agents) != 1 || !lv.Cycles[0].Agents[0].Done {
+		t.Error("Expected coder agent to be done")
+	}
+
+	// Complete the phase.
+	tm, _ = tm.Update(MsgPhaseTaskComplete{PhaseID: "setup", BeadID: "b-1", TotalCost: 0.5})
+	am = tm.(AppModel)
+	if am.NebulaView.Phases[0].Status != PhaseDone {
+		t.Errorf("Phase status = %d, want PhaseDone(%d)", am.NebulaView.Phases[0].Status, PhaseDone)
+	}
+}
+
+func TestNebulaNavigationDrillDown(t *testing.T) {
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.Width = 80
+	m.Height = 24
+
+	var tm tea.Model = m
+
+	// Init phases and start one.
+	tm, _ = tm.Update(MsgNebulaInit{
+		Name:   "nav-test",
+		Phases: []PhaseInfo{{ID: "alpha", Title: "Alpha"}},
+	})
+	tm, _ = tm.Update(MsgPhaseTaskStarted{PhaseID: "alpha", BeadID: "b-1", Title: "Alpha"})
+	tm, _ = tm.Update(MsgPhaseCycleStart{PhaseID: "alpha", Cycle: 1, MaxCycles: 3})
+	tm, _ = tm.Update(MsgPhaseAgentStart{PhaseID: "alpha", Role: "coder"})
+
+	am := tm.(AppModel)
+	if am.Depth != DepthPhases {
+		t.Errorf("Depth = %d, want DepthPhases", am.Depth)
+	}
+
+	// Drill into alpha.
+	am.drillDown()
+	if am.Depth != DepthPhaseLoop {
+		t.Errorf("After drillDown: Depth = %d, want DepthPhaseLoop", am.Depth)
+	}
+	if am.FocusedPhase != "alpha" {
+		t.Errorf("FocusedPhase = %q, want %q", am.FocusedPhase, "alpha")
+	}
+
+	// Drill into agent output.
+	am.drillDown()
+	if am.Depth != DepthAgentOutput {
+		t.Errorf("After second drillDown: Depth = %d, want DepthAgentOutput", am.Depth)
+	}
+
+	// Drill back up.
+	am.drillUp()
+	if am.Depth != DepthPhaseLoop {
+		t.Errorf("After drillUp: Depth = %d, want DepthPhaseLoop", am.Depth)
+	}
+
+	am.drillUp()
+	if am.Depth != DepthPhases {
+		t.Errorf("After second drillUp: Depth = %d, want DepthPhases", am.Depth)
+	}
+	if am.FocusedPhase != "" {
+		t.Errorf("FocusedPhase should be empty, got %q", am.FocusedPhase)
+	}
+}
+
+func TestPhaseUIBridgeImplementsInterface(t *testing.T) {
+	model := NewAppModel(ModeNebula)
+	model.Detail = NewDetailPanel(80, 10)
+	p := tea.NewProgram(model, tea.WithoutSignalHandler())
+	var iface ui.UI = NewPhaseUIBridge(p, "test-phase")
+	_ = iface
+}
+
 func TestLoopViewCursorNavigation(t *testing.T) {
 	lv := NewLoopView()
 	lv.StartCycle(1)

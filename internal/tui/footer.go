@@ -37,6 +37,11 @@ func NebulaFooterBindings(km KeyMap) []key.Binding {
 	return []key.Binding{km.Up, km.Down, km.Enter, km.Pause, km.Stop, km.Quit}
 }
 
+// NebulaDetailFooterBindings returns footer bindings when drilled into a phase.
+func NebulaDetailFooterBindings(km KeyMap) []key.Binding {
+	return []key.Binding{km.Up, km.Down, km.Enter, km.Back, km.Quit}
+}
+
 // GateFooterBindings returns footer bindings during gate prompts.
 func GateFooterBindings(km KeyMap) []key.Binding {
 	return []key.Binding{km.Accept, km.Reject, km.Retry, km.Skip}

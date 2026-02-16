@@ -20,7 +20,7 @@ type PhaseRunnerResult struct {
 
 // PhaseRunner is the interface for executing a phase (satisfied by loop.Loop).
 type PhaseRunner interface {
-	RunExistingPhase(ctx context.Context, beadID, phaseDescription string, exec ResolvedExecution) (*PhaseRunnerResult, error)
+	RunExistingPhase(ctx context.Context, phaseID, beadID, phaseDescription string, exec ResolvedExecution) (*PhaseRunnerResult, error)
 	GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error)
 }
 
@@ -268,7 +268,7 @@ func (wg *WorkerGroup) executePhase(
 
 	exec := ResolveExecution(wg.GlobalCycles, wg.GlobalBudget, wg.GlobalModel, &wg.Nebula.Manifest.Execution, phase)
 	prompt := buildPhasePrompt(phase, &wg.Nebula.Manifest.Context)
-	phaseResult, err := wg.Runner.RunExistingPhase(ctx, ps.BeadID, prompt, exec)
+	phaseResult, err := wg.Runner.RunExistingPhase(ctx, phaseID, ps.BeadID, prompt, exec)
 
 	if wg.Metrics != nil && phaseResult != nil {
 		wg.Metrics.RecordPhaseComplete(phaseID, *phaseResult)

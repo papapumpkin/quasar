@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -20,11 +21,23 @@ const (
 	ModeNebula
 )
 
+// ViewDepth tracks the navigation level in nebula mode.
+type ViewDepth int
+
+const (
+	// DepthPhases shows the phase table (top level).
+	DepthPhases ViewDepth = iota
+	// DepthPhaseLoop shows a single phase's cycle timeline.
+	DepthPhaseLoop
+	// DepthAgentOutput shows agent output in the detail panel.
+	DepthAgentOutput
+)
+
 // AppModel is the root BubbleTea model composing all sub-views.
 type AppModel struct {
 	Mode       Mode
 	StatusBar  StatusBar
-	LoopView   LoopView
+	LoopView   LoopView  // used in loop mode (single task)
 	NebulaView NebulaView
 	Detail     DetailPanel
 	Gate       *GatePrompt
@@ -34,8 +47,12 @@ type AppModel struct {
 	StartTime  time.Time
 	Done       bool
 	DoneErr    error
-	Messages   []string // recent info/error messages for detail
-	showDetail bool
+	Messages   []string // recent info/error messages
+
+	// Nebula navigation state.
+	Depth        ViewDepth          // current navigation depth
+	FocusedPhase string             // phase ID we're drilled into
+	PhaseLoops   map[string]*LoopView // per-phase cycle timelines
 }
 
 // NewAppModel creates a root model configured for the given mode.
@@ -46,6 +63,7 @@ func NewAppModel(mode Mode) AppModel {
 		NebulaView: NewNebulaView(),
 		Keys:       DefaultKeyMap(),
 		StartTime:  time.Now(),
+		PhaseLoops: make(map[string]*LoopView),
 	}
 	m.StatusBar.StartTime = m.StartTime
 	return m
@@ -87,11 +105,15 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.LoopView.Spinner, cmd = m.LoopView.Spinner.Update(msg)
 		cmds = append(cmds, cmd)
 		m.NebulaView.Spinner, _ = m.NebulaView.Spinner.Update(msg)
+		// Update spinners in per-phase loop views.
+		for _, lv := range m.PhaseLoops {
+			lv.Spinner, _ = lv.Spinner.Update(msg)
+		}
 
 	case MsgTick:
 		cmds = append(cmds, tickCmd())
 
-	// Loop lifecycle.
+	// --- Loop mode (single task) ---
 	case MsgTaskStarted:
 		m.StatusBar.BeadID = msg.BeadID
 		m.StatusBar.Name = msg.Title
@@ -125,18 +147,77 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgInfo:
 		m.addMessage("%s", msg.Msg)
 
-	// Nebula lifecycle.
+	// --- Nebula initialization ---
+	case MsgNebulaInit:
+		m.StatusBar.Name = msg.Name
+		m.StatusBar.Total = len(msg.Phases)
+		m.NebulaView.InitPhases(msg.Phases)
+
+	// --- Nebula progress ---
 	case MsgNebulaProgress:
 		m.StatusBar.Completed = msg.Completed
 		m.StatusBar.Total = msg.Total
 		m.StatusBar.CostUSD = msg.TotalCostUSD
 
-	// Gate.
+	// --- Phase-contextualized messages (nebula mode) ---
+	case MsgPhaseTaskStarted:
+		m.ensurePhaseLoop(msg.PhaseID)
+		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseWorking)
+	case MsgPhaseTaskComplete:
+		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseDone)
+		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
+			lv.Approved = true
+		}
+		m.NebulaView.SetPhaseCost(msg.PhaseID, msg.TotalCost)
+	case MsgPhaseCycleStart:
+		lv := m.ensurePhaseLoop(msg.PhaseID)
+		lv.StartCycle(msg.Cycle)
+		m.NebulaView.SetPhaseCycles(msg.PhaseID, msg.Cycle)
+	case MsgPhaseAgentStart:
+		lv := m.ensurePhaseLoop(msg.PhaseID)
+		lv.StartAgent(msg.Role)
+	case MsgPhaseAgentDone:
+		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
+			lv.FinishAgent(msg.Role, msg.CostUSD, msg.DurationMs)
+		}
+	case MsgPhaseAgentOutput:
+		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
+			lv.SetAgentOutput(msg.Role, msg.Cycle, msg.Output)
+		}
+		// If we're focused on this phase, refresh detail.
+		if m.FocusedPhase == msg.PhaseID {
+			m.updateDetailFromSelection()
+		}
+	case MsgPhaseCycleSummary:
+		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
+			lv.Approved = msg.Data.Approved
+		}
+		m.NebulaView.SetPhaseCost(msg.PhaseID, msg.Data.TotalCostUSD)
+	case MsgPhaseIssuesFound:
+		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
+			lv.SetIssueCount(msg.Count)
+		}
+	case MsgPhaseApproved:
+		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
+			lv.Approved = true
+		}
+		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseDone)
+	case MsgPhaseError:
+		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseFailed)
+		m.addMessage("[%s] %s", msg.PhaseID, msg.Msg)
+	case MsgPhaseInfo:
+		// Informational — don't change phase status.
+
+	// --- Gate ---
 	case MsgGatePrompt:
 		m.Gate = NewGatePrompt(msg.Checkpoint, msg.ResponseCh)
 		m.Gate.Width = m.Width
+		// Mark the phase as gated if we know which one.
+		if msg.Checkpoint != nil {
+			m.NebulaView.SetPhaseStatus(msg.Checkpoint.PhaseID, PhaseGate)
+		}
 
-	// Done signals.
+	// --- Done signals ---
 	case MsgLoopDone:
 		m.Done = true
 		m.DoneErr = msg.Err
@@ -146,6 +227,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+// ensurePhaseLoop creates a LoopView for a phase if it doesn't exist.
+func (m *AppModel) ensurePhaseLoop(phaseID string) *LoopView {
+	if lv, ok := m.PhaseLoops[phaseID]; ok {
+		return lv
+	}
+	lv := NewLoopView()
+	m.PhaseLoops[phaseID] = &lv
+	return &lv
 }
 
 // handleKey processes keyboard input.
@@ -158,30 +249,65 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.Keys.Quit):
 		return m, tea.Quit
+
 	case key.Matches(msg, m.Keys.Up):
-		if m.showDetail {
-			m.Detail.Update(msg)
-		} else {
-			m.moveUp()
-		}
+		m.moveUp()
+
 	case key.Matches(msg, m.Keys.Down):
-		if m.showDetail {
-			m.Detail.Update(msg)
-		} else {
-			m.moveDown()
-		}
+		m.moveDown()
+
 	case key.Matches(msg, m.Keys.Enter):
-		if m.showDetail {
-			// Already in detail, no-op.
-		} else {
-			m.showDetail = true
-			m.updateDetailFromSelection()
-		}
+		m.drillDown()
+
 	case key.Matches(msg, m.Keys.Back):
-		m.showDetail = false
+		m.drillUp()
 	}
 
 	return m, nil
+}
+
+// drillDown navigates deeper into the hierarchy.
+func (m *AppModel) drillDown() {
+	switch m.Mode {
+	case ModeLoop:
+		// In loop mode, enter toggles the detail panel.
+		if m.Depth == DepthAgentOutput {
+			return
+		}
+		m.Depth = DepthAgentOutput
+		m.updateDetailFromSelection()
+
+	case ModeNebula:
+		switch m.Depth {
+		case DepthPhases:
+			// Drill into the selected phase's loop view.
+			if p := m.NebulaView.SelectedPhase(); p != nil {
+				m.FocusedPhase = p.ID
+				m.Depth = DepthPhaseLoop
+			}
+		case DepthPhaseLoop:
+			// Drill into agent output.
+			m.Depth = DepthAgentOutput
+			m.updateDetailFromSelection()
+		}
+	}
+}
+
+// drillUp navigates back up the hierarchy.
+func (m *AppModel) drillUp() {
+	switch m.Mode {
+	case ModeLoop:
+		m.Depth = DepthPhases // collapse detail
+
+	case ModeNebula:
+		switch m.Depth {
+		case DepthAgentOutput:
+			m.Depth = DepthPhaseLoop
+		case DepthPhaseLoop:
+			m.Depth = DepthPhases
+			m.FocusedPhase = ""
+		}
+	}
 }
 
 // handleGateKey processes keys while a gate prompt is active.
@@ -213,43 +339,69 @@ func (m *AppModel) resolveGate(action nebula.GateAction) {
 	}
 }
 
-// moveUp delegates to the active view.
+// moveUp delegates to the active view based on depth.
 func (m *AppModel) moveUp() {
 	switch m.Mode {
 	case ModeLoop:
 		m.LoopView.MoveUp()
 	case ModeNebula:
-		m.NebulaView.MoveUp()
+		if m.Depth == DepthPhases {
+			m.NebulaView.MoveUp()
+		} else if m.Depth >= DepthPhaseLoop {
+			if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
+				lv.MoveUp()
+			}
+		}
 	}
 	m.updateDetailFromSelection()
 }
 
-// moveDown delegates to the active view.
+// moveDown delegates to the active view based on depth.
 func (m *AppModel) moveDown() {
 	switch m.Mode {
 	case ModeLoop:
 		m.LoopView.MoveDown()
 	case ModeNebula:
-		m.NebulaView.MoveDown()
+		if m.Depth == DepthPhases {
+			m.NebulaView.MoveDown()
+		} else if m.Depth >= DepthPhaseLoop {
+			if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
+				lv.MoveDown()
+			}
+		}
 	}
 	m.updateDetailFromSelection()
 }
 
 // updateDetailFromSelection updates the detail panel content
-// based on the currently selected row.
+// based on the current view depth and selected item.
 func (m *AppModel) updateDetailFromSelection() {
 	switch m.Mode {
 	case ModeLoop:
 		if agent := m.LoopView.SelectedAgent(); agent != nil {
 			content := agent.Output
 			if content == "" {
-				content = "(no output captured)"
+				content = "(output will appear when agent completes)"
 			}
 			m.Detail.SetContent(agent.Role+" output", content)
 		}
 	case ModeNebula:
-		if phase := m.NebulaView.SelectedPhase(); phase != nil {
-			m.Detail.SetContent(phase.ID, phase.Title)
+		if m.Depth >= DepthPhaseLoop {
+			// Show agent output from the focused phase's loop view.
+			if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
+				if agent := lv.SelectedAgent(); agent != nil {
+					content := agent.Output
+					if content == "" {
+						content = "(output will appear when agent completes)"
+					}
+					m.Detail.SetContent(
+						fmt.Sprintf("%s → %s output", m.FocusedPhase, agent.Role),
+						content,
+					)
+					return
+				}
+			}
+			m.Detail.SetContent(m.FocusedPhase, "(select an agent row to view output)")
 		}
 	}
 }
@@ -265,27 +417,21 @@ func (m *AppModel) addMessage(format string, args ...any) {
 
 // detailHeight computes available height for the detail panel.
 func (m AppModel) detailHeight() int {
-	// status bar (1) + main view (variable) + footer (1) + borders
 	used := 3
 	mainH := m.Height - used
 	if mainH < 4 {
 		return 0
 	}
-	// Split: ~60% main view, ~40% detail.
 	return mainH * 2 / 5
 }
 
-// mainViewHeight computes available height for the main list view.
-func (m AppModel) mainViewHeight() int {
-	used := 3 // status bar + footer + border
-	if m.showDetail {
-		used += m.detailHeight() + 1 // +1 for separator
+// showDetailPanel returns whether the detail panel should be visible.
+func (m AppModel) showDetailPanel() bool {
+	if m.Mode == ModeLoop {
+		return m.Depth == DepthAgentOutput
 	}
-	h := m.Height - used
-	if h < 1 {
-		h = 1
-	}
-	return h
+	// In nebula mode, show detail when drilled into agent output.
+	return m.Depth == DepthAgentOutput
 }
 
 // View renders the full TUI.
@@ -299,18 +445,16 @@ func (m AppModel) View() string {
 	// Status bar.
 	sections = append(sections, m.StatusBar.View())
 
-	// Main view.
-	switch m.Mode {
-	case ModeLoop:
-		m.LoopView.Width = m.Width
-		sections = append(sections, m.LoopView.View())
-	case ModeNebula:
-		m.NebulaView.Width = m.Width
-		sections = append(sections, m.NebulaView.View())
+	// Breadcrumb (nebula drill-down).
+	if m.Mode == ModeNebula && m.Depth > DepthPhases {
+		sections = append(sections, m.renderBreadcrumb())
 	}
 
-	// Detail panel (when expanded).
-	if m.showDetail {
+	// Main view.
+	sections = append(sections, m.renderMainView())
+
+	// Detail panel (when drilled into agent output).
+	if m.showDetailPanel() {
 		sep := styleSectionBorder.Width(m.Width).Render("")
 		sections = append(sections, sep)
 		sections = append(sections, m.Detail.View())
@@ -328,13 +472,54 @@ func (m AppModel) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
+// renderBreadcrumb renders the navigation path for drill-down.
+func (m AppModel) renderBreadcrumb() string {
+	parts := []string{"phases"}
+	if m.FocusedPhase != "" {
+		parts = append(parts, m.FocusedPhase)
+	}
+	if m.Depth == DepthAgentOutput {
+		parts = append(parts, "output")
+	}
+	path := strings.Join(parts, " › ")
+	return styleDetailDim.Render(" " + path)
+}
+
+// renderMainView renders the appropriate view for the current depth.
+func (m AppModel) renderMainView() string {
+	switch m.Mode {
+	case ModeLoop:
+		m.LoopView.Width = m.Width
+		return m.LoopView.View()
+
+	case ModeNebula:
+		switch m.Depth {
+		case DepthPhases:
+			m.NebulaView.Width = m.Width
+			return m.NebulaView.View()
+		default:
+			// Show the focused phase's loop view.
+			if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
+				lv.Width = m.Width
+				return lv.View()
+			}
+			return styleDetailDim.Render("  (no activity for this phase yet)")
+		}
+	}
+	return ""
+}
+
 // buildFooter creates the footer with appropriate bindings.
 func (m AppModel) buildFooter() Footer {
 	f := Footer{Width: m.Width}
 	if m.Gate != nil {
 		f.Bindings = GateFooterBindings(m.Keys)
 	} else if m.Mode == ModeNebula {
-		f.Bindings = NebulaFooterBindings(m.Keys)
+		if m.Depth > DepthPhases {
+			f.Bindings = NebulaDetailFooterBindings(m.Keys)
+		} else {
+			f.Bindings = NebulaFooterBindings(m.Keys)
+		}
 	} else {
 		f.Bindings = LoopFooterBindings(m.Keys)
 	}

@@ -1,0 +1,39 @@
+version = 1
+nebula_name = 'TUI Polish & Interactivity'
+
+[phases]
+[phases.color-theme]
+bead_id = 'quasar-7j4'
+status = 'in_progress'
+created_at = 2026-02-16T13:20:33.880479-05:00
+updated_at = 2026-02-16T13:23:45.476133-05:00
+
+[phases.detail-panel]
+bead_id = 'quasar-2ms'
+status = 'created'
+created_at = 2026-02-16T13:20:34.286352-05:00
+updated_at = 2026-02-16T13:24:07.627663-05:00
+
+[phases.error-overlays]
+bead_id = 'quasar-8s1'
+status = 'created'
+created_at = 2026-02-16T13:20:34.652813-05:00
+updated_at = 2026-02-16T13:24:07.628174-05:00
+
+[phases.interactive-controls]
+bead_id = 'quasar-6zr'
+status = 'created'
+created_at = 2026-02-16T13:20:35.042055-05:00
+updated_at = 2026-02-16T13:24:07.628396-05:00
+
+[phases.progress-indicators]
+bead_id = 'quasar-tf5'
+status = 'created'
+created_at = 2026-02-16T13:20:35.433126-05:00
+updated_at = 2026-02-16T13:24:07.628608-05:00
+
+[phases.resize-edge-cases]
+bead_id = 'quasar-prt'
+status = 'created'
+created_at = 2026-02-16T13:20:35.797376-05:00
+updated_at = 2026-02-16T13:24:07.628849-05:00

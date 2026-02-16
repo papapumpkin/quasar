@@ -1,0 +1,32 @@
+[nebula]
+name = "TUI Polish & Interactivity"
+description = "Enhance the BubbleTea TUI with richer visuals, better color theming, interactive controls (pause/resume/stop/retry), animated transitions, and a more informative layout."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "tui"]
+
+[execution]
+max_workers = 2
+max_review_cycles = 5
+max_budget_usd = 30.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Make the TUI visually rich with color gradients, bold section headers, and clear visual hierarchy",
+    "Add interactive controls: pause/resume, stop, retry via keyboard shortcuts",
+    "Add animated spinners, progress bars, and smooth transitions between states",
+    "Make the detail panel genuinely useful with formatted agent output, syntax highlighting hints, and scroll indicators",
+    "Ensure the TUI degrades gracefully on narrow terminals and handles resize smoothly",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "All TUI code lives in internal/tui/",
+    "Do not break the stderr Printer fallback path",
+    "Use only charmbracelet ecosystem (bubbletea, lipgloss, bubbles) — no other TUI deps",
+    "All new code must have tests",
+    "The loop and nebula packages must not import internal/tui",
+]

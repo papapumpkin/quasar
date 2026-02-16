@@ -239,30 +239,9 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	noTUI, _ := cmd.Flags().GetBool("no-tui")
 	useTUI := !noTUI && isStderrTTY()
 
-	// Determine the UI handler: TUI bridge or stderr printer.
-	var uiHandler ui.UI = printer
+	// Build the runner and WorkerGroup, branching on TUI vs stderr.
 	var tuiProgram *tui.Program
-	if useTUI {
-		tuiProgram = tui.NewProgramRaw(tui.ModeNebula)
-		uiHandler = tui.NewUIBridge(tuiProgram)
-	}
-
-	taskLoop := &loop.Loop{
-		Invoker:      claudeInv,
-		Beads:        client,
-		UI:           uiHandler,
-		MaxCycles:    cfg.MaxReviewCycles,
-		MaxBudgetUSD: cfg.MaxBudgetUSD,
-		Model:        cfg.Model,
-		CoderPrompt:  coderPrompt,
-		ReviewPrompt: reviewerPrompt,
-		WorkDir:      workDir,
-		MCP:          nil,
-	}
-
-	// Build the WorkerGroup.
 	wg := &nebula.WorkerGroup{
-		Runner:       &loopAdapter{loop: taskLoop},
 		Nebula:       n,
 		State:        state,
 		MaxWorkers:   maxWorkers,
@@ -272,7 +251,19 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	if useTUI {
-		// TUI mode: no dashboard, use TUI gater, silence stderr.
+		tuiProgram = tui.NewProgramRaw(tui.ModeNebula)
+		// Per-phase loops with PhaseUIBridge for hierarchical TUI tracking.
+		wg.Runner = &tuiLoopAdapter{
+			program:      tuiProgram,
+			invoker:      claudeInv,
+			beads:        client,
+			maxCycles:    cfg.MaxReviewCycles,
+			maxBudget:    cfg.MaxBudgetUSD,
+			model:        cfg.Model,
+			coderPrompt:  coderPrompt,
+			reviewPrompt: reviewerPrompt,
+			workDir:      workDir,
+		}
 		wg.Logger = io.Discard
 		wg.Gater = tui.NewTUIGater(tuiProgram)
 		wg.OnProgress = func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
@@ -285,6 +276,19 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			})
 		}
 	} else {
+		// Stderr path: single shared loop with Printer UI.
+		taskLoop := &loop.Loop{
+			Invoker:      claudeInv,
+			Beads:        client,
+			UI:           printer,
+			MaxCycles:    cfg.MaxReviewCycles,
+			MaxBudgetUSD: cfg.MaxBudgetUSD,
+			Model:        cfg.Model,
+			CoderPrompt:  coderPrompt,
+			ReviewPrompt: reviewerPrompt,
+			WorkDir:      workDir,
+		}
+		wg.Runner = &loopAdapter{loop: taskLoop}
 		// Stderr path: use dashboard and terminal gater.
 		isTTY := isStderrTTY()
 		dashboard := nebula.NewDashboard(os.Stderr, n, state, cfg.MaxBudgetUSD, isTTY)
@@ -314,6 +318,20 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	if useTUI {
+		// Populate the phase table before starting.
+		phases := make([]tui.PhaseInfo, 0, len(n.Phases))
+		for _, p := range n.Phases {
+			phases = append(phases, tui.PhaseInfo{
+				ID:        p.ID,
+				Title:     p.Title,
+				DependsOn: p.DependsOn,
+			})
+		}
+		tuiProgram.Send(tui.MsgNebulaInit{
+			Name:   n.Manifest.Nebula.Name,
+			Phases: phases,
+		})
+
 		// Run workers in a goroutine; block on TUI.
 		go func() {
 			results, runErr := wg.Run(ctx)
@@ -355,7 +373,7 @@ type loopAdapter struct {
 	loop *loop.Loop
 }
 
-func (a *loopAdapter) RunExistingPhase(ctx context.Context, beadID, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
+func (a *loopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
 	// Apply per-phase execution overrides to the loop.
 	if exec.MaxReviewCycles > 0 {
 		a.loop.MaxCycles = exec.MaxReviewCycles
@@ -371,6 +389,80 @@ func (a *loopAdapter) RunExistingPhase(ctx context.Context, beadID, phaseDescrip
 	if err != nil {
 		return nil, err
 	}
+	return toPhaseRunnerResult(result), nil
+}
+
+func (a *loopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error) {
+	return a.loop.GenerateCheckpoint(ctx, beadID, phaseDescription)
+}
+
+// tuiLoopAdapter creates a fresh loop per phase with a phase-specific PhaseUIBridge.
+// This ensures each nebula phase sends UI messages tagged with its phase ID,
+// enabling the TUI to track per-phase cycle timelines independently.
+type tuiLoopAdapter struct {
+	program      *tui.Program
+	invoker      agent.Invoker
+	beads        beads.Client
+	maxCycles    int
+	maxBudget    float64
+	model        string
+	coderPrompt  string
+	reviewPrompt string
+	workDir      string
+}
+
+func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
+	// Create a per-phase UI bridge so messages carry the phase ID.
+	phaseUI := tui.NewPhaseUIBridge(a.program, phaseID)
+
+	l := &loop.Loop{
+		Invoker:      a.invoker,
+		Beads:        a.beads,
+		UI:           phaseUI,
+		MaxCycles:    a.maxCycles,
+		MaxBudgetUSD: a.maxBudget,
+		Model:        a.model,
+		CoderPrompt:  a.coderPrompt,
+		ReviewPrompt: a.reviewPrompt,
+		WorkDir:      a.workDir,
+	}
+
+	// Apply per-phase execution overrides.
+	if exec.MaxReviewCycles > 0 {
+		l.MaxCycles = exec.MaxReviewCycles
+	}
+	if exec.MaxBudgetUSD > 0 {
+		l.MaxBudgetUSD = exec.MaxBudgetUSD
+	}
+	if exec.Model != "" {
+		l.Model = exec.Model
+	}
+
+	result, err := l.RunExistingTask(ctx, beadID, phaseDescription)
+	if err != nil {
+		return nil, err
+	}
+	return toPhaseRunnerResult(result), nil
+}
+
+func (a *tuiLoopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error) {
+	phaseUI := tui.NewPhaseUIBridge(a.program, "checkpoint")
+	l := &loop.Loop{
+		Invoker:      a.invoker,
+		Beads:        a.beads,
+		UI:           phaseUI,
+		MaxCycles:    a.maxCycles,
+		MaxBudgetUSD: a.maxBudget,
+		Model:        a.model,
+		CoderPrompt:  a.coderPrompt,
+		ReviewPrompt: a.reviewPrompt,
+		WorkDir:      a.workDir,
+	}
+	return l.GenerateCheckpoint(ctx, beadID, phaseDescription)
+}
+
+// toPhaseRunnerResult converts a loop.TaskResult to nebula.PhaseRunnerResult.
+func toPhaseRunnerResult(result *loop.TaskResult) *nebula.PhaseRunnerResult {
 	tr := &nebula.PhaseRunnerResult{
 		TotalCostUSD: result.TotalCostUSD,
 		CyclesUsed:   result.CyclesUsed,
@@ -383,11 +475,7 @@ func (a *loopAdapter) RunExistingPhase(ctx context.Context, beadID, phaseDescrip
 			Summary:          result.Report.Summary,
 		}
 	}
-	return tr, nil
-}
-
-func (a *loopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error) {
-	return a.loop.GenerateCheckpoint(ctx, beadID, phaseDescription)
+	return tr
 }
 
 func runNebulaShow(cmd *cobra.Command, args []string) error {

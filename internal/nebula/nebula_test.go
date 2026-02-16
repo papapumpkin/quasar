@@ -605,7 +605,7 @@ type mockRunner struct {
 	resultFunc func(beadID string) *PhaseRunnerResult // optional per-call result
 }
 
-func (m *mockRunner) RunExistingPhase(ctx context.Context, beadID, phaseDescription string, exec ResolvedExecution) (*PhaseRunnerResult, error) {
+func (m *mockRunner) RunExistingPhase(ctx context.Context, phaseID, beadID, phaseDescription string, exec ResolvedExecution) (*PhaseRunnerResult, error) {
 	m.calls = append(m.calls, beadID)
 	if m.resultFunc != nil {
 		return m.resultFunc(beadID), m.err

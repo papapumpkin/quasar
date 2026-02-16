@@ -71,11 +71,54 @@ func (nv *NebulaView) MoveDown() {
 	}
 }
 
-// UpdateProgress updates phase entries from nebula progress data.
-func (nv *NebulaView) UpdateProgress(completed, total int) {
-	// Progress updates are handled at the model level by updating
-	// individual phase entries. This method is a placeholder for
-	// batch-updating the summary counts.
+// InitPhases populates the phase table from a MsgNebulaInit.
+func (nv *NebulaView) InitPhases(phases []PhaseInfo) {
+	nv.Phases = make([]PhaseEntry, len(phases))
+	for i, p := range phases {
+		blocked := ""
+		if len(p.DependsOn) > 0 {
+			blocked = p.DependsOn[0]
+			if len(p.DependsOn) > 1 {
+				blocked += fmt.Sprintf(" +%d", len(p.DependsOn)-1)
+			}
+		}
+		nv.Phases[i] = PhaseEntry{
+			ID:        p.ID,
+			Title:     p.Title,
+			Status:    PhaseWaiting,
+			BlockedBy: blocked,
+		}
+	}
+}
+
+// SetPhaseStatus updates the status of a phase by ID.
+func (nv *NebulaView) SetPhaseStatus(phaseID string, status PhaseStatus) {
+	for i := range nv.Phases {
+		if nv.Phases[i].ID == phaseID {
+			nv.Phases[i].Status = status
+			return
+		}
+	}
+}
+
+// SetPhaseCost updates the cost of a phase by ID.
+func (nv *NebulaView) SetPhaseCost(phaseID string, cost float64) {
+	for i := range nv.Phases {
+		if nv.Phases[i].ID == phaseID {
+			nv.Phases[i].CostUSD = cost
+			return
+		}
+	}
+}
+
+// SetPhaseCycles updates the cycle count of a phase by ID.
+func (nv *NebulaView) SetPhaseCycles(phaseID string, cycles int) {
+	for i := range nv.Phases {
+		if nv.Phases[i].ID == phaseID {
+			nv.Phases[i].Cycles = cycles
+			return
+		}
+	}
 }
 
 // View renders the phase table.
