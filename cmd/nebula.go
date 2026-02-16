@@ -178,14 +178,6 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		printer.Info("\nshutting down...")
-		cancel()
-	}()
-
 	printer.Info("applying changes...")
 	if err := nebula.Apply(ctx, plan, n, state, client); err != nil {
 		printer.Error(err.Error())
@@ -251,7 +243,16 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	if useTUI {
-		tuiProgram = tui.NewProgramRaw(tui.ModeNebula)
+		// Build phase info and pre-populate the model (no Send before Run).
+		phases := make([]tui.PhaseInfo, 0, len(n.Phases))
+		for _, p := range n.Phases {
+			phases = append(phases, tui.PhaseInfo{
+				ID:        p.ID,
+				Title:     p.Title,
+				DependsOn: p.DependsOn,
+			})
+		}
+		tuiProgram = tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases)
 		// Per-phase loops with PhaseUIBridge for hierarchical TUI tracking.
 		wg.Runner = &tuiLoopAdapter{
 			program:      tuiProgram,
@@ -318,27 +319,15 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	if useTUI {
-		// Build phase info for the TUI init message.
-		phases := make([]tui.PhaseInfo, 0, len(n.Phases))
-		for _, p := range n.Phases {
-			phases = append(phases, tui.PhaseInfo{
-				ID:        p.ID,
-				Title:     p.Title,
-				DependsOn: p.DependsOn,
-			})
-		}
-
-		// Run workers in a goroutine; Send must happen after Run() starts.
+		// Run workers in a goroutine; block on TUI.
 		go func() {
-			tuiProgram.Send(tui.MsgNebulaInit{
-				Name:   n.Manifest.Nebula.Name,
-				Phases: phases,
-			})
 			results, runErr := wg.Run(ctx)
 			tuiProgram.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
 		}()
 
 		finalModel, tuiErr := tuiProgram.Run()
+		// TUI exited — cancel context to stop any running workers.
+		cancel()
 		if tuiErr != nil {
 			return fmt.Errorf("TUI error: %w", tuiErr)
 		}
@@ -351,7 +340,14 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Stderr path.
+	// Stderr path: install signal handler for graceful shutdown.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		printer.Info("\nshutting down...")
+		cancel()
+	}()
 	printer.Info(fmt.Sprintf("starting workers (max %d)...", maxWorkers))
 	results, err := wg.Run(ctx)
 	printer.NebulaProgressBarDone()

@@ -32,6 +32,17 @@ func NewProgramRaw(mode Mode) *Program {
 	return NewProgram(mode)
 }
 
+// NewNebulaProgram creates a nebula-mode TUI with the phase table pre-populated.
+// This avoids needing to Send a MsgNebulaInit before Run() starts.
+func NewNebulaProgram(name string, phases []PhaseInfo) *Program {
+	model := NewAppModel(ModeNebula)
+	model.Detail = NewDetailPanel(80, 10)
+	model.StatusBar.Name = name
+	model.StatusBar.Total = len(phases)
+	model.NebulaView.InitPhases(phases)
+	return tea.NewProgram(model, tea.WithAltScreen())
+}
+
 // Run creates and runs a TUI program, blocking until it exits.
 // Returns an error if the program encounters a fatal error.
 func Run(mode Mode) error {
