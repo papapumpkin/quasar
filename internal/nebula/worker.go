@@ -38,17 +38,17 @@ type WorkerGroup struct {
 	Nebula       *Nebula
 	State        *State
 	MaxWorkers   int
-	Watcher      *Watcher      // nil = no in-flight editing
-	Committer    GitCommitter   // nil = no phase-boundary commits
-	Gater        Gater          // nil = trust mode (no prompts)
-	Dashboard    *Dashboard     // nil = no dashboard; used to coordinate watch-mode output
+	Watcher      *Watcher     // nil = no in-flight editing
+	Committer    GitCommitter // nil = no phase-boundary commits
+	Gater        Gater        // nil = trust mode (no prompts)
+	Dashboard    *Dashboard   // nil = no dashboard; used to coordinate watch-mode output
 	GlobalCycles int
 	GlobalBudget float64
 	GlobalModel  string
 	OnProgress   ProgressFunc // optional progress callback
 
 	mu          sync.Mutex
-	outputMu    sync.Mutex   // serializes checkpoint + dashboard output in watch mode
+	outputMu    sync.Mutex // serializes checkpoint + dashboard output in watch mode
 	results     []WorkerResult
 	gateSignals []gateSignal // collected after each batch
 }

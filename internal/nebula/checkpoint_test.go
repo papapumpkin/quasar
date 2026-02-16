@@ -232,12 +232,12 @@ func TestRenderCheckpoint(t *testing.T) {
 	t.Run("renders full checkpoint", func(t *testing.T) {
 		t.Parallel()
 		cp := &Checkpoint{
-			PhaseID:      "test-script-action",
-			PhaseTitle:   "Test Script Action",
-			NebulaName:   "CI/CD Pipeline",
-			Status:       PhaseStatusDone,
-			ReviewCycles: 2,
-			CostUSD:      0.12,
+			PhaseID:       "test-script-action",
+			PhaseTitle:    "Test Script Action",
+			NebulaName:    "CI/CD Pipeline",
+			Status:        PhaseStatusDone,
+			ReviewCycles:  2,
+			CostUSD:       0.12,
 			ReviewSummary: "Clean implementation, follows POSIX conventions",
 			FilesChanged: []FileChange{
 				{Path: "scripts/test.sh", Operation: "added", LinesAdded: 15},

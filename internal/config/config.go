@@ -21,7 +21,7 @@ type Config struct {
 	CoderSystemPrompt    string          `mapstructure:"coder_system_prompt"`
 	ReviewerSystemPrompt string          `mapstructure:"reviewer_system_prompt"`
 	Verbose              bool            `mapstructure:"verbose"`
-	AgentMail            AgentMailConfig  `mapstructure:"agentmail"`
+	AgentMail            AgentMailConfig `mapstructure:"agentmail"`
 }
 
 // Load reads configuration from viper, applying built-in defaults for any

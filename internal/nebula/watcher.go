@@ -51,11 +51,11 @@ func IsInterventionFile(name string) bool {
 // Watcher monitors a nebula directory for phase file changes using fsnotify.
 type Watcher struct {
 	Dir           string
-	Changes       <-chan Change            // Read-only external channel
-	Interventions <-chan InterventionKind  // Read-only intervention channel
+	Changes       <-chan Change           // Read-only external channel
+	Interventions <-chan InterventionKind // Read-only intervention channel
 
-	changes       chan Change             // Internal write channel
-	interventions chan InterventionKind   // Internal write channel
+	changes       chan Change           // Internal write channel
+	interventions chan InterventionKind // Internal write channel
 	done          chan struct{}
 	watcher       *fsnotify.Watcher
 }
