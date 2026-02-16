@@ -1,0 +1,32 @@
+[nebula]
+name = "TUI Visual Enhancements"
+description = "Visual overhaul of the Quasar TUI: logo, status bar redesign, phase tree polish, and side-by-side git diff viewer."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "tui", "visual"]
+
+[execution]
+max_workers = 2
+max_review_cycles = 5
+max_budget_usd = 30.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Design an iconic Quasar ASCII logo for the TUI status bar and README",
+    "Fix status bar: single-line layout, distinct color treatment, visual separation from the phase tree",
+    "Enhance the phase tree and cycle timeline with better visual hierarchy while preserving the existing structure users love",
+    "Add a side-by-side git diff viewer in the detail panel for understanding what changed",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "All TUI code lives in internal/tui/",
+    "Do not break the stderr Printer fallback path",
+    "Use only charmbracelet ecosystem (bubbletea, lipgloss, bubbles) — no other TUI deps",
+    "All new code must have tests",
+    "The loop and nebula packages must not import internal/tui",
+    "Preserve the existing phase/cycle tree structure — users like the information layout",
+]
