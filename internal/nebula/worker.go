@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // PhaseRunnerResult holds the outcome of a single phase execution.
@@ -46,6 +47,7 @@ type WorkerGroup struct {
 	GlobalBudget float64
 	GlobalModel  string
 	OnProgress   ProgressFunc // optional progress callback
+	Metrics      *Metrics     // optional; nil = no collection
 
 	mu          sync.Mutex
 	outputMu    sync.Mutex // serializes checkpoint + dashboard output in watch mode
@@ -231,6 +233,7 @@ func (wg *WorkerGroup) applyGate(ctx context.Context, phase *PhaseSpec, cp *Chec
 func (wg *WorkerGroup) executePhase(
 	ctx context.Context,
 	phaseID string,
+	waveNumber int,
 	phasesByID map[string]*PhaseSpec,
 	done, failed, inFlight map[string]bool,
 ) {
@@ -239,6 +242,10 @@ func (wg *WorkerGroup) executePhase(
 	if phase == nil || ps == nil || ps.BeadID == "" {
 		wg.recordFailure(phaseID, done, failed, inFlight)
 		return
+	}
+
+	if wg.Metrics != nil {
+		wg.Metrics.RecordPhaseStart(phaseID, waveNumber)
 	}
 
 	wg.mu.Lock()
@@ -252,6 +259,10 @@ func (wg *WorkerGroup) executePhase(
 	exec := ResolveExecution(wg.GlobalCycles, wg.GlobalBudget, wg.GlobalModel, &wg.Nebula.Manifest.Execution, phase)
 	prompt := buildPhasePrompt(phase, &wg.Nebula.Manifest.Context)
 	phaseResult, err := wg.Runner.RunExistingPhase(ctx, ps.BeadID, prompt, exec)
+
+	if wg.Metrics != nil && phaseResult != nil {
+		wg.Metrics.RecordPhaseComplete(phaseID, *phaseResult)
+	}
 
 	// Commit phase changes on success so reviewers see clean diffs.
 	if err == nil && wg.Committer != nil {
@@ -545,6 +556,9 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 
 		sem := make(chan struct{}, workerCount)
 
+		// Track peak actual parallelism during this wave via atomic counter.
+		var actualConcurrent, peakConcurrent int64
+
 		// Build a set of phase IDs belonging to this wave so the inner
 		// dispatch loop only considers phases from the current wave.
 		// Without this filter, graph.Ready(done) would return phases from
@@ -623,8 +637,19 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 				sem <- struct{}{}
 				wgSync.Add(1)
 				go func(phaseID string) {
-					defer func() { <-sem; wgSync.Done() }()
-					wg.executePhase(ctx, phaseID, phasesByID, done, failed, inFlight)
+					defer func() {
+						atomic.AddInt64(&actualConcurrent, -1)
+						<-sem
+						wgSync.Done()
+					}()
+					cur := atomic.AddInt64(&actualConcurrent, 1)
+					for {
+						peak := atomic.LoadInt64(&peakConcurrent)
+						if cur <= peak || atomic.CompareAndSwapInt64(&peakConcurrent, peak, cur) {
+							break
+						}
+					}
+					wg.executePhase(ctx, phaseID, wave.Number, phasesByID, done, failed, inFlight)
 				}(id)
 			}
 			wgSync.Wait() // wait for batch before looking for more ready phases
@@ -634,6 +659,11 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 			if stop {
 				return wg.collectResults(), retErr
 			}
+		}
+
+		// Record wave completion metrics.
+		if wg.Metrics != nil {
+			wg.Metrics.RecordWaveComplete(wave.Number, ep, int(atomic.LoadInt64(&peakConcurrent)))
 		}
 	}
 	wgSync.Wait()
