@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: go-fmt
+        name: Format go code
+        entry: scripts/fmt.sh
+        language: script
+        files: \.go$
+        pass_filenames: true

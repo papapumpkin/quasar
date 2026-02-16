@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Formatting Go files..." >&2
-changed=$(gofmt -l .)
-if [ -n "$changed" ]; then
-    echo "Reformatting:" >&2
-    echo "$changed" >&2
-    gofmt -w .
-    echo "Done." >&2
-else
-    echo "All files already formatted." >&2
+# pre-commit passes the list of changed files as arguments
+FILES=("$@")
+
+if [ ${#FILES[@]} -eq 0 ]; then
+    echo "No Go files to format." >&2
+    exit 0
 fi
+
+echo "Formatting Go files..." >&2
+# gofmt -l -w only runs on the specific files staged for commit
+gofmt -w "${FILES[@]}"
+echo "Done." >&2
