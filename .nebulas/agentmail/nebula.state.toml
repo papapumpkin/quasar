@@ -1,0 +1,69 @@
+version = 1
+nebula_name = 'agentmail'
+
+[phases]
+[phases.agent-lifecycle]
+bead_id = 'quasar-4yx'
+status = 'created'
+created_at = 2026-02-15T21:59:27.760928-05:00
+updated_at = 2026-02-15T21:59:27.760928-05:00
+
+[phases.change-tools]
+bead_id = 'quasar-ct8'
+status = 'created'
+created_at = 2026-02-15T21:59:27.654018-05:00
+updated_at = 2026-02-15T21:59:27.654018-05:00
+
+[phases.docs]
+bead_id = 'quasar-v7m'
+status = 'created'
+created_at = 2026-02-15T21:59:28.081862-05:00
+updated_at = 2026-02-15T21:59:28.081862-05:00
+
+[phases.dolt-client]
+bead_id = 'quasar-b1m'
+status = 'created'
+created_at = 2026-02-15T21:59:27.224862-05:00
+updated_at = 2026-02-15T21:59:27.224862-05:00
+
+[phases.dolt-schema]
+bead_id = 'quasar-63k'
+status = 'created'
+created_at = 2026-02-15T21:59:26.998325-05:00
+updated_at = 2026-02-15T21:59:26.998325-05:00
+
+[phases.file-claim-tools]
+bead_id = 'quasar-3wv'
+status = 'created'
+created_at = 2026-02-15T21:59:27.54924-05:00
+updated_at = 2026-02-15T21:59:27.54924-05:00
+
+[phases.go-module]
+bead_id = 'quasar-6tp'
+status = 'in_progress'
+created_at = 2026-02-15T21:59:27.112397-05:00
+updated_at = 2026-02-15T21:59:28.149167-05:00
+
+[phases.integration-tests]
+bead_id = 'quasar-7f0'
+status = 'created'
+created_at = 2026-02-15T21:59:27.972183-05:00
+updated_at = 2026-02-15T21:59:27.972183-05:00
+
+[phases.mailbox-tools]
+bead_id = 'quasar-xjx'
+status = 'created'
+created_at = 2026-02-15T21:59:27.444127-05:00
+updated_at = 2026-02-15T21:59:27.444127-05:00
+
+[phases.mcp-skeleton]
+bead_id = 'quasar-eda'
+status = 'created'
+created_at = 2026-02-15T21:59:27.337348-05:00
+updated_at = 2026-02-15T21:59:27.337348-05:00
+
+[phases.quasar-mcp-wiring]
+bead_id = 'quasar-1dq'
+status = 'created'
+created_at = 2026-02-15T21:59:27.866295-05:00
+updated_at = 2026-02-15T21:59:27.866295-05:00
