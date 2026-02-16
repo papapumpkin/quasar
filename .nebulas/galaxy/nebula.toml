@@ -1,0 +1,31 @@
+[nebula]
+name = "galaxy"
+description = "Add scope-aware validation and coordination to nebula for octree-inspired conflict avoidance"
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "nebula", "galaxy"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 75.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Add scope declarations to phases for file ownership boundaries",
+    "Validate scope overlaps at nebula validation time (hard error by default)",
+    "Define a Coordinator interface for work queuing, broadcast, and locking",
+    "Implement an in-process Go channel Coordinator",
+    "Integrate Coordinator into WorkerGroup for runtime conflict detection",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "No external dependencies for the in-process coordinator",
+    "Coordinator interface must be transport-agnostic (swappable for Temporal/etcd later)",
+    "Scope validation uses only stdlib (path/filepath for glob matching)",
+    "All UI output goes to stderr via ui.Printer",
+]
