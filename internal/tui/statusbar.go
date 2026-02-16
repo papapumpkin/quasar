@@ -43,25 +43,25 @@ func (s StatusBar) View() string {
 			if s.Total > 0 {
 				pct = s.Completed * 100 / s.Total
 			}
-			left = " " + styleStatusLabel.Render("QUASAR") + "  " +
+			left = " " + Logo() + "  " +
 				styleStatusValue.Render(fmt.Sprintf("%s %d%%", name, pct))
 		} else {
 			bar := renderProgressBar(s.Completed, s.Total, 12)
-			left = " " + styleStatusLabel.Render("QUASAR") + "  " +
+			left = " " + Logo() + "  " +
 				styleStatusValue.Render(fmt.Sprintf("nebula: %s  %s %d/%d", name, bar, s.Completed, s.Total))
 		}
 	} else if s.BeadID != "" {
 		// Loop mode: show cycle mini-bar.
 		if compact {
-			left = " " + styleStatusLabel.Render("QUASAR") + "  " +
+			left = " " + Logo() + "  " +
 				styleStatusValue.Render(fmt.Sprintf("%d/%d", s.Cycle, s.MaxCycles))
 		} else {
 			cycleBar := renderCycleBar(s.Cycle, s.MaxCycles)
-			left = " " + styleStatusLabel.Render("QUASAR") + "  " +
+			left = " " + Logo() + "  " +
 				styleStatusValue.Render(fmt.Sprintf("task %s  cycle %d/%d %s", s.BeadID, s.Cycle, s.MaxCycles, cycleBar))
 		}
 	} else {
-		left = " " + styleStatusLabel.Render("QUASAR")
+		left = " " + Logo()
 	}
 
 	// Show execution state indicators.

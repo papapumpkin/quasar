@@ -1,5 +1,9 @@
 # Quasar
 
+```
+      ━━╋━━  Q U A S A R  ━━╋━━
+```
+
 Dual-agent AI coding coordinator that cycles a coder and reviewer until the reviewer approves.
 
 ## What It Does
