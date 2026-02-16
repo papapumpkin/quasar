@@ -1,6 +1,6 @@
 [nebula]
 name = "local-parallelism"
-description = "Add scope-aware validation and in-process coordination to nebula for safe parallel phase execution"
+description = "Add scope declarations, overlap validation, and static effective parallelism to nebula — Layer 1 of the relativity coordination model"
 
 [defaults]
 type = "feature"
@@ -10,7 +10,7 @@ labels = ["quasar", "nebula", "relativity"]
 [execution]
 max_workers = 1
 max_review_cycles = 5
-max_budget_usd = 75.0
+max_budget_usd = 40.0
 
 [context]
 repo = "github.com/papapumpkin/quasar"
@@ -18,14 +18,14 @@ working_dir = "."
 goals = [
     "Add scope declarations to phases for file ownership boundaries",
     "Validate scope overlaps at nebula validation time (hard error by default)",
-    "Define a Coordinator interface for work queuing, broadcast, and locking",
-    "Implement an in-process Go channel Coordinator",
-    "Integrate Coordinator into WorkerGroup for runtime conflict detection",
+    "Add transitive dependency checking to Graph for scope overlap exemption",
+    "Compute effective parallelism per wave from graph width and scope overlap",
+    "Integrate wave-based semaphore sizing into WorkerGroup dispatch loop",
 ]
 constraints = [
     "Follow existing Go conventions from CLAUDE.md",
-    "No external dependencies for the in-process coordinator",
-    "Coordinator interface must be transport-agnostic (swappable for Temporal/etcd later)",
+    "No external dependencies — stdlib only",
     "Scope validation uses only stdlib (path/filepath for glob matching)",
+    "Runtime file locking is handled by agentmail, not this nebula",
     "All UI output goes to stderr via ui.Printer",
 ]

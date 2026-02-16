@@ -3,7 +3,7 @@ id = "metrics-tests"
 title = "Comprehensive tests for metrics collection, persistence, and status"
 type = "task"
 priority = 2
-depends_on = ["worker-metrics", "coordinator-metrics", "metrics-persistence", "status-command"]
+depends_on = ["worker-metrics", "agentmail-metrics", "metrics-persistence", "status-command"]
 scope = ["internal/nebula/nebula_test.go"]
 +++
 

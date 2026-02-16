@@ -1,53 +1,62 @@
 +++
-id = "coordinator-metrics"
-title = "Instrument ChannelCoordinator with metrics hooks"
+id = "agentmail-metrics"
+title = "Query agentmail Dolt tables for coordination metrics"
 type = "feature"
 priority = 2
 depends_on = ["metrics-types"]
-scope = ["internal/nebula/channel_coordinator.go"]
+scope = ["internal/nebula/metrics_agentmail.go"]
 +++
 
 ## Problem
 
-The ChannelCoordinator handles lock acquisition, broadcast, and queue operations but records nothing about their performance. Lock wait times and conflict counts are critical signals for the adaptive concurrency controller.
+Runtime coordination data (file claim conflicts, claim wait patterns, change announcements) lives in agentmail's Dolt database. The metrics system needs to query this data after each wave to feed the adaptive concurrency controller.
 
 ## Solution
 
-Add an optional `*Metrics` field to `ChannelCoordinator`. When non-nil, record:
+Create `internal/nebula/metrics_agentmail.go` with functions that query agentmail's Dolt tables and populate the Metrics struct.
 
-### Lock metrics
-- Time between `Lock()` call and lock acquisition → `RecordLockWait(phaseID, duration)`
-- Lock contention events (when a lock blocks because paths overlap with an existing lock)
+### Data sources
 
-### Broadcast metrics
-- Count of broadcast events per phase
-- Subscriber notification latency (time to fan out to all subscribers)
+Agentmail's Dolt schema has four tables with relevant coordination data:
 
-### Queue metrics
-- Queue depth at enqueue/dequeue time
-- Wait time in dequeue (time between phase becoming ready and worker picking it up)
+| Table | Metric signal |
+|-------|--------------|
+| `file_claims` | Active claims, contention (multiple agents wanting same file) |
+| `changes` | Change count per wave, files modified per phase |
+| `agents` | Active worker count, stale agent detection |
+| `messages` | Conflict resolution messages between agents |
 
-### Implementation approach
-
-Wrap the existing Lock/Broadcast/Enqueue/Dequeue methods with timing instrumentation. The Metrics pointer is checked before each record call — nil means no-op, zero overhead.
+### Functions
 
 ```go
-type ChannelCoordinator struct {
-    // ... existing fields ...
-    Metrics *Metrics // optional, nil = no collection
-}
+// CollectAgentmailMetrics queries the agentmail Dolt database and populates
+// coordination metrics for the given wave. Requires a database/sql connection.
+// Returns nil error if agentmail is not configured (metrics left empty).
+func CollectAgentmailMetrics(ctx context.Context, db *sql.DB, m *Metrics, waveNumber int) error
 ```
 
-This does NOT change the Coordinator interface — metrics are an implementation concern of ChannelCoordinator, not a contract requirement.
+Specific queries:
+- **Conflict count**: `SELECT COUNT(*) FROM file_claims WHERE file_path IN (SELECT file_path FROM file_claims GROUP BY file_path HAVING COUNT(DISTINCT agent_id) > 1)`
+- **Claim duration**: time between claim and release for completed phases (join `file_claims` with `changes` timestamps)
+- **Change volume**: `SELECT COUNT(*) FROM changes WHERE announced_at > ?` (wave start time)
+
+### Integration point
+
+Called from `WorkerGroup.Run` after each wave completes, before the adaptive controller's `Decide()`. Only called if a Dolt DSN is configured.
+
+### Optional dependency
+
+This phase has a soft dependency on agentmail being deployed. When agentmail is not configured (no DSN), the function is a no-op. Metrics from the orchestrator side (phase duration, cycles, cost) still work independently.
 
 ## Files to Modify
 
-- `internal/nebula/channel_coordinator.go` — Add Metrics field, instrument Lock/Broadcast/Enqueue/Dequeue
+- `internal/nebula/metrics_agentmail.go` — New file: Dolt query functions for coordination metrics
 
 ## Acceptance Criteria
 
-- [ ] Lock wait time recorded when Metrics is non-nil
-- [ ] No behavioral change when Metrics is nil
-- [ ] No additional allocations on the hot path when Metrics is nil
-- [ ] `go test ./internal/nebula/...` passes (existing tests unaffected)
+- [ ] Queries compile and return correct data against agentmail schema
+- [ ] No-op when db is nil (agentmail not configured)
+- [ ] Conflict count populated from file_claims contention
+- [ ] Change volume populated from changes table
 - [ ] `go vet ./...` passes
+- [ ] Test with mock sql.DB or sqltest

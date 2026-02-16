@@ -1,74 +1,55 @@
 +++
 id = "worker-integration"
-title = "Integrate Coordinator and effective parallelism into WorkerGroup"
+title = "Integrate wave-based effective parallelism into WorkerGroup"
 type = "feature"
 priority = 1
-depends_on = ["scope-validation", "channel-coordinator", "effective-parallelism"]
+depends_on = ["scope-validation", "effective-parallelism"]
 scope = ["internal/nebula/worker.go"]
 +++
 
 ## Problem
 
-WorkerGroup currently dispatches phases with a flat `max_workers` semaphore and no runtime coordination. With scope validation, the Coordinator interface, and effective parallelism computation in place, we can add both smart worker capping and runtime conflict detection.
+WorkerGroup dispatches phases with a flat `max_workers` semaphore for all waves. This wastes workers on narrow waves and doesn't account for scope-serialized phases. Runtime file locking is handled by agentmail (agents claim files via MCP tools during execution), but the orchestrator should still avoid spawning more workers than are useful.
 
 ## Solution
 
-### 1. Wave-based effective parallelism (Layer 1)
+Replace the flat semaphore with per-wave sizing using the `EffectiveParallelism` function.
 
-Replace the flat semaphore with per-wave sizing:
+### Dispatch loop changes
 
-1. At the start of `Run`, compute waves via `ComputeWaves()`
-2. For each wave, call `EffectiveParallelism()` to get the true max useful workers
-3. Resize the semaphore to `min(max_workers, effective_parallelism)` before dispatching the wave
-4. This is purely static — no Coordinator required, works with nil Coordinator
+In `WorkerGroup.Run`:
 
-### 2. Coordinator integration (optional)
-
-Add `Coordinator` as an optional field on `WorkerGroup`. When present, the execution flow becomes:
-
-#### Dispatch loop
-
-1. For each ready phase (from `Graph.Ready`):
-   - If phase has `Scope`, call `Coordinator.Lock(ctx, phase.Scope)` before starting
-   - Call `Coordinator.Enqueue(ctx, phase.ID)` (or dispatch directly as today)
-2. Worker goroutine:
-   - Subscribe to broadcast channel on start
-   - Run phase via `PhaseRunner`
-   - On completion: get actual files edited (from git diff), broadcast `ChangeEvent`
-   - Call unlock function
-3. Conflict detection goroutine (per worker):
-   - Listen on subscribed channel
-   - For each ChangeEvent: check if any `FilesEdited` overlap with own phase's `Scope`
-   - If overlap detected: log warning via UI, check if own work has touched those files
-   - If real conflict: cancel own context → triggers pessimistic restart
+1. At the start, compute waves via `ComputeWaves()`
+2. Before dispatching each wave's phases, compute `EffectiveParallelism()` for the wave
+3. Resize the semaphore to `min(max_workers, effective_parallelism)`
+4. Log the per-wave worker count via stderr: "Wave 1: 3 workers (effective parallelism: 3/4)"
 
 ### Backward compatibility
 
-- `Coordinator` nil → no locking, no broadcasts (exactly as today)
-- Effective parallelism is always active (it only reduces unnecessary worker spawns, never changes behavior)
+- Phases without `Scope` fields don't affect effective parallelism (unscoped phases are unrestricted)
+- If all phases are unscoped, behavior is identical to today (semaphore = max_workers)
+- No dependency on agentmail or any external system — this is purely static analysis
 
-### Phase restart protocol
+### No runtime locking here
 
-When a conflict is detected:
-1. Cancel the phase's context (kills the coder-reviewer loop)
-2. Re-queue the phase with `Coordinator.Lock` on the contested paths
-3. Update state to record the retry
-4. Log via `OnProgress` callback
+Runtime file coordination (locking, conflict detection, change broadcasting) is delegated to agentmail. The orchestrator's job is limited to:
+1. Static scope validation at plan time (Validate)
+2. Smart worker count per wave (EffectiveParallelism)
+
+Agents self-coordinate during execution via agentmail MCP tools.
 
 ## Files to Modify
 
-- `internal/nebula/worker.go` — Add Coordinator field, wave-based semaphore sizing, integrate dispatch loop
+- `internal/nebula/worker.go` — Per-wave semaphore sizing using EffectiveParallelism
 
 ## Acceptance Criteria
 
-- [ ] WorkerGroup with nil Coordinator works exactly as before
-- [ ] Semaphore is capped at effective parallelism per wave (not flat max_workers)
-- [ ] Linear dependency chain uses 1 worker regardless of max_workers setting
+- [ ] Semaphore capped at effective parallelism per wave
+- [ ] Linear dependency chain uses 1 worker regardless of max_workers
 - [ ] Wide wave with non-overlapping scopes uses full max_workers
 - [ ] Wide wave with overlapping scopes reduces effective workers
-- [ ] WorkerGroup with Coordinator uses Lock/Broadcast/Subscribe
-- [ ] Conflict detection cancels and re-queues conflicting phase
-- [ ] Phase restarts are logged via OnProgress
-- [ ] State tracks retry count
+- [ ] Unscoped phases: behavior identical to current
+- [ ] Per-wave worker count logged to stderr
+- [ ] Existing tests pass unchanged
 - [ ] `go test ./internal/nebula/...` passes
 - [ ] `go vet ./...` passes

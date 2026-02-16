@@ -1,11 +1,11 @@
 [nebula]
 name = "agentmail"
-description = "MCP server for inter-agent communication via Dolt-backed mailbox"
+description = "MCP server for inter-agent communication and runtime coordination via Dolt-backed mailbox — provides file locking, change broadcasting, and conflict detection for parallel quasar workers"
 
 [defaults]
 type = "task"
 priority = 2
-labels = ["agentmail", "mcp"]
+labels = ["agentmail", "mcp", "relativity"]
 
 [execution]
 max_workers = 1
@@ -17,9 +17,11 @@ repo = "github.com/aaronsalm/quasar"
 working_dir = "."
 goals = [
     "Enable parallel quasar agents to communicate and coordinate",
-    "Prevent file conflicts between concurrent workers",
-    "Use Dolt as the backing store for versioned message history",
+    "Prevent file conflicts between concurrent workers via advisory file claims",
+    "Broadcast change announcements so agents can detect and resolve conflicts at runtime",
+    "Use Dolt as the backing store for versioned coordination history and audit trail",
     "Implement as an MCP server using the official Go SDK",
+    "Serve as the runtime coordination layer complementing local-parallelism's static analysis",
 ]
 constraints = [
     "Use the official Go MCP SDK (github.com/modelcontextprotocol/go-sdk)",
