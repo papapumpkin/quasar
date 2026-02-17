@@ -145,6 +145,26 @@ func TestFileListView_SelectedFile_Empty(t *testing.T) {
 	}
 }
 
+func TestFileListView_View_LongPathTruncation(t *testing.T) {
+	t.Parallel()
+	// Use a very narrow width so paths must be truncated, exercising the
+	// multi-byte "…" truncation guard against negative padding.
+	files := []FileStatEntry{
+		{Path: "internal/very/deeply/nested/package/some_long_filename.go", Additions: 5, Deletions: 2},
+		{Path: "short.go", Additions: 1, Deletions: 0},
+	}
+	v := NewFileListView(files, 30, "", "", "")
+
+	// Must not panic.
+	got := v.View()
+	if !strings.Contains(got, "…") {
+		t.Error("View() should contain truncation indicator …")
+	}
+	if !strings.Contains(got, "short.go") {
+		t.Error("View() should still contain the short path")
+	}
+}
+
 func TestFileListView_CursorIndicatorMovesWithSelection(t *testing.T) {
 	t.Parallel()
 	files := []FileStatEntry{

@@ -63,8 +63,14 @@ func (v *FileListView) View() string {
 			path = "…" + path[len(path)-available+1:]
 		}
 
-		// Right-pad path for alignment.
-		padded := path + strings.Repeat(" ", maxPath-len(path))
+		// Right-pad path for alignment. Clamp to zero because multi-byte
+		// truncation characters (e.g. "…" = 3 bytes) can make len(path)
+		// exceed maxPath.
+		pad := maxPath - len(path)
+		if pad < 0 {
+			pad = 0
+		}
+		padded := path + strings.Repeat(" ", pad)
 
 		add := styleDiffStatAdd.Render(fmt.Sprintf("+%d", f.Additions))
 		del := styleDiffStatDel.Render(fmt.Sprintf("-%d", f.Deletions))
