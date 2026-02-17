@@ -428,6 +428,7 @@ func TestOverlayPickerKeyHandling(t *testing.T) {
 	t.Run("cursor does not go above 0", func(t *testing.T) {
 		t.Parallel()
 		m := NewAppModel(ModeNebula)
+		m.Splash = false
 		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, NebulaChoices: choices}
 		m.AvailableNebulae = choices
 		m.PickerCursor = 0
@@ -445,6 +446,7 @@ func TestOverlayPickerKeyHandling(t *testing.T) {
 	t.Run("enter selects nebula and quits", func(t *testing.T) {
 		t.Parallel()
 		m := NewAppModel(ModeNebula)
+		m.Splash = false
 		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, NebulaChoices: choices}
 		m.AvailableNebulae = choices
 		m.PickerCursor = 1
@@ -673,6 +675,7 @@ func TestOverlayBlocksKeys(t *testing.T) {
 	t.Run("only q exits when overlay is active", func(t *testing.T) {
 		t.Parallel()
 		m := NewAppModel(ModeLoop)
+		m.Splash = false
 		m.Width = 80
 		m.Height = 24
 		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess}
