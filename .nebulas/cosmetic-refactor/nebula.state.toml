@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'cosmetic-refactor'
-total_cost_usd = 4.6161062500000005
+total_cost_usd = 7.06665775
 
 [phases]
 [phases.claude-eliminate-pkg-vars]
@@ -71,9 +71,15 @@ updated_at = 2026-02-17T17:21:12.128394-05:00
 
 [phases.nebula-extract-phases-by-id]
 bead_id = 'quasar-9ll'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-17T17:21:10.724457-05:00
-updated_at = 2026-02-17T17:24:23.901679-05:00
+updated_at = 2026-02-17T17:30:18.740622-05:00
+
+[phases.nebula-extract-phases-by-id.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean DRY refactor consolidating four inline phase-map constructions into a shared `PhasesByID` helper, plus extracting scope validation to its own file — all tests and vet pass, no behavior changes.'
 
 [phases.nebula-extract-scope-validation]
 bead_id = 'quasar-tqp'
