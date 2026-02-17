@@ -21,6 +21,8 @@ var (
 	colorStarYellow    = lipgloss.Color("#E3B341") // Star yellow — highlights, sparkle accents
 	colorNebula        = lipgloss.Color("#BC8CFF") // Nebula purple — breadcrumbs, secondary UI
 	colorNebulaDeep    = lipgloss.Color("#8B5CF6") // Deep nebula — selected backgrounds, borders
+	colorRedshift      = lipgloss.Color("#FF6B6B") // Warm red — Doppler left jet
+	colorBlueshift     = lipgloss.Color("#4FC3F7") // Cool cyan — Doppler right jet
 )
 
 // Selection indicator prepended to the active row.
