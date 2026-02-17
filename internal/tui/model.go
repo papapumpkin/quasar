@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -435,6 +436,15 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// --- Toast auto-dismiss ---
 	case MsgToastExpired:
 		m.Toasts = removeToast(m.Toasts, msg.ID)
+
+	// --- External difftool ---
+	case MsgDiffToolDone:
+		if msg.Err != nil {
+			m.addMessage("difftool: %s", msg.Err)
+			toast, cmd := NewToast(fmt.Sprintf("difftool: %s", msg.Err), true)
+			m.Toasts = append(m.Toasts, toast)
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	return m, tea.Batch(cmds...)
@@ -560,6 +570,12 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.Detail.Update(msg)
 			return m, nil
 		}
+	}
+
+	// When the diff file list is active, Enter opens the external difftool
+	// instead of drilling down into the loop view.
+	if m.ShowDiff && m.DiffFileList != nil && key.Matches(msg, m.Keys.OpenDiff) {
+		return m.openDiffTool()
 	}
 
 	switch {
@@ -744,6 +760,28 @@ func (m *AppModel) buildDiffFileList() *FileListView {
 		return nil
 	}
 	return NewFileListView(agent.DiffFiles, m.Width-4, agent.BaseRef, agent.HeadRef, agent.WorkDir)
+}
+
+// openDiffTool launches the user's configured git difftool for the selected file.
+// It suspends the TUI via tea.ExecProcess and resumes when the tool exits.
+// Returns a no-op when refs or files are unavailable.
+func (m AppModel) openDiffTool() (tea.Model, tea.Cmd) {
+	fl := m.DiffFileList
+	if fl == nil || len(fl.Files) == 0 {
+		return m, nil
+	}
+	if fl.BaseRef == "" || fl.HeadRef == "" {
+		return m, nil
+	}
+
+	file := fl.SelectedFile()
+	c := exec.Command("git", "difftool", "--no-prompt",
+		fl.BaseRef+".."+fl.HeadRef,
+		"--", file.Path)
+	c.Dir = fl.WorkDir
+	return m, tea.ExecProcess(c, func(err error) tea.Msg {
+		return MsgDiffToolDone{Err: err}
+	})
 }
 
 // handleBeadsKey toggles the bead tracker view in the detail panel.
@@ -1356,6 +1394,14 @@ func (m AppModel) renderMainView() string {
 // buildFooter creates the footer with appropriate bindings.
 func (m AppModel) buildFooter() Footer {
 	f := Footer{Width: m.Width}
+
+	// When the diff file list is active, show dedicated diff-mode bindings.
+	if m.ShowDiff && m.DiffFileList != nil {
+		hasRefs := m.DiffFileList.BaseRef != "" && m.DiffFileList.HeadRef != ""
+		f.Bindings = DiffFileListFooterBindings(m.Keys, hasRefs)
+		return f
+	}
+
 	if m.Gate != nil {
 		f.Bindings = GateFooterBindings(m.Keys)
 	} else if m.Mode == ModeNebula {

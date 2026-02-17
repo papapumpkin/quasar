@@ -38,11 +38,11 @@ var _ beads.Client = (*noopBeads)(nil)
 func (n *noopBeads) Create(context.Context, string, beads.CreateOpts) (string, error) {
 	return "test-bead", nil
 }
-func (n *noopBeads) Show(context.Context, string) (*beads.Bead, error) { return nil, nil }
+func (n *noopBeads) Show(context.Context, string) (*beads.Bead, error)      { return nil, nil }
 func (n *noopBeads) Update(context.Context, string, beads.UpdateOpts) error { return nil }
-func (n *noopBeads) Close(context.Context, string, string) error       { return nil }
-func (n *noopBeads) AddComment(context.Context, string, string) error  { return nil }
-func (n *noopBeads) Validate() error                                   { return nil }
+func (n *noopBeads) Close(context.Context, string, string) error            { return nil }
+func (n *noopBeads) AddComment(context.Context, string, string) error       { return nil }
+func (n *noopBeads) Validate() error                                        { return nil }
 
 func TestNilGitDoesNotPanic(t *testing.T) {
 	t.Parallel()

@@ -55,6 +55,18 @@ func NebulaDetailFooterBindings(km KeyMap) []key.Binding {
 	return []key.Binding{km.Up, km.Down, km.Enter, km.Info, km.Beads, km.Back, km.Quit}
 }
 
+// DiffFileListFooterBindings returns footer bindings when the diff file list is active.
+// When hasRefs is false, the OpenDiff binding is disabled and a hint is shown instead.
+func DiffFileListFooterBindings(km KeyMap, hasRefs bool) []key.Binding {
+	openDiff := km.OpenDiff
+	if !hasRefs {
+		openDiff.SetEnabled(false)
+	}
+	diffToggle := km.Diff
+	diffToggle.SetHelp("d", "close")
+	return []key.Binding{km.Up, km.Down, openDiff, diffToggle, km.Quit}
+}
+
 // GateFooterBindings returns footer bindings during gate prompts.
 func GateFooterBindings(km KeyMap) []key.Binding {
 	return []key.Binding{km.Accept, km.Reject, km.Retry, km.Skip}

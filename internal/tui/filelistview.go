@@ -87,7 +87,11 @@ func (v *FileListView) View() string {
 
 	b.WriteString("\n\n")
 	hint := lipgloss.NewStyle().Foreground(colorMuted)
-	b.WriteString(hint.Render("  ↑↓ navigate"))
+	if v.BaseRef != "" && v.HeadRef != "" {
+		b.WriteString(hint.Render("  ↑↓ navigate  ⏎ open diff"))
+	} else {
+		b.WriteString(hint.Render("  ↑↓ navigate  (external diff not available)"))
+	}
 
 	return b.String()
 }

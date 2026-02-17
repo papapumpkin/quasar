@@ -1,0 +1,33 @@
+[nebula]
+name = "File-List Diff View with External Difftool"
+description = "Replace the expensive side-by-side diff renderer with a lightweight file list and delegate actual diff viewing to git difftool. Includes per-cycle git commits for clean diff refs."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "tui", "performance"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 30.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Stop rendering full side-by-side diffs in the TUI — the Bubbles viewport chokes on large ANSI content",
+    "Show a lightweight navigable file list when the user presses 'd'",
+    "Delegate actual diff viewing to the user's configured git difftool (nvimdiff, VS Code, meld, etc.)",
+    "Create per-cycle git commits so each cycle's changes are isolated and diffable",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "All TUI code lives in internal/tui/",
+    "Use only charmbracelet ecosystem (bubbletea, lipgloss, bubbles) — no other TUI deps",
+    "The loop and nebula packages must not import internal/tui",
+    "Do not break the stderr Printer fallback path",
+    "Keep existing RenderDiffView as fallback for no-git or small-diff cases",
+    "Use tea.ExecProcess for external difftool — suspends TUI, runs tool, resumes",
+    "CycleCommitter must be nil-safe (no-op when not in a git repo)",
+]

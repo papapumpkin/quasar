@@ -23,6 +23,9 @@ type KeyMap struct {
 	Home     key.Binding
 	End      key.Binding
 
+	// Diff file list keys.
+	OpenDiff key.Binding
+
 	// Architect overlay keys (nebula mode).
 	NewPhase  key.Binding
 	EditPhase key.Binding
@@ -102,6 +105,10 @@ func DefaultKeyMap() KeyMap {
 		End: key.NewBinding(
 			key.WithKeys("end", "G"),
 			key.WithHelp("end/G", "bottom"),
+		),
+		OpenDiff: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("⏎", "open diff"),
 		),
 		NewPhase: key.NewBinding(
 			key.WithKeys("n"),

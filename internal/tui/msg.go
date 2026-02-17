@@ -318,3 +318,6 @@ type MsgArchitectConfirm struct {
 	Result    *nebula.ArchitectResult
 	DependsOn []string // user-modified dependency list
 }
+
+// MsgDiffToolDone is sent when an external difftool process exits.
+type MsgDiffToolDone struct{ Err error }

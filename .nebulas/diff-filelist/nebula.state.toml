@@ -1,0 +1,64 @@
+version = 1
+nebula_name = 'File-List Diff View with External Difftool'
+total_cost_usd = 13.835970249999999
+
+[phases]
+[phases.cycle-committer]
+bead_id = 'quasar-2d3'
+status = 'done'
+created_at = 2026-02-16T23:53:54.545335-05:00
+updated_at = 2026-02-16T23:58:41.102507-05:00
+
+[phases.cycle-committer.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'New `CycleCommitter` interface and `gitCycleCommitter` implementation in `internal/loop/git.go` with comprehensive tests — clean, idiomatic Go that follows existing project patterns.'
+
+[phases.diff-messages]
+bead_id = 'quasar-dse'
+status = 'done'
+created_at = 2026-02-16T23:53:54.663444-05:00
+updated_at = 2026-02-17T00:10:36.8592-05:00
+
+[phases.diff-messages.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, well-tested extension of diff messages with structured metadata (refs, file stats, workdir) to support future file list navigation and difftool integration.'
+
+[phases.external-difftool]
+bead_id = 'quasar-b8r'
+status = 'done'
+created_at = 2026-02-16T23:53:54.783542-05:00
+updated_at = 2026-02-17T00:24:53.801765-05:00
+
+[phases.external-difftool.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented external difftool integration via tea.ExecProcess with proper edge case handling, consistent error reporting, and good test coverage of the file list view component.'
+
+[phases.filelist-view]
+bead_id = 'quasar-d4i'
+status = 'done'
+created_at = 2026-02-16T23:53:54.896245-05:00
+updated_at = 2026-02-17T00:19:05.433036-05:00
+
+[phases.filelist-view.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = "Targeted fix for a negative-padding panic in FileListView's multi-byte truncation, with a regression test — clean and low-risk."
+
+[phases.wire-committer]
+bead_id = 'quasar-ukx'
+status = 'done'
+created_at = 2026-02-16T23:53:55.005987-05:00
+updated_at = 2026-02-17T00:04:23.615773-05:00
+
+[phases.wire-committer.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'CycleCommitter integrated into Loop struct with proper nil-safety guards, SHA tracking in CycleState, and wiring through both cmd/run.go and cmd/nebula.go paths — clean, well-tested implementation.'
