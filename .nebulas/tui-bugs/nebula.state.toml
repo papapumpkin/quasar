@@ -19,7 +19,7 @@ summary = 'Straightforward bug fix that adds architect function wiring to `NewNe
 bead_id = 'quasar-tmw'
 status = 'in_progress'
 created_at = 2026-02-17T11:52:42.856203-05:00
-updated_at = 2026-02-17T11:56:48.005419-05:00
+updated_at = 2026-02-17T12:39:54.056052-05:00
 
 [phases.detail-refresh]
 bead_id = 'quasar-t36'
@@ -37,10 +37,10 @@ summary = 'Verified that the detail panel refresh fix for three phase message ha
 bead_id = 'quasar-ctz'
 status = 'created'
 created_at = 2026-02-17T11:52:43.539996-05:00
-updated_at = 2026-02-17T11:53:39.712069-05:00
+updated_at = 2026-02-17T12:39:54.046488-05:00
 
 [phases.diff-state-fix]
 bead_id = 'quasar-2cw'
 status = 'in_progress'
 created_at = 2026-02-17T11:52:43.881959-05:00
-updated_at = 2026-02-17T11:56:48.00413-05:00
+updated_at = 2026-02-17T12:39:54.054446-05:00
