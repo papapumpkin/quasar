@@ -15,7 +15,10 @@ func resetViper() {
 func TestLoad_Defaults(t *testing.T) {
 	resetViper()
 
-	cfg := Load()
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned unexpected error: %v", err)
+	}
 
 	tests := []struct {
 		name string
@@ -113,7 +116,10 @@ func TestLoad_EnvOverrides(t *testing.T) {
 			os.Setenv(tt.envKey, tt.envVal)
 			defer os.Unsetenv(tt.envKey)
 
-			cfg := Load()
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() returned unexpected error: %v", err)
+			}
 			got := tt.field(cfg)
 			if got != tt.want {
 				t.Errorf("%s: got %v (%T), want %v (%T)", tt.name, got, got, tt.want, tt.want)
@@ -125,7 +131,10 @@ func TestLoad_EnvOverrides(t *testing.T) {
 func TestLoad_DefaultsAreNotZero(t *testing.T) {
 	resetViper()
 
-	cfg := Load()
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned unexpected error: %v", err)
+	}
 
 	if cfg.ClaudePath == "" {
 		t.Error("ClaudePath should not be empty")

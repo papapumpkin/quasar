@@ -168,7 +168,7 @@ func loadPrompts(cmd *cobra.Command, cfg *config.Config) (coder, reviewer string
 // buildLoop validates dependencies, resolves the working directory, and
 // constructs a Loop ready to execute tasks.
 func buildLoop(cfg *config.Config, uiHandler ui.UI, coderPrompt, reviewerPrompt string) (*loop.Loop, error) {
-	claudeInv := &claude.Invoker{ClaudePath: cfg.ClaudePath, Verbose: cfg.Verbose}
+	claudeInv := claude.NewInvoker(cfg.ClaudePath, cfg.Verbose)
 	if err := claudeInv.Validate(); err != nil {
 		uiHandler.Error(fmt.Sprintf("claude not available: %v", err))
 		return nil, err

@@ -215,7 +215,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		reviewerPrompt = cfg.ReviewerSystemPrompt
 	}
 
-	claudeInv := &claude.Invoker{ClaudePath: cfg.ClaudePath, Verbose: cfg.Verbose}
+	claudeInv := claude.NewInvoker(cfg.ClaudePath, cfg.Verbose)
 	if err := claudeInv.Validate(); err != nil {
 		printer.Error(fmt.Sprintf("claude not available: %v", err))
 		return err

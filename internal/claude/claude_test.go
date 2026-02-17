@@ -144,11 +144,7 @@ func TestInvoke_ExitError(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "claude", `echo "fatal: out of tokens" >&2; exit 1`)
 
-	origExec := execCommandContext
-	execCommandContext = fakeExecContextWith(script)
-	defer func() { execCommandContext = origExec }()
-
-	inv := &Invoker{ClaudePath: "claude"}
+	inv := newTestInvoker("claude", false, fakeExecContextWith(script), nil)
 	a := agent.Agent{}
 	_, err := inv.Invoke(context.Background(), a, "do stuff", dir)
 	if err == nil {
@@ -167,20 +163,18 @@ func TestInvoke_ContextCancellation(t *testing.T) {
 	// Script that blocks via exec (replaces shell process) so SIGKILL reaches it directly.
 	script := writeScript(t, dir, "claude", "exec sleep 300")
 
-	origExec := execCommandContext
 	// Use a custom fake that sets WaitDelay so the process is reaped promptly
 	// after context cancellation (default WaitDelay=0 waits for I/O indefinitely).
-	execCommandContext = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+	fakeCtx := func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
 		cmd := exec.CommandContext(ctx, script)
 		cmd.WaitDelay = 100 * time.Millisecond
 		return cmd
 	}
-	defer func() { execCommandContext = origExec }()
+	inv := newTestInvoker("claude", false, fakeCtx, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	inv := &Invoker{ClaudePath: "claude"}
 	a := agent.Agent{}
 	_, err := inv.Invoke(ctx, a, "do stuff", dir)
 	if err == nil {
@@ -201,11 +195,7 @@ func TestInvoke_VerboseLogging(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "claude", "printf '%s' '"+string(jsonBytes)+"'")
 
-	origExec := execCommandContext
-	execCommandContext = fakeExecContextWith(script)
-	defer func() { execCommandContext = origExec }()
-
-	inv := &Invoker{ClaudePath: "claude", Verbose: true}
+	inv := newTestInvoker("claude", true, fakeExecContextWith(script), nil)
 	a := agent.Agent{}
 	result, err := inv.Invoke(context.Background(), a, "do stuff", dir)
 	if err != nil {
@@ -225,11 +215,7 @@ func TestValidate_Success(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "claude", `echo "claude 1.2.3"`)
 
-	origExec := execCommand
-	execCommand = fakeExecWith(script)
-	defer func() { execCommand = origExec }()
-
-	inv := &Invoker{ClaudePath: "claude"}
+	inv := newTestInvoker("claude", false, nil, fakeExecWith(script))
 	if err := inv.Validate(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -239,11 +225,7 @@ func TestValidate_VerboseLogging(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "claude", `echo "claude 1.2.3"`)
 
-	origExec := execCommand
-	execCommand = fakeExecWith(script)
-	defer func() { execCommand = origExec }()
-
-	inv := &Invoker{ClaudePath: "claude", Verbose: true}
+	inv := newTestInvoker("claude", true, nil, fakeExecWith(script))
 	if err := inv.Validate(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -253,11 +235,7 @@ func TestValidate_BinaryNotFound(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "claude", `exit 1`)
 
-	origExec := execCommand
-	execCommand = fakeExecWith(script)
-	defer func() { execCommand = origExec }()
-
-	inv := &Invoker{ClaudePath: "/nonexistent/path/to/claude"}
+	inv := newTestInvoker("/nonexistent/path/to/claude", false, nil, fakeExecWith(script))
 	err := inv.Validate()
 	if err == nil {
 		t.Fatal("expected error for missing binary, got nil")

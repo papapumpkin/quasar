@@ -21,7 +21,7 @@ var validateCmd = &cobra.Command{
 		}
 		ok := true
 
-		claudeInv := &claude.Invoker{ClaudePath: cfg.ClaudePath, Verbose: cfg.Verbose}
+		claudeInv := claude.NewInvoker(cfg.ClaudePath, cfg.Verbose)
 		if err := claudeInv.Validate(); err != nil {
 			fmt.Fprintf(os.Stderr, "✗ claude: %v\n", err)
 			ok = false
