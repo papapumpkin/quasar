@@ -22,6 +22,7 @@ type Loop struct {
 	ReviewPrompt string
 	WorkDir      string
 	MCP          *agent.MCPConfig // Optional MCP server config passed to agents.
+	RefactorCh   <-chan string    // Optional channel carrying updated task descriptions from phase edits.
 }
 
 // TaskResult holds the outcome of a completed task loop.
@@ -102,6 +103,9 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 			return l.handleApproval(ctx, state)
 		}
 
+		// Check for a mid-run refactor signal before starting the next cycle.
+		l.drainRefactor(state)
+
 		l.UI.IssuesFound(len(state.Findings))
 		state.Phase = PhaseResolvingIssues
 		// Tag findings with the current cycle number before creating beads
@@ -124,6 +128,29 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 		l.UI.Error(fmt.Sprintf("failed to add bead comment: %v", err))
 	}
 	return nil, ErrMaxCycles
+}
+
+// drainRefactor checks the RefactorCh for a pending phase edit and applies it
+// to the cycle state. The current cycle always completes before the new
+// description takes effect. Only the most recent value on the channel wins.
+func (l *Loop) drainRefactor(state *CycleState) {
+	if l.RefactorCh == nil {
+		return
+	}
+	var latest string
+	for {
+		select {
+		case body := <-l.RefactorCh:
+			latest = body
+		default:
+			if latest != "" {
+				state.OriginalDescription = state.TaskTitle
+				state.TaskTitle = latest
+				state.Refactored = true
+			}
+			return
+		}
+	}
 }
 
 // perAgentBudget computes the per-invocation budget by splitting the total

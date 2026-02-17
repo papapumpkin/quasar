@@ -34,6 +34,12 @@ type gateSignal struct {
 	action  GateAction
 }
 
+// phaseLoopHandle tracks a running phase's refactor channel so that mid-run
+// edits can be signaled to the loop without interrupting the current cycle.
+type phaseLoopHandle struct {
+	RefactorCh chan<- string
+}
+
 // WorkerGroup executes phases in dependency order using a pool of workers.
 type WorkerGroup struct {
 	Runner       PhaseRunner
@@ -47,14 +53,17 @@ type WorkerGroup struct {
 	GlobalCycles int
 	GlobalBudget float64
 	GlobalModel  string
-	OnProgress   ProgressFunc // optional progress callback
-	Metrics      *Metrics     // optional; nil = no collection
-	Logger       io.Writer    // optional; nil = os.Stderr
+	OnProgress   ProgressFunc                       // optional progress callback
+	OnRefactor   func(phaseID string, pending bool) // optional callback for refactor notifications
+	Metrics      *Metrics                           // optional; nil = no collection
+	Logger       io.Writer                          // optional; nil = os.Stderr
 
-	mu          sync.Mutex
-	outputMu    sync.Mutex // serializes checkpoint + dashboard output in watch mode
-	results     []WorkerResult
-	gateSignals []gateSignal // collected after each batch
+	mu               sync.Mutex
+	outputMu         sync.Mutex // serializes checkpoint + dashboard output in watch mode
+	results          []WorkerResult
+	gateSignals      []gateSignal                // collected after each batch
+	phaseLoops       map[string]*phaseLoopHandle // running phase → refactor handle
+	pendingRefactors map[string]string           // phaseID → updated body (not yet dispatched)
 }
 
 // buildPhasePrompt prepends nebula context (goals, constraints) to the phase body.
@@ -584,6 +593,18 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	if wg.MaxWorkers <= 0 {
 		wg.MaxWorkers = 1
 	}
+
+	// Initialize phase-loop tracking maps.
+	wg.mu.Lock()
+	wg.phaseLoops = make(map[string]*phaseLoopHandle)
+	wg.pendingRefactors = make(map[string]string)
+	wg.mu.Unlock()
+
+	// Consume file-change events from the watcher in a background goroutine.
+	if wg.Watcher != nil {
+		go wg.consumeChanges()
+	}
+
 	phasesByID, done, failed := wg.initPhaseState()
 	graph := NewGraph(wg.Nebula.Phases)
 
@@ -776,4 +797,86 @@ func (wg *WorkerGroup) collectResults() []WorkerResult {
 	wg.mu.Lock()
 	defer wg.mu.Unlock()
 	return wg.results
+}
+
+// consumeChanges reads from Watcher.Changes and dispatches to the appropriate
+// handler. It runs until the channel is closed (watcher stopped).
+func (wg *WorkerGroup) consumeChanges() {
+	for change := range wg.Watcher.Changes {
+		switch change.Kind {
+		case ChangeModified:
+			wg.handlePhaseModified(change)
+		case ChangeAdded:
+			wg.handlePhaseAdded(change)
+		case ChangeRemoved:
+			fmt.Fprintf(wg.logger(), "warning: phase file removed: %s (ignored)\n", change.File)
+		}
+	}
+}
+
+// handlePhaseModified re-parses the modified phase file and, if the phase is
+// currently running, sends the updated body on its refactor channel. If the
+// phase has not started yet, the body is stored in pendingRefactors for later.
+func (wg *WorkerGroup) handlePhaseModified(change Change) {
+	phase, err := parsePhaseFile(change.File, Defaults{})
+	if err != nil {
+		fmt.Fprintf(wg.logger(), "warning: failed to re-parse modified phase %q: %v\n", change.PhaseID, err)
+		return
+	}
+
+	newBody := phase.Body
+
+	wg.mu.Lock()
+	handle, running := wg.phaseLoops[change.PhaseID]
+	wg.pendingRefactors[change.PhaseID] = newBody
+	wg.mu.Unlock()
+
+	if wg.OnRefactor != nil {
+		wg.OnRefactor(change.PhaseID, true)
+	}
+
+	if running {
+		// Non-blocking send — if the channel already has a value the loop
+		// will pick up the latest via its drain loop.
+		select {
+		case handle.RefactorCh <- newBody:
+		default:
+		}
+	}
+
+	fmt.Fprintf(wg.logger(), "phase %q modified — refactor queued\n", change.PhaseID)
+}
+
+// handlePhaseAdded logs the addition of a new phase file. Full DAG insertion
+// is handled by a higher-level orchestrator; the worker group records the event.
+func (wg *WorkerGroup) handlePhaseAdded(change Change) {
+	fmt.Fprintf(wg.logger(), "phase %q added (file: %s) — noted for future DAG insertion\n", change.PhaseID, filepath.Base(change.File))
+
+	wg.mu.Lock()
+	wg.pendingRefactors[change.PhaseID] = "" // placeholder; body loaded on demand
+	wg.mu.Unlock()
+}
+
+// RegisterPhaseLoop records a running phase's refactor channel so that
+// handlePhaseModified can forward updated descriptions to the loop.
+func (wg *WorkerGroup) RegisterPhaseLoop(phaseID string, refactorCh chan<- string) {
+	wg.mu.Lock()
+	defer wg.mu.Unlock()
+	wg.phaseLoops[phaseID] = &phaseLoopHandle{RefactorCh: refactorCh}
+
+	// If there is already a pending refactor for this phase (file was edited
+	// before the loop started), send it immediately.
+	if body, ok := wg.pendingRefactors[phaseID]; ok && body != "" {
+		select {
+		case refactorCh <- body:
+		default:
+		}
+	}
+}
+
+// UnregisterPhaseLoop removes a phase's loop handle after completion.
+func (wg *WorkerGroup) UnregisterPhaseLoop(phaseID string) {
+	wg.mu.Lock()
+	defer wg.mu.Unlock()
+	delete(wg.phaseLoops, phaseID)
 }

@@ -209,6 +209,20 @@ type MsgGateResolved struct {
 	Action  nebula.GateAction
 }
 
+// Phase refactor messages — sent when a phase file is edited during execution.
+
+// MsgPhaseRefactorPending signals that a running phase's file was modified
+// and the updated description is waiting to be applied after the current cycle.
+type MsgPhaseRefactorPending struct {
+	PhaseID string
+}
+
+// MsgPhaseRefactorApplied signals that the pending refactor was picked up by
+// the loop and the new description is now in use.
+type MsgPhaseRefactorApplied struct {
+	PhaseID string
+}
+
 // Internal TUI messages.
 
 // MsgTick drives the elapsed-time timer.
@@ -235,6 +249,11 @@ type MsgNebulaChoicesLoaded struct {
 // MsgToastExpired signals that a toast notification should be dismissed.
 type MsgToastExpired struct {
 	ID int
+}
+
+// MsgResourceUpdate carries a periodic resource usage snapshot.
+type MsgResourceUpdate struct {
+	Snapshot ResourceSnapshot
 }
 
 // Bead hierarchy messages — carry bead state snapshots for the bead tracker.

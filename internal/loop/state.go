@@ -50,16 +50,18 @@ type ReviewFinding struct {
 
 // CycleState tracks the mutable state of a coder-reviewer loop across cycles.
 type CycleState struct {
-	TaskBeadID   string
-	TaskTitle    string
-	Phase        Phase
-	Cycle        int
-	MaxCycles    int
-	TotalCostUSD float64
-	MaxBudgetUSD float64
-	CoderOutput  string
-	ReviewOutput string
-	Findings     []ReviewFinding // current cycle's findings (reset each cycle)
-	AllFindings  []ReviewFinding // accumulated findings across all cycles
-	ChildBeadIDs []string        // accumulated child bead IDs across all cycles
+	TaskBeadID          string
+	TaskTitle           string
+	Phase               Phase
+	Cycle               int
+	MaxCycles           int
+	TotalCostUSD        float64
+	MaxBudgetUSD        float64
+	CoderOutput         string
+	ReviewOutput        string
+	Findings            []ReviewFinding // current cycle's findings (reset each cycle)
+	AllFindings         []ReviewFinding // accumulated findings across all cycles
+	ChildBeadIDs        []string        // accumulated child bead IDs across all cycles
+	Refactored          bool            // true when a mid-run phase edit was applied
+	OriginalDescription string          // task description before the refactor
 }
