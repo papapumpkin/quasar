@@ -16,18 +16,14 @@ func initGitRepo(t *testing.T) string {
 	run := func(args ...string) {
 		t.Helper()
 		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=test",
-			"GIT_AUTHOR_EMAIL=test@test.com",
-			"GIT_COMMITTER_NAME=test",
-			"GIT_COMMITTER_EMAIL=test@test.com",
-		)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
 		}
 	}
 	run("init")
+	run("config", "user.name", "test")
+	run("config", "user.email", "test@test.com")
 	run("commit", "--allow-empty", "-m", "initial")
 	return dir
 }

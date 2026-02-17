@@ -272,7 +272,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			workDir:      workDir,
 		}
 		wg.Logger = io.Discard
-		wg.Gater = tui.NewTUIGater(tuiProgram)
+		wg.Gater = tui.NewGater(tuiProgram)
 		wg.OnProgress = func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
 			tuiProgram.Send(tui.MsgNebulaProgress{
 				Completed:    completed,
@@ -430,7 +430,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					reviewPrompt: reviewerPrompt,
 					workDir:      nextWorkDir,
 				}
-				wg.Gater = tui.NewTUIGater(tuiProgram)
+				wg.Gater = tui.NewGater(tuiProgram)
 				wg.OnProgress = func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
 					tuiProgram.Send(tui.MsgNebulaProgress{
 						Completed:    completed,
@@ -453,7 +453,6 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					}
 				}
 
-				dir = nextDir
 				n = nextN
 				continue
 			}

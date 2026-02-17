@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
@@ -893,8 +894,8 @@ func TestMsgNebulaDoneCleansUpArchitect(t *testing.T) {
 	})
 	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
 
-	cancelled := false
-	m.Architect.CancelFunc = func() { cancelled = true }
+	canceled := false
+	m.Architect.CancelFunc = func() { canceled = true }
 
 	msg := MsgNebulaDone{}
 	result, _ := m.Update(msg)
@@ -903,7 +904,7 @@ func TestMsgNebulaDoneCleansUpArchitect(t *testing.T) {
 	if updated.Architect != nil {
 		t.Error("expected Architect to be nil after MsgNebulaDone")
 	}
-	if !cancelled {
+	if !canceled {
 		t.Error("expected Architect CancelFunc to be called on MsgNebulaDone")
 	}
 	if updated.Overlay == nil {
@@ -1000,7 +1001,7 @@ func TestMsgArchitectStartStoresCancelFunc(t *testing.T) {
 	m.Architect.StartWorking()
 
 	m.ArchitectFunc = func(ctx context.Context, msg MsgArchitectStart) (*nebula.ArchitectResult, error) {
-		// Block until context is cancelled.
+		// Block until context is canceled.
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}

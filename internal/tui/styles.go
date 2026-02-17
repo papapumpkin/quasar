@@ -143,9 +143,6 @@ var (
 	styleDetailDim = lipgloss.NewStyle().
 			Foreground(colorMuted)
 
-	// styleDetailHeader styles the contextual header block above content.
-	styleDetailHeader = lipgloss.NewStyle().
-				Foreground(colorMutedLight)
 
 	// styleDetailHeaderLabel styles labels in the header (e.g. "role:", "cost:").
 	styleDetailHeaderLabel = lipgloss.NewStyle().

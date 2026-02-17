@@ -185,7 +185,7 @@ func TestInvoke_ContextCancellation(t *testing.T) {
 	a := agent.Agent{}
 	_, err := inv.Invoke(ctx, a, "do stuff", dir)
 	if err == nil {
-		t.Fatal("expected error for cancelled context, got nil")
+		t.Fatal("expected error for canceled context, got nil")
 	}
 	if !strings.Contains(err.Error(), "claude invocation failed") {
 		t.Errorf("error = %q, want it to contain %q", err.Error(), "claude invocation failed")

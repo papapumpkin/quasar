@@ -141,10 +141,8 @@ func TestTruncateOutputPreservesContent(t *testing.T) {
 	if !strings.Contains(result, "line3") {
 		t.Error("should contain third line")
 	}
-	if strings.Contains(result, "line4") {
-		// line4 should not appear in the visible portion.
-		// (it could be in the truncation indicator message)
-	}
+	// line4 should not appear in the visible portion
+	// (it could be in the truncation indicator message).
 }
 
 func TestFormatAgentHeader(t *testing.T) {

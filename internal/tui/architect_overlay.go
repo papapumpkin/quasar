@@ -249,7 +249,7 @@ func (a *ArchitectOverlay) renderPreview(width, height int) string {
 	b.WriteString(a.Result.PhaseSpec.Type)
 	b.WriteString("  ")
 	b.WriteString(styleArchitectLabel.Render("Priority: "))
-	b.WriteString(fmt.Sprintf("%d", a.Result.PhaseSpec.Priority))
+	fmt.Fprintf(&b, "%d", a.Result.PhaseSpec.Priority)
 	b.WriteString("\n")
 
 	// Errors from validation.

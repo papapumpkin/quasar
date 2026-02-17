@@ -438,7 +438,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			ctx, cancel := context.WithCancel(context.Background())
 			m.Architect.CancelFunc = cancel
 			cmds = append(cmds, func() tea.Msg {
-				result, err := safeArchitectCall(fn, ctx, startMsg)
+				result, err := safeArchitectCall(ctx, fn, startMsg)
 				return MsgArchitectResult{Result: result, Err: err}
 			})
 		} else if m.Architect != nil {
@@ -529,7 +529,7 @@ func clampCursors(m *AppModel) {
 
 // safeArchitectCall wraps an architect function call with panic recovery.
 // Any panic is converted to an error in the returned result.
-func safeArchitectCall(fn func(context.Context, MsgArchitectStart) (*nebula.ArchitectResult, error), ctx context.Context, msg MsgArchitectStart) (result *nebula.ArchitectResult, err error) {
+func safeArchitectCall(ctx context.Context, fn func(context.Context, MsgArchitectStart) (*nebula.ArchitectResult, error), msg MsgArchitectStart) (result *nebula.ArchitectResult, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("architect panic: %v", r)
