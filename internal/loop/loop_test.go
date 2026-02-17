@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aaronsalm/quasar/internal/beads"
-	"github.com/aaronsalm/quasar/internal/ui"
+	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/ui"
 )
 
 // noopUI satisfies ui.UI for tests without producing any output.

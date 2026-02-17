@@ -6,9 +6,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/aaronsalm/quasar/internal/beads"
-	"github.com/aaronsalm/quasar/internal/claude"
-	"github.com/aaronsalm/quasar/internal/config"
+	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/claude"
+	"github.com/papapumpkin/quasar/internal/config"
 )
 
 var validateCmd = &cobra.Command{

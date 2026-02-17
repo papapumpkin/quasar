@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aaronsalm/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/beads"
 )
 
 // CheckDependencies verifies that all external dependencies declared in the nebula are met.

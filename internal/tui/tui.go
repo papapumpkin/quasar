@@ -1,10 +1,13 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"io"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
 // Program is an alias for tea.Program, exposed so callers don't need
@@ -37,13 +40,16 @@ func NewProgramRaw(mode Mode) *Program {
 // This avoids needing to Send a MsgNebulaInit before Run() starts.
 // nebulaDir is the path to the nebula directory, used for writing intervention
 // files (PAUSE/STOP) from TUI keyboard shortcuts.
-func NewNebulaProgram(name string, phases []PhaseInfo, nebulaDir string) *Program {
+// architectFunc is the function called when the user triggers the architect overlay
+// (new phase or edit phase). Pass nil to disable the architect feature.
+func NewNebulaProgram(name string, phases []PhaseInfo, nebulaDir string, architectFunc func(ctx context.Context, msg MsgArchitectStart) (*nebula.ArchitectResult, error)) *Program {
 	model := NewAppModel(ModeNebula)
 	model.Detail = NewDetailPanel(80, 10)
 	model.StatusBar.Name = name
 	model.StatusBar.Total = len(phases)
 	model.NebulaView.InitPhases(phases)
 	model.NebulaDir = nebulaDir
+	model.ArchitectFunc = architectFunc
 	return tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 }
 

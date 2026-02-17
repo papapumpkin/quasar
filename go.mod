@@ -1,4 +1,4 @@
-module github.com/aaronsalm/quasar
+module github.com/papapumpkin/quasar
 
 go 1.25.7
 

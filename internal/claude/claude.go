@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/aaronsalm/quasar/internal/agent"
+	"github.com/papapumpkin/quasar/internal/agent"
 )
 
 type Invoker struct {

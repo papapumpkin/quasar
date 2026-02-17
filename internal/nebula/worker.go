@@ -10,7 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/aaronsalm/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/beads"
 )
 
 // PhaseRunnerResult holds the outcome of a single phase execution.

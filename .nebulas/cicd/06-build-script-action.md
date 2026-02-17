@@ -22,7 +22,7 @@ set -euo pipefail
 
 VERSION="${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo "dev")}"
 COMMIT="${COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")}"
-LDFLAGS="-s -w -X github.com/aaronsalm/quasar/cmd.Version=${VERSION}"
+LDFLAGS="-s -w -X github.com/papapumpkin/quasar/cmd.Version=${VERSION}"
 
 echo "Building quasar ${VERSION} (${COMMIT})..." >&2
 go build -ldflags "${LDFLAGS}" -o quasar .
@@ -46,7 +46,7 @@ A composite action that:
 ## Acceptance Criteria
 
 - [ ] `scripts/build.sh` exists and is executable
-- [ ] Script injects version via `-X github.com/aaronsalm/quasar/cmd.Version`
+- [ ] Script injects version via `-X github.com/papapumpkin/quasar/cmd.Version`
 - [ ] Script uses `-s -w` ldflags for smaller binaries
 - [ ] VERSION and COMMIT can be overridden via environment variables
 - [ ] `.github/actions/build/action.yml` runs the script and verifies with `./quasar version`

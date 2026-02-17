@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aaronsalm/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
 func TestNewArchitectOverlay(t *testing.T) {

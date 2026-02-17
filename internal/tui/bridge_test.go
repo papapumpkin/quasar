@@ -9,7 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/aaronsalm/quasar/internal/ui"
+	"github.com/papapumpkin/quasar/internal/ui"
 )
 
 func TestUIBridgeImplementsInterface(t *testing.T) {

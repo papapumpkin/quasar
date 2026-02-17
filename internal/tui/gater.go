@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/aaronsalm/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
 // TUIGater implements nebula.Gater by sending a gate prompt message

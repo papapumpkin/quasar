@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aaronsalm/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
 // captureStderr redirects os.Stderr to a pipe and returns the captured output.

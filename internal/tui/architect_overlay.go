@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/aaronsalm/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
 // architectStep tracks the current stage of the architect overlay.

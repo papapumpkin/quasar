@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aaronsalm/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
 // ANSI color codes.

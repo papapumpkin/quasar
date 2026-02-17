@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/aaronsalm/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/beads"
 )
 
 // Apply executes a plan's actions, creating/updating/closing beads and

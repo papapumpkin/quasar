@@ -62,7 +62,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/aaronsalm/quasar
+        - github.com/papapumpkin/quasar
   exclusions:
     generated: lax
     paths:

@@ -7,7 +7,7 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	"github.com/aaronsalm/quasar/internal/agent"
+	"github.com/papapumpkin/quasar/internal/agent"
 )
 
 // ArchitectMode specifies whether the architect is creating a new phase or refactoring an existing one.

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aaronsalm/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/beads"
 )
 
 // --- Parse tests ---

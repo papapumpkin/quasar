@@ -1,0 +1,31 @@
+[nebula]
+name = "TUI Bug Fixes"
+description = "Fix seven user-reported TUI bugs: architect wiring, detail refresh, diff view state, beads/plan view mutual exclusivity, and text overflow."
+
+[defaults]
+type = "bug"
+priority = 1
+labels = ["quasar", "tui", "bugfix"]
+
+[execution]
+max_workers = 2
+max_budget_usd = 25.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Fix architect overlay 'not available' error for both new and edit phase actions",
+    "Fix detail panel not refreshing when drilled into a phase during live updates",
+    "Fix diff view appearing then immediately disappearing due to premature state clearing",
+    "Fix j/k scroll lock after diff toggle when no diff files exist",
+    "Fix beads/plan/diff views overlapping instead of being mutually exclusive",
+    "Fix detail text overflowing past viewport border due to missing word wrap",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "All TUI code lives in internal/tui/",
+    "Do not break the stderr Printer fallback path",
+    "Use only charmbracelet ecosystem (bubbletea, lipgloss, bubbles)",
+    "Maintain backward compatibility with existing TUI message protocol",
+]

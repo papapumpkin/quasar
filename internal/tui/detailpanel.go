@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // maxOutputLines is the maximum number of lines shown before truncation.
@@ -37,11 +38,22 @@ func (d *DetailPanel) SetSize(width, height int) {
 	d.viewport.Height = height
 }
 
+// wrapContent soft-wraps text to the viewport width so long lines don't
+// overflow past the detail panel border. Uses lipgloss for ANSI-aware wrapping.
+func (d *DetailPanel) wrapContent(content string) string {
+	w := d.viewport.Width
+	if w <= 0 {
+		return content
+	}
+	return lipgloss.NewStyle().Width(w).Render(content)
+}
+
 // SetContent updates the displayed text and title.
 func (d *DetailPanel) SetContent(title, content string) {
 	d.title = title
 	d.emptyHint = ""
 	d.headerBlock = ""
+	content = d.wrapContent(content)
 	d.totalLines = strings.Count(content, "\n") + 1
 	d.viewport.SetContent(content)
 	d.viewport.GotoTop()
@@ -53,10 +65,10 @@ func (d *DetailPanel) SetContentWithHeader(title, header, body string) {
 	d.emptyHint = ""
 	d.headerBlock = header
 
-	combined := body
+	combined := d.wrapContent(body)
 	if header != "" {
 		sep := styleDetailSep.Render(strings.Repeat("─", 40))
-		combined = header + "\n" + sep + "\n" + body
+		combined = d.wrapContent(header) + "\n" + sep + "\n" + combined
 	}
 
 	d.totalLines = strings.Count(combined, "\n") + 1

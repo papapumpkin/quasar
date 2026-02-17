@@ -3,8 +3,8 @@ package tui
 import (
 	"time"
 
-	"github.com/aaronsalm/quasar/internal/nebula"
-	"github.com/aaronsalm/quasar/internal/ui"
+	"github.com/papapumpkin/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/ui"
 )
 
 // Loop lifecycle messages — sent by UIBridge in response to ui.UI calls.

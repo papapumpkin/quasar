@@ -10,8 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/aaronsalm/quasar/internal/loop"
-	"github.com/aaronsalm/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/loop"
+	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
 // CompletionOverlay displays the outcome when the loop or nebula finishes.

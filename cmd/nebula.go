@@ -13,14 +13,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/aaronsalm/quasar/internal/agent"
-	"github.com/aaronsalm/quasar/internal/beads"
-	"github.com/aaronsalm/quasar/internal/claude"
-	"github.com/aaronsalm/quasar/internal/config"
-	"github.com/aaronsalm/quasar/internal/loop"
-	"github.com/aaronsalm/quasar/internal/nebula"
-	"github.com/aaronsalm/quasar/internal/tui"
-	"github.com/aaronsalm/quasar/internal/ui"
+	"github.com/papapumpkin/quasar/internal/agent"
+	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/claude"
+	"github.com/papapumpkin/quasar/internal/config"
+	"github.com/papapumpkin/quasar/internal/loop"
+	"github.com/papapumpkin/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/tui"
+	"github.com/papapumpkin/quasar/internal/ui"
 )
 
 var nebulaCmd = &cobra.Command{
@@ -256,7 +256,8 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				PlanBody:  p.Body,
 			})
 		}
-		tuiProgram = tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir)
+		architectFunc := buildArchitectFunc(claudeInv, n)
+		tuiProgram = tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir, architectFunc)
 		// Per-phase loops with PhaseUIBridge for hierarchical TUI tracking.
 		wg.Runner = &tuiLoopAdapter{
 			program:      tuiProgram,
@@ -402,7 +403,8 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 						PlanBody:  p.Body,
 					})
 				}
-				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir)
+				nextArchitectFunc := buildArchitectFunc(claudeInv, nextN)
+				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, nextArchitectFunc)
 
 				wg = &nebula.WorkerGroup{
 					Nebula:       nextN,
@@ -486,6 +488,18 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 
 	printer.NebulaWorkerResults(results)
 	return nil
+}
+
+// buildArchitectFunc creates a closure that invokes the nebula architect via the given invoker.
+func buildArchitectFunc(invoker agent.Invoker, n *nebula.Nebula) func(ctx context.Context, msg tui.MsgArchitectStart) (*nebula.ArchitectResult, error) {
+	return func(ctx context.Context, msg tui.MsgArchitectStart) (*nebula.ArchitectResult, error) {
+		return nebula.RunArchitect(ctx, invoker, nebula.ArchitectRequest{
+			Mode:       nebula.ArchitectMode(msg.Mode),
+			UserPrompt: msg.Prompt,
+			Nebula:     n,
+			PhaseID:    msg.PhaseID,
+		})
+	}
 }
 
 // loopAdapter wraps *loop.Loop to satisfy nebula.PhaseRunner.

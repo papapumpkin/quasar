@@ -14,7 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/aaronsalm/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
 // Mode indicates whether the TUI is in loop or nebula mode.
@@ -273,6 +273,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
 			lv.FinishAgent(msg.Role, msg.CostUSD, msg.DurationMs)
 		}
+		if m.FocusedPhase == msg.PhaseID {
+			m.updateDetailFromSelection()
+		}
 	case MsgPhaseAgentOutput:
 		lv := m.ensurePhaseLoop(msg.PhaseID)
 		lv.SetAgentOutput(msg.Role, msg.Cycle, msg.Output)
@@ -292,9 +295,15 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			lv.Approved = msg.Data.Approved
 		}
 		m.NebulaView.SetPhaseCost(msg.PhaseID, msg.Data.TotalCostUSD)
+		if m.FocusedPhase == msg.PhaseID {
+			m.updateDetailFromSelection()
+		}
 	case MsgPhaseIssuesFound:
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
 			lv.SetIssueCount(msg.Count)
+		}
+		if m.FocusedPhase == msg.PhaseID {
+			m.updateDetailFromSelection()
 		}
 	case MsgPhaseApproved:
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
@@ -752,6 +761,10 @@ func (m *AppModel) handleInfoKey() {
 
 	m.ShowPlan = !m.ShowPlan
 	if m.ShowPlan {
+		// Dismiss other panel modes for mutual exclusivity.
+		m.ShowBeads = false
+		m.ShowDiff = false
+		m.DiffFileList = nil
 		m.updatePlanDetail()
 	}
 }
@@ -764,7 +777,14 @@ func (m *AppModel) handleDiffKey() {
 	}
 	m.ShowDiff = !m.ShowDiff
 	if m.ShowDiff {
+		// Dismiss other panel modes for mutual exclusivity.
+		m.ShowPlan = false
+		m.ShowBeads = false
 		m.DiffFileList = m.buildDiffFileList()
+		// If no file list and no raw diff text, reset to prevent inconsistent state.
+		if m.DiffFileList == nil && !m.hasSelectedAgentDiff() {
+			m.ShowDiff = false
+		}
 	} else {
 		m.DiffFileList = nil
 	}
@@ -786,6 +806,20 @@ func (m *AppModel) buildDiffFileList() *FileListView {
 		return nil
 	}
 	return NewFileListView(agent.DiffFiles, m.contentWidth()-4, agent.BaseRef, agent.HeadRef, agent.WorkDir)
+}
+
+// hasSelectedAgentDiff reports whether the currently selected agent has raw diff text.
+func (m *AppModel) hasSelectedAgentDiff() bool {
+	var agent *AgentEntry
+	switch m.Mode {
+	case ModeLoop:
+		agent = m.LoopView.SelectedAgent()
+	case ModeNebula:
+		if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
+			agent = lv.SelectedAgent()
+		}
+	}
+	return agent != nil && agent.Diff != ""
 }
 
 // openDiffTool launches the user's configured git difftool for the selected file.
@@ -986,24 +1020,28 @@ func (m *AppModel) updatePlanDetail() {
 
 // drillDown navigates deeper into the hierarchy.
 func (m *AppModel) drillDown() {
-	// Drilling down dismisses the plan, diff, and beads viewers.
-	m.ShowPlan = false
-	m.ShowDiff = false
-	m.DiffFileList = nil
-	m.ShowBeads = false
-
 	switch m.Mode {
 	case ModeLoop:
-		// In loop mode, enter toggles the detail panel.
+		// In loop mode at DepthAgentOutput, Enter is a no-op — don't clear state.
 		if m.Depth == DepthAgentOutput {
 			return
 		}
+		// Dismiss overlay viewers when actually transitioning.
+		m.ShowPlan = false
+		m.ShowDiff = false
+		m.DiffFileList = nil
+		m.ShowBeads = false
 		m.Depth = DepthAgentOutput
 		m.updateDetailFromSelection()
 
 	case ModeNebula:
 		switch m.Depth {
 		case DepthPhases:
+			// Dismiss overlay viewers when transitioning into a phase.
+			m.ShowPlan = false
+			m.ShowDiff = false
+			m.DiffFileList = nil
+			m.ShowBeads = false
 			// Drill into the selected phase's loop view.
 			if p := m.NebulaView.SelectedPhase(); p != nil {
 				m.FocusedPhase = p.ID
@@ -1011,7 +1049,11 @@ func (m *AppModel) drillDown() {
 				m.updateDetailFromSelection()
 			}
 		case DepthPhaseLoop:
-			// Drill into agent output.
+			// Dismiss overlay viewers when transitioning to agent output.
+			m.ShowPlan = false
+			m.ShowDiff = false
+			m.DiffFileList = nil
+			m.ShowBeads = false
 			m.Depth = DepthAgentOutput
 			m.updateDetailFromSelection()
 		}

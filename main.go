@@ -1,6 +1,6 @@
 package main
 
-import "github.com/aaronsalm/quasar/cmd"
+import "github.com/papapumpkin/quasar/cmd"
 
 func main() {
 	cmd.Execute()

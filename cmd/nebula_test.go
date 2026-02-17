@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aaronsalm/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
 func TestWriteStatusJSON_WritesToWriter(t *testing.T) {

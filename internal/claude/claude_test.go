@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aaronsalm/quasar/internal/agent"
+	"github.com/papapumpkin/quasar/internal/agent"
 )
 
 func TestBuildArgs_AllowedTools(t *testing.T) {

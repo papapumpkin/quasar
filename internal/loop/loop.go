@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aaronsalm/quasar/internal/agent"
-	"github.com/aaronsalm/quasar/internal/beads"
-	"github.com/aaronsalm/quasar/internal/ui"
+	"github.com/papapumpkin/quasar/internal/agent"
+	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/ui"
 )
 
 // Loop orchestrates the coder-reviewer cycle for a single task.

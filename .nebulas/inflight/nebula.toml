@@ -13,7 +13,7 @@ max_review_cycles = 5
 max_budget_usd = 15.0
 
 [context]
-repo = "github.com/aaronsalm/quasar"
+repo = "github.com/papapumpkin/quasar"
 working_dir = "."
 goals = [
     "Improve developer in the loop ergonomics",

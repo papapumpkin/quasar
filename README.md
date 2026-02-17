@@ -47,7 +47,7 @@ Quasar coordinates two AI agents — a **coder** and a **reviewer** — that ite
 ## Install
 
 ```bash
-git clone https://github.com/aaronsalm/quasar.git
+git clone https://github.com/papapumpkin/quasar.git
 cd quasar
 go build -o quasar .
 ```

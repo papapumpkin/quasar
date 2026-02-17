@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aaronsalm/quasar/internal/agent"
+	"github.com/papapumpkin/quasar/internal/agent"
 )
 
 // mockInvoker implements agent.Invoker for testing the architect.

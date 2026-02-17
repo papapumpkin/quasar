@@ -11,7 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/aaronsalm/quasar/internal/ui"
+	"github.com/papapumpkin/quasar/internal/ui"
 )
 
 // gitDiffTimeout is the maximum time allowed for a git diff subprocess.
