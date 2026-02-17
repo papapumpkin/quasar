@@ -1,13 +1,19 @@
 version = 1
 nebula_name = 'cosmetic-refactor'
-total_cost_usd = 7.06665775
+total_cost_usd = 10.548783
 
 [phases]
 [phases.claude-eliminate-pkg-vars]
 bead_id = 'quasar-qao'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-17T17:21:10.016114-05:00
-updated_at = 2026-02-17T17:21:15.821149-05:00
+updated_at = 2026-02-17T17:31:51.841749-05:00
+
+[phases.claude-eliminate-pkg-vars.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean refactoring of package-level mutable exec vars into Invoker struct fields with constructor defaults; all call sites updated, tests pass, follows established codebase patterns.'
 
 [phases.cmd-extract-adapters]
 bead_id = 'quasar-duv'
@@ -35,9 +41,9 @@ summary = 'Clean, minimal change that surfaces previously-swallowed config unmar
 
 [phases.consolidate-ansi-constants]
 bead_id = 'quasar-7zf'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-17T17:21:11.795506-05:00
-updated_at = 2026-02-17T17:21:11.795506-05:00
+updated_at = 2026-02-17T17:31:51.845228-05:00
 
 [phases.loop-bead-observer]
 bead_id = 'quasar-7xc'
@@ -65,9 +71,9 @@ summary = 'Clean file extraction refactor moving parsing utilities from loop.go 
 
 [phases.loop-extract-prompt-builders]
 bead_id = 'quasar-5c4'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-17T17:21:12.128394-05:00
-updated_at = 2026-02-17T17:21:12.128394-05:00
+updated_at = 2026-02-17T17:31:51.842375-05:00
 
 [phases.nebula-extract-phases-by-id]
 bead_id = 'quasar-9ll'
@@ -131,9 +137,9 @@ updated_at = 2026-02-17T17:21:14.8653-05:00
 
 [phases.worker-functional-options]
 bead_id = 'quasar-2vg'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-17T17:21:14.197787-05:00
-updated_at = 2026-02-17T17:21:14.197787-05:00
+updated_at = 2026-02-17T17:31:51.842825-05:00
 
 [phases.worker-gate-strategy]
 bead_id = 'quasar-q41'

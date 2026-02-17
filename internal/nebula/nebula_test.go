@@ -649,12 +649,10 @@ func TestWorkerGroup_ExecutesDependencyOrder(t *testing.T) {
 	}
 
 	runner := &mockRunner{}
-	wg := &WorkerGroup{
-		Runner:     runner,
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: 1,
-	}
+	wg := NewWorkerGroup(n, state,
+		WithRunner(runner),
+		WithMaxWorkers(1),
+	)
 
 	results, err := wg.Run(context.Background())
 	if err != nil {
@@ -702,12 +700,10 @@ func TestWorkerGroup_FailureBlocksDependents(t *testing.T) {
 	}
 
 	runner := &mockRunner{err: errors.New("simulated failure")}
-	wg := &WorkerGroup{
-		Runner:     runner,
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: 1,
-	}
+	wg := NewWorkerGroup(n, state,
+		WithRunner(runner),
+		WithMaxWorkers(1),
+	)
 
 	results, err := wg.Run(context.Background())
 	if err != nil {
@@ -767,15 +763,13 @@ func TestWorkerGroup_AccumulatesCostAcrossPhases(t *testing.T) {
 	}
 
 	var progressCosts []float64
-	wg := &WorkerGroup{
-		Runner:     runner,
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: 1,
-		OnProgress: func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
+	wg := NewWorkerGroup(n, state,
+		WithRunner(runner),
+		WithMaxWorkers(1),
+		WithOnProgress(func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
 			progressCosts = append(progressCosts, totalCostUSD)
-		},
-	}
+		}),
+	)
 
 	results, err := wg.Run(context.Background())
 	if err != nil {

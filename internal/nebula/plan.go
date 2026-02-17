@@ -179,17 +179,17 @@ func (p *Plan) HasChanges() bool {
 // It shows phases grouped into dependency waves and key statistics.
 // Output uses ANSI colors consistent with checkpoint rendering.
 func RenderPlan(w io.Writer, nebulaName string, waves []Wave, phaseCount int, budgetUSD float64, gate GateMode) {
-	separator := cpDim + "───────────────────────────────────────────────────" + cpReset
+	separator := ansi.Dim + "───────────────────────────────────────────────────" + ansi.Reset
 
-	fmt.Fprintf(w, "\n"+cpBold+cpMagenta+"── Nebula: %s (%s mode) ──"+cpReset+"\n", nebulaName, gate)
+	fmt.Fprintf(w, "\n"+ansi.Bold+ansi.Magenta+"── Nebula: %s (%s mode) ──"+ansi.Reset+"\n", nebulaName, gate)
 
 	for _, wave := range waves {
 		label := fmt.Sprintf("Wave %d", wave.Number)
 		phases := strings.Join(wave.PhaseIDs, ", ")
 		if len(wave.PhaseIDs) > 1 {
-			fmt.Fprintf(w, "   "+cpDim+"%s (parallel):"+cpReset+" %s\n", label, phases)
+			fmt.Fprintf(w, "   "+ansi.Dim+"%s (parallel):"+ansi.Reset+" %s\n", label, phases)
 		} else {
-			fmt.Fprintf(w, "   "+cpDim+"%s:"+cpReset+"            %s\n", label, phases)
+			fmt.Fprintf(w, "   "+ansi.Dim+"%s:"+ansi.Reset+"            %s\n", label, phases)
 		}
 	}
 

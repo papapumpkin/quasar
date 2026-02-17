@@ -7,31 +7,32 @@ import (
 	"strings"
 	"time"
 
+	"github.com/papapumpkin/quasar/internal/ansi"
 	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
-// ANSI color codes.
+// Package-level aliases for ANSI constants from the ansi package.
+// These keep method bodies concise while using the single source of truth.
 const (
-	reset   = "\033[0m"
-	bold    = "\033[1m"
-	dim     = "\033[2m"
-	blue    = "\033[34m"
-	yellow  = "\033[33m"
-	green   = "\033[32m"
-	red     = "\033[31m"
-	cyan    = "\033[36m"
-	magenta = "\033[35m"
+	reset   = ansi.Reset
+	bold    = ansi.Bold
+	dim     = ansi.Dim
+	blue    = ansi.Blue
+	yellow  = ansi.Yellow
+	green   = ansi.Green
+	red     = ansi.Red
+	cyan    = ansi.Cyan
+	magenta = ansi.Magenta
 )
 
-// Exported ANSI cursor movement helpers for use by dashboard and other packages.
-const (
-	// ANSIClearLine clears the entire current line.
-	ANSIClearLine = "\033[2K"
-)
+// ANSIClearLine clears the entire current line.
+// Deprecated: use ansi.ClearLine directly.
+const ANSIClearLine = ansi.ClearLine
 
 // ANSICursorUp returns an ANSI escape sequence to move the cursor up n lines.
+// Deprecated: use ansi.CursorUp directly.
 func ANSICursorUp(n int) string {
-	return fmt.Sprintf("\033[%dA", n)
+	return ansi.CursorUp(n)
 }
 
 // UI defines the interface for user-facing output during a coder-reviewer loop.

@@ -46,6 +46,100 @@ type phaseLoopHandle struct {
 // Parameters: phaseID, title, dependsOn.
 type HotAddFunc func(phaseID, title string, dependsOn []string)
 
+// Option configures a WorkerGroup.
+type Option func(*WorkerGroup)
+
+// WithRunner sets the phase runner. Required before calling Run, but may be
+// set after construction when the runner depends on the WorkerGroup itself.
+func WithRunner(r PhaseRunner) Option {
+	return func(wg *WorkerGroup) { wg.Runner = r }
+}
+
+// WithMaxWorkers sets the maximum number of concurrent phase workers.
+func WithMaxWorkers(n int) Option {
+	return func(wg *WorkerGroup) { wg.MaxWorkers = n }
+}
+
+// WithWatcher enables in-flight file watching for live edits.
+func WithWatcher(w *Watcher) Option {
+	return func(wg *WorkerGroup) { wg.Watcher = w }
+}
+
+// WithCommitter enables phase-boundary git commits.
+func WithCommitter(c GitCommitter) Option {
+	return func(wg *WorkerGroup) { wg.Committer = c }
+}
+
+// WithGater sets the gate prompt handler. Nil means trust mode.
+func WithGater(g Gater) Option {
+	return func(wg *WorkerGroup) { wg.Gater = g }
+}
+
+// WithDashboard enables dashboard output coordination in watch mode.
+func WithDashboard(d *Dashboard) Option {
+	return func(wg *WorkerGroup) { wg.Dashboard = d }
+}
+
+// WithBeadsClient sets the beads client for hot-added phase bead creation.
+func WithBeadsClient(c beads.Client) Option {
+	return func(wg *WorkerGroup) { wg.BeadsClient = c }
+}
+
+// WithGlobalCycles sets the default max review cycles for phases.
+func WithGlobalCycles(n int) Option {
+	return func(wg *WorkerGroup) { wg.GlobalCycles = n }
+}
+
+// WithGlobalBudget sets the default max budget (USD) for phases.
+func WithGlobalBudget(b float64) Option {
+	return func(wg *WorkerGroup) { wg.GlobalBudget = b }
+}
+
+// WithGlobalModel sets the default model override for phases.
+func WithGlobalModel(m string) Option {
+	return func(wg *WorkerGroup) { wg.GlobalModel = m }
+}
+
+// WithOnProgress sets a callback invoked after each phase status change.
+func WithOnProgress(f ProgressFunc) Option {
+	return func(wg *WorkerGroup) { wg.OnProgress = f }
+}
+
+// WithOnRefactor sets a callback invoked when a refactor is pending or dispatched.
+func WithOnRefactor(f func(phaseID string, pending bool)) Option {
+	return func(wg *WorkerGroup) { wg.OnRefactor = f }
+}
+
+// WithOnHotAdd sets a callback invoked after a phase is dynamically inserted.
+func WithOnHotAdd(f HotAddFunc) Option {
+	return func(wg *WorkerGroup) { wg.OnHotAdd = f }
+}
+
+// WithMetrics enables metrics collection.
+func WithMetrics(m *Metrics) Option {
+	return func(wg *WorkerGroup) { wg.Metrics = m }
+}
+
+// WithLogger sets the log output writer. Nil defaults to os.Stderr.
+func WithLogger(w io.Writer) Option {
+	return func(wg *WorkerGroup) { wg.Logger = w }
+}
+
+// NewWorkerGroup creates a WorkerGroup with required dependencies and optional
+// configuration. Required parameters are the nebula definition and execution
+// state; everything else is configured via Option functions.
+func NewWorkerGroup(n *Nebula, state *State, opts ...Option) *WorkerGroup {
+	wg := &WorkerGroup{
+		Nebula:     n,
+		State:      state,
+		MaxWorkers: 1,
+	}
+	for _, opt := range opts {
+		opt(wg)
+	}
+	return wg
+}
+
 // WorkerGroup executes phases in dependency order using a pool of workers.
 type WorkerGroup struct {
 	Runner       PhaseRunner

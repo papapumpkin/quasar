@@ -5,19 +5,8 @@ import (
 	"io"
 	"strings"
 	"sync"
-)
 
-// ANSI escape codes for dashboard rendering.
-const (
-	ansiReset     = "\033[0m"
-	ansiBold      = "\033[1m"
-	ansiDim       = "\033[2m"
-	ansiGreen     = "\033[32m"
-	ansiYellow    = "\033[33m"
-	ansiRed       = "\033[31m"
-	ansiCyan      = "\033[36m"
-	ansiCursorUp  = "\033[%dA" // Move cursor up N lines
-	ansiClearLine = "\033[2K"  // Clear entire line
+	"github.com/papapumpkin/quasar/internal/ansi"
 )
 
 // Dashboard renders a live-updating progress view of a nebula execution to a writer.
@@ -81,7 +70,7 @@ func (d *Dashboard) Pause() {
 	if d.IsTTY && d.rendered && d.lineCount > 0 {
 		// Move cursor up and clear each line to remove the dashboard.
 		for i := 0; i < d.lineCount; i++ {
-			fmt.Fprintf(d.Writer, "\033[1A"+ansiClearLine)
+			fmt.Fprintf(d.Writer, "\033[1A"+ansi.ClearLine)
 		}
 	}
 	d.rendered = false
@@ -97,12 +86,12 @@ func (d *Dashboard) Resume() {
 func (d *Dashboard) renderTTY() {
 	// Move cursor up to overwrite previous render.
 	if d.rendered && d.lineCount > 0 {
-		fmt.Fprintf(d.Writer, ansiCursorUp, d.lineCount)
+		fmt.Fprintf(d.Writer, ansi.CursorUpFmt, d.lineCount)
 	}
 
 	lines := d.buildLines()
 	for _, line := range lines {
-		fmt.Fprintf(d.Writer, ansiClearLine+"%s\n", line)
+		fmt.Fprintf(d.Writer, ansi.ClearLine+"%s\n", line)
 	}
 	d.lineCount = len(lines)
 	d.rendered = true
@@ -124,12 +113,12 @@ func (d *Dashboard) buildLines() []string {
 
 	// Header.
 	header := fmt.Sprintf("%s%sNebula: %s%s          [%d/%d done, %d active]",
-		ansiBold, ansiCyan, d.Nebula.Manifest.Nebula.Name, ansiReset,
+		ansi.Bold, ansi.Cyan, d.Nebula.Manifest.Nebula.Name, ansi.Reset,
 		completed, total, active)
 	lines = append(lines, header)
 
 	// Separator.
-	lines = append(lines, ansiDim+"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"+ansiReset)
+	lines = append(lines, ansi.Dim+"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"+ansi.Reset)
 
 	// Phase lines.
 	for i, phase := range d.Nebula.Phases {
@@ -149,7 +138,7 @@ func (d *Dashboard) buildLines() []string {
 	}
 
 	// Separator.
-	lines = append(lines, ansiDim+"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"+ansiReset)
+	lines = append(lines, ansi.Dim+"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"+ansi.Reset)
 
 	// Budget line.
 	budget := fmt.Sprintf("  Budget: $%.2f", d.State.TotalCostUSD)
@@ -226,19 +215,19 @@ func (d *Dashboard) phaseSuffix(phaseID string, graph *Graph, status PhaseStatus
 func statusIcon(status PhaseStatus, isBlocked bool) string {
 	switch status {
 	case PhaseStatusDone:
-		return ansiGreen + "[done]" + ansiReset
+		return ansi.Green + "[done]" + ansi.Reset
 	case PhaseStatusInProgress:
-		return ansiCyan + "[>>>>]" + ansiReset
+		return ansi.Cyan + "[>>>>]" + ansi.Reset
 	case PhaseStatusCreated:
-		return ansiCyan + "[>>>>]" + ansiReset
+		return ansi.Cyan + "[>>>>]" + ansi.Reset
 	case PhaseStatusFailed:
-		return ansiRed + ansiBold + "[FAIL]" + ansiReset
+		return ansi.Red + ansi.Bold + "[FAIL]" + ansi.Reset
 	case PhaseStatusPending:
 		if isBlocked {
-			return ansiYellow + "[gate]" + ansiReset
+			return ansi.Yellow + "[gate]" + ansi.Reset
 		}
-		return ansiDim + "[wait]" + ansiReset
+		return ansi.Dim + "[wait]" + ansi.Reset
 	default:
-		return ansiDim + "[skip]" + ansiReset
+		return ansi.Dim + "[skip]" + ansi.Reset
 	}
 }

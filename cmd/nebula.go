@@ -241,15 +241,13 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 
 	// Build the runner and WorkerGroup, branching on TUI vs stderr.
 	var tuiProgram *tui.Program
-	wg := &nebula.WorkerGroup{
-		Nebula:       n,
-		State:        state,
-		MaxWorkers:   maxWorkers,
-		BeadsClient:  client,
-		GlobalCycles: cfg.MaxReviewCycles,
-		GlobalBudget: cfg.MaxBudgetUSD,
-		GlobalModel:  cfg.Model,
-	}
+	wg := nebula.NewWorkerGroup(n, state,
+		nebula.WithMaxWorkers(maxWorkers),
+		nebula.WithBeadsClient(client),
+		nebula.WithGlobalCycles(cfg.MaxReviewCycles),
+		nebula.WithGlobalBudget(cfg.MaxBudgetUSD),
+		nebula.WithGlobalModel(cfg.Model),
+	)
 
 	if useTUI {
 		// Build phase info and pre-populate the model (no Send before Run).
@@ -412,16 +410,14 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				// Create WorkerGroup first so its SnapshotNebula method can be
 				// captured by the architect closure. The Runner is set after the
 				// TUI program is created (it depends on the program).
-				wg = &nebula.WorkerGroup{
-					Nebula:       nextN,
-					State:        nextState,
-					MaxWorkers:   maxWorkers,
-					BeadsClient:  client,
-					GlobalCycles: cfg.MaxReviewCycles,
-					GlobalBudget: cfg.MaxBudgetUSD,
-					GlobalModel:  cfg.Model,
-					Logger:       io.Discard,
-				}
+				wg = nebula.NewWorkerGroup(nextN, nextState,
+					nebula.WithMaxWorkers(maxWorkers),
+					nebula.WithBeadsClient(client),
+					nebula.WithGlobalCycles(cfg.MaxReviewCycles),
+					nebula.WithGlobalBudget(cfg.MaxBudgetUSD),
+					nebula.WithGlobalModel(cfg.Model),
+					nebula.WithLogger(io.Discard),
+				)
 				nextArchitectFunc := buildArchitectFunc(claudeInv, wg.SnapshotNebula)
 				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, nextArchitectFunc)
 				wg.Runner = &tuiLoopAdapter{

@@ -6,18 +6,8 @@ import (
 	"io"
 	"strconv"
 	"strings"
-)
 
-// ANSI color codes for checkpoint rendering.
-const (
-	cpReset   = "\033[0m"
-	cpBold    = "\033[1m"
-	cpDim     = "\033[2m"
-	cpGreen   = "\033[32m"
-	cpYellow  = "\033[33m"
-	cpRed     = "\033[31m"
-	cpCyan    = "\033[36m"
-	cpMagenta = "\033[35m"
+	"github.com/papapumpkin/quasar/internal/ansi"
 )
 
 // PlanPhaseID is the synthetic phase ID used for plan-level gate checkpoints.
@@ -165,14 +155,14 @@ func parseDiffStatLine(line string) *FileChange {
 // RenderCheckpoint writes a formatted checkpoint summary to the given writer.
 // Output uses ANSI colors consistent with ui.Printer patterns.
 func RenderCheckpoint(w io.Writer, cp *Checkpoint) {
-	separator := cpDim + "───────────────────────────────────────────────────" + cpReset
+	separator := ansi.Dim + "───────────────────────────────────────────────────" + ansi.Reset
 
 	// Header with phase ID.
 	title := cp.PhaseID
 	if cp.PhaseTitle != "" {
 		title = cp.PhaseTitle + " (" + cp.PhaseID + ")"
 	}
-	fmt.Fprintf(w, "\n"+cpBold+cpMagenta+"── Phase: %s ──"+cpReset+"\n", title)
+	fmt.Fprintf(w, "\n"+ansi.Bold+ansi.Magenta+"── Phase: %s ──"+ansi.Reset+"\n", title)
 
 	// Status line with review cycles and cost.
 	statusStr := string(cp.Status)
@@ -190,21 +180,21 @@ func RenderCheckpoint(w io.Writer, cp *Checkpoint) {
 		}
 		statusStr += " (" + strings.Join(parts, ", ") + ")"
 	}
-	fmt.Fprintf(w, "   "+cpDim+"Status:"+cpReset+"  %s\n", statusStr)
+	fmt.Fprintf(w, "   "+ansi.Dim+"Status:"+ansi.Reset+"  %s\n", statusStr)
 
 	// Files changed.
 	if len(cp.FilesChanged) > 0 {
-		fmt.Fprintf(w, "   "+cpDim+"Files:"+cpReset+"\n")
+		fmt.Fprintf(w, "   "+ansi.Dim+"Files:"+ansi.Reset+"\n")
 		for _, fc := range cp.FilesChanged {
 			icon, color := fileChangeStyle(fc.Operation)
 			lineInfo := formatLineInfo(fc)
-			fmt.Fprintf(w, "     %s%s %-40s%s %s\n", color, icon, fc.Path, cpReset, lineInfo)
+			fmt.Fprintf(w, "     %s%s %-40s%s %s\n", color, icon, fc.Path, ansi.Reset, lineInfo)
 		}
 	}
 
 	// Reviewer summary.
 	if cp.ReviewSummary != "" {
-		fmt.Fprintf(w, "   "+cpDim+"Reviewer:"+cpReset+" %q\n", cp.ReviewSummary)
+		fmt.Fprintf(w, "   "+ansi.Dim+"Reviewer:"+ansi.Reset+" %q\n", cp.ReviewSummary)
 	}
 
 	fmt.Fprintln(w, separator)
@@ -214,11 +204,11 @@ func RenderCheckpoint(w io.Writer, cp *Checkpoint) {
 func fileChangeStyle(op string) (icon, color string) {
 	switch op {
 	case "added":
-		return "+ ", cpGreen
+		return "+ ", ansi.Green
 	case "deleted":
-		return "- ", cpRed
+		return "- ", ansi.Red
 	case "modified":
-		return "~ ", cpYellow
+		return "~ ", ansi.Yellow
 	default:
 		return "  ", ""
 	}
@@ -232,10 +222,10 @@ func formatLineInfo(fc FileChange) string {
 	}
 	var parts []string
 	if fc.LinesAdded > 0 {
-		parts = append(parts, fmt.Sprintf(cpGreen+"+%d"+cpReset, fc.LinesAdded))
+		parts = append(parts, fmt.Sprintf(ansi.Green+"+%d"+ansi.Reset, fc.LinesAdded))
 	}
 	if fc.LinesRemoved > 0 {
-		parts = append(parts, fmt.Sprintf(cpRed+"-%d"+cpReset, fc.LinesRemoved))
+		parts = append(parts, fmt.Sprintf(ansi.Red+"-%d"+ansi.Reset, fc.LinesRemoved))
 	}
 	return "(" + strings.Join(parts, ", ") + ")"
 }
