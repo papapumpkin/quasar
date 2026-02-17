@@ -1,0 +1,34 @@
+[nebula]
+name = "Quasar ASCII Banner & Splash"
+description = "Add adaptive ASCII quasar art to the TUI: side panel on wide terminals, top banner on medium, pill on narrow, XL splash on launch, and XL in the README."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "tui", "cosmetic"]
+
+[execution]
+max_workers = 2
+max_review_cycles = 5
+max_budget_usd = 20.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Add a left side panel with S-B Tall Ellipse quasar art on wide terminals (>=120 cols)",
+    "Fall back to S-A Wide Ellipse top banner on medium terminals (90-119 cols)",
+    "Fall back to XS-A Pill top banner on narrow terminals (60-89 cols)",
+    "Show XL Full Bleed splash screen for ~1.5s on TUI launch",
+    "Add XL Full Bleed to the README as the project hero image",
+    "Apply red/blue Doppler shift coloring — red/magenta left, blue/cyan right, gold core",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "All TUI code lives in internal/tui/",
+    "Use only charmbracelet ecosystem (bubbletea, lipgloss) — no other TUI deps",
+    "Do NOT change any existing functionality — detail panels, gate overlays, toasts, footer all remain as-is",
+    "Status bar and footer always span full terminal width",
+    "Banner is static text — no per-frame recomputation",
+    "Degrade gracefully: hide art entirely below 60 cols",
+]
