@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'release'
-total_cost_usd = 0.40354025000000004
+total_cost_usd = 1.2835032499999999
 
 [phases]
 [phases.cleanup-old-build]
@@ -23,9 +23,15 @@ summary = 'GoReleaser configuration and .gitignore are correctly set up for cros
 
 [phases.homebrew-formula]
 bead_id = 'quasar-0sg'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-17T16:03:00.655873-05:00
-updated_at = 2026-02-17T16:04:57.714019-05:00
+updated_at = 2026-02-17T16:09:06.042299-05:00
+
+[phases.homebrew-formula.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Script injection fix correctly moves all `${{ inputs.tag }}` references to `env:` blocks; Homebrew promotion workflow and formula template are well-structured and match GoReleaser archive naming.'
 
 [phases.release-docs]
 bead_id = 'quasar-3rs'
@@ -35,6 +41,6 @@ updated_at = 2026-02-17T16:03:00.993969-05:00
 
 [phases.update-release-workflow]
 bead_id = 'quasar-rn8'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-17T16:03:01.312747-05:00
-updated_at = 2026-02-17T16:03:01.312747-05:00
+updated_at = 2026-02-17T16:09:06.04285-05:00
