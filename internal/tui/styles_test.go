@@ -3,7 +3,9 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -23,6 +25,9 @@ func TestSemanticColorsDefined(t *testing.T) {
 		"colorSurfaceBright": colorSurfaceBright,
 		"colorSurfaceDim":    colorSurfaceDim,
 		"colorBlue":          colorBlue,
+		"colorStarYellow":    colorStarYellow,
+		"colorNebula":        colorNebula,
+		"colorNebulaDeep":    colorNebulaDeep,
 	}
 	for name, c := range colors {
 		if string(c) == "" {
@@ -341,5 +346,275 @@ func TestSectionBorderHasTopOnly(t *testing.T) {
 	}
 	if styleSectionBorder.GetBorderRight() {
 		t.Error("section border should not have right border")
+	}
+}
+
+func TestRenderProgressBar(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		completed int
+		total     int
+		width     int
+		wantEmpty bool
+		wantFull  bool
+	}{
+		{"zero total", 0, 0, 10, true, false},
+		{"zero width", 5, 10, 0, true, false},
+		{"no progress", 0, 10, 10, false, false},
+		{"half progress", 5, 10, 10, false, false},
+		{"full progress", 10, 10, 10, false, true},
+		{"over progress", 15, 10, 10, false, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := renderProgressBar(tt.completed, tt.total, tt.width)
+			if tt.wantEmpty && result != "" {
+				t.Errorf("expected empty bar, got %q", result)
+			}
+			if !tt.wantEmpty && result == "" {
+				t.Error("expected non-empty bar")
+			}
+			if tt.wantFull && !strings.Contains(result, "━") {
+				t.Error("full bar should contain filled segments")
+			}
+		})
+	}
+}
+
+func TestRenderBudgetBar(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		spent     float64
+		budget    float64
+		width     int
+		wantEmpty bool
+	}{
+		{"zero budget", 0, 0, 10, true},
+		{"zero width", 5, 10, 0, true},
+		{"low spend", 1, 10, 10, false},
+		{"mid spend", 5, 10, 10, false},
+		{"high spend", 8, 10, 10, false},
+		{"over budget", 12, 10, 10, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := renderBudgetBar(tt.spent, tt.budget, tt.width)
+			if tt.wantEmpty && result != "" {
+				t.Errorf("expected empty bar, got %q", result)
+			}
+			if !tt.wantEmpty && result == "" {
+				t.Error("expected non-empty bar")
+			}
+		})
+	}
+}
+
+func TestRenderCycleBar(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		cycle     int
+		maxCycles int
+		wantEmpty bool
+	}{
+		{"zero max", 0, 0, true},
+		{"first cycle", 1, 5, false},
+		{"last cycle", 5, 5, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := renderCycleBar(tt.cycle, tt.maxCycles)
+			if tt.wantEmpty && result != "" {
+				t.Errorf("expected empty bar, got %q", result)
+			}
+			if !tt.wantEmpty {
+				if !strings.Contains(result, "[") || !strings.Contains(result, "]") {
+					t.Error("cycle bar should be wrapped in brackets")
+				}
+			}
+		})
+	}
+}
+
+func TestProgressColor(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		ratio float64
+		want  lipgloss.Color
+	}{
+		{"low", 0.1, colorBlue},
+		{"mid", 0.5, colorPrimary},
+		{"high", 0.9, colorSuccess},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := progressColor(tt.ratio)
+			if got != tt.want {
+				t.Errorf("progressColor(%f) = %v, want %v", tt.ratio, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBudgetColor(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		ratio float64
+		want  lipgloss.Color
+	}{
+		{"low spend", 0.2, colorSuccess},
+		{"mid spend", 0.6, colorAccent},
+		{"high spend", 0.75, colorBudgetWarn},
+		{"critical", 0.95, colorDanger},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := budgetColor(tt.ratio)
+			if got != tt.want {
+				t.Errorf("budgetColor(%f) = %v, want %v", tt.ratio, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatElapsed(t *testing.T) {
+	t.Parallel()
+	t.Run("zero time", func(t *testing.T) {
+		t.Parallel()
+		result := formatElapsed(time.Time{})
+		if result != "" {
+			t.Errorf("expected empty string for zero time, got %q", result)
+		}
+	})
+	t.Run("recent time", func(t *testing.T) {
+		t.Parallel()
+		// Use a fixed time in the past to produce a known duration.
+		start := time.Now().Add(-5 * time.Second)
+		result := formatElapsed(start)
+		// Should contain 's' for seconds.
+		if !strings.Contains(result, "s") {
+			t.Errorf("expected elapsed to contain 's', got %q", result)
+		}
+	})
+}
+
+func TestRoleColoredSpinner(t *testing.T) {
+	t.Parallel()
+	s := spinner.New()
+	s.Spinner = spinner.MiniDot
+	// Just verify it doesn't panic and returns non-empty.
+	coderResult := roleColoredSpinner("coder", s)
+	if coderResult == "" {
+		t.Error("coder spinner should not be empty")
+	}
+	reviewerResult := roleColoredSpinner("reviewer", s)
+	if reviewerResult == "" {
+		t.Error("reviewer spinner should not be empty")
+	}
+}
+
+func TestAgentEntryHasStartedAt(t *testing.T) {
+	t.Parallel()
+	lv := NewLoopView()
+	lv.StartCycle(1)
+	lv.StartAgent("coder")
+	if len(lv.Cycles) == 0 || len(lv.Cycles[0].Agents) == 0 {
+		t.Fatal("expected agent to be added")
+	}
+	agent := lv.Cycles[0].Agents[0]
+	if agent.StartedAt.IsZero() {
+		t.Error("StartedAt should be set when agent starts")
+	}
+}
+
+func TestLoopViewWorkingAgentShowsElapsed(t *testing.T) {
+	t.Parallel()
+	lv := NewLoopView()
+	lv.StartCycle(1)
+	lv.StartAgent("coder")
+	lv.Width = 80
+
+	output := lv.View()
+	if !strings.Contains(output, "working…") {
+		t.Error("working agent should show 'working…'")
+	}
+	// Should contain seconds indicator.
+	if !strings.Contains(output, "s") {
+		t.Error("working agent should show elapsed time with 's'")
+	}
+}
+
+func TestStatusBarNebulaShowsProgressBar(t *testing.T) {
+	t.Parallel()
+	sb := StatusBar{
+		Name:      "test",
+		Total:     10,
+		Completed: 5,
+		Width:     100,
+	}
+	output := sb.View()
+	if !strings.Contains(output, "5/10") {
+		t.Error("nebula status bar should show completed/total count")
+	}
+}
+
+func TestStatusBarLoopShowsCycleBar(t *testing.T) {
+	t.Parallel()
+	sb := StatusBar{
+		BeadID:    "bead-123",
+		Cycle:     2,
+		MaxCycles: 5,
+		Width:     100,
+	}
+	output := sb.View()
+	if !strings.Contains(output, "cycle 2/5") {
+		t.Error("loop status bar should show cycle count")
+	}
+	if !strings.Contains(output, "[") {
+		t.Error("loop status bar should show cycle bar brackets")
+	}
+}
+
+func TestStatusBarBudgetShowsBar(t *testing.T) {
+	t.Parallel()
+	sb := StatusBar{
+		CostUSD:   3.50,
+		BudgetUSD: 10.00,
+		Width:     100,
+	}
+	output := sb.View()
+	if !strings.Contains(output, "$3.50") {
+		t.Error("budget bar should show current cost")
+	}
+	if !strings.Contains(output, "$10.00") {
+		t.Error("budget bar should show budget limit")
+	}
+}
+
+func TestNewColorsDefined(t *testing.T) {
+	t.Parallel()
+	if string(colorBudgetWarn) == "" {
+		t.Error("colorBudgetWarn should not be empty")
+	}
+	if string(colorReviewer) == "" {
+		t.Error("colorReviewer should not be empty")
+	}
+	if string(colorStarYellow) == "" {
+		t.Error("colorStarYellow should not be empty")
+	}
+	if string(colorNebula) == "" {
+		t.Error("colorNebula should not be empty")
+	}
+	if string(colorNebulaDeep) == "" {
+		t.Error("colorNebulaDeep should not be empty")
 	}
 }

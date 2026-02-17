@@ -15,6 +15,9 @@ type KeyMap struct {
 	Accept key.Binding
 	Reject key.Binding
 	Skip   key.Binding
+	Info   key.Binding
+	Diff   key.Binding
+	Beads  key.Binding
 }
 
 // DefaultKeyMap returns the default keybinding configuration.
@@ -63,6 +66,18 @@ func DefaultKeyMap() KeyMap {
 		Skip: key.NewBinding(
 			key.WithKeys("k"),
 			key.WithHelp("k", "skip"),
+		),
+		Info: key.NewBinding(
+			key.WithKeys("i"),
+			key.WithHelp("i", "plan"),
+		),
+		Diff: key.NewBinding(
+			key.WithKeys("d"),
+			key.WithHelp("d", "diff"),
+		),
+		Beads: key.NewBinding(
+			key.WithKeys("b"),
+			key.WithHelp("b", "beads"),
 		),
 	}
 }

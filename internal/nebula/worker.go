@@ -405,8 +405,8 @@ func (wg *WorkerGroup) drainGateSignals() []gateSignal {
 }
 
 // checkInterventions drains the intervention channel and returns the most
-// significant pending intervention (stop > pause > none).
-func (wg *WorkerGroup) checkInterventions() InterventionKind {
+// significant pending intervention (stop > retry > pause > none).
+func (wg *WorkerGroup) checkInterventions(done, failed, inFlight map[string]bool) InterventionKind {
 	if wg.Watcher == nil {
 		return ""
 	}
@@ -414,9 +414,13 @@ func (wg *WorkerGroup) checkInterventions() InterventionKind {
 	for {
 		select {
 		case kind := <-wg.Watcher.Interventions:
-			// Stop takes priority over pause.
+			// Stop takes priority over everything.
 			if kind == InterventionStop {
 				return InterventionStop
+			}
+			if kind == InterventionRetry {
+				wg.handleRetry(done, failed, inFlight)
+				continue
 			}
 			if kind == InterventionPause {
 				latest = InterventionPause
@@ -471,6 +475,53 @@ func (wg *WorkerGroup) handleStop() {
 	fmt.Fprintf(wg.logger(), "\n── Nebula stopped by user ─────────────────────────\n")
 	fmt.Fprintf(wg.logger(), "   State saved. Resume with: quasar nebula apply\n")
 	fmt.Fprintf(wg.logger(), "───────────────────────────────────────────────────\n\n")
+}
+
+// handleRetry reads the RETRY file to get the phase ID, resets the phase from failed
+// to in-progress so it will be re-dispatched, and removes the RETRY file.
+func (wg *WorkerGroup) handleRetry(done, failed, inFlight map[string]bool) {
+	retryPath := filepath.Join(wg.Nebula.Dir, "RETRY")
+	content, err := os.ReadFile(retryPath)
+	if err != nil {
+		fmt.Fprintf(wg.logger(), "warning: failed to read RETRY file: %v\n", err)
+		return
+	}
+
+	phaseID := strings.TrimSpace(string(content))
+	if phaseID == "" {
+		fmt.Fprintf(wg.logger(), "warning: RETRY file is empty\n")
+		_ = os.Remove(retryPath)
+		return
+	}
+
+	// Clean up the RETRY file.
+	if err := os.Remove(retryPath); err != nil {
+		fmt.Fprintf(wg.logger(), "warning: failed to remove RETRY file: %v\n", err)
+	}
+
+	wg.mu.Lock()
+	defer wg.mu.Unlock()
+
+	// Only retry phases that are actually failed.
+	if !failed[phaseID] {
+		fmt.Fprintf(wg.logger(), "warning: phase %q is not failed, ignoring retry\n", phaseID)
+		return
+	}
+
+	// Reset the phase state so the dispatch loop can re-queue it.
+	delete(failed, phaseID)
+	delete(done, phaseID)
+	delete(inFlight, phaseID)
+
+	ps := wg.State.Phases[phaseID]
+	if ps != nil {
+		wg.State.SetPhaseState(phaseID, ps.BeadID, PhaseStatusInProgress)
+		if saveErr := SaveState(wg.Nebula.Dir, wg.State); saveErr != nil {
+			fmt.Fprintf(wg.logger(), "warning: failed to save state: %v\n", saveErr)
+		}
+	}
+
+	fmt.Fprintf(wg.logger(), "\n── Retrying phase %q ──────────────────────────────\n\n", phaseID)
 }
 
 // globalGateMode returns the effective gate mode from the manifest execution config.
@@ -582,7 +633,7 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		// until all wave phases are done or in-flight.
 		for ctx.Err() == nil {
 			// Check for interventions between batches.
-			switch wg.checkInterventions() {
+			switch wg.checkInterventions(done, failed, inFlight) {
 			case InterventionStop:
 				wg.handleStop()
 				wg.mu.Lock()
@@ -592,7 +643,7 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 			case InterventionPause:
 				wg.handlePause()
 				// After resume, re-check for stop.
-				if wg.checkInterventions() == InterventionStop {
+				if wg.checkInterventions(done, failed, inFlight) == InterventionStop {
 					wg.handleStop()
 					wg.mu.Lock()
 					results := wg.results

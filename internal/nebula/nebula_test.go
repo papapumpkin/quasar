@@ -972,8 +972,10 @@ func TestIsInterventionFile(t *testing.T) {
 	}{
 		{"PAUSE", true},
 		{"STOP", true},
+		{"RETRY", true},
 		{"pause", false},
 		{"stop", false},
+		{"retry", false},
 		{"README.md", false},
 		{"PAUSING", false},
 	}
@@ -990,20 +992,20 @@ func TestIsInterventionFile(t *testing.T) {
 
 func TestInterventionFileNames(t *testing.T) {
 	names := InterventionFileNames()
-	if len(names) != 2 {
-		t.Fatalf("expected 2 intervention file names, got %d", len(names))
+	if len(names) != 3 {
+		t.Fatalf("expected 3 intervention file names, got %d", len(names))
 	}
 
 	sort.Strings(names)
-	if names[0] != "PAUSE" || names[1] != "STOP" {
-		t.Errorf("expected [PAUSE, STOP], got %v", names)
+	if names[0] != "PAUSE" || names[1] != "RETRY" || names[2] != "STOP" {
+		t.Errorf("expected [PAUSE, RETRY, STOP], got %v", names)
 	}
 }
 
 func TestGitExcludePatterns(t *testing.T) {
 	patterns := GitExcludePatterns()
-	if len(patterns) != 2 {
-		t.Fatalf("expected 2 patterns, got %d", len(patterns))
+	if len(patterns) != 3 {
+		t.Fatalf("expected 3 patterns, got %d", len(patterns))
 	}
 
 	joined := strings.Join(patterns, ",")
@@ -1012,6 +1014,9 @@ func TestGitExcludePatterns(t *testing.T) {
 	}
 	if !strings.Contains(joined, "STOP") {
 		t.Error("expected STOP in exclude patterns")
+	}
+	if !strings.Contains(joined, "RETRY") {
+		t.Error("expected RETRY in exclude patterns")
 	}
 }
 

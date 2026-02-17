@@ -84,8 +84,13 @@ func runAutoTUI(cfg config.Config, printer *ui.Printer, coderPrompt, reviewerPro
 		return fmt.Errorf("no task provided in auto mode")
 	}
 
+	workDir, err := resolveWorkDir(cfg.WorkDir)
+	if err != nil {
+		return err
+	}
+
 	p := tui.NewProgram(tui.ModeLoop)
-	bridge := tui.NewUIBridge(p)
+	bridge := tui.NewUIBridge(p, workDir)
 
 	taskLoop, err := buildLoop(&cfg, bridge, coderPrompt, reviewerPrompt)
 	if err != nil {

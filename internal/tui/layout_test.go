@@ -24,6 +24,10 @@ func TestTruncateWithEllipsis(t *testing.T) {
 		{"empty string", "", 5, ""},
 		{"single char fits", "a", 1, "a"},
 		{"long phase ID", "phase-authentication-service", 15, "phase-authen..."},
+		{"multibyte runes truncated", "こんにちは世界abc", 5, "こん..."},
+		{"multibyte runes fit", "こんにちは", 5, "こんにちは"},
+		{"multibyte short truncate", "日本語テスト", 2, "日本"},
+		{"multibyte single rune", "🚀rocket", 4, "🚀..."},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -284,6 +288,15 @@ func TestStatusBarCompactLoopMode(t *testing.T) {
 	// In compact mode, should show abbreviated cycle info.
 	if !strings.Contains(output, "2/5") {
 		t.Errorf("compact loop status bar should show cycle fraction, got: %q", output)
+	}
+	// Ensure cycle progress is NOT rendered twice (regression check).
+	if strings.Count(output, "2/5") != 1 {
+		t.Errorf("compact loop status bar should render cycle fraction exactly once, got %d occurrences in: %q",
+			strings.Count(output, "2/5"), output)
+	}
+	// Bead ID should also appear.
+	if !strings.Contains(output, "bead") {
+		t.Errorf("compact loop status bar should show (truncated) bead ID, got: %q", output)
 	}
 }
 

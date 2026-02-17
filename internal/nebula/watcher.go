@@ -34,12 +34,15 @@ const (
 	InterventionStop InterventionKind = "stop"
 	// InterventionResume indicates the user removed the PAUSE file.
 	InterventionResume InterventionKind = "resume"
+	// InterventionRetry indicates the user created a RETRY file for a phase.
+	InterventionRetry InterventionKind = "retry"
 )
 
 // interventionFiles maps filenames to their intervention kinds.
 var interventionFiles = map[string]InterventionKind{
 	"PAUSE": InterventionPause,
 	"STOP":  InterventionStop,
+	"RETRY": InterventionRetry,
 }
 
 // IsInterventionFile reports whether the given filename is an intervention file (PAUSE or STOP).
@@ -182,12 +185,15 @@ func (w *Watcher) handleIntervention(event fsnotify.Event) bool {
 		return true
 	}
 
-	if event.Has(fsnotify.Remove) && kind == InterventionPause {
-		// Removing the PAUSE file signals resume.
-		select {
-		case w.interventions <- InterventionResume:
-		default:
+	if event.Has(fsnotify.Remove) {
+		if kind == InterventionPause {
+			// Removing the PAUSE file signals resume.
+			select {
+			case w.interventions <- InterventionResume:
+			default:
+			}
 		}
+		// Removing other intervention files (STOP, RETRY) is a no-op.
 		return true
 	}
 

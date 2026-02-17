@@ -1,39 +1,76 @@
 version = 1
 nebula_name = 'TUI Polish & Interactivity'
+total_cost_usd = 32.9402275
 
 [phases]
 [phases.color-theme]
 bead_id = 'quasar-7j4'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-16T13:20:33.880479-05:00
-updated_at = 2026-02-16T13:23:45.476133-05:00
+updated_at = 2026-02-16T15:04:24.206852-05:00
+
+[phases.color-theme.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean fix-up round that addressed three review issues — a no-op test, unused color variables, and dead style definitions — all changes are correct, minimal, and well-tested.'
 
 [phases.detail-panel]
-bead_id = 'quasar-iaw'
-status = 'created'
+bead_id = 'quasar-u6u'
+status = 'done'
 created_at = 2026-02-16T13:20:34.286352-05:00
-updated_at = 2026-02-16T14:12:30.243461-05:00
+updated_at = 2026-02-16T15:19:12.760958-05:00
+
+[phases.detail-panel.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-structured detail panel enrichment with contextual headers, output highlighting, scroll indicators, and empty states — all backed by thorough tests and following existing project conventions.'
 
 [phases.error-overlays]
-bead_id = 'quasar-5vk'
-status = 'created'
+bead_id = 'quasar-1ya'
+status = 'done'
 created_at = 2026-02-16T13:20:34.652813-05:00
-updated_at = 2026-02-16T14:12:30.633983-05:00
+updated_at = 2026-02-16T15:43:17.697051-05:00
+
+[phases.error-overlays.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented completion overlay and error toast system with proper error classification, race-safe toast IDs, skipped phase computation, and comprehensive test coverage — all passing with race detector.'
 
 [phases.interactive-controls]
-bead_id = 'quasar-2sm'
-status = 'created'
+bead_id = 'quasar-0c2'
+status = 'done'
 created_at = 2026-02-16T13:20:35.042055-05:00
-updated_at = 2026-02-16T14:12:30.992312-05:00
+updated_at = 2026-02-16T15:28:03.890575-05:00
+
+[phases.interactive-controls.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Wired pause/stop/retry TUI keyboard shortcuts to nebula intervention files with 21 tests covering all edge cases, cleanly integrating with the existing watcher/worker architecture.'
 
 [phases.progress-indicators]
-bead_id = 'quasar-394'
-status = 'created'
+bead_id = 'quasar-2vg'
+status = 'done'
 created_at = 2026-02-16T13:20:35.433126-05:00
-updated_at = 2026-02-16T14:12:31.357532-05:00
+updated_at = 2026-02-16T15:11:50.790042-05:00
+
+[phases.progress-indicators.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented visual progress indicators (progress bars, budget bars, elapsed timers, role-colored spinners) with comprehensive tests and a pre-existing spinner bug fix.'
 
 [phases.resize-edge-cases]
-bead_id = 'quasar-eqb'
-status = 'created'
+bead_id = 'quasar-j2k'
+status = 'done'
 created_at = 2026-02-16T13:20:35.797376-05:00
-updated_at = 2026-02-16T14:12:31.733636-05:00
+updated_at = 2026-02-16T15:34:23.683129-05:00
+
+[phases.resize-edge-cases.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-executed adaptive terminal layout with comprehensive tests covering minimum size, compact modes, cursor clamping, and truncation — only minor UTF-8 consideration noted.'

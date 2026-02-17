@@ -352,6 +352,127 @@ func TestHandleRetryKey(t *testing.T) {
 	})
 }
 
+// --- handleInfoKey tests ---
+
+func TestHandleInfoKey(t *testing.T) {
+	t.Parallel()
+
+	t.Run("toggles plan on at DepthPhases", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "phase-1", Title: "Phase 1", PlanBody: "# Plan\nDo stuff."},
+		})
+
+		m.handleInfoKey()
+
+		if !m.ShowPlan {
+			t.Error("expected ShowPlan to be true after handleInfoKey")
+		}
+	})
+
+	t.Run("toggles plan off when already on", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "phase-1", Title: "Phase 1", PlanBody: "# Plan\nDo stuff."},
+		})
+		m.ShowPlan = true
+
+		m.handleInfoKey()
+
+		if m.ShowPlan {
+			t.Error("expected ShowPlan to be false after second handleInfoKey")
+		}
+	})
+
+	t.Run("works at DepthPhaseLoop", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "phase-1", Title: "Phase 1", PlanBody: "# Plan"},
+		})
+		m.Depth = DepthPhaseLoop
+		m.FocusedPhase = "phase-1"
+
+		m.handleInfoKey()
+
+		if !m.ShowPlan {
+			t.Error("expected ShowPlan to be true at DepthPhaseLoop")
+		}
+	})
+
+	t.Run("no-op in loop mode", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "phase-1", Title: "Phase 1", PlanBody: "# Plan"},
+		})
+		m.Mode = ModeLoop
+
+		m.handleInfoKey()
+
+		if m.ShowPlan {
+			t.Error("expected ShowPlan to remain false in loop mode")
+		}
+	})
+
+	t.Run("no-op at DepthAgentOutput", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "phase-1", Title: "Phase 1", PlanBody: "# Plan"},
+		})
+		m.Depth = DepthAgentOutput
+
+		m.handleInfoKey()
+
+		if m.ShowPlan {
+			t.Error("expected ShowPlan to remain false at DepthAgentOutput")
+		}
+	})
+
+	t.Run("drillDown dismisses plan", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "phase-1", Title: "Phase 1", PlanBody: "# Plan"},
+		})
+		m.ShowPlan = true
+
+		m.drillDown()
+
+		if m.ShowPlan {
+			t.Error("expected ShowPlan to be false after drillDown")
+		}
+	})
+
+	t.Run("drillUp dismisses plan without changing depth", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "phase-1", Title: "Phase 1", PlanBody: "# Plan"},
+		})
+		m.Depth = DepthPhaseLoop
+		m.FocusedPhase = "phase-1"
+		m.ShowPlan = true
+
+		m.drillUp()
+
+		if m.ShowPlan {
+			t.Error("expected ShowPlan to be false after drillUp")
+		}
+		if m.Depth != DepthPhaseLoop {
+			t.Errorf("expected depth to remain DepthPhaseLoop, got %d", m.Depth)
+		}
+	})
+
+	t.Run("showDetailPanel true when plan is toggled on at DepthPhases", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "phase-1", Title: "Phase 1", PlanBody: "# Plan"},
+		})
+		m.ShowPlan = true
+
+		if !m.showDetailPanel() {
+			t.Error("expected showDetailPanel to return true when ShowPlan is true at DepthPhases")
+		}
+	})
+}
+
 // --- Test helpers ---
 
 // newNebulaModel creates an AppModel in nebula mode at DepthPhases with

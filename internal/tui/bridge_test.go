@@ -12,48 +12,12 @@ import (
 	"github.com/aaronsalm/quasar/internal/ui"
 )
 
-// collectingModel is a tea.Model that collects all messages for inspection.
-type collectingModel struct {
-	msgs []tea.Msg
-}
-
-func (m collectingModel) Init() tea.Cmd { return nil }
-func (m collectingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	m.msgs = append(m.msgs, msg)
-	return m, nil
-}
-func (m collectingModel) View() string { return "" }
-
-// sendAndCollect runs a function that calls bridge methods, then returns
-// the messages that were sent to the program.
-func sendAndCollect(t *testing.T, fn func(b *UIBridge)) []tea.Msg {
-	t.Helper()
-
-	// Use a channel-based approach: the bridge calls Send which puts messages
-	// into the program's channel. We verify by calling bridge methods and
-	// checking they don't panic.
-	msgs := make(chan tea.Msg, 100)
-
-	// Create a minimal program just to test Send doesn't panic.
-	model := NewAppModel(ModeLoop)
-	model.Detail = NewDetailPanel(80, 10)
-	p := tea.NewProgram(model, tea.WithoutSignalHandler())
-
-	bridge := NewUIBridge(p)
-
-	// Call the bridge function (sends messages to the program).
-	fn(bridge)
-
-	close(msgs)
-	return nil
-}
-
 func TestUIBridgeImplementsInterface(t *testing.T) {
 	// Compile-time check is in bridge.go, but verify at runtime too.
 	model := NewAppModel(ModeLoop)
 	model.Detail = NewDetailPanel(80, 10)
 	p := tea.NewProgram(model, tea.WithoutSignalHandler())
-	var iface ui.UI = NewUIBridge(p)
+	var iface ui.UI = NewUIBridge(p, "")
 	_ = iface
 }
 
@@ -61,7 +25,7 @@ func TestUIBridgeMethodsDoNotPanic(t *testing.T) {
 	model := NewAppModel(ModeLoop)
 	model.Detail = NewDetailPanel(80, 10)
 	p := tea.NewProgram(model, tea.WithoutSignalHandler())
-	b := NewUIBridge(p)
+	b := NewUIBridge(p, "")
 
 	// Run the program briefly in a goroutine so Send has a receiver.
 	done := make(chan struct{})
@@ -93,6 +57,10 @@ func TestUIBridgeMethodsDoNotPanic(t *testing.T) {
 	b.BudgetExceeded(10.0, 5.0)
 	b.Error("test error")
 	b.Info("test info")
+	b.BeadUpdate("bead-123", "test", "open", nil)
+	b.BeadUpdate("bead-123", "test", "open", []ui.BeadChild{
+		{ID: "c1", Title: "child", Status: "open", Severity: "major", Cycle: 1},
+	})
 	b.TaskComplete("bead-123", 1.23)
 
 	<-done
@@ -283,7 +251,7 @@ func TestPhaseUIBridgeImplementsInterface(t *testing.T) {
 	model := NewAppModel(ModeNebula)
 	model.Detail = NewDetailPanel(80, 10)
 	p := tea.NewProgram(model, tea.WithoutSignalHandler())
-	var iface ui.UI = NewPhaseUIBridge(p, "test-phase")
+	var iface ui.UI = NewPhaseUIBridge(p, "test-phase", "")
 	_ = iface
 }
 
@@ -378,13 +346,16 @@ func TestNebulaViewSetPhaseCostAndCycles(t *testing.T) {
 	if nv.Phases[0].CostUSD != 1.23 {
 		t.Errorf("CostUSD = %f, want 1.23", nv.Phases[0].CostUSD)
 	}
-	nv.SetPhaseCycles("p", 3)
+	nv.SetPhaseCycles("p", 3, 5)
 	if nv.Phases[0].Cycles != 3 {
 		t.Errorf("Cycles = %d, want 3", nv.Phases[0].Cycles)
 	}
+	if nv.Phases[0].MaxCycles != 5 {
+		t.Errorf("MaxCycles = %d, want 5", nv.Phases[0].MaxCycles)
+	}
 	// Unknown phase — should not panic.
 	nv.SetPhaseCost("nope", 0.5)
-	nv.SetPhaseCycles("nope", 1)
+	nv.SetPhaseCycles("nope", 1, 5)
 }
 
 func TestNebulaViewCursorNavigation(t *testing.T) {
@@ -600,18 +571,18 @@ func TestFooterBindings(t *testing.T) {
 	km := DefaultKeyMap()
 
 	loop := LoopFooterBindings(km)
-	if len(loop) != 4 {
-		t.Errorf("LoopFooterBindings = %d bindings, want 4", len(loop))
+	if len(loop) != 5 {
+		t.Errorf("LoopFooterBindings = %d bindings, want 5", len(loop))
 	}
 
 	neb := NebulaFooterBindings(km)
-	if len(neb) != 6 {
-		t.Errorf("NebulaFooterBindings = %d bindings, want 6", len(neb))
+	if len(neb) != 8 {
+		t.Errorf("NebulaFooterBindings = %d bindings, want 8", len(neb))
 	}
 
 	detail := NebulaDetailFooterBindings(km)
-	if len(detail) != 5 {
-		t.Errorf("NebulaDetailFooterBindings = %d bindings, want 5", len(detail))
+	if len(detail) != 7 {
+		t.Errorf("NebulaDetailFooterBindings = %d bindings, want 7", len(detail))
 	}
 
 	gate := GateFooterBindings(km)
@@ -1069,5 +1040,99 @@ func TestAgentOutputBeforeDonePreservesOutput(t *testing.T) {
 	}
 	if !agent.Done {
 		t.Error("Agent should be done")
+	}
+}
+
+func TestSetAgentDiffExactCycleMatch(t *testing.T) {
+	lv := NewLoopView()
+	lv.StartCycle(1)
+	lv.StartAgent("coder")
+
+	lv.SetAgentDiff("coder", 1, "diff --git a/foo.go b/foo.go\n+added line\n")
+	if lv.Cycles[0].Agents[0].Diff != "diff --git a/foo.go b/foo.go\n+added line\n" {
+		t.Errorf("Diff = %q, want diff content", lv.Cycles[0].Agents[0].Diff)
+	}
+}
+
+func TestSetAgentDiffFallbackOnCycleMismatch(t *testing.T) {
+	lv := NewLoopView()
+	lv.StartCycle(1)
+	lv.StartAgent("coder")
+	lv.FinishAgent("coder", 0.5, 5000)
+
+	// Diff arrives with wrong cycle number — should fall back to most recent agent.
+	lv.SetAgentDiff("coder", 99, "fallback diff")
+	if lv.Cycles[0].Agents[0].Diff != "fallback diff" {
+		t.Errorf("Diff = %q, want %q (fallback)", lv.Cycles[0].Agents[0].Diff, "fallback diff")
+	}
+}
+
+func TestSetAgentDiffNoMatchDoesNotPanic(t *testing.T) {
+	lv := NewLoopView()
+	// No cycles, no agents — should not panic.
+	lv.SetAgentDiff("coder", 1, "orphaned diff")
+}
+
+func TestHandleDiffKeyTogglesShowDiff(t *testing.T) {
+	m := NewAppModel(ModeLoop)
+	m.Detail = NewDetailPanel(80, 10)
+	m.Width = 80
+	m.Height = 24
+
+	// Set up a cycle with a coder agent that has a diff.
+	m.LoopView.StartCycle(1)
+	m.LoopView.StartAgent("coder")
+	m.LoopView.FinishAgent("coder", 0.5, 5000)
+	m.LoopView.SetAgentOutput("coder", 1, "wrote code")
+	m.LoopView.SetAgentDiff("coder", 1, "diff --git a/f.go b/f.go\n+line\n")
+
+	// Navigate to agent output depth and select the coder.
+	m.Depth = DepthAgentOutput
+	m.LoopView.Cursor = 1 // coder agent row
+	m.updateDetailFromSelection()
+
+	// Initially ShowDiff is false.
+	if m.ShowDiff {
+		t.Error("ShowDiff should be false initially")
+	}
+
+	// Press d to toggle to diff view.
+	m.handleDiffKey()
+	if !m.ShowDiff {
+		t.Error("ShowDiff should be true after first toggle")
+	}
+
+	// Press d again to toggle back to output view.
+	m.handleDiffKey()
+	if m.ShowDiff {
+		t.Error("ShowDiff should be false after second toggle")
+	}
+}
+
+func TestHandleDiffKeyNoopAtWrongDepth(t *testing.T) {
+	m := NewAppModel(ModeLoop)
+	m.Detail = NewDetailPanel(80, 10)
+
+	// At DepthPhases, handleDiffKey should be a no-op.
+	m.Depth = DepthPhases
+	m.handleDiffKey()
+	if m.ShowDiff {
+		t.Error("ShowDiff should remain false at DepthPhases")
+	}
+}
+
+func TestCaptureGitDiffEmptyWorkDir(t *testing.T) {
+	// Empty workDir should return empty string.
+	result := captureGitDiff("")
+	if result != "" {
+		t.Errorf("expected empty diff for empty workDir, got %q", result)
+	}
+}
+
+func TestCaptureGitDiffInvalidDir(t *testing.T) {
+	// Non-existent directory should return empty string (no error).
+	result := captureGitDiff("/nonexistent/path/that/does/not/exist")
+	if result != "" {
+		t.Errorf("expected empty diff for invalid dir, got %q", result)
 	}
 }

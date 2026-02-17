@@ -44,13 +44,6 @@ var (
 			Bold(true).
 			Padding(0, 1)
 
-	styleStatusLabel = lipgloss.NewStyle().
-				Foreground(colorPrimary).
-				Bold(true)
-
-	styleStatusValue = lipgloss.NewStyle().
-				Foreground(colorWhite)
-
 	// styleStatusMode renders mode labels ("nebula:", "task") in a dimmer secondary color.
 	styleStatusMode = lipgloss.NewStyle().
 			Foreground(colorMutedLight)
@@ -126,6 +119,14 @@ var (
 				Bold(true)
 )
 
+// styleTreeConnector styles the tree-drawing characters (├──, └──) in the cycle timeline.
+var styleTreeConnector = lipgloss.NewStyle().
+	Foreground(colorMuted)
+
+// styleWaveHeader styles the wave separator lines in the nebula phase view.
+var styleWaveHeader = lipgloss.NewStyle().
+	Foreground(colorMuted)
+
 // Detail panel styles — rounded border, styled title.
 var (
 	styleDetailBorder = lipgloss.NewStyle().
@@ -176,6 +177,46 @@ var (
 	// styleDetailSep styles the separator between header and body.
 	styleDetailSep = lipgloss.NewStyle().
 			Foreground(colorMuted)
+)
+
+// Diff view styles — side-by-side diff rendering.
+var (
+	// styleDiffAdd styles added lines with a green background.
+	styleDiffAdd = lipgloss.NewStyle().
+			Foreground(colorSuccess)
+
+	// styleDiffRemove styles removed lines with a red foreground.
+	styleDiffRemove = lipgloss.NewStyle().
+			Foreground(colorDanger)
+
+	// styleDiffContext styles unchanged context lines.
+	styleDiffContext = lipgloss.NewStyle().
+				Foreground(colorMutedLight)
+
+	// styleDiffHeader styles file path headers in the diff.
+	styleDiffHeader = lipgloss.NewStyle().
+			Foreground(colorPrimary).
+			Bold(true)
+
+	// styleDiffLineNum styles line numbers in muted gray.
+	styleDiffLineNum = lipgloss.NewStyle().
+				Foreground(colorMuted)
+
+	// styleDiffSep styles the column separator between left and right panes.
+	styleDiffSep = lipgloss.NewStyle().
+			Foreground(colorMuted)
+
+	// styleDiffStat styles the stat summary line.
+	styleDiffStat = lipgloss.NewStyle().
+			Foreground(colorMutedLight)
+
+	// styleDiffStatAdd styles the "+" portion of file stats.
+	styleDiffStatAdd = lipgloss.NewStyle().
+				Foreground(colorSuccess)
+
+	// styleDiffStatDel styles the "-" portion of file stats.
+	styleDiffStatDel = lipgloss.NewStyle().
+				Foreground(colorDanger)
 )
 
 // Gate prompt styles.
@@ -250,6 +291,51 @@ var (
 				Italic(true)
 
 	styleOverlayDimmed = lipgloss.NewStyle().
+				Foreground(colorMuted)
+)
+
+// Bead tracker styles.
+var (
+	// styleBeadOpen styles open beads (white ●).
+	styleBeadOpen = lipgloss.NewStyle().
+			Foreground(colorWhite)
+
+	// styleBeadInProgress styles in-progress beads (blue ◎).
+	styleBeadInProgress = lipgloss.NewStyle().
+				Foreground(colorBlue)
+
+	// styleBeadClosed styles closed beads (green ✓).
+	styleBeadClosed = lipgloss.NewStyle().
+			Foreground(colorSuccess)
+
+	// styleBeadTitle styles bead titles.
+	styleBeadTitle = lipgloss.NewStyle().
+			Foreground(colorWhite)
+
+	// styleBeadID styles bead IDs in muted text.
+	styleBeadID = lipgloss.NewStyle().
+			Foreground(colorMuted)
+
+	// styleBeadCycleHeader styles cycle group headers.
+	styleBeadCycleHeader = lipgloss.NewStyle().
+				Foreground(colorMutedLight).
+				Bold(true)
+
+	// styleBeadSummary styles per-cycle summary lines.
+	styleBeadSummary = lipgloss.NewStyle().
+				Foreground(colorMuted).
+				Italic(true)
+
+	// styleBeadSeverityCritical styles critical severity tags (red).
+	styleBeadSeverityCritical = lipgloss.NewStyle().
+					Foreground(colorDanger)
+
+	// styleBeadSeverityMajor styles major severity tags (orange).
+	styleBeadSeverityMajor = lipgloss.NewStyle().
+				Foreground(colorAccent)
+
+	// styleBeadSeverityMinor styles minor severity tags (muted gray).
+	styleBeadSeverityMinor = lipgloss.NewStyle().
 				Foreground(colorMuted)
 )
 

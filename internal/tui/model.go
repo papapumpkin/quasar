@@ -58,6 +58,15 @@ type AppModel struct {
 	FocusedPhase string               // phase ID we're drilled into
 	PhaseLoops   map[string]*LoopView // per-phase cycle timelines
 
+	// Detail panel state.
+	ShowPlan  bool // whether the plan viewer is toggled on
+	ShowDiff  bool // whether the diff viewer is toggled on (vs raw output)
+	ShowBeads bool // whether the bead tracker is toggled on
+
+	// Bead hierarchy state.
+	LoopBeads  *BeadInfo            // bead hierarchy for loop mode
+	PhaseBeads map[string]*BeadInfo // phaseID → latest bead hierarchy
+
 	// Execution control state (nebula mode).
 	Paused    bool   // whether execution is paused
 	Stopping  bool   // whether a stop has been requested
@@ -78,6 +87,7 @@ func NewAppModel(mode Mode) AppModel {
 		Keys:       DefaultKeyMap(),
 		StartTime:  time.Now(),
 		PhaseLoops: make(map[string]*LoopView),
+		PhaseBeads: make(map[string]*BeadInfo),
 	}
 	m.StatusBar.StartTime = m.StartTime
 	return m
@@ -163,6 +173,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgAgentOutput:
 		m.LoopView.SetAgentOutput(msg.Role, msg.Cycle, msg.Output)
 		m.updateDetailFromSelection()
+	case MsgAgentDiff:
+		m.LoopView.SetAgentDiff(msg.Role, msg.Cycle, msg.Diff)
+		m.updateDetailFromSelection()
 	case MsgError:
 		m.addMessage("error: %s", msg.Msg)
 		toast, cmd := NewToast("error: "+msg.Msg, true)
@@ -196,7 +209,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgPhaseCycleStart:
 		lv := m.ensurePhaseLoop(msg.PhaseID)
 		lv.StartCycle(msg.Cycle)
-		m.NebulaView.SetPhaseCycles(msg.PhaseID, msg.Cycle)
+		m.NebulaView.SetPhaseCycles(msg.PhaseID, msg.Cycle, msg.MaxCycles)
 	case MsgPhaseAgentStart:
 		lv := m.ensurePhaseLoop(msg.PhaseID)
 		lv.StartAgent(msg.Role)
@@ -208,6 +221,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lv := m.ensurePhaseLoop(msg.PhaseID)
 		lv.SetAgentOutput(msg.Role, msg.Cycle, msg.Output)
 		// If we're focused on this phase, refresh detail.
+		if m.FocusedPhase == msg.PhaseID {
+			m.updateDetailFromSelection()
+		}
+	case MsgPhaseAgentDiff:
+		lv := m.ensurePhaseLoop(msg.PhaseID)
+		lv.SetAgentDiff(msg.Role, msg.Cycle, msg.Diff)
 		if m.FocusedPhase == msg.PhaseID {
 			m.updateDetailFromSelection()
 		}
@@ -234,6 +253,20 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgPhaseInfo:
 		// Informational — don't change phase status.
 
+	// --- Bead hierarchy ---
+	case MsgBeadUpdate:
+		root := msg.Root
+		m.LoopBeads = &root
+		if m.ShowBeads {
+			m.updateBeadDetail()
+		}
+	case MsgPhaseBeadUpdate:
+		root := msg.Root
+		m.PhaseBeads[msg.PhaseID] = &root
+		if m.ShowBeads {
+			m.updateBeadDetail()
+		}
+
 	// --- Gate ---
 	case MsgGatePrompt:
 		m.Gate = NewGatePrompt(msg.Checkpoint, msg.ResponseCh)
@@ -258,7 +291,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.NebulaDir != "" {
 			nebulaDir := m.NebulaDir
 			cmds = append(cmds, func() tea.Msg {
-				choices, _ := DiscoverNebulae(nebulaDir)
+				choices, err := DiscoverNebulae(nebulaDir)
+				if err != nil {
+					return MsgError{Msg: fmt.Sprintf("nebula discovery: %v", err)}
+				}
 				return MsgNebulaChoicesLoaded{Choices: choices}
 			})
 		}
@@ -375,6 +411,15 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.Keys.Back):
 		m.drillUp()
+
+	case key.Matches(msg, m.Keys.Info):
+		m.handleInfoKey()
+
+	case key.Matches(msg, m.Keys.Diff):
+		m.handleDiffKey()
+
+	case key.Matches(msg, m.Keys.Beads):
+		m.handleBeadsKey()
 	}
 
 	return m, nil
@@ -472,8 +517,109 @@ func (m *AppModel) handleRetryKey() {
 	m.addMessage("retrying phase %s", phaseID)
 }
 
+// handleInfoKey toggles the phase plan viewer in the detail panel.
+// Active in nebula mode at DepthPhases or DepthPhaseLoop.
+func (m *AppModel) handleInfoKey() {
+	if m.Mode != ModeNebula {
+		return
+	}
+	if m.Depth != DepthPhases && m.Depth != DepthPhaseLoop {
+		return
+	}
+
+	m.ShowPlan = !m.ShowPlan
+	if m.ShowPlan {
+		m.updatePlanDetail()
+	}
+}
+
+// handleDiffKey toggles between output and diff view in the detail panel.
+// Active at DepthAgentOutput when the selected agent has a diff.
+func (m *AppModel) handleDiffKey() {
+	if m.Depth != DepthAgentOutput {
+		return
+	}
+	m.ShowDiff = !m.ShowDiff
+	m.updateDetailFromSelection()
+}
+
+// handleBeadsKey toggles the bead tracker view in the detail panel.
+// In loop mode, shows the single task's bead hierarchy.
+// In nebula mode at DepthPhases or DepthPhaseLoop, shows the focused phase's beads.
+func (m *AppModel) handleBeadsKey() {
+	m.ShowBeads = !m.ShowBeads
+	if m.ShowBeads {
+		// Dismiss other panel modes.
+		m.ShowPlan = false
+		m.ShowDiff = false
+		m.updateBeadDetail()
+	}
+}
+
+// updateBeadDetail populates the detail panel with the bead hierarchy.
+func (m *AppModel) updateBeadDetail() {
+	switch m.Mode {
+	case ModeLoop:
+		if m.LoopBeads == nil {
+			m.Detail.SetEmpty("(no bead data yet)")
+			return
+		}
+		bv := NewBeadView()
+		bv.SetRoot(*m.LoopBeads)
+		bv.Width = m.Width - 2
+		m.Detail.SetContent("Beads: "+m.LoopBeads.Title, bv.View())
+
+	case ModeNebula:
+		phaseID := m.FocusedPhase
+		if phaseID == "" {
+			// At DepthPhases, use the selected phase.
+			if p := m.NebulaView.SelectedPhase(); p != nil {
+				phaseID = p.ID
+			}
+		}
+		if phaseID == "" {
+			m.Detail.SetEmpty("(select a phase to view beads)")
+			return
+		}
+		root, ok := m.PhaseBeads[phaseID]
+		if !ok || root == nil {
+			m.Detail.SetEmpty("(no bead data for " + phaseID + ")")
+			return
+		}
+		bv := NewBeadView()
+		bv.SetRoot(*root)
+		bv.Width = m.Width - 2
+		m.Detail.SetContent("Beads: "+root.Title, bv.View())
+	}
+}
+
+// updatePlanDetail populates the detail panel with the selected phase's plan body.
+func (m *AppModel) updatePlanDetail() {
+	var phase *PhaseEntry
+	switch m.Depth {
+	case DepthPhases:
+		phase = m.NebulaView.SelectedPhase()
+	case DepthPhaseLoop:
+		phase = m.findPhase(m.FocusedPhase)
+	}
+	if phase == nil {
+		m.Detail.SetEmpty("No phase selected")
+		return
+	}
+	if phase.PlanBody == "" {
+		m.Detail.SetContent("📋 Plan: "+phase.ID, "(no plan body available)")
+		return
+	}
+	m.Detail.SetContent("📋 Plan: "+phase.ID, phase.PlanBody)
+}
+
 // drillDown navigates deeper into the hierarchy.
 func (m *AppModel) drillDown() {
+	// Drilling down dismisses the plan, diff, and beads viewers.
+	m.ShowPlan = false
+	m.ShowDiff = false
+	m.ShowBeads = false
+
 	switch m.Mode {
 	case ModeLoop:
 		// In loop mode, enter toggles the detail panel.
@@ -502,6 +648,16 @@ func (m *AppModel) drillDown() {
 
 // drillUp navigates back up the hierarchy.
 func (m *AppModel) drillUp() {
+	// Pressing esc dismisses plan/beads viewers first (without changing depth).
+	if m.ShowPlan {
+		m.ShowPlan = false
+		return
+	}
+	if m.ShowBeads {
+		m.ShowBeads = false
+		return
+	}
+
 	switch m.Mode {
 	case ModeLoop:
 		m.Depth = DepthPhases // collapse detail
@@ -583,6 +739,16 @@ func (m *AppModel) moveDown() {
 // updateDetailFromSelection updates the detail panel content
 // based on the current view depth and selected item.
 func (m *AppModel) updateDetailFromSelection() {
+	// Bead tracker takes precedence when toggled on.
+	if m.ShowBeads {
+		m.updateBeadDetail()
+		return
+	}
+	// Plan viewer takes precedence when toggled on.
+	if m.ShowPlan {
+		m.updatePlanDetail()
+		return
+	}
 	switch m.Mode {
 	case ModeLoop:
 		agent := m.LoopView.SelectedAgent()
@@ -598,6 +764,11 @@ func (m *AppModel) updateDetailFromSelection() {
 			IssueCount: agent.IssueCount,
 			Done:       agent.Done,
 		})
+		if m.ShowDiff && agent.Diff != "" {
+			body := RenderDiffView(agent.Diff, m.Width-4)
+			m.Detail.SetContentWithHeader(agent.Role+" diff", header, body)
+			return
+		}
 		if agent.Output == "" {
 			m.Detail.SetContentWithHeader(
 				agent.Role+" output", header,
@@ -665,6 +836,12 @@ func (m *AppModel) updateNebulaDetail() {
 			header = phaseHeader + "\n" + agentHeader
 		}
 
+		if m.ShowDiff && agent.Diff != "" {
+			title := fmt.Sprintf("%s → %s diff", m.FocusedPhase, agent.Role)
+			body := RenderDiffView(agent.Diff, m.Width-4)
+			m.Detail.SetContentWithHeader(title, header, body)
+			return
+		}
 		title := fmt.Sprintf("%s → %s output", m.FocusedPhase, agent.Role)
 		if agent.Output == "" {
 			m.Detail.SetContentWithHeader(title, header, "(output will appear when agent completes)")
@@ -710,9 +887,12 @@ func (m AppModel) detailHeight() int {
 // showDetailPanel returns whether the detail panel should be visible.
 func (m AppModel) showDetailPanel() bool {
 	if m.Mode == ModeLoop {
-		return m.Depth == DepthAgentOutput
+		return m.Depth == DepthAgentOutput || m.ShowBeads
 	}
-	// In nebula mode, show detail at phase loop (summary) and agent output.
+	// In nebula mode, show detail when plan/beads is toggled or drilled into a phase.
+	if m.ShowPlan || m.ShowBeads {
+		return true
+	}
 	return m.Depth >= DepthPhaseLoop
 }
 
@@ -844,19 +1024,35 @@ func (m AppModel) buildFooter() Footer {
 	} else if m.Mode == ModeNebula {
 		if m.Depth > DepthPhases {
 			f.Bindings = NebulaDetailFooterBindings(m.Keys)
-			// Add retry if the focused phase is failed.
+			if m.Depth == DepthAgentOutput {
+				diffBind := m.Keys.Diff
+				if m.ShowDiff {
+					diffBind.SetHelp("d", "output")
+				} else {
+					diffBind.SetHelp("d", "diff")
+				}
+				f.Bindings = append(f.Bindings, diffBind)
+			}
 			if m.selectedPhaseFailed() {
 				f.Bindings = append(f.Bindings, m.Keys.Retry)
 			}
 		} else {
 			f.Bindings = NebulaFooterBindings(m.Keys)
-			// Add retry if the selected phase is failed.
 			if m.selectedPhaseFailed() {
 				f.Bindings = append(f.Bindings, m.Keys.Retry)
 			}
 		}
 	} else {
 		f.Bindings = LoopFooterBindings(m.Keys)
+		if m.Depth == DepthAgentOutput {
+			diffBind := m.Keys.Diff
+			if m.ShowDiff {
+				diffBind.SetHelp("d", "output")
+			} else {
+				diffBind.SetHelp("d", "diff")
+			}
+			f.Bindings = append(f.Bindings, diffBind)
+		}
 	}
 	return f
 }

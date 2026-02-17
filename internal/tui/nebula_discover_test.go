@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -258,7 +259,7 @@ func writeTestState(t *testing.T, dir, content string) {
 	}
 }
 
-// itoa converts an int to a string (avoids importing strconv in tests).
+// itoa converts an int to a string.
 func itoa(i int) string {
-	return string(rune('0' + i))
+	return strconv.Itoa(i)
 }

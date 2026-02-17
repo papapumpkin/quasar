@@ -50,6 +50,16 @@ type UI interface {
 	Error(msg string)
 	Info(msg string)
 	AgentOutput(role string, cycle int, output string)
+	BeadUpdate(taskBeadID, title, status string, children []BeadChild)
+}
+
+// BeadChild carries display information for a child bead in the hierarchy.
+type BeadChild struct {
+	ID       string
+	Title    string
+	Status   string // "open", "in_progress", "closed"
+	Severity string // "critical", "major", "minor"
+	Cycle    int    // cycle in which this child was created
 }
 
 // Verify that *Printer satisfies the UI interface at compile time.
@@ -133,6 +143,10 @@ func (p *Printer) Info(msg string) {
 // AgentOutput is a no-op for the stderr printer; agent output is only
 // displayed in the TUI drill-down view.
 func (p *Printer) AgentOutput(role string, cycle int, output string) {}
+
+// BeadUpdate is a no-op for the stderr printer; bead hierarchy is only
+// displayed in the TUI bead tracker view.
+func (p *Printer) BeadUpdate(taskBeadID, title, status string, children []BeadChild) {}
 
 // TaskStarted prints a status line when a task begins.
 func (p *Printer) TaskStarted(beadID, title string) {

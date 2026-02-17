@@ -45,6 +45,7 @@ func (p Phase) String() string {
 type ReviewFinding struct {
 	Severity    string
 	Description string
+	Cycle       int // cycle in which this finding was created (set during accumulation)
 }
 
 // CycleState tracks the mutable state of a coder-reviewer loop across cycles.
@@ -58,6 +59,7 @@ type CycleState struct {
 	MaxBudgetUSD float64
 	CoderOutput  string
 	ReviewOutput string
-	Findings     []ReviewFinding
-	ChildBeadIDs []string
+	Findings     []ReviewFinding // current cycle's findings (reset each cycle)
+	AllFindings  []ReviewFinding // accumulated findings across all cycles
+	ChildBeadIDs []string        // accumulated child bead IDs across all cycles
 }

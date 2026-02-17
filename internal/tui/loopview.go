@@ -17,6 +17,7 @@ type AgentEntry struct {
 	DurationMs int64
 	IssueCount int
 	Output     string
+	Diff       string
 	StartedAt  time.Time
 }
 
@@ -147,6 +148,32 @@ func (lv *LoopView) SetAgentOutput(role string, cycle int, output string) {
 	}
 }
 
+// SetAgentDiff stores a git diff for the given agent in the given cycle.
+func (lv *LoopView) SetAgentDiff(role string, cycle int, diff string) {
+	// Try exact cycle match first.
+	for i := range lv.Cycles {
+		if lv.Cycles[i].Number != cycle {
+			continue
+		}
+		for j := range lv.Cycles[i].Agents {
+			if lv.Cycles[i].Agents[j].Role == role {
+				lv.Cycles[i].Agents[j].Diff = diff
+				return
+			}
+		}
+	}
+
+	// Fallback: store on the most recent agent with this role.
+	for i := len(lv.Cycles) - 1; i >= 0; i-- {
+		for j := len(lv.Cycles[i].Agents) - 1; j >= 0; j-- {
+			if lv.Cycles[i].Agents[j].Role == role {
+				lv.Cycles[i].Agents[j].Diff = diff
+				return
+			}
+		}
+	}
+}
+
 // SetIssueCount sets the issue count on the last reviewer in the current cycle.
 func (lv *LoopView) SetIssueCount(count int) {
 	if len(lv.Cycles) == 0 {
@@ -179,7 +206,7 @@ func (lv *LoopView) MoveDown() {
 	}
 }
 
-// View renders the cycle timeline.
+// View renders the cycle timeline with tree connector lines.
 func (lv LoopView) View() string {
 	var b strings.Builder
 	idx := 0
@@ -199,20 +226,27 @@ func (lv LoopView) View() string {
 		b.WriteString("\n")
 		idx++
 
-		// Agent entries.
-		for _, a := range c.Agents {
+		// Agent entries with tree connectors.
+		for j, a := range c.Agents {
 			selected = idx == lv.Cursor
-			indent := "  "
 			indicator = "  "
 			if selected {
 				indicator = styleSelectionIndicator.Render(selectionIndicator) + " "
 			}
 
+			// Tree connector: └── for last agent, ├── for others.
+			isLast := j == len(c.Agents)-1
+			connector := "├── "
+			if isLast {
+				connector = "└── "
+			}
+			styledConnector := styleTreeConnector.Render(connector)
+
 			var line string
 			if a.Done {
 				secs := float64(a.DurationMs) / 1000.0
 				icon := styleRowDone.Render(iconDone)
-				line = fmt.Sprintf("%s%s%s %s  %.1fs  $%.4f", indicator, indent, icon, a.Role, secs, a.CostUSD)
+				line = fmt.Sprintf("%s%s%s %s  %.1fs  $%.4f", indicator, styledConnector, icon, a.Role, secs, a.CostUSD)
 				if a.Role == "reviewer" && a.IssueCount > 0 {
 					line += fmt.Sprintf("  → %d issue(s)", a.IssueCount)
 				}
@@ -225,7 +259,7 @@ func (lv LoopView) View() string {
 				icon := styleRowWorking.Render(iconWorking)
 				elapsed := formatElapsed(a.StartedAt)
 				spinnerStr := roleColoredSpinner(a.Role, lv.Spinner)
-				line = fmt.Sprintf("%s%s%s %s  working… %s  %s", indicator, indent, icon, a.Role, elapsed, spinnerStr)
+				line = fmt.Sprintf("%s%s%s %s  working… %s  %s", indicator, styledConnector, icon, a.Role, elapsed, spinnerStr)
 				b.WriteString(styleRowWorking.Render(line))
 			}
 			b.WriteString("\n")

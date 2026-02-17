@@ -128,6 +128,21 @@ type MsgPhaseAgentOutput struct {
 	Output  string
 }
 
+// MsgAgentDiff carries a git diff for an agent's changes (loop mode).
+type MsgAgentDiff struct {
+	Role  string
+	Cycle int
+	Diff  string
+}
+
+// MsgPhaseAgentDiff carries a git diff for an agent's changes (nebula mode).
+type MsgPhaseAgentDiff struct {
+	PhaseID string
+	Role    string
+	Cycle   int
+	Diff    string
+}
+
 // MsgPhaseCycleSummary is sent after each coder/reviewer step within a phase.
 type MsgPhaseCycleSummary struct {
 	PhaseID string
@@ -164,6 +179,7 @@ type PhaseInfo struct {
 	ID        string
 	Title     string
 	DependsOn []string
+	PlanBody  string // markdown content from the phase file
 }
 
 // MsgNebulaInit is sent at TUI startup to populate the phase table.
@@ -219,4 +235,30 @@ type MsgNebulaChoicesLoaded struct {
 // MsgToastExpired signals that a toast notification should be dismissed.
 type MsgToastExpired struct {
 	ID int
+}
+
+// Bead hierarchy messages — carry bead state snapshots for the bead tracker.
+
+// BeadInfo represents a bead's display state in the hierarchy.
+type BeadInfo struct {
+	ID       string
+	Title    string
+	Status   string     // "open", "in_progress", "closed"
+	Type     string     // "epic", "task", "bug", "feature"
+	Severity string     // "critical", "major", "minor" (empty for root)
+	Cycle    int        // cycle in which this child was created (0 for root)
+	Children []BeadInfo // nested child issues
+}
+
+// MsgBeadUpdate carries the current bead hierarchy for a task (loop mode).
+type MsgBeadUpdate struct {
+	TaskBeadID string
+	Root       BeadInfo
+}
+
+// MsgPhaseBeadUpdate carries bead state for a specific phase (nebula mode).
+type MsgPhaseBeadUpdate struct {
+	PhaseID    string
+	TaskBeadID string
+	Root       BeadInfo
 }

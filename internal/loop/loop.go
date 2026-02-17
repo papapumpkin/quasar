@@ -79,6 +79,7 @@ func (l *Loop) GenerateCheckpoint(ctx context.Context, beadID, taskDescription s
 func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*TaskResult, error) {
 	perAgentBudget := l.perAgentBudget()
 	state := l.initCycleState(ctx, beadID, taskDescription)
+	l.emitBeadUpdate(state, "in_progress")
 
 	for cycle := 1; cycle <= l.MaxCycles; cycle++ {
 		state.Cycle = cycle
@@ -103,7 +104,15 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 
 		l.UI.IssuesFound(len(state.Findings))
 		state.Phase = PhaseResolvingIssues
-		state.ChildBeadIDs = l.createFindingBeads(ctx, state)
+		// Tag findings with the current cycle number before creating beads
+		// or accumulating, so the Cycle field is available downstream.
+		for i := range state.Findings {
+			state.Findings[i].Cycle = state.Cycle
+		}
+		newChildIDs := l.createFindingBeads(ctx, state)
+		state.ChildBeadIDs = append(state.ChildBeadIDs, newChildIDs...)
+		state.AllFindings = append(state.AllFindings, state.Findings...)
+		l.emitBeadUpdate(state, "in_progress")
 
 		if err := l.Beads.Update(ctx, beadID, beads.UpdateOpts{Assignee: "quasar-coder"}); err != nil {
 			l.UI.Error(fmt.Sprintf("failed to update bead: %v", err))
@@ -263,6 +272,7 @@ func (l *Loop) handleApproval(ctx context.Context, state *CycleState) (*TaskResu
 	if err := l.Beads.Close(ctx, state.TaskBeadID, "Approved by reviewer"); err != nil {
 		l.UI.Error(fmt.Sprintf("failed to close bead: %v", err))
 	}
+	l.emitBeadUpdate(state, "closed")
 	if report != nil {
 		if err := l.Beads.AddComment(ctx, state.TaskBeadID, FormatReportComment(report)); err != nil {
 			l.UI.Error(fmt.Sprintf("failed to add bead comment: %v", err))
@@ -275,6 +285,38 @@ func (l *Loop) handleApproval(ctx context.Context, state *CycleState) (*TaskResu
 		CyclesUsed:   state.Cycle,
 		Report:       report,
 	}, nil
+}
+
+// emitBeadUpdate sends the current bead hierarchy to the UI.
+// It uses AllFindings (accumulated across cycles) to match ChildBeadIDs,
+// so that children from earlier cycles are preserved in the hierarchy.
+// When the parent task is closed (approved), all children are marked closed
+// since we don't track per-child status independently.
+func (l *Loop) emitBeadUpdate(state *CycleState, status string) {
+	// When the task is closed, all child issues are considered resolved.
+	childStatus := "open"
+	if status == "closed" {
+		childStatus = "closed"
+	}
+	var children []ui.BeadChild
+	for i, id := range state.ChildBeadIDs {
+		title := "review finding"
+		severity := "major"
+		cycle := 0
+		if i < len(state.AllFindings) {
+			title = truncate(state.AllFindings[i].Description, 80)
+			severity = state.AllFindings[i].Severity
+			cycle = state.AllFindings[i].Cycle
+		}
+		children = append(children, ui.BeadChild{
+			ID:       id,
+			Title:    title,
+			Status:   childStatus,
+			Severity: severity,
+			Cycle:    cycle,
+		})
+	}
+	l.UI.BeadUpdate(state.TaskBeadID, state.TaskTitle, status, children)
 }
 
 // createFindingBeads creates a child bead for each review finding and returns

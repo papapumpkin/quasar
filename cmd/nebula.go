@@ -250,6 +250,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				ID:        p.ID,
 				Title:     p.Title,
 				DependsOn: p.DependsOn,
+				PlanBody:  p.Body,
 			})
 		}
 		tuiProgram = tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir)
@@ -388,6 +389,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 						ID:        p.ID,
 						Title:     p.Title,
 						DependsOn: p.DependsOn,
+						PlanBody:  p.Body,
 					})
 				}
 				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir)
@@ -519,7 +521,7 @@ type tuiLoopAdapter struct {
 
 func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
 	// Create a per-phase UI bridge so messages carry the phase ID.
-	phaseUI := tui.NewPhaseUIBridge(a.program, phaseID)
+	phaseUI := tui.NewPhaseUIBridge(a.program, phaseID, a.workDir)
 
 	l := &loop.Loop{
 		Invoker:      a.invoker,
@@ -552,7 +554,7 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 }
 
 func (a *tuiLoopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error) {
-	phaseUI := tui.NewPhaseUIBridge(a.program, "checkpoint")
+	phaseUI := tui.NewPhaseUIBridge(a.program, "checkpoint", a.workDir)
 	l := &loop.Loop{
 		Invoker:      a.invoker,
 		Beads:        a.beads,

@@ -120,10 +120,7 @@ func (s StatusBar) buildFixedLeftPrefix(compact bool) string {
 	if s.Total > 0 {
 		// Nebula mode.
 		if compact {
-			pct := 0
-			if s.Total > 0 {
-				pct = s.Completed * 100 / s.Total
-			}
+			pct := s.Completed * 100 / s.Total
 			progStyle := styleStatusProgress
 			if s.Completed > 0 {
 				progStyle = styleStatusProgressActive
@@ -134,7 +131,8 @@ func (s StatusBar) buildFixedLeftPrefix(compact bool) string {
 	}
 	if s.BeadID != "" {
 		if compact {
-			return styleStatusMode.Render("task ")
+			return styleStatusMode.Render("task ") +
+				styleStatusProgress.Render(fmt.Sprintf("%d/%d ", s.Cycle, s.MaxCycles))
 		}
 		return styleStatusMode.Render("task ")
 	}
@@ -176,8 +174,9 @@ func (s StatusBar) buildNameSegment(compact bool, maxWidth int) string {
 	if s.BeadID != "" {
 		// Loop mode: "bead-id  cycle 2/5 [██░░░]"
 		if compact {
-			progText := fmt.Sprintf("%d/%d", s.Cycle, s.MaxCycles)
-			return styleStatusProgress.Render(progText)
+			// Progress is already rendered by buildFixedLeftPrefix; show truncated bead ID.
+			beadID := TruncateWithEllipsis(s.BeadID, maxWidth)
+			return styleStatusName.Render(beadID)
 		}
 		cycleBar := renderCycleBar(s.Cycle, s.MaxCycles)
 		suffix := fmt.Sprintf("  cycle %d/%d %s", s.Cycle, s.MaxCycles, cycleBar)

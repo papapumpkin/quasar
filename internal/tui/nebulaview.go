@@ -29,8 +29,10 @@ type PhaseEntry struct {
 	Wave      int
 	CostUSD   float64
 	Cycles    int
+	MaxCycles int
 	BlockedBy string
 	StartedAt time.Time
+	PlanBody  string // markdown content from the phase file
 }
 
 // NebulaView renders the phase table for multi-task orchestration.
@@ -91,6 +93,7 @@ func (nv *NebulaView) InitPhases(phases []PhaseInfo) {
 			Title:     p.Title,
 			Status:    PhaseWaiting,
 			BlockedBy: blocked,
+			PlanBody:  p.PlanBody,
 		}
 	}
 }
@@ -118,78 +121,121 @@ func (nv *NebulaView) SetPhaseCost(phaseID string, cost float64) {
 	}
 }
 
-// SetPhaseCycles updates the cycle count of a phase by ID.
-func (nv *NebulaView) SetPhaseCycles(phaseID string, cycles int) {
+// SetPhaseCycles updates the cycle count and max cycles of a phase by ID.
+func (nv *NebulaView) SetPhaseCycles(phaseID string, cycles, maxCycles int) {
 	for i := range nv.Phases {
 		if nv.Phases[i].ID == phaseID {
 			nv.Phases[i].Cycles = cycles
+			nv.Phases[i].MaxCycles = maxCycles
 			return
 		}
 	}
 }
 
-// View renders the phase table.
+// View renders the phase table with wave separators and aligned columns.
 func (nv NebulaView) View() string {
 	var b strings.Builder
+	lastWave := -1
 	for i, p := range nv.Phases {
-		selected := i == nv.Cursor
-		indicator := "  "
-		if selected {
-			indicator = styleSelectionIndicator.Render(selectionIndicator) + " "
-		}
-
-		var statusIcon string
-		var style = styleRowNormal
-		switch p.Status {
-		case PhaseDone:
-			statusIcon = styleRowDone.Render(iconDone)
-			style = styleRowDone
-		case PhaseWorking:
-			statusIcon = styleRowWorking.Render(iconWorking) + " " + nv.Spinner.View()
-			style = styleRowWorking
-		case PhaseFailed:
-			statusIcon = styleRowFailed.Render(iconFailed)
-			style = styleRowFailed
-		case PhaseGate:
-			statusIcon = styleRowGate.Render(iconGate)
-			style = styleRowGate
-		case PhaseSkipped:
-			statusIcon = styleRowWaiting.Render(iconSkipped)
-			style = styleRowWaiting
-		default:
-			statusIcon = styleRowWaiting.Render(iconWaiting)
-			style = styleRowWaiting
-		}
-
-		if selected {
-			style = styleRowSelected
-		}
-
-		detail := ""
-		if p.Status == PhaseDone {
-			detail = fmt.Sprintf("W%d  $%.2f  %d cycle(s)", p.Wave, p.CostUSD, p.Cycles)
-		} else if p.Status == PhaseWorking {
-			elapsed := formatElapsed(p.StartedAt)
-			detail = fmt.Sprintf("W%d  working… %s", p.Wave, elapsed)
-		} else if p.BlockedBy != "" {
-			detail = fmt.Sprintf("blocked: %s", p.BlockedBy)
-		}
-
-		// Truncate phase ID to fit available width.
-		phaseID := p.ID
-		idWidth := 24
-		if nv.Width < CompactWidth && nv.Width > 0 {
-			// In compact mode, shrink the ID column proportionally.
-			idWidth = nv.Width / 3
-			if idWidth < 8 {
-				idWidth = 8
+		// Wave separator when wave changes.
+		if p.Wave > 0 && p.Wave != lastWave {
+			if i > 0 {
+				b.WriteString("\n")
 			}
+			b.WriteString(nv.renderWaveHeader(p.Wave))
+			b.WriteString("\n")
 		}
-		phaseID = TruncateWithEllipsis(phaseID, idWidth)
+		lastWave = p.Wave
 
-		line := fmt.Sprintf("%s%s %-*s %s", indicator, statusIcon, idWidth, phaseID, detail)
-		b.WriteString(style.Render(line))
+		b.WriteString(nv.renderPhaseRow(i, p))
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// renderWaveHeader renders a subtle wave separator line.
+func (nv NebulaView) renderWaveHeader(wave int) string {
+	label := fmt.Sprintf("── Wave %d ──", wave)
+	return "  " + styleWaveHeader.Render(label)
+}
+
+// renderPhaseRow renders a single phase row with aligned columns.
+func (nv NebulaView) renderPhaseRow(i int, p PhaseEntry) string {
+	selected := i == nv.Cursor
+	indicator := "  "
+	if selected {
+		indicator = styleSelectionIndicator.Render(selectionIndicator) + " "
+	}
+
+	statusIcon, style := nv.phaseIconAndStyle(p)
+	if selected {
+		style = styleRowSelected
+	}
+
+	detail := nv.phaseDetail(p)
+
+	// Truncate phase ID to fit available width.
+	idWidth := 24
+	if nv.Width < CompactWidth && nv.Width > 0 {
+		idWidth = nv.Width / 3
+		if idWidth < 8 {
+			idWidth = 8
+		}
+	}
+	phaseID := TruncateWithEllipsis(p.ID, idWidth)
+
+	line := fmt.Sprintf("%s%s %-*s  %s", indicator, statusIcon, idWidth, phaseID, detail)
+	return style.Render(line)
+}
+
+// phaseIconAndStyle returns the status icon and row style for a phase.
+func (nv NebulaView) phaseIconAndStyle(p PhaseEntry) (string, lipgloss.Style) {
+	switch p.Status {
+	case PhaseDone:
+		return styleRowDone.Render(iconDone), styleRowDone
+	case PhaseWorking:
+		return styleRowWorking.Render(iconWorking), styleRowWorking
+	case PhaseFailed:
+		return styleRowFailed.Render(iconFailed), styleRowFailed
+	case PhaseGate:
+		return styleRowGate.Render(iconGate), styleRowGate
+	case PhaseSkipped:
+		return styleRowWaiting.Render(iconSkipped), styleRowWaiting
+	default:
+		return styleRowWaiting.Render(iconWaiting), styleRowWaiting
+	}
+}
+
+// phaseDetail builds the detail text for a phase row.
+func (nv NebulaView) phaseDetail(p PhaseEntry) string {
+	switch p.Status {
+	case PhaseDone:
+		elapsed := formatElapsed(p.StartedAt)
+		if elapsed != "" {
+			return fmt.Sprintf("$%.2f  %d cycle(s)  %s", p.CostUSD, p.Cycles, elapsed)
+		}
+		return fmt.Sprintf("$%.2f  %d cycle(s)", p.CostUSD, p.Cycles)
+	case PhaseWorking:
+		elapsed := formatElapsed(p.StartedAt)
+		cycleProgress := ""
+		if p.MaxCycles > 0 {
+			cycleProgress = fmt.Sprintf("cycle %d/%d", p.Cycles, p.MaxCycles)
+		} else if p.Cycles > 0 {
+			cycleProgress = fmt.Sprintf("cycle %d", p.Cycles)
+		}
+		parts := []string{}
+		if cycleProgress != "" {
+			parts = append(parts, cycleProgress)
+		}
+		if elapsed != "" {
+			parts = append(parts, elapsed)
+		}
+		parts = append(parts, nv.Spinner.View())
+		return strings.Join(parts, "  ")
+	default:
+		if p.BlockedBy != "" {
+			return fmt.Sprintf("blocked: %s", p.BlockedBy)
+		}
+		return ""
+	}
 }

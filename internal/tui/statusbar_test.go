@@ -252,3 +252,77 @@ func TestJoinSegments(t *testing.T) {
 		}
 	})
 }
+
+func TestStatusBarCompactMode(t *testing.T) {
+	t.Parallel()
+
+	t.Run("compact nebula shows percentage", func(t *testing.T) {
+		t.Parallel()
+		sb := StatusBar{
+			Name:      "test-nebula-task",
+			Total:     10,
+			Completed: 5,
+			Width:     50, // below CompactWidth=60
+		}
+		view := sb.View()
+		if !strings.Contains(view, "50%") {
+			t.Errorf("expected 50%% in compact nebula view, got: %s", view)
+		}
+	})
+
+	t.Run("compact loop shows cycle fraction", func(t *testing.T) {
+		t.Parallel()
+		sb := StatusBar{
+			BeadID:    "quasar-xyz",
+			Cycle:     3,
+			MaxCycles: 5,
+			Width:     50,
+		}
+		view := sb.View()
+		if !strings.Contains(view, "3/5") {
+			t.Errorf("expected 3/5 cycle in compact loop view, got: %s", view)
+		}
+	})
+}
+
+func TestStatusBarMultipleSegments(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nebula mode renders all key segments", func(t *testing.T) {
+		t.Parallel()
+		sb := StatusBar{
+			Name:      "test-task",
+			Total:     5,
+			Completed: 2,
+			CostUSD:   1.50,
+			BudgetUSD: 10.00,
+			StartTime: time.Now().Add(-1 * time.Minute),
+			Width:     120,
+		}
+		view := sb.View()
+		// Verify key content segments are all present.
+		for _, want := range []string{"nebula", "test-task", "2/5", "$1.50", "$10.00"} {
+			if !strings.Contains(view, want) {
+				t.Errorf("expected %q in status bar, got: %s", want, view)
+			}
+		}
+	})
+
+	t.Run("loop mode renders all key segments", func(t *testing.T) {
+		t.Parallel()
+		sb := StatusBar{
+			BeadID:    "quasar-abc",
+			Cycle:     3,
+			MaxCycles: 5,
+			CostUSD:   0.75,
+			StartTime: time.Now().Add(-30 * time.Second),
+			Width:     120,
+		}
+		view := sb.View()
+		for _, want := range []string{"task", "quasar-abc", "3/5", "$0.75"} {
+			if !strings.Contains(view, want) {
+				t.Errorf("expected %q in status bar, got: %s", want, view)
+			}
+		}
+	})
+}

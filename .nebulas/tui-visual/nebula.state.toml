@@ -1,0 +1,124 @@
+version = 1
+nebula_name = 'TUI Visual Enhancements'
+total_cost_usd = 43.86778975
+
+[phases]
+[phases.bead-tracker]
+bead_id = 'quasar-1b2'
+status = 'done'
+created_at = 2026-02-16T15:53:38.587395-05:00
+updated_at = 2026-02-16T20:53:09.821582-05:00
+
+[phases.bead-tracker.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Three targeted fixes — dead code removal, child bead status derivation on approval, and defensive cycle tagging reorder — all correct with good test coverage and no regressions.'
+
+[phases.galactic-palette]
+bead_id = 'quasar-bfb'
+status = 'done'
+created_at = 2026-02-16T15:53:38.69709-05:00
+updated_at = 2026-02-16T16:02:08.441746-05:00
+
+[phases.galactic-palette.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Pure color constant updates to a galactic theme palette — correct, minimal, well-tested, and zero functional risk.'
+
+[phases.git-diff-viewer]
+bead_id = 'quasar-06e'
+status = 'done'
+created_at = 2026-02-16T15:53:38.811723-05:00
+updated_at = 2026-02-16T20:39:49.904928-05:00
+
+[phases.git-diff-viewer.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented side-by-side git diff viewer with proper unified diff parsing, bridge capture, toggle UI, and comprehensive tests — all following existing codebase conventions.'
+
+[phases.missing-agent-output]
+bead_id = 'quasar-k9y'
+status = 'done'
+created_at = 2026-02-16T15:53:38.91703-05:00
+updated_at = 2026-02-16T15:59:27.759-05:00
+
+[phases.missing-agent-output.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Surgical three-part fix for silently dropped agent output in TUI — message reordering, cycle-mismatch fallback, and nebula phase-loop creation — with comprehensive test coverage and zero risk to existing behavior.'
+
+[phases.nebula-chaining]
+bead_id = 'quasar-f5r'
+status = 'done'
+created_at = 2026-02-16T15:53:39.027701-05:00
+updated_at = 2026-02-16T20:16:25.038256-05:00
+
+[phases.nebula-chaining.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Fixes context leak, goroutine variable capture race, and itoa bug; adds RETRY intervention support and extensive new TUI tests — all clean, idiomatic, and well-tested.'
+
+[phases.phase-plan-viewer]
+bead_id = 'quasar-uhm'
+status = 'done'
+created_at = 2026-02-16T15:53:39.135029-05:00
+updated_at = 2026-02-16T20:24:46.003156-05:00
+
+[phases.phase-plan-viewer.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented phase plan viewer toggle feature with clean state management, proper edge case handling, and thorough test coverage across all affected files.'
+
+[phases.phase-tree-polish]
+bead_id = 'quasar-3gm'
+status = 'done'
+created_at = 2026-02-16T15:53:39.244138-05:00
+updated_at = 2026-02-16T20:25:02.547875-05:00
+
+[phases.phase-tree-polish.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-executed visual hierarchy improvements to the TUI phase tree and cycle timeline — tree connectors, wave separators, cycle progress, and column alignment — with comprehensive tests and clean code structure.'
+
+[phases.quasar-logo]
+bead_id = 'quasar-xrn'
+status = 'done'
+created_at = 2026-02-16T15:53:39.350474-05:00
+updated_at = 2026-02-16T16:02:35.746757-05:00
+
+[phases.quasar-logo.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-executed ASCII logo addition with clean code, proper tests, and correct integration into both TUI status bar and README; only a minor dead-code cleanup opportunity remains.'
+
+[phases.status-bar-redesign]
+bead_id = 'quasar-psp'
+status = 'done'
+created_at = 2026-02-16T15:53:39.454376-05:00
+updated_at = 2026-02-16T20:18:47.181271-05:00
+
+[phases.status-bar-redesign.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean set of bug fixes and improvements — dead code removal, redundant guard cleanup, compact loop mode bead ID visibility fix, and rune-safe truncation with thorough tests.'
+
+[phases.timer-stop-on-done]
+bead_id = 'quasar-yc8'
+status = 'done'
+created_at = 2026-02-16T15:53:39.557995-05:00
+updated_at = 2026-02-16T15:58:15.10431-05:00
+
+[phases.timer-stop-on-done.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, well-tested implementation that freezes the elapsed timer on completion by adding a FinalElapsed field to StatusBar and stopping tick scheduling when done.'

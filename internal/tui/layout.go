@@ -1,5 +1,7 @@
 package tui
 
+import "unicode/utf8"
+
 // Minimum terminal dimensions for usable rendering.
 const (
 	MinWidth  = 40
@@ -14,18 +16,30 @@ const (
 	DetailCollapseHeight = 20
 )
 
-// TruncateWithEllipsis truncates s to maxLen characters, appending "..." if truncated.
-// If maxLen is less than 4, returns s truncated to maxLen without ellipsis.
-// Returns s unchanged if it fits within maxLen.
+// TruncateWithEllipsis truncates s to maxLen runes, appending "..." if truncated.
+// If maxLen is less than 4, returns s truncated to maxLen runes without ellipsis.
+// Returns s unchanged if it fits within maxLen runes.
+// Uses rune-aware counting and slicing to avoid splitting multi-byte UTF-8 characters.
 func TruncateWithEllipsis(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	runeCount := utf8.RuneCountInString(s)
+	if runeCount <= maxLen {
 		return s
 	}
 	if maxLen < 4 {
 		if maxLen <= 0 {
 			return ""
 		}
-		return s[:maxLen]
+		return truncateToNRunes(s, maxLen)
 	}
-	return s[:maxLen-3] + "..."
+	return truncateToNRunes(s, maxLen-3) + "..."
+}
+
+// truncateToNRunes returns the first n runes of s as a string.
+func truncateToNRunes(s string, n int) string {
+	i := 0
+	for j := 0; j < n; j++ {
+		_, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+	}
+	return s[:i]
 }
