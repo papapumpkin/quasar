@@ -3,9 +3,9 @@ package claude
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -14,84 +14,38 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// TestHelperProcess — fake claude binary for subprocess tests.
+// Helpers for faking exec.CommandContext / exec.Command in tests.
 //
-// This is not a real test. Tests that need to simulate the claude CLI set
-// execCommandContext / execCommand to return a command that re-execs the test
-// binary with -test.run=^TestHelperProcess$ and GO_WANT_HELPER_PROCESS=1.
-// The HELPER_MODE env var selects which fake behavior to produce.
+// Each test swaps the package-level execCommandContext / execCommand with a
+// function that returns a command pointing to a small shell script that
+// simulates the claude CLI binary.
 // ---------------------------------------------------------------------------
 
-func TestHelperProcess(t *testing.T) {
-	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
-		return
+// writeScript creates an executable shell script in dir and returns its path.
+func writeScript(t *testing.T, dir, name, content string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+content), 0o755); err != nil {
+		t.Fatalf("failed to write script %s: %v", path, err)
 	}
-
-	mode := os.Getenv("HELPER_MODE")
-	switch mode {
-	case "success":
-		resp := CLIResponse{
-			Type:         "result",
-			Subtype:      "success",
-			IsError:      false,
-			DurationMs:   1234,
-			NumTurns:     3,
-			Result:       "all tests passed",
-			SessionID:    "sess-abc123",
-			TotalCostUSD: 0.42,
-		}
-		out, _ := json.Marshal(resp)
-		fmt.Fprint(os.Stdout, string(out))
-		os.Exit(0)
-	case "is_error":
-		resp := CLIResponse{
-			IsError: true,
-			Result:  "something went wrong in claude",
-		}
-		out, _ := json.Marshal(resp)
-		fmt.Fprint(os.Stdout, string(out))
-		os.Exit(0)
-	case "invalid_json":
-		fmt.Fprint(os.Stdout, "this is not json {{{")
-		os.Exit(0)
-	case "exit_error":
-		fmt.Fprint(os.Stderr, "fatal: out of tokens")
-		os.Exit(1)
-	case "version":
-		fmt.Fprint(os.Stdout, "claude 1.2.3\n")
-		os.Exit(0)
-	case "hang":
-		// Block until killed to test context cancellation.
-		select {}
-	default:
-		fmt.Fprintf(os.Stderr, "unknown HELPER_MODE: %s", mode)
-		os.Exit(2)
-	}
+	return path
 }
 
-// fakeExecCommandContext returns a function matching the exec.CommandContext
-// signature that spawns the test binary as a helper process with the given mode.
-func fakeExecCommandContext(mode string) func(context.Context, string, ...string) *exec.Cmd {
+// fakeExecContextWith returns a function matching the execCommandContext
+// signature that always runs the given script path, ignoring the original
+// binary name and arguments.
+func fakeExecContextWith(scriptPath string) func(context.Context, string, ...string) *exec.Cmd {
 	return func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
-		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestHelperProcess$")
-		cmd.Env = append(os.Environ(),
-			"GO_WANT_HELPER_PROCESS=1",
-			"HELPER_MODE="+mode,
-		)
-		return cmd
+		return exec.CommandContext(ctx, scriptPath)
 	}
 }
 
-// fakeExecCommand returns a function matching the exec.Command signature that
-// spawns the test binary as a helper process with the given mode.
-func fakeExecCommand(mode string) func(string, ...string) *exec.Cmd {
+// fakeExecWith returns a function matching the execCommand signature that
+// always runs the given script path, ignoring the original binary name and
+// arguments.
+func fakeExecWith(scriptPath string) func(string, ...string) *exec.Cmd {
 	return func(_ string, _ ...string) *exec.Cmd {
-		cmd := exec.Command(os.Args[0], "-test.run=^TestHelperProcess$")
-		cmd.Env = append(os.Environ(),
-			"GO_WANT_HELPER_PROCESS=1",
-			"HELPER_MODE="+mode,
-		)
-		return cmd
+		return exec.Command(scriptPath)
 	}
 }
 
@@ -100,13 +54,28 @@ func fakeExecCommand(mode string) func(string, ...string) *exec.Cmd {
 // ---------------------------------------------------------------------------
 
 func TestInvoke_Success(t *testing.T) {
+	resp := CLIResponse{
+		Type:         "result",
+		Subtype:      "success",
+		IsError:      false,
+		DurationMs:   1234,
+		NumTurns:     3,
+		Result:       "all tests passed",
+		SessionID:    "sess-abc123",
+		TotalCostUSD: 0.42,
+	}
+	jsonBytes, _ := json.Marshal(resp)
+
+	dir := t.TempDir()
+	script := writeScript(t, dir, "claude", "printf '%s' '"+string(jsonBytes)+"'")
+
 	origExec := execCommandContext
-	execCommandContext = fakeExecCommandContext("success")
+	execCommandContext = fakeExecContextWith(script)
 	defer func() { execCommandContext = origExec }()
 
 	inv := &Invoker{ClaudePath: "claude"}
 	a := agent.Agent{}
-	result, err := inv.Invoke(context.Background(), a, "do stuff", t.TempDir())
+	result, err := inv.Invoke(context.Background(), a, "do stuff", dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -126,13 +95,22 @@ func TestInvoke_Success(t *testing.T) {
 }
 
 func TestInvoke_IsError(t *testing.T) {
+	resp := CLIResponse{
+		IsError: true,
+		Result:  "something went wrong in claude",
+	}
+	jsonBytes, _ := json.Marshal(resp)
+
+	dir := t.TempDir()
+	script := writeScript(t, dir, "claude", "printf '%s' '"+string(jsonBytes)+"'")
+
 	origExec := execCommandContext
-	execCommandContext = fakeExecCommandContext("is_error")
+	execCommandContext = fakeExecContextWith(script)
 	defer func() { execCommandContext = origExec }()
 
 	inv := &Invoker{ClaudePath: "claude"}
 	a := agent.Agent{}
-	_, err := inv.Invoke(context.Background(), a, "do stuff", t.TempDir())
+	_, err := inv.Invoke(context.Background(), a, "do stuff", dir)
 	if err == nil {
 		t.Fatal("expected error when IsError is true, got nil")
 	}
@@ -145,13 +123,16 @@ func TestInvoke_IsError(t *testing.T) {
 }
 
 func TestInvoke_InvalidJSON(t *testing.T) {
+	dir := t.TempDir()
+	script := writeScript(t, dir, "claude", `printf '%s' 'this is not json {{{'`)
+
 	origExec := execCommandContext
-	execCommandContext = fakeExecCommandContext("invalid_json")
+	execCommandContext = fakeExecContextWith(script)
 	defer func() { execCommandContext = origExec }()
 
 	inv := &Invoker{ClaudePath: "claude"}
 	a := agent.Agent{}
-	_, err := inv.Invoke(context.Background(), a, "do stuff", t.TempDir())
+	_, err := inv.Invoke(context.Background(), a, "do stuff", dir)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON, got nil")
 	}
@@ -161,13 +142,16 @@ func TestInvoke_InvalidJSON(t *testing.T) {
 }
 
 func TestInvoke_ExitError(t *testing.T) {
+	dir := t.TempDir()
+	script := writeScript(t, dir, "claude", `echo "fatal: out of tokens" >&2; exit 1`)
+
 	origExec := execCommandContext
-	execCommandContext = fakeExecCommandContext("exit_error")
+	execCommandContext = fakeExecContextWith(script)
 	defer func() { execCommandContext = origExec }()
 
 	inv := &Invoker{ClaudePath: "claude"}
 	a := agent.Agent{}
-	_, err := inv.Invoke(context.Background(), a, "do stuff", t.TempDir())
+	_, err := inv.Invoke(context.Background(), a, "do stuff", dir)
 	if err == nil {
 		t.Fatal("expected error for non-zero exit code, got nil")
 	}
@@ -180,16 +164,26 @@ func TestInvoke_ExitError(t *testing.T) {
 }
 
 func TestInvoke_ContextCancellation(t *testing.T) {
+	dir := t.TempDir()
+	// Script that blocks via exec (replaces shell process) so SIGKILL reaches it directly.
+	script := writeScript(t, dir, "claude", "exec sleep 300")
+
 	origExec := execCommandContext
-	execCommandContext = fakeExecCommandContext("hang")
+	// Use a custom fake that sets WaitDelay so the process is reaped promptly
+	// after context cancellation (default WaitDelay=0 waits for I/O indefinitely).
+	execCommandContext = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		cmd := exec.CommandContext(ctx, script)
+		cmd.WaitDelay = 100 * time.Millisecond
+		return cmd
+	}
 	defer func() { execCommandContext = origExec }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
 	inv := &Invoker{ClaudePath: "claude"}
 	a := agent.Agent{}
-	_, err := inv.Invoke(ctx, a, "do stuff", t.TempDir())
+	_, err := inv.Invoke(ctx, a, "do stuff", dir)
 	if err == nil {
 		t.Fatal("expected error for cancelled context, got nil")
 	}
@@ -199,19 +193,28 @@ func TestInvoke_ContextCancellation(t *testing.T) {
 }
 
 func TestInvoke_VerboseLogging(t *testing.T) {
+	resp := CLIResponse{
+		Result:    "done",
+		SessionID: "sess-verbose",
+	}
+	jsonBytes, _ := json.Marshal(resp)
+
+	dir := t.TempDir()
+	script := writeScript(t, dir, "claude", "printf '%s' '"+string(jsonBytes)+"'")
+
 	origExec := execCommandContext
-	execCommandContext = fakeExecCommandContext("success")
+	execCommandContext = fakeExecContextWith(script)
 	defer func() { execCommandContext = origExec }()
 
 	inv := &Invoker{ClaudePath: "claude", Verbose: true}
 	a := agent.Agent{}
-	result, err := inv.Invoke(context.Background(), a, "do stuff", t.TempDir())
+	result, err := inv.Invoke(context.Background(), a, "do stuff", dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Verbose mode should still produce a valid result.
-	if result.ResultText != "all tests passed" {
-		t.Errorf("ResultText = %q, want %q", result.ResultText, "all tests passed")
+	if result.ResultText != "done" {
+		t.Errorf("ResultText = %q, want %q", result.ResultText, "done")
 	}
 }
 
@@ -220,8 +223,11 @@ func TestInvoke_VerboseLogging(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestValidate_Success(t *testing.T) {
+	dir := t.TempDir()
+	script := writeScript(t, dir, "claude", `echo "claude 1.2.3"`)
+
 	origExec := execCommand
-	execCommand = fakeExecCommand("version")
+	execCommand = fakeExecWith(script)
 	defer func() { execCommand = origExec }()
 
 	inv := &Invoker{ClaudePath: "claude"}
@@ -231,8 +237,11 @@ func TestValidate_Success(t *testing.T) {
 }
 
 func TestValidate_VerboseLogging(t *testing.T) {
+	dir := t.TempDir()
+	script := writeScript(t, dir, "claude", `echo "claude 1.2.3"`)
+
 	origExec := execCommand
-	execCommand = fakeExecCommand("version")
+	execCommand = fakeExecWith(script)
 	defer func() { execCommand = origExec }()
 
 	inv := &Invoker{ClaudePath: "claude", Verbose: true}
@@ -242,8 +251,11 @@ func TestValidate_VerboseLogging(t *testing.T) {
 }
 
 func TestValidate_BinaryNotFound(t *testing.T) {
+	dir := t.TempDir()
+	script := writeScript(t, dir, "claude", `exit 1`)
+
 	origExec := execCommand
-	execCommand = fakeExecCommand("exit_error")
+	execCommand = fakeExecWith(script)
 	defer func() { execCommand = origExec }()
 
 	inv := &Invoker{ClaudePath: "/nonexistent/path/to/claude"}
