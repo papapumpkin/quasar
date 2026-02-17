@@ -1,5 +1,6 @@
 version = 1
 nebula_name = 'cosmetic-refactor'
+total_cost_usd = 1.8927045000000005
 
 [phases]
 [phases.claude-eliminate-pkg-vars]
@@ -22,9 +23,15 @@ updated_at = 2026-02-17T17:21:15.547434-05:00
 
 [phases.config-handle-unmarshal-error]
 bead_id = 'quasar-7sp'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-17T17:21:09.661246-05:00
-updated_at = 2026-02-17T17:21:15.819739-05:00
+updated_at = 2026-02-17T17:24:59.62883-05:00
+
+[phases.config-handle-unmarshal-error.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, minimal change that surfaces previously-swallowed config unmarshal errors with proper error wrapping at all four call sites — no issues found.'
 
 [phases.consolidate-ansi-constants]
 bead_id = 'quasar-7zf'
@@ -58,15 +65,15 @@ updated_at = 2026-02-17T17:21:12.128394-05:00
 
 [phases.nebula-extract-phases-by-id]
 bead_id = 'quasar-9ll'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-17T17:21:10.724457-05:00
-updated_at = 2026-02-17T17:21:10.724457-05:00
+updated_at = 2026-02-17T17:24:23.901679-05:00
 
 [phases.nebula-extract-scope-validation]
 bead_id = 'quasar-tqp'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-17T17:21:11.090843-05:00
-updated_at = 2026-02-17T17:21:11.090843-05:00
+updated_at = 2026-02-17T17:24:59.629784-05:00
 
 [phases.split-cmd-nebula-file]
 bead_id = 'quasar-uhd'
@@ -88,9 +95,15 @@ updated_at = 2026-02-17T17:21:13.165737-05:00
 
 [phases.watcher-remove-dead-check]
 bead_id = 'quasar-1p1'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-17T17:21:10.37176-05:00
-updated_at = 2026-02-17T17:21:15.815103-05:00
+updated_at = 2026-02-17T17:24:23.900675-05:00
+
+[phases.watcher-remove-dead-check.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Trivial dead-code removal in `isPhaseFile` — unreachable `.toml` guard deleted, replaced with equivalent one-liner; all tests and vet pass.'
 
 [phases.worker-decompose-composition]
 bead_id = 'quasar-492'
