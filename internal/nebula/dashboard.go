@@ -70,7 +70,7 @@ func (d *Dashboard) Pause() {
 	if d.IsTTY && d.rendered && d.lineCount > 0 {
 		// Move cursor up and clear each line to remove the dashboard.
 		for i := 0; i < d.lineCount; i++ {
-			fmt.Fprintf(d.Writer, "\033[1A"+ansi.ClearLine)
+			fmt.Fprint(d.Writer, ansi.CursorUp(1)+ansi.ClearLine)
 		}
 	}
 	d.rendered = false

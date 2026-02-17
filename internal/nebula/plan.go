@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/papapumpkin/quasar/internal/ansi"
 	"github.com/papapumpkin/quasar/internal/beads"
 )
 

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/papapumpkin/quasar/internal/ansi"
 )
 
 func newTestNebula(name string, phases []PhaseSpec) *Nebula {
@@ -198,7 +200,7 @@ func TestDashboard_Pause_ClearsOutput(t *testing.T) {
 
 	output := buf.String()
 	// After pause in TTY mode, should contain clear-line sequences.
-	if !strings.Contains(output, ansiClearLine) {
+	if !strings.Contains(output, ansi.ClearLine) {
 		t.Errorf("expected clear-line escape after pause, got:\n%s", output)
 	}
 
