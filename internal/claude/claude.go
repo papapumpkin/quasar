@@ -67,6 +67,7 @@ func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, wo
 
 	cmd := exec.CommandContext(ctx, inv.ClaudePath, args...)
 	cmd.Dir = workDir
+	cmd.SysProcAttr = sessionAttr()
 
 	cmd.Env = buildEnv(os.Environ())
 
