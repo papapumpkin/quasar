@@ -32,7 +32,7 @@ func (v *BeadView) SetRoot(root BeadInfo) {
 	v.HasData = true
 }
 
-// View renders the bead hierarchy as a styled tree.
+// View renders the bead hierarchy as a compact graph with progress bar and status icons.
 func (v BeadView) View() string {
 	if !v.HasData {
 		return styleDetailDim.Render("  (no bead data yet)")
@@ -40,32 +40,47 @@ func (v BeadView) View() string {
 
 	var b strings.Builder
 
-	// Root bead line.
-	icon, iconStyle := beadStatusIcon(v.Root.Status)
-	b.WriteString("  ")
-	b.WriteString(iconStyle.Render(icon))
-	b.WriteString(" ")
-	b.WriteString(styleBeadID.Render(v.Root.ID))
+	total := len(v.Root.Children)
+	closed := 0
+	for _, c := range v.Root.Children {
+		if c.Status == "closed" {
+			closed++
+		}
+	}
+
+	// Title + progress fraction.
 	b.WriteString("  ")
 	b.WriteString(styleBeadTitle.Render(v.Root.Title))
-	b.WriteString("  ")
-	b.WriteString(beadStatusLabel(v.Root.Status))
-	b.WriteString("\n")
-
-	if len(v.Root.Children) == 0 {
-		b.WriteString(styleDetailDim.Render("  (no child issues)"))
+	if total == 0 {
+		b.WriteString("  ")
+		b.WriteString(styleDetailDim.Render("(no child issues)"))
 		return b.String()
 	}
+	b.WriteString("  ")
+	progress := fmt.Sprintf("[%d/%d resolved]", closed, total)
+	if closed == total {
+		b.WriteString(styleBeadClosed.Render(progress))
+	} else {
+		b.WriteString(styleBeadOpen.Render(progress))
+	}
+	b.WriteString("\n")
 
-	// Group children by cycle.
+	// Progress bar.
+	barWidth := min(v.Width-4, 32)
+	if barWidth < 8 {
+		barWidth = 8
+	}
+	filled := (closed * barWidth) / total
+	b.WriteString("  ")
+	b.WriteString(styleBeadClosed.Render(strings.Repeat("█", filled)))
+	b.WriteString(styleDetailDim.Render(strings.Repeat("░", barWidth-filled)))
+	b.WriteString("\n\n")
+
+	// Per-cycle compact rows.
 	groups := groupByCycle(v.Root.Children)
 	for _, g := range groups {
-		b.WriteString(renderCycleGroup(g))
+		b.WriteString(renderCompactCycle(g))
 	}
-
-	// Per-cycle summary.
-	b.WriteString("\n")
-	b.WriteString(renderBeadSummary(v.Root.Children))
 
 	return b.String()
 }
@@ -98,54 +113,17 @@ func groupByCycle(children []BeadInfo) []cycleGroup {
 	return groups
 }
 
-// renderCycleGroup renders a cycle header and its children.
-func renderCycleGroup(g cycleGroup) string {
+// renderCompactCycle renders a single cycle as a compact label + status icons.
+func renderCompactCycle(g cycleGroup) string {
 	var b strings.Builder
-
-	header := fmt.Sprintf("  Cycle %d — %d %s", g.Cycle, len(g.Children), pluralIssue(len(g.Children)))
-	b.WriteString(styleBeadCycleHeader.Render(header))
-	b.WriteString("\n")
-
-	for i, child := range g.Children {
-		connector := "├── "
-		if i == len(g.Children)-1 {
-			connector = "└── "
-		}
-
-		icon, iconStyle := beadStatusIcon(child.Status)
-
-		b.WriteString("  ")
-		b.WriteString(styleTreeConnector.Render(connector))
+	label := fmt.Sprintf("  Cycle %d  ", g.Cycle)
+	b.WriteString(styleBeadCycleHeader.Render(label))
+	for _, c := range g.Children {
+		icon, iconStyle := beadStatusIcon(c.Status)
 		b.WriteString(iconStyle.Render(icon))
-		b.WriteString(" ")
-		b.WriteString(styleBeadID.Render(child.ID))
-		b.WriteString("  ")
-		b.WriteString(styleBeadTitle.Render(child.Title))
-		b.WriteString("  ")
-		b.WriteString(beadStatusLabel(child.Status))
-		if child.Severity != "" {
-			b.WriteString("  ")
-			b.WriteString(beadSeverityTag(child.Severity))
-		}
-		b.WriteString("\n")
 	}
-
+	b.WriteString("\n")
 	return b.String()
-}
-
-// renderBeadSummary renders a summary of issue counts across cycles.
-func renderBeadSummary(children []BeadInfo) string {
-	total := len(children)
-	closed := 0
-	for _, c := range children {
-		if c.Status == "closed" {
-			closed++
-		}
-	}
-	open := total - closed
-	summary := fmt.Sprintf("  %d %s found, %d resolved, %d remaining",
-		total, pluralIssue(total), closed, open)
-	return styleBeadSummary.Render(summary)
 }
 
 // beadStatusIcon returns the icon and style for a bead status.

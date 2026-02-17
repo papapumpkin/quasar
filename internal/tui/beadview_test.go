@@ -25,9 +25,6 @@ func TestBeadViewRootOnly(t *testing.T) {
 	})
 
 	view := bv.View()
-	if !strings.Contains(view, "quasar-a1b") {
-		t.Error("Expected root bead ID in view")
-	}
 	if !strings.Contains(view, "Add JWT auth") {
 		t.Error("Expected root title in view")
 	}
@@ -38,6 +35,7 @@ func TestBeadViewRootOnly(t *testing.T) {
 
 func TestBeadViewWithChildren(t *testing.T) {
 	bv := NewBeadView()
+	bv.Width = 60
 	bv.SetRoot(BeadInfo{
 		ID:     "quasar-a1b",
 		Title:  "Add JWT auth",
@@ -52,27 +50,55 @@ func TestBeadViewWithChildren(t *testing.T) {
 
 	view := bv.View()
 
-	// Check child IDs appear.
-	for _, id := range []string{"quasar-a1b.1", "quasar-a1b.2", "quasar-a1b.3"} {
-		if !strings.Contains(view, id) {
-			t.Errorf("Expected child ID %q in view", id)
-		}
+	// Check compact graph elements.
+	if !strings.Contains(view, "Add JWT auth") {
+		t.Error("Expected root title in view")
+	}
+	if !strings.Contains(view, "[1/3 resolved]") {
+		t.Error("Expected progress fraction '[1/3 resolved]'")
 	}
 
-	// Check tree connectors.
-	if !strings.Contains(view, "├") || !strings.Contains(view, "└") {
-		t.Error("Expected tree connectors (├, └) in view")
+	// Check progress bar characters.
+	if !strings.Contains(view, "█") {
+		t.Error("Expected filled progress bar characters")
+	}
+	if !strings.Contains(view, "░") {
+		t.Error("Expected empty progress bar characters")
 	}
 
-	// Check summary line.
-	if !strings.Contains(view, "3 issues found") {
-		t.Error("Expected summary with '3 issues found'")
+	// Check cycle labels and status icons.
+	if !strings.Contains(view, "Cycle 1") {
+		t.Error("Expected 'Cycle 1' label")
 	}
-	if !strings.Contains(view, "1 resolved") {
-		t.Error("Expected '1 resolved' in summary")
+	if !strings.Contains(view, "Cycle 2") {
+		t.Error("Expected 'Cycle 2' label")
 	}
-	if !strings.Contains(view, "2 remaining") {
-		t.Error("Expected '2 remaining' in summary")
+	if !strings.Contains(view, beadIconClosed) {
+		t.Error("Expected closed icon (✓) in view")
+	}
+	if !strings.Contains(view, beadIconOpen) {
+		t.Error("Expected open icon (●) in view")
+	}
+	if !strings.Contains(view, beadIconInProgress) {
+		t.Error("Expected in_progress icon (◎) in view")
+	}
+}
+
+func TestBeadViewAllResolved(t *testing.T) {
+	bv := NewBeadView()
+	bv.Width = 60
+	bv.SetRoot(BeadInfo{
+		ID:     "root",
+		Title:  "All done",
+		Status: "closed",
+		Children: []BeadInfo{
+			{ID: "c1", Status: "closed", Cycle: 1},
+			{ID: "c2", Status: "closed", Cycle: 1},
+		},
+	})
+	view := bv.View()
+	if !strings.Contains(view, "[2/2 resolved]") {
+		t.Error("Expected '[2/2 resolved]' for fully resolved task")
 	}
 }
 
@@ -132,7 +158,7 @@ func TestGroupByCyclePreservesOrder(t *testing.T) {
 	}
 }
 
-func TestRenderCycleGroup(t *testing.T) {
+func TestRenderCompactCycle(t *testing.T) {
 	g := cycleGroup{
 		Cycle: 1,
 		Children: []BeadInfo{
@@ -141,62 +167,15 @@ func TestRenderCycleGroup(t *testing.T) {
 		},
 	}
 
-	out := renderCycleGroup(g)
+	out := renderCompactCycle(g)
 	if !strings.Contains(out, "Cycle 1") {
-		t.Error("Expected 'Cycle 1' header")
+		t.Error("Expected 'Cycle 1' label")
 	}
-	if !strings.Contains(out, "2 issues") {
-		t.Error("Expected '2 issues' in cycle header")
+	if !strings.Contains(out, beadIconClosed) {
+		t.Error("Expected closed icon")
 	}
-	if !strings.Contains(out, "First issue") {
-		t.Error("Expected 'First issue' in output")
-	}
-	if !strings.Contains(out, "Second issue") {
-		t.Error("Expected 'Second issue' in output")
-	}
-}
-
-func TestRenderBeadSummary(t *testing.T) {
-	tests := []struct {
-		name     string
-		children []BeadInfo
-		wantSub  []string
-	}{
-		{
-			name: "mixed status",
-			children: []BeadInfo{
-				{Status: "closed"},
-				{Status: "open"},
-				{Status: "open"},
-			},
-			wantSub: []string{"3 issues found", "1 resolved", "2 remaining"},
-		},
-		{
-			name: "all closed",
-			children: []BeadInfo{
-				{Status: "closed"},
-				{Status: "closed"},
-			},
-			wantSub: []string{"2 issues found", "2 resolved", "0 remaining"},
-		},
-		{
-			name: "single issue",
-			children: []BeadInfo{
-				{Status: "open"},
-			},
-			wantSub: []string{"1 issue found", "0 resolved", "1 remaining"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			out := renderBeadSummary(tt.children)
-			for _, sub := range tt.wantSub {
-				if !strings.Contains(out, sub) {
-					t.Errorf("Expected %q in summary, got: %q", sub, out)
-				}
-			}
-		})
+	if !strings.Contains(out, beadIconOpen) {
+		t.Error("Expected open icon")
 	}
 }
 
@@ -285,26 +264,6 @@ func TestBeadSeverityTag(t *testing.T) {
 	}
 }
 
-func TestBeadViewSeverityRendering(t *testing.T) {
-	bv := NewBeadView()
-	bv.SetRoot(BeadInfo{
-		ID:     "root",
-		Title:  "Test",
-		Status: "open",
-		Children: []BeadInfo{
-			{ID: "c1", Title: "Critical issue", Status: "open", Severity: "critical", Cycle: 1},
-			{ID: "c2", Title: "Minor issue", Status: "open", Severity: "minor", Cycle: 1},
-		},
-	})
-	view := bv.View()
-	if !strings.Contains(view, "critical") {
-		t.Error("Expected 'critical' severity tag in view")
-	}
-	if !strings.Contains(view, "minor") {
-		t.Error("Expected 'minor' severity tag in view")
-	}
-}
-
 func TestMsgBeadUpdateAutoRefreshesBeadPanel(t *testing.T) {
 	m := NewAppModel(ModeLoop)
 	m.Detail = NewDetailPanel(80, 10)
@@ -328,7 +287,7 @@ func TestMsgBeadUpdateAutoRefreshesBeadPanel(t *testing.T) {
 	// The detail panel should have been refreshed with bead content.
 	// Verify by checking the View output contains bead info.
 	view := am.Detail.View()
-	if !strings.Contains(view, "bead-1") && !strings.Contains(view, "Test task") {
+	if !strings.Contains(view, "Test task") {
 		t.Error("Expected detail panel to be refreshed with bead content when ShowBeads is true")
 	}
 }
