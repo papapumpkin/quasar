@@ -200,39 +200,6 @@ func TestBeadStatusIcon(t *testing.T) {
 	}
 }
 
-func TestBeadStatusLabel(t *testing.T) {
-	tests := []struct {
-		status  string
-		wantSub string
-	}{
-		{"closed", "closed"},
-		{"in_progress", "in_progress"},
-		{"open", "open"},
-		{"other", "open"}, // default
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.status, func(t *testing.T) {
-			label := beadStatusLabel(tt.status)
-			if !strings.Contains(label, tt.wantSub) {
-				t.Errorf("beadStatusLabel(%q) = %q, expected to contain %q", tt.status, label, tt.wantSub)
-			}
-		})
-	}
-}
-
-func TestPluralIssue(t *testing.T) {
-	if got := pluralIssue(0); got != "issues" {
-		t.Errorf("pluralIssue(0) = %q, want %q", got, "issues")
-	}
-	if got := pluralIssue(1); got != "issue" {
-		t.Errorf("pluralIssue(1) = %q, want %q", got, "issue")
-	}
-	if got := pluralIssue(5); got != "issues" {
-		t.Errorf("pluralIssue(5) = %q, want %q", got, "issues")
-	}
-}
-
 func TestBeadViewSetRootSetsHasData(t *testing.T) {
 	bv := NewBeadView()
 	if bv.HasData {
@@ -241,26 +208,6 @@ func TestBeadViewSetRootSetsHasData(t *testing.T) {
 	bv.SetRoot(BeadInfo{ID: "test", Title: "test"})
 	if !bv.HasData {
 		t.Error("After SetRoot, HasData should be true")
-	}
-}
-
-func TestBeadSeverityTag(t *testing.T) {
-	tests := []struct {
-		severity string
-		wantSub  string
-	}{
-		{"critical", "critical"},
-		{"major", "major"},
-		{"minor", "minor"},
-		{"unknown", "unknown"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.severity, func(t *testing.T) {
-			tag := beadSeverityTag(tt.severity)
-			if !strings.Contains(tag, tt.wantSub) {
-				t.Errorf("beadSeverityTag(%q) = %q, expected to contain %q", tt.severity, tag, tt.wantSub)
-			}
-		})
 	}
 }
 

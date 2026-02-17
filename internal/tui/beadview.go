@@ -137,37 +137,3 @@ func beadStatusIcon(status string) (string, lipgloss.Style) {
 		return beadIconOpen, styleBeadOpen
 	}
 }
-
-// beadStatusLabel returns a styled status label.
-func beadStatusLabel(status string) string {
-	switch status {
-	case "closed":
-		return styleBeadClosed.Render("closed")
-	case "in_progress":
-		return styleBeadInProgress.Render("in_progress")
-	default:
-		return styleBeadOpen.Render("open")
-	}
-}
-
-// beadSeverityTag returns a styled severity label.
-func beadSeverityTag(severity string) string {
-	switch severity {
-	case "critical":
-		return styleBeadSeverityCritical.Render("[critical]")
-	case "major":
-		return styleBeadSeverityMajor.Render("[major]")
-	case "minor":
-		return styleBeadSeverityMinor.Render("[minor]")
-	default:
-		return styleBeadSeverityMajor.Render("[" + severity + "]")
-	}
-}
-
-// pluralIssue returns "issue" or "issues" based on count.
-func pluralIssue(n int) string {
-	if n == 1 {
-		return "issue"
-	}
-	return "issues"
-}

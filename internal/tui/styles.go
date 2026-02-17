@@ -143,7 +143,6 @@ var (
 	styleDetailDim = lipgloss.NewStyle().
 			Foreground(colorMuted)
 
-
 	// styleDetailHeaderLabel styles labels in the header (e.g. "role:", "cost:").
 	styleDetailHeaderLabel = lipgloss.NewStyle().
 				Foreground(colorPrimary).
@@ -320,22 +319,6 @@ var (
 				Foreground(colorMutedLight).
 				Bold(true)
 
-	// styleBeadSummary styles per-cycle summary lines.
-	styleBeadSummary = lipgloss.NewStyle().
-				Foreground(colorMuted).
-				Italic(true)
-
-	// styleBeadSeverityCritical styles critical severity tags (red).
-	styleBeadSeverityCritical = lipgloss.NewStyle().
-					Foreground(colorDanger)
-
-	// styleBeadSeverityMajor styles major severity tags (orange).
-	styleBeadSeverityMajor = lipgloss.NewStyle().
-				Foreground(colorAccent)
-
-	// styleBeadSeverityMinor styles minor severity tags (muted gray).
-	styleBeadSeverityMinor = lipgloss.NewStyle().
-				Foreground(colorMuted)
 )
 
 // Resource indicator styles — color-coded by severity level.

@@ -470,14 +470,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgSplashDone:
 		m.Splash = false
 
-	// --- External difftool ---
-	case MsgDiffToolDone:
-		if msg.Err != nil {
-			m.addMessage("difftool: %s", msg.Err)
-			toast, cmd := NewToast(fmt.Sprintf("difftool: %s", msg.Err), true)
-			m.Toasts = append(m.Toasts, toast)
-			cmds = append(cmds, cmd)
-		}
 	}
 
 	return m, tea.Batch(cmds...)
@@ -627,7 +619,7 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// When the diff file list is active, Enter shows the selected file's
 	// diff inline instead of drilling down into the loop view.
 	if m.ShowDiff && m.DiffFileList != nil && key.Matches(msg, m.Keys.OpenDiff) {
-		return m.openDiffTool()
+		return m.showFileDiff()
 	}
 
 	switch {
@@ -839,10 +831,8 @@ func (m *AppModel) hasSelectedAgentDiff() bool {
 	return agent != nil && agent.Diff != ""
 }
 
-// openDiffTool renders the selected file's diff inline in the detail panel.
-// Replaces the previous approach of launching an external git difftool which
-// could freeze the TUI when the tool exited instantly.
-func (m AppModel) openDiffTool() (tea.Model, tea.Cmd) {
+// showFileDiff renders the selected file's diff inline in the detail panel.
+func (m AppModel) showFileDiff() (tea.Model, tea.Cmd) {
 	fl := m.DiffFileList
 	if fl == nil || len(fl.Files) == 0 {
 		return m, nil
