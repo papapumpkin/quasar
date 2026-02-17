@@ -314,7 +314,6 @@ var (
 	styleBeadCycleHeader = lipgloss.NewStyle().
 				Foreground(colorMutedLight).
 				Bold(true)
-
 )
 
 // Resource indicator styles — color-coded by severity level.

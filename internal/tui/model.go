@@ -1541,8 +1541,7 @@ func (m AppModel) buildFooter() Footer {
 
 	// When the diff file list is active, show dedicated diff-mode bindings.
 	if m.ShowDiff && m.DiffFileList != nil {
-		hasRefs := m.DiffFileList.BaseRef != "" && m.DiffFileList.HeadRef != ""
-		f.Bindings = DiffFileListFooterBindings(m.Keys, hasRefs)
+		f.Bindings = DiffFileListFooterBindings(m.Keys)
 		return f
 	}
 
