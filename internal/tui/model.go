@@ -377,6 +377,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.DoneErr = msg.Err
 		m.StatusBar.FinalElapsed = time.Since(m.StartTime).Truncate(time.Second)
 		m.Overlay = NewCompletionFromNebulaDone(msg, time.Since(m.StartTime), m.StatusBar.CostUSD, len(m.NebulaView.Phases))
+		// Cancel and clear any active architect overlay.
+		if m.Architect != nil {
+			if m.Architect.CancelFunc != nil {
+				m.Architect.CancelFunc()
+			}
+			m.Architect = nil
+		}
 		// Discover sibling nebulae in background.
 		if m.NebulaDir != "" {
 			nebulaDir := m.NebulaDir
@@ -541,7 +548,12 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Completion overlay takes precedence — q to exit, arrow keys for picker.
+	// Architect overlay takes priority — it intercepts all keys when active.
+	if m.Architect != nil {
+		return m.handleArchitectKey(msg)
+	}
+
+	// Completion overlay — q to exit, arrow keys for picker.
 	if m.Overlay != nil {
 		switch {
 		case key.Matches(msg, m.Keys.Quit):
@@ -563,11 +575,6 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	}
-
-	// Architect overlay intercepts all keys.
-	if m.Architect != nil {
-		return m.handleArchitectKey(msg)
 	}
 
 	// Gate mode overrides normal keys.

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
@@ -593,6 +594,80 @@ func assertNoFile(t *testing.T, path string) {
 	t.Helper()
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("expected file %s to not exist", path)
+	}
+}
+
+// --- Overlay priority tests ---
+
+func TestArchitectOverlayTakesPriorityOverCompletion(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "setup", Status: PhaseDone},
+	})
+	m.Splash = false
+	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
+	m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, Message: "done"}
+
+	// Send a 'q' key — should be handled by architect (no quit), not completion.
+	qKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
+	result, cmd := m.Update(qKey)
+	updated := result.(AppModel)
+
+	// The architect overlay should still be active (it doesn't quit on 'q' at input step).
+	if updated.Architect == nil {
+		t.Error("expected Architect overlay to still be active after key event")
+	}
+	// Critically, the completion overlay should NOT have triggered tea.Quit.
+	if cmd != nil {
+		resultMsg := cmd()
+		if _, ok := resultMsg.(tea.QuitMsg); ok {
+			t.Error("completion overlay stole 'q' key and triggered Quit; architect should have priority")
+		}
+	}
+}
+
+// --- MsgNebulaDone architect cleanup tests ---
+
+func TestMsgNebulaDoneCleansUpArchitect(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "setup", Status: PhaseDone},
+	})
+	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
+
+	cancelled := false
+	m.Architect.CancelFunc = func() { cancelled = true }
+
+	msg := MsgNebulaDone{}
+	result, _ := m.Update(msg)
+	updated := result.(AppModel)
+
+	if updated.Architect != nil {
+		t.Error("expected Architect to be nil after MsgNebulaDone")
+	}
+	if !cancelled {
+		t.Error("expected Architect CancelFunc to be called on MsgNebulaDone")
+	}
+	if updated.Overlay == nil {
+		t.Error("expected Overlay to be set after MsgNebulaDone")
+	}
+}
+
+func TestMsgNebulaDoneWithoutArchitect(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "setup", Status: PhaseDone},
+	})
+	// No architect set — should not panic.
+	msg := MsgNebulaDone{}
+	result, _ := m.Update(msg)
+	updated := result.(AppModel)
+
+	if updated.Overlay == nil {
+		t.Error("expected Overlay to be set after MsgNebulaDone")
 	}
 }
 
