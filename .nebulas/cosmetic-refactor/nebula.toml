@@ -1,0 +1,30 @@
+[nebula]
+name = "cosmetic-refactor"
+description = "Purely cosmetic refactor: consolidate duplicated types, extract helpers, split oversized files, remove dead code, and fix silent error handling. No behavior changes — existing tests must continue to pass."
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["refactor", "cosmetic"]
+
+[execution]
+max_workers = 4
+max_review_cycles = 3
+max_budget_usd = 30.0
+gate = "trust"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Eliminate duplicated types, constants, and patterns across packages",
+    "Extract large files into focused, single-responsibility files",
+    "Remove dead code and fix silent error swallowing",
+    "Improve readability without changing any external behavior",
+]
+constraints = [
+    "All existing tests must pass: go test ./...",
+    "No behavior changes — purely cosmetic",
+    "go vet ./... must pass",
+    "Maintain all existing exported APIs",
+]

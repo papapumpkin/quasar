@@ -14,8 +14,11 @@ import (
 var validateCmd = &cobra.Command{
 	Use:   "validate",
 	Short: "Check that required dependencies are available",
-	Run: func(cmd *cobra.Command, args []string) {
-		cfg := config.Load()
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := config.Load()
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
 		ok := true
 
 		claudeInv := &claude.Invoker{ClaudePath: cfg.ClaudePath, Verbose: cfg.Verbose}
@@ -37,6 +40,7 @@ var validateCmd = &cobra.Command{
 		if !ok {
 			os.Exit(1)
 		}
+		return nil
 	},
 }
 

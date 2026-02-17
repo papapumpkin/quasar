@@ -1,6 +1,10 @@
 package config
 
-import "github.com/spf13/viper"
+import (
+	"fmt"
+
+	"github.com/spf13/viper"
+)
 
 // Config holds all runtime configuration for a quasar session.
 // Values are populated from .quasar.yaml, QUASAR_* env vars, and CLI flags.
@@ -18,7 +22,7 @@ type Config struct {
 
 // Load reads configuration from viper, applying built-in defaults for any
 // values not set by config file, environment, or flags.
-func Load() Config {
+func Load() (Config, error) {
 	viper.SetDefault("claude_path", "claude")
 	viper.SetDefault("beads_path", "beads")
 	viper.SetDefault("work_dir", ".")
@@ -30,6 +34,8 @@ func Load() Config {
 	viper.SetDefault("verbose", false)
 
 	var cfg Config
-	_ = viper.Unmarshal(&cfg)
-	return cfg
+	if err := viper.Unmarshal(&cfg); err != nil {
+		return Config{}, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+	return cfg, nil
 }

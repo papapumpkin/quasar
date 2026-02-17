@@ -16,9 +16,8 @@ import (
 // ---------------------------------------------------------------------------
 // Helpers for faking exec.CommandContext / exec.Command in tests.
 //
-// Each test swaps the package-level execCommandContext / execCommand with a
-// function that returns a command pointing to a small shell script that
-// simulates the claude CLI binary.
+// Each test sets the Invoker struct fields with a function that returns a
+// command pointing to a small shell script that simulates the claude CLI binary.
 // ---------------------------------------------------------------------------
 
 // writeScript creates an executable shell script in dir and returns its path.
@@ -49,6 +48,18 @@ func fakeExecWith(scriptPath string) func(string, ...string) *exec.Cmd {
 	}
 }
 
+// newTestInvoker creates an Invoker with the exec functions replaced by fakes.
+func newTestInvoker(claudePath string, verbose bool, ctxFn func(context.Context, string, ...string) *exec.Cmd, cmdFn func(string, ...string) *exec.Cmd) *Invoker {
+	inv := NewInvoker(claudePath, verbose)
+	if ctxFn != nil {
+		inv.execCommandContext = ctxFn
+	}
+	if cmdFn != nil {
+		inv.execCommand = cmdFn
+	}
+	return inv
+}
+
 // ---------------------------------------------------------------------------
 // Invoke tests
 // ---------------------------------------------------------------------------
@@ -69,11 +80,7 @@ func TestInvoke_Success(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "claude", "printf '%s' '"+string(jsonBytes)+"'")
 
-	origExec := execCommandContext
-	execCommandContext = fakeExecContextWith(script)
-	defer func() { execCommandContext = origExec }()
-
-	inv := &Invoker{ClaudePath: "claude"}
+	inv := newTestInvoker("claude", false, fakeExecContextWith(script), nil)
 	a := agent.Agent{}
 	result, err := inv.Invoke(context.Background(), a, "do stuff", dir)
 	if err != nil {
@@ -104,11 +111,7 @@ func TestInvoke_IsError(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "claude", "printf '%s' '"+string(jsonBytes)+"'")
 
-	origExec := execCommandContext
-	execCommandContext = fakeExecContextWith(script)
-	defer func() { execCommandContext = origExec }()
-
-	inv := &Invoker{ClaudePath: "claude"}
+	inv := newTestInvoker("claude", false, fakeExecContextWith(script), nil)
 	a := agent.Agent{}
 	_, err := inv.Invoke(context.Background(), a, "do stuff", dir)
 	if err == nil {
@@ -126,11 +129,7 @@ func TestInvoke_InvalidJSON(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "claude", `printf '%s' 'this is not json {{{'`)
 
-	origExec := execCommandContext
-	execCommandContext = fakeExecContextWith(script)
-	defer func() { execCommandContext = origExec }()
-
-	inv := &Invoker{ClaudePath: "claude"}
+	inv := newTestInvoker("claude", false, fakeExecContextWith(script), nil)
 	a := agent.Agent{}
 	_, err := inv.Invoke(context.Background(), a, "do stuff", dir)
 	if err == nil {

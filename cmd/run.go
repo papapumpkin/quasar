@@ -39,7 +39,10 @@ func init() {
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
 	printer := ui.New()
 
 	applyFlagOverrides(cmd, &cfg)

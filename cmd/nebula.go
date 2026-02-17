@@ -101,7 +101,10 @@ func runNebulaValidate(cmd *cobra.Command, args []string) error {
 
 func runNebulaPlan(cmd *cobra.Command, args []string) error {
 	printer := ui.New()
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
 	dir := args[0]
 
 	n, err := nebula.Load(dir)
@@ -136,7 +139,10 @@ func runNebulaPlan(cmd *cobra.Command, args []string) error {
 
 func runNebulaApply(cmd *cobra.Command, args []string) error {
 	printer := ui.New()
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
 	dir := args[0]
 
 	n, err := nebula.Load(dir)
