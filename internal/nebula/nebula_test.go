@@ -837,13 +837,11 @@ func TestWorkerGroup_StopIntervention(t *testing.T) {
 	w := newTestWatcher(dir)
 	runner := &mockRunner{}
 
-	wg := &WorkerGroup{
-		Runner:     runner,
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: 1,
-		Watcher:    w,
-	}
+	wg := NewWorkerGroup(n, state,
+		WithRunner(runner),
+		WithMaxWorkers(1),
+		WithWatcher(w),
+	)
 
 	// Create a STOP file so it can be cleaned up.
 	stopFile := filepath.Join(dir, "STOP")
@@ -893,13 +891,11 @@ func TestWorkerGroup_PauseIntervention(t *testing.T) {
 	w := newTestWatcher(dir)
 	runner := &mockRunner{}
 
-	wg := &WorkerGroup{
-		Runner:     runner,
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: 1,
-		Watcher:    w,
-	}
+	wg := NewWorkerGroup(n, state,
+		WithRunner(runner),
+		WithMaxWorkers(1),
+		WithWatcher(w),
+	)
 
 	// Send pause, but the PAUSE file doesn't exist on disk so handlePause
 	// returns immediately (the stat check finds no file).
@@ -937,13 +933,11 @@ func TestWorkerGroup_PauseBlocksUntilResume(t *testing.T) {
 	w := newTestWatcher(dir)
 	runner := &mockRunner{}
 
-	wg := &WorkerGroup{
-		Runner:     runner,
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: 1,
-		Watcher:    w,
-	}
+	wg := NewWorkerGroup(n, state,
+		WithRunner(runner),
+		WithMaxWorkers(1),
+		WithWatcher(w),
+	)
 
 	// Create the PAUSE file so handlePause actually blocks.
 	pauseFile := filepath.Join(dir, "PAUSE")
@@ -1341,13 +1335,11 @@ func TestWorkerGroup_ApproveMode_PlanAccepted(t *testing.T) {
 
 	gater := &mockGater{action: GateActionAccept}
 	runner := &mockRunner{}
-	wg := &WorkerGroup{
-		Runner:     runner,
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: 1,
-		Gater:      gater,
-	}
+	wg := NewWorkerGroup(n, state,
+		WithRunner(runner),
+		WithMaxWorkers(1),
+		WithGater(gater),
+	)
 
 	_, err := wg.Run(context.Background())
 	if err != nil {
@@ -1387,13 +1379,11 @@ func TestWorkerGroup_ApproveMode_PlanRejected(t *testing.T) {
 
 	gater := &mockGater{action: GateActionSkip}
 	runner := &mockRunner{}
-	wg := &WorkerGroup{
-		Runner:     runner,
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: 1,
-		Gater:      gater,
-	}
+	wg := NewWorkerGroup(n, state,
+		WithRunner(runner),
+		WithMaxWorkers(1),
+		WithGater(gater),
+	)
 
 	_, err := wg.Run(context.Background())
 	if !errors.Is(err, ErrPlanRejected) {
@@ -1429,13 +1419,11 @@ func TestWorkerGroup_ReviewMode_NoPlanGate(t *testing.T) {
 	// Use a gater that accepts — but we want to verify the plan gate is NOT shown.
 	gater := &mockGater{action: GateActionAccept}
 	runner := &mockRunner{}
-	wg := &WorkerGroup{
-		Runner:     runner,
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: 1,
-		Gater:      gater,
-	}
+	wg := NewWorkerGroup(n, state,
+		WithRunner(runner),
+		WithMaxWorkers(1),
+		WithGater(gater),
+	)
 
 	_, err := wg.Run(context.Background())
 	if err != nil {
@@ -1476,13 +1464,11 @@ func TestWorkerGroup_TrustMode_NoPlanGate(t *testing.T) {
 
 	gater := &mockGater{action: GateActionAccept}
 	runner := &mockRunner{}
-	wg := &WorkerGroup{
-		Runner:     runner,
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: 1,
-		Gater:      gater,
-	}
+	wg := NewWorkerGroup(n, state,
+		WithRunner(runner),
+		WithMaxWorkers(1),
+		WithGater(gater),
+	)
 
 	_, err := wg.Run(context.Background())
 	if err != nil {
@@ -1517,13 +1503,11 @@ func TestWorkerGroup_WatchMode_NoPlanGate(t *testing.T) {
 
 	gater := &mockGater{action: GateActionAccept}
 	runner := &mockRunner{}
-	wg := &WorkerGroup{
-		Runner:     runner,
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: 1,
-		Gater:      gater,
-	}
+	wg := NewWorkerGroup(n, state,
+		WithRunner(runner),
+		WithMaxWorkers(1),
+		WithGater(gater),
+	)
 
 	_, err := wg.Run(context.Background())
 	if err != nil {
@@ -1576,16 +1560,14 @@ func TestWorkerGroup_WatchMode_RendersCheckpointWithoutBlocking(t *testing.T) {
 	dashboard := NewDashboard(&dashBuf, n, state, 10.0, true)
 	dashboard.AppendOnly = true
 
-	wg := &WorkerGroup{
-		Runner:     runner,
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: 2,
-		Gater:      gater,
-		Dashboard:  dashboard,
-		Committer:  committer,
-		OnProgress: dashboard.ProgressCallback(),
-	}
+	wg := NewWorkerGroup(n, state,
+		WithRunner(runner),
+		WithMaxWorkers(2),
+		WithGater(gater),
+		WithDashboard(dashboard),
+		WithCommitter(committer),
+		WithOnProgress(dashboard.ProgressCallback()),
+	)
 
 	results, err := wg.Run(context.Background())
 	if err != nil {
@@ -1645,16 +1627,14 @@ func TestWorkerGroup_WatchMode_DashboardPausedDuringCheckpoint(t *testing.T) {
 	dashboard := NewDashboard(&dashBuf, n, state, 5.0, true)
 	dashboard.AppendOnly = true
 
-	wg := &WorkerGroup{
-		Runner:     runner,
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: 1,
-		Gater:      &mockGater{action: GateActionAccept},
-		Dashboard:  dashboard,
-		Committer:  committer,
-		OnProgress: dashboard.ProgressCallback(),
-	}
+	wg := NewWorkerGroup(n, state,
+		WithRunner(runner),
+		WithMaxWorkers(1),
+		WithGater(&mockGater{action: GateActionAccept}),
+		WithDashboard(dashboard),
+		WithCommitter(committer),
+		WithOnProgress(dashboard.ProgressCallback()),
+	)
 
 	_, err := wg.Run(context.Background())
 	if err != nil {
@@ -1689,13 +1669,11 @@ func TestWorkerGroup_ApproveMode_PlanRejectedWithReject(t *testing.T) {
 
 	gater := &mockGater{action: GateActionReject}
 	runner := &mockRunner{}
-	wg := &WorkerGroup{
-		Runner:     runner,
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: 1,
-		Gater:      gater,
-	}
+	wg := NewWorkerGroup(n, state,
+		WithRunner(runner),
+		WithMaxWorkers(1),
+		WithGater(gater),
+	)
 
 	_, err := wg.Run(context.Background())
 	if !errors.Is(err, ErrPlanRejected) {
@@ -1762,13 +1740,11 @@ func TestWorkerGroup_NilMetrics_NoPanics(t *testing.T) {
 			state := &State{Version: 1, Phases: phases}
 
 			runner := &mockRunner{}
-			wg := &WorkerGroup{
-				Runner:     runner,
-				Nebula:     n,
-				State:      state,
-				MaxWorkers: tt.maxWorkers,
-				Metrics:    nil, // explicitly nil
-			}
+			wg := NewWorkerGroup(n, state,
+				WithRunner(runner),
+				WithMaxWorkers(tt.maxWorkers),
+				// Metrics intentionally omitted (nil).
+			)
 
 			results, err := wg.Run(context.Background())
 			if err != nil {
@@ -1861,13 +1837,11 @@ func TestWorkerGroup_WithMetrics_PhaseMetricsPopulated(t *testing.T) {
 			}
 
 			metrics := NewMetrics("metrics-test")
-			wg := &WorkerGroup{
-				Runner:     runner,
-				Nebula:     n,
-				State:      state,
-				MaxWorkers: 1,
-				Metrics:    metrics,
-			}
+			wg := NewWorkerGroup(n, state,
+				WithRunner(runner),
+				WithMaxWorkers(1),
+				WithMetrics(metrics),
+			)
 
 			results, err := wg.Run(context.Background())
 			if err != nil {
@@ -1954,13 +1928,11 @@ func TestWorkerGroup_WithMetrics_FailedPhaseRecorded(t *testing.T) {
 
 	runner := &mockRunner{err: errors.New("simulated failure")}
 	metrics := NewMetrics("fail-metrics-test")
-	wg := &WorkerGroup{
-		Runner:     runner,
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: 1,
-		Metrics:    metrics,
-	}
+	wg := NewWorkerGroup(n, state,
+		WithRunner(runner),
+		WithMaxWorkers(1),
+		WithMetrics(metrics),
+	)
 
 	_, err := wg.Run(context.Background())
 	if err != nil {
@@ -2007,13 +1979,11 @@ func TestWorkerGroup_NilGater_NoPlanGate(t *testing.T) {
 	}
 
 	runner := &mockRunner{}
-	wg := &WorkerGroup{
-		Runner:     runner,
-		Nebula:     n,
-		State:      state,
-		MaxWorkers: 1,
-		// Gater is nil — should fall back to trust mode.
-	}
+	wg := NewWorkerGroup(n, state,
+		WithRunner(runner),
+		WithMaxWorkers(1),
+		// Gater intentionally omitted — should fall back to trust mode.
+	)
 
 	_, err := wg.Run(context.Background())
 	if err != nil {

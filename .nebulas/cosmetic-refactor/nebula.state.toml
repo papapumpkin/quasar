@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'cosmetic-refactor'
-total_cost_usd = 10.548783
+total_cost_usd = 11.52241325
 
 [phases]
 [phases.claude-eliminate-pkg-vars]
@@ -71,9 +71,15 @@ summary = 'Clean file extraction refactor moving parsing utilities from loop.go 
 
 [phases.loop-extract-prompt-builders]
 bead_id = 'quasar-5c4'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-17T17:21:12.128394-05:00
-updated_at = 2026-02-17T17:31:51.842375-05:00
+updated_at = 2026-02-17T17:35:45.553791-05:00
+
+[phases.loop-extract-prompt-builders.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Straightforward file extraction refactoring moving three prompt-builder methods from loop.go to prompts.go with no behavior or API changes — clean and correct.'
 
 [phases.nebula-extract-phases-by-id]
 bead_id = 'quasar-9ll'
