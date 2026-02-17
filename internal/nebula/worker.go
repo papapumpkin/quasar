@@ -161,10 +161,7 @@ func (wg *WorkerGroup) reportProgress() {
 // It returns a phase-spec index, and sets of already-done and already-failed phase IDs.
 // Failed phases are also marked done so that graph.Ready() can unblock dependents.
 func (wg *WorkerGroup) initPhaseState() (phasesByID map[string]*PhaseSpec, done, failed map[string]bool) {
-	phasesByID = make(map[string]*PhaseSpec)
-	for i := range wg.Nebula.Phases {
-		phasesByID[wg.Nebula.Phases[i].ID] = &wg.Nebula.Phases[i]
-	}
+	phasesByID = PhasesByID(wg.Nebula.Phases)
 
 	done = make(map[string]bool)
 	failed = make(map[string]bool)

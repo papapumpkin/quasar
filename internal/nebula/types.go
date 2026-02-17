@@ -77,6 +77,15 @@ type Nebula struct {
 	Phases   []PhaseSpec
 }
 
+// PhasesByID returns a map from phase ID to phase pointer for quick lookup.
+func PhasesByID(phases []PhaseSpec) map[string]*PhaseSpec {
+	m := make(map[string]*PhaseSpec, len(phases))
+	for i := range phases {
+		m[phases[i].ID] = &phases[i]
+	}
+	return m
+}
+
 // Snapshot returns a deep copy of the Nebula that is safe to read without
 // holding any lock. Scalar fields and the Manifest struct are shallow-copied
 // (they are value types). Each PhaseSpec and its sub-slices are independently
