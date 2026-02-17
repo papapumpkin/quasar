@@ -10,6 +10,8 @@ const (
 	RoleCoder Role = "coder"
 	// RoleReviewer is the agent role that reviews code changes.
 	RoleReviewer Role = "reviewer"
+	// RoleArchitect is the agent role that creates and refactors nebula phase files.
+	RoleArchitect Role = "architect"
 )
 
 // MCPConfig holds optional MCP server configuration for an agent invocation.
