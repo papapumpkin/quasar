@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -599,6 +600,7 @@ func TestApply_RetriesFailedPhase(t *testing.T) {
 // --- Worker tests ---
 
 type mockRunner struct {
+	mu         sync.Mutex
 	calls      []string
 	err        error
 	result     *PhaseRunnerResult
@@ -606,11 +608,22 @@ type mockRunner struct {
 }
 
 func (m *mockRunner) RunExistingPhase(ctx context.Context, phaseID, beadID, phaseDescription string, exec ResolvedExecution) (*PhaseRunnerResult, error) {
+	m.mu.Lock()
 	m.calls = append(m.calls, beadID)
+	m.mu.Unlock()
 	if m.resultFunc != nil {
 		return m.resultFunc(beadID), m.err
 	}
 	return m.result, m.err
+}
+
+// getCalls returns a snapshot of the calls slice for safe reading in assertions.
+func (m *mockRunner) getCalls() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := make([]string, len(m.calls))
+	copy(cp, m.calls)
+	return cp
 }
 
 func (m *mockRunner) GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error) {
@@ -653,11 +666,12 @@ func TestWorkerGroup_ExecutesDependencyOrder(t *testing.T) {
 	}
 
 	// With max 1 worker and b depending on a, a must execute first.
-	if runner.calls[0] != "bead-a" {
-		t.Errorf("expected bead-a to run first, got %s", runner.calls[0])
+	calls := runner.getCalls()
+	if calls[0] != "bead-a" {
+		t.Errorf("expected bead-a to run first, got %s", calls[0])
 	}
-	if runner.calls[1] != "bead-b" {
-		t.Errorf("expected bead-b to run second, got %s", runner.calls[1])
+	if calls[1] != "bead-b" {
+		t.Errorf("expected bead-b to run second, got %s", calls[1])
 	}
 
 	// State should reflect both done.
@@ -1352,8 +1366,8 @@ func TestWorkerGroup_ApproveMode_PlanAccepted(t *testing.T) {
 	}
 
 	// Phase should have been executed.
-	if len(runner.calls) != 1 {
-		t.Errorf("expected 1 phase execution, got %d", len(runner.calls))
+	if len(runner.getCalls()) != 1 {
+		t.Errorf("expected 1 phase execution, got %d", len(runner.getCalls()))
 	}
 }
 
@@ -1393,8 +1407,8 @@ func TestWorkerGroup_ApproveMode_PlanRejected(t *testing.T) {
 	}
 
 	// No phases should have been executed.
-	if len(runner.calls) != 0 {
-		t.Errorf("expected 0 phase executions after plan rejection, got %d", len(runner.calls))
+	if len(runner.getCalls()) != 0 {
+		t.Errorf("expected 0 phase executions after plan rejection, got %d", len(runner.getCalls()))
 	}
 }
 
@@ -1435,8 +1449,8 @@ func TestWorkerGroup_ReviewMode_NoPlanGate(t *testing.T) {
 	}
 
 	// Phase should have been executed.
-	if len(runner.calls) != 1 {
-		t.Errorf("expected 1 phase execution, got %d", len(runner.calls))
+	if len(runner.getCalls()) != 1 {
+		t.Errorf("expected 1 phase execution, got %d", len(runner.getCalls()))
 	}
 
 	// Gater should have been called once for the phase gate (review mode),
@@ -1695,8 +1709,8 @@ func TestWorkerGroup_ApproveMode_PlanRejectedWithReject(t *testing.T) {
 	}
 
 	// No phases should have been executed.
-	if len(runner.calls) != 0 {
-		t.Errorf("expected 0 phase executions after plan rejection, got %d", len(runner.calls))
+	if len(runner.getCalls()) != 0 {
+		t.Errorf("expected 0 phase executions after plan rejection, got %d", len(runner.getCalls()))
 	}
 }
 
@@ -2014,7 +2028,7 @@ func TestWorkerGroup_NilGater_NoPlanGate(t *testing.T) {
 
 	// Phase should have been executed even with approve mode set,
 	// because nil Gater falls back to trust.
-	if len(runner.calls) != 1 {
-		t.Errorf("expected 1 phase execution with nil gater, got %d", len(runner.calls))
+	if len(runner.getCalls()) != 1 {
+		t.Errorf("expected 1 phase execution with nil gater, got %d", len(runner.getCalls()))
 	}
 }

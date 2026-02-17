@@ -403,9 +403,9 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 						PlanBody:  p.Body,
 					})
 				}
-				nextArchitectFunc := buildArchitectFunc(claudeInv, nextN)
-				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, nextArchitectFunc)
-
+				// Create WorkerGroup first so its SnapshotNebula method can be
+				// captured by the architect closure. The Runner is set after the
+				// TUI program is created (it depends on the program).
 				wg = &nebula.WorkerGroup{
 					Nebula:       nextN,
 					State:        nextState,
@@ -414,21 +414,23 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					GlobalCycles: cfg.MaxReviewCycles,
 					GlobalBudget: cfg.MaxBudgetUSD,
 					GlobalModel:  cfg.Model,
-					Runner: &tuiLoopAdapter{
-						program:      tuiProgram,
-						invoker:      claudeInv,
-						beads:        client,
-						git:          loop.NewCycleCommitter(ctx, nextWorkDir),
-						maxCycles:    cfg.MaxReviewCycles,
-						maxBudget:    cfg.MaxBudgetUSD,
-						model:        cfg.Model,
-						coderPrompt:  coderPrompt,
-						reviewPrompt: reviewerPrompt,
-						workDir:      nextWorkDir,
-					},
-					Logger: io.Discard,
-					Gater:  tui.NewTUIGater(tuiProgram),
+					Logger:       io.Discard,
 				}
+				nextArchitectFunc := buildArchitectFunc(claudeInv, wg.SnapshotNebula)
+				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, nextArchitectFunc)
+				wg.Runner = &tuiLoopAdapter{
+					program:      tuiProgram,
+					invoker:      claudeInv,
+					beads:        client,
+					git:          loop.NewCycleCommitter(ctx, nextWorkDir),
+					maxCycles:    cfg.MaxReviewCycles,
+					maxBudget:    cfg.MaxBudgetUSD,
+					model:        cfg.Model,
+					coderPrompt:  coderPrompt,
+					reviewPrompt: reviewerPrompt,
+					workDir:      nextWorkDir,
+				}
+				wg.Gater = tui.NewTUIGater(tuiProgram)
 				wg.OnProgress = func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
 					tuiProgram.Send(tui.MsgNebulaProgress{
 						Completed:    completed,
