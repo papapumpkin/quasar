@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'TUI Bug Fixes'
-total_cost_usd = 2.7186517500000003
+total_cost_usd = 5.0634785
 
 [phases]
 [phases.architect-wiring]
@@ -41,12 +41,18 @@ summary = 'Verified that the detail panel refresh fix for three phase message ha
 
 [phases.detail-text-wrap]
 bead_id = 'quasar-ctz'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-17T11:52:43.539996-05:00
-updated_at = 2026-02-17T12:39:54.046488-05:00
+updated_at = 2026-02-17T12:47:32.864092-05:00
 
 [phases.diff-state-fix]
 bead_id = 'quasar-2cw'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-17T11:52:43.881959-05:00
-updated_at = 2026-02-17T12:39:54.054446-05:00
+updated_at = 2026-02-17T12:47:32.862931-05:00
+
+[phases.diff-state-fix.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-targeted regression tests for two TUI state-management bugs, with clean code fixes already in place and all tests passing.'
