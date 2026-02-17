@@ -133,17 +133,20 @@ func TestUnregisterPhaseLoop(t *testing.T) {
 	}
 }
 
-func TestHandlePhaseAdded(t *testing.T) {
+func TestHandlePhaseAdded_NoLiveState(t *testing.T) {
 	t.Parallel()
+	dir := t.TempDir()
 	var buf bytes.Buffer
 	wg := &WorkerGroup{Logger: &buf}
 	wg.phaseLoops = make(map[string]*phaseLoopHandle)
 	wg.pendingRefactors = make(map[string]string)
 
+	path := writeTestPhaseFile(t, dir, "new-phase", "New phase body")
+
 	wg.handlePhaseAdded(Change{
 		Kind:    ChangeAdded,
 		PhaseID: "new-phase",
-		File:    "/tmp/new-phase.md",
+		File:    path,
 	})
 
 	wg.mu.Lock()
@@ -158,6 +161,324 @@ func TestHandlePhaseAdded(t *testing.T) {
 	}
 }
 
+func TestHandlePhaseAdded_BadFile(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	wg := &WorkerGroup{Logger: &buf}
+	wg.phaseLoops = make(map[string]*phaseLoopHandle)
+	wg.pendingRefactors = make(map[string]string)
+
+	wg.handlePhaseAdded(Change{
+		Kind:    ChangeAdded,
+		PhaseID: "bad-phase",
+		File:    "/nonexistent/bad-phase.md",
+	})
+
+	if !strings.Contains(buf.String(), "warning") {
+		t.Error("expected warning log for unparseable file")
+	}
+}
+
+func TestHandlePhaseAdded_WithLiveState(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	var buf bytes.Buffer
+	neb := &Nebula{
+		Dir:      dir,
+		Manifest: Manifest{},
+		Phases:   []PhaseSpec{{ID: "existing", Title: "Existing"}},
+	}
+	state := &State{
+		Version: 1,
+		Phases:  map[string]*PhaseState{"existing": {Status: PhaseStatusDone}},
+	}
+	graph := NewGraph(neb.Phases)
+	wg := &WorkerGroup{
+		Logger:         &buf,
+		Nebula:         neb,
+		State:          state,
+		liveGraph:      graph,
+		livePhasesByID: map[string]*PhaseSpec{"existing": &neb.Phases[0]},
+		liveDone:       map[string]bool{"existing": true},
+		liveFailed:     map[string]bool{},
+		liveInFlight:   map[string]bool{},
+		hotAdded:       make(chan string, 16),
+	}
+	wg.phaseLoops = make(map[string]*phaseLoopHandle)
+	wg.pendingRefactors = make(map[string]string)
+
+	path := writeTestPhaseFile(t, dir, "hot-phase", "Hot phase body")
+
+	wg.handlePhaseAdded(Change{
+		Kind:    ChangeAdded,
+		PhaseID: "hot-phase",
+		File:    path,
+	})
+
+	// Phase should be in live data structures.
+	wg.mu.Lock()
+	_, inLive := wg.livePhasesByID["hot-phase"]
+	ps := wg.State.Phases["hot-phase"]
+	wg.mu.Unlock()
+
+	if !inLive {
+		t.Error("expected hot-phase in livePhasesByID")
+	}
+	if ps == nil || ps.Status != PhaseStatusPending {
+		t.Errorf("expected state pending for hot-phase, got %v", ps)
+	}
+
+	// Phase has no deps and all deps are satisfied, should be on hotAdded channel.
+	select {
+	case id := <-wg.hotAdded:
+		if id != "hot-phase" {
+			t.Errorf("expected hot-phase on hotAdded channel, got %q", id)
+		}
+	default:
+		t.Error("expected hot-phase to be immediately ready on hotAdded channel")
+	}
+
+	if !strings.Contains(buf.String(), "hot-added") {
+		t.Error("expected log message about hot-add")
+	}
+}
+
+func TestHandlePhaseAdded_DuplicateID(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	var buf bytes.Buffer
+	neb := &Nebula{
+		Dir:      dir,
+		Manifest: Manifest{},
+		Phases:   []PhaseSpec{{ID: "dup", Title: "Duplicate"}},
+	}
+	state := &State{
+		Version: 1,
+		Phases:  map[string]*PhaseState{"dup": {Status: PhaseStatusPending}},
+	}
+	graph := NewGraph(neb.Phases)
+	wg := &WorkerGroup{
+		Logger:         &buf,
+		Nebula:         neb,
+		State:          state,
+		liveGraph:      graph,
+		livePhasesByID: map[string]*PhaseSpec{"dup": &neb.Phases[0]},
+		liveDone:       map[string]bool{},
+		liveFailed:     map[string]bool{},
+		liveInFlight:   map[string]bool{},
+		hotAdded:       make(chan string, 16),
+	}
+	wg.phaseLoops = make(map[string]*phaseLoopHandle)
+	wg.pendingRefactors = make(map[string]string)
+
+	path := writeTestPhaseFile(t, dir, "dup", "Duplicate phase body")
+
+	wg.handlePhaseAdded(Change{
+		Kind:    ChangeAdded,
+		PhaseID: "dup",
+		File:    path,
+	})
+
+	if !strings.Contains(buf.String(), "rejected") {
+		t.Error("expected rejection warning for duplicate ID")
+	}
+
+	// Should not be on hotAdded channel.
+	select {
+	case id := <-wg.hotAdded:
+		t.Errorf("unexpected phase on hotAdded: %q", id)
+	default:
+		// Expected: rejected phase is not queued.
+	}
+}
+
+func TestHandlePhaseAdded_WithBlocks(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	var buf bytes.Buffer
+	neb := &Nebula{
+		Dir:      dir,
+		Manifest: Manifest{},
+		Phases: []PhaseSpec{
+			{ID: "setup", Title: "Setup"},
+			{ID: "tests", Title: "Tests", DependsOn: []string{"setup"}},
+		},
+	}
+	state := &State{
+		Version: 1,
+		Phases: map[string]*PhaseState{
+			"setup": {Status: PhaseStatusDone},
+			"tests": {Status: PhaseStatusPending},
+		},
+	}
+	graph := NewGraph(neb.Phases)
+	wg := &WorkerGroup{
+		Logger:         &buf,
+		Nebula:         neb,
+		State:          state,
+		liveGraph:      graph,
+		livePhasesByID: map[string]*PhaseSpec{"setup": &neb.Phases[0], "tests": &neb.Phases[1]},
+		liveDone:       map[string]bool{"setup": true},
+		liveFailed:     map[string]bool{},
+		liveInFlight:   map[string]bool{},
+		hotAdded:       make(chan string, 16),
+	}
+	wg.phaseLoops = make(map[string]*phaseLoopHandle)
+	wg.pendingRefactors = make(map[string]string)
+
+	// Write a phase file with blocks field.
+	content := "+++\nid = \"middleware\"\ntitle = \"Middleware\"\ndepends_on = [\"setup\"]\nblocks = [\"tests\"]\n+++\nMiddleware body"
+	path := filepath.Join(dir, "middleware.md")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write phase file: %v", err)
+	}
+
+	wg.handlePhaseAdded(Change{
+		Kind:    ChangeAdded,
+		PhaseID: "middleware",
+		File:    path,
+	})
+
+	wg.mu.Lock()
+	testsPhase := wg.livePhasesByID["tests"]
+	wg.mu.Unlock()
+
+	// The "tests" phase should now depend on "middleware".
+	found := false
+	for _, dep := range testsPhase.DependsOn {
+		if dep == "middleware" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'tests' to depend on 'middleware' after blocks injection, got %v", testsPhase.DependsOn)
+	}
+}
+
+func TestHandlePhaseAdded_BlocksRunningPhase(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	var buf bytes.Buffer
+	neb := &Nebula{
+		Dir:      dir,
+		Manifest: Manifest{},
+		Phases: []PhaseSpec{
+			{ID: "setup", Title: "Setup"},
+			{ID: "running", Title: "Running Phase"},
+		},
+	}
+	state := &State{
+		Version: 1,
+		Phases: map[string]*PhaseState{
+			"setup":   {Status: PhaseStatusDone},
+			"running": {Status: PhaseStatusInProgress},
+		},
+	}
+	graph := NewGraph(neb.Phases)
+	wg := &WorkerGroup{
+		Logger:         &buf,
+		Nebula:         neb,
+		State:          state,
+		liveGraph:      graph,
+		livePhasesByID: map[string]*PhaseSpec{"setup": &neb.Phases[0], "running": &neb.Phases[1]},
+		liveDone:       map[string]bool{"setup": true},
+		liveFailed:     map[string]bool{},
+		liveInFlight:   map[string]bool{"running": true},
+		hotAdded:       make(chan string, 16),
+	}
+	wg.phaseLoops = make(map[string]*phaseLoopHandle)
+	wg.pendingRefactors = make(map[string]string)
+
+	// Write a phase that tries to block a running phase.
+	content := "+++\nid = \"blocker\"\ntitle = \"Blocker\"\ndepends_on = [\"setup\"]\nblocks = [\"running\"]\n+++\nBlocker body"
+	path := filepath.Join(dir, "blocker.md")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write phase file: %v", err)
+	}
+
+	wg.handlePhaseAdded(Change{
+		Kind:    ChangeAdded,
+		PhaseID: "blocker",
+		File:    path,
+	})
+
+	// Should log a warning about the running phase.
+	if !strings.Contains(buf.String(), "already started/done") {
+		t.Error("expected warning about blocking a running phase")
+	}
+
+	// The running phase should NOT have blocker as a dependency.
+	wg.mu.Lock()
+	runningPhase := wg.livePhasesByID["running"]
+	wg.mu.Unlock()
+	for _, dep := range runningPhase.DependsOn {
+		if dep == "blocker" {
+			t.Error("running phase should not have blocker as dependency")
+		}
+	}
+}
+
+func TestHandlePhaseAdded_OnHotAddCallback(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	var buf bytes.Buffer
+	neb := &Nebula{
+		Dir:      dir,
+		Manifest: Manifest{},
+		Phases:   []PhaseSpec{{ID: "existing", Title: "Existing"}},
+	}
+	state := &State{
+		Version: 1,
+		Phases:  map[string]*PhaseState{"existing": {Status: PhaseStatusDone}},
+	}
+	graph := NewGraph(neb.Phases)
+
+	var callbackPhaseID, callbackTitle string
+	var callbackDeps []string
+
+	wg := &WorkerGroup{
+		Logger:         &buf,
+		Nebula:         neb,
+		State:          state,
+		liveGraph:      graph,
+		livePhasesByID: map[string]*PhaseSpec{"existing": &neb.Phases[0]},
+		liveDone:       map[string]bool{"existing": true},
+		liveFailed:     map[string]bool{},
+		liveInFlight:   map[string]bool{},
+		hotAdded:       make(chan string, 16),
+		OnHotAdd: func(phaseID, title string, dependsOn []string) {
+			callbackPhaseID = phaseID
+			callbackTitle = title
+			callbackDeps = dependsOn
+		},
+	}
+	wg.phaseLoops = make(map[string]*phaseLoopHandle)
+	wg.pendingRefactors = make(map[string]string)
+
+	content := "+++\nid = \"callback-phase\"\ntitle = \"Callback Phase\"\ndepends_on = [\"existing\"]\n+++\nBody"
+	path := filepath.Join(dir, "callback-phase.md")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write phase file: %v", err)
+	}
+
+	wg.handlePhaseAdded(Change{
+		Kind:    ChangeAdded,
+		PhaseID: "callback-phase",
+		File:    path,
+	})
+
+	if callbackPhaseID != "callback-phase" {
+		t.Errorf("callback phaseID = %q, want %q", callbackPhaseID, "callback-phase")
+	}
+	if callbackTitle != "Callback Phase" {
+		t.Errorf("callback title = %q, want %q", callbackTitle, "Callback Phase")
+	}
+	if len(callbackDeps) != 1 || callbackDeps[0] != "existing" {
+		t.Errorf("callback deps = %v, want [existing]", callbackDeps)
+	}
+}
+
 func TestConsumeChanges(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -165,10 +486,11 @@ func TestConsumeChanges(t *testing.T) {
 
 	// Create a change channel we control.
 	ch := make(chan Change, 3)
-	path := writeTestPhaseFile(t, dir, "phase-c", "Consumed body")
+	pathC := writeTestPhaseFile(t, dir, "phase-c", "Consumed body")
+	pathNew := writeTestPhaseFile(t, dir, "phase-new", "New phase body")
 
-	ch <- Change{Kind: ChangeModified, PhaseID: "phase-c", File: path}
-	ch <- Change{Kind: ChangeAdded, PhaseID: "phase-new", File: "/tmp/phase-new.md"}
+	ch <- Change{Kind: ChangeModified, PhaseID: "phase-c", File: pathC}
+	ch <- Change{Kind: ChangeAdded, PhaseID: "phase-new", File: pathNew}
 	ch <- Change{Kind: ChangeRemoved, PhaseID: "", File: "/tmp/removed.md"}
 	close(ch)
 
@@ -184,14 +506,10 @@ func TestConsumeChanges(t *testing.T) {
 
 	wg.mu.Lock()
 	_, hasC := wg.pendingRefactors["phase-c"]
-	_, hasNew := wg.pendingRefactors["phase-new"]
 	wg.mu.Unlock()
 
 	if !hasC {
 		t.Error("expected pending refactor for phase-c")
-	}
-	if !hasNew {
-		t.Error("expected pending entry for phase-new")
 	}
 }
 

@@ -22,6 +22,9 @@ func TestWatcher_DetectsChange(t *testing.T) {
 		t.Fatalf("NewWatcher failed: %v", err)
 	}
 
+	// Seed the watcher with the existing file so edits emit ChangeModified.
+	w.SeedKnownFiles([]string{phaseFile})
+
 	if err := w.Start(); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
