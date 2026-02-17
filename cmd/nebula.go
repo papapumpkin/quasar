@@ -228,6 +228,8 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		workDir = wd
 	}
 
+	git := loop.NewCycleCommitter(ctx, workDir)
+
 	noTUI, _ := cmd.Flags().GetBool("no-tui")
 	useTUI := !noTUI && isStderrTTY()
 
@@ -260,6 +262,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			program:      tuiProgram,
 			invoker:      claudeInv,
 			beads:        client,
+			git:          git,
 			maxCycles:    cfg.MaxReviewCycles,
 			maxBudget:    cfg.MaxBudgetUSD,
 			model:        cfg.Model,
@@ -289,6 +292,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			Invoker:      claudeInv,
 			Beads:        client,
 			UI:           printer,
+			Git:          git,
 			MaxCycles:    cfg.MaxReviewCycles,
 			MaxBudgetUSD: cfg.MaxBudgetUSD,
 			Model:        cfg.Model,
@@ -412,6 +416,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 						program:      tuiProgram,
 						invoker:      claudeInv,
 						beads:        client,
+						git:          loop.NewCycleCommitter(ctx, nextWorkDir),
 						maxCycles:    cfg.MaxReviewCycles,
 						maxBudget:    cfg.MaxBudgetUSD,
 						model:        cfg.Model,
@@ -518,6 +523,7 @@ type tuiLoopAdapter struct {
 	program      *tui.Program
 	invoker      agent.Invoker
 	beads        beads.Client
+	git          loop.CycleCommitter
 	maxCycles    int
 	maxBudget    float64
 	model        string
@@ -534,6 +540,7 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 		Invoker:      a.invoker,
 		Beads:        a.beads,
 		UI:           phaseUI,
+		Git:          a.git,
 		MaxCycles:    a.maxCycles,
 		MaxBudgetUSD: a.maxBudget,
 		Model:        a.model,
@@ -566,6 +573,7 @@ func (a *tuiLoopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDe
 		Invoker:      a.invoker,
 		Beads:        a.beads,
 		UI:           phaseUI,
+		Git:          a.git,
 		MaxCycles:    a.maxCycles,
 		MaxBudgetUSD: a.maxBudget,
 		Model:        a.model,

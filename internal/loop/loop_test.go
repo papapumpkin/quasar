@@ -1,9 +1,11 @@
 package loop
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/aaronsalm/quasar/internal/beads"
 	"github.com/aaronsalm/quasar/internal/ui"
 )
 
@@ -27,6 +29,41 @@ func (n *noopUI) Info(string)                                       {}
 func (n *noopUI) AgentOutput(string, int, string)                   {}
 func (n *noopUI) BeadUpdate(string, string, string, []ui.BeadChild) {}
 func (n *noopUI) RefactorApplied(string)                            {}
+
+// noopBeads satisfies beads.Client for tests without side effects.
+type noopBeads struct{}
+
+var _ beads.Client = (*noopBeads)(nil)
+
+func (n *noopBeads) Create(context.Context, string, beads.CreateOpts) (string, error) {
+	return "test-bead", nil
+}
+func (n *noopBeads) Show(context.Context, string) (*beads.Bead, error) { return nil, nil }
+func (n *noopBeads) Update(context.Context, string, beads.UpdateOpts) error { return nil }
+func (n *noopBeads) Close(context.Context, string, string) error       { return nil }
+func (n *noopBeads) AddComment(context.Context, string, string) error  { return nil }
+func (n *noopBeads) Validate() error                                   { return nil }
+
+func TestNilGitDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	l := &Loop{
+		Beads:     &noopBeads{},
+		UI:        &noopUI{},
+		Git:       nil,
+		MaxCycles: 1,
+	}
+
+	ctx := context.Background()
+	state := l.initCycleState(ctx, "test-bead", "test task")
+
+	if state.BaseCommitSHA != "" {
+		t.Errorf("expected empty BaseCommitSHA with nil Git, got %q", state.BaseCommitSHA)
+	}
+	if len(state.CycleCommits) != 0 {
+		t.Errorf("expected empty CycleCommits with nil Git, got %v", state.CycleCommits)
+	}
+}
 
 func TestParseReviewFindings(t *testing.T) {
 	tests := []struct {

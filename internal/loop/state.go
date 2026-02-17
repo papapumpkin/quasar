@@ -65,4 +65,6 @@ type CycleState struct {
 	Refactored          bool            // true when a mid-run phase edit was applied
 	OriginalDescription string          // task description before the refactor
 	RefactorDescription string          // the new description from the user edit
+	BaseCommitSHA       string          // HEAD before first cycle (captured at task start)
+	CycleCommits        []string        // commit SHA per cycle (index = cycle-1)
 }

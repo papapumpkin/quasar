@@ -38,7 +38,7 @@ func TestNewCycleCommitter(t *testing.T) {
 	t.Run("returns committer for git repo", func(t *testing.T) {
 		t.Parallel()
 		dir := initGitRepo(t)
-		c := NewCycleCommitter(dir)
+		c := NewCycleCommitter(context.Background(), dir)
 		if c == nil {
 			t.Fatal("expected non-nil CycleCommitter for git repo")
 		}
@@ -47,7 +47,7 @@ func TestNewCycleCommitter(t *testing.T) {
 	t.Run("returns nil for non-git directory", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		c := NewCycleCommitter(dir)
+		c := NewCycleCommitter(context.Background(), dir)
 		if c != nil {
 			t.Fatal("expected nil CycleCommitter for non-git directory")
 		}
@@ -60,7 +60,7 @@ func TestCommitCycle(t *testing.T) {
 	t.Run("creates commit with expected message", func(t *testing.T) {
 		t.Parallel()
 		dir := initGitRepo(t)
-		c := NewCycleCommitter(dir)
+		c := NewCycleCommitter(context.Background(), dir)
 
 		// Create a file so there's something to commit.
 		if err := os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("hello"), 0o644); err != nil {
@@ -92,7 +92,7 @@ func TestCommitCycle(t *testing.T) {
 	t.Run("returns HEAD SHA when tree is clean", func(t *testing.T) {
 		t.Parallel()
 		dir := initGitRepo(t)
-		c := NewCycleCommitter(dir)
+		c := NewCycleCommitter(context.Background(), dir)
 
 		ctx := context.Background()
 		sha, err := c.CommitCycle(ctx, "task-1", 1)
@@ -113,7 +113,7 @@ func TestCommitCycle(t *testing.T) {
 func TestHeadSHA(t *testing.T) {
 	t.Parallel()
 	dir := initGitRepo(t)
-	c := NewCycleCommitter(dir)
+	c := NewCycleCommitter(context.Background(), dir)
 
 	ctx := context.Background()
 	sha, err := c.HeadSHA(ctx)

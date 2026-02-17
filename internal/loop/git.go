@@ -26,11 +26,11 @@ type gitCycleCommitter struct {
 // NewCycleCommitter returns a CycleCommitter if the working directory is a git
 // repo, or nil otherwise. A nil return is not an error — callers should treat
 // a nil CycleCommitter as a no-op.
-func NewCycleCommitter(dir string) CycleCommitter {
+func NewCycleCommitter(ctx context.Context, dir string) CycleCommitter {
 	if _, err := exec.LookPath("git"); err != nil {
 		return nil
 	}
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "--git-dir")
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--git-dir")
 	if err := cmd.Run(); err != nil {
 		return nil
 	}

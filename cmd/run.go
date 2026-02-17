@@ -182,10 +182,13 @@ func buildLoop(cfg *config.Config, uiHandler ui.UI, coderPrompt, reviewerPrompt 
 		return nil, err
 	}
 
+	git := loop.NewCycleCommitter(context.Background(), workDir)
+
 	return &loop.Loop{
 		Invoker:      claudeInv,
 		Beads:        beadsClient,
 		UI:           uiHandler,
+		Git:          git,
 		MaxCycles:    cfg.MaxReviewCycles,
 		MaxBudgetUSD: cfg.MaxBudgetUSD,
 		Model:        cfg.Model,

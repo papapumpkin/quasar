@@ -15,6 +15,7 @@ type Loop struct {
 	Invoker      agent.Invoker
 	Beads        beads.Client
 	UI           ui.UI
+	Git          CycleCommitter // Optional; nil disables per-cycle commits.
 	MaxCycles    int
 	MaxBudgetUSD float64
 	Model        string
@@ -169,12 +170,25 @@ func (l *Loop) initCycleState(ctx context.Context, beadID, taskDescription strin
 	if err := l.Beads.Update(ctx, beadID, beads.UpdateOpts{Status: "in_progress", Assignee: "quasar-coder"}); err != nil {
 		l.UI.Error(fmt.Sprintf("failed to update bead: %v", err))
 	}
+
+	// Capture HEAD before the first cycle for later diffing.
+	var baseSHA string
+	if l.Git != nil {
+		sha, err := l.Git.HeadSHA(ctx)
+		if err != nil {
+			l.UI.Error(fmt.Sprintf("failed to capture base commit SHA: %v", err))
+		} else {
+			baseSHA = sha
+		}
+	}
+
 	return &CycleState{
-		TaskBeadID:   beadID,
-		TaskTitle:    taskDescription,
-		Phase:        PhaseBeadCreated,
-		MaxCycles:    l.MaxCycles,
-		MaxBudgetUSD: l.MaxBudgetUSD,
+		TaskBeadID:    beadID,
+		TaskTitle:     taskDescription,
+		Phase:         PhaseBeadCreated,
+		MaxCycles:     l.MaxCycles,
+		MaxBudgetUSD:  l.MaxBudgetUSD,
+		BaseCommitSHA: baseSHA,
 	}
 }
 
@@ -232,6 +246,16 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	l.UI.AgentOutput("coder", state.Cycle, result.ResultText)
 	l.UI.AgentDone("coder", result.CostUSD, result.DurationMs)
 	l.emitCycleSummary(state, PhaseCodeComplete, result)
+
+	// Commit the coder's changes for this cycle.
+	if l.Git != nil {
+		sha, err := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle)
+		if err != nil {
+			l.UI.Error(fmt.Sprintf("failed to commit cycle %d: %v", state.Cycle, err))
+		} else {
+			state.CycleCommits = append(state.CycleCommits, sha)
+		}
+	}
 
 	if wasRefactored {
 		comment := fmt.Sprintf("[refactor cycle %d] User updated task description mid-execution.\nOriginal: %s\nUpdated: %s",
