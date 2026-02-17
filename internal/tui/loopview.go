@@ -21,7 +21,7 @@ type AgentEntry struct {
 	DiffFiles  []FileStatEntry // parsed file stats for the diff
 	BaseRef    string          // git ref before this cycle
 	HeadRef    string          // git ref after this cycle
-	WorkDir    string          // working directory for git difftool
+	WorkDir    string          // working directory for git operations
 	StartedAt  time.Time
 }
 
