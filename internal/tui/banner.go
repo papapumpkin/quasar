@@ -133,11 +133,11 @@ type bannerCacheKey struct {
 // Size returns the appropriate BannerSize for the current dimensions.
 func (b Banner) Size() BannerSize {
 	switch {
-	case b.Width >= 120:
+	case b.Width >= SidePanelMinWidth:
 		return BannerSB
-	case b.Width >= 90:
+	case b.Width >= BannerSMinWidth:
 		return BannerS
-	case b.Width >= 60:
+	case b.Width >= CompactWidth:
 		return BannerXS
 	default:
 		return BannerNone

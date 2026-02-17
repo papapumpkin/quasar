@@ -763,7 +763,7 @@ func (m *AppModel) buildDiffFileList() *FileListView {
 	if agent == nil || len(agent.DiffFiles) == 0 {
 		return nil
 	}
-	return NewFileListView(agent.DiffFiles, m.Width-4, agent.BaseRef, agent.HeadRef, agent.WorkDir)
+	return NewFileListView(agent.DiffFiles, m.contentWidth()-4, agent.BaseRef, agent.HeadRef, agent.WorkDir)
 }
 
 // openDiffTool launches the user's configured git difftool for the selected file.
@@ -915,7 +915,7 @@ func (m *AppModel) updateBeadDetail() {
 		}
 		bv := NewBeadView()
 		bv.SetRoot(*m.LoopBeads)
-		bv.Width = m.Width - 2
+		bv.Width = m.contentWidth() - 2
 		m.Detail.SetContent("Beads: "+m.LoopBeads.Title, bv.View())
 
 	case ModeNebula:
@@ -937,7 +937,7 @@ func (m *AppModel) updateBeadDetail() {
 		}
 		bv := NewBeadView()
 		bv.SetRoot(*root)
-		bv.Width = m.Width - 2
+		bv.Width = m.contentWidth() - 2
 		m.Detail.SetContent("Beads: "+root.Title, bv.View())
 	}
 }
@@ -1131,7 +1131,7 @@ func (m *AppModel) updateDetailFromSelection() {
 			if m.DiffFileList != nil {
 				body = m.DiffFileList.View()
 			} else {
-				body = RenderDiffView(agent.Diff, m.Width-4)
+				body = RenderDiffView(agent.Diff, m.contentWidth()-4)
 			}
 			m.Detail.SetContentWithHeader(agent.Role+" diff", header, body)
 			return
@@ -1209,7 +1209,7 @@ func (m *AppModel) updateNebulaDetail() {
 			if m.DiffFileList != nil {
 				body = m.DiffFileList.View()
 			} else {
-				body = RenderDiffView(agent.Diff, m.Width-4)
+				body = RenderDiffView(agent.Diff, m.contentWidth()-4)
 			}
 			m.Detail.SetContentWithHeader(title, header, body)
 			return
