@@ -3,6 +3,7 @@ package nebula
 import (
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -60,6 +61,7 @@ type Watcher struct {
 	changes       chan Change           // Internal write channel
 	interventions chan InterventionKind // Internal write channel
 	done          chan struct{}
+	stopOnce      sync.Once
 	watcher       *fsnotify.Watcher
 	knownFiles    map[string]bool // Phase files present at startup; used to detect hot-adds
 }
@@ -104,12 +106,14 @@ func (w *Watcher) Start() error {
 	return nil
 }
 
-// Stop closes the watcher and channels.
+// Stop closes the watcher and channels. It is safe to call multiple times.
 func (w *Watcher) Stop() {
-	w.watcher.Close()
-	<-w.done // Wait for loop to exit
-	close(w.changes)
-	close(w.interventions)
+	w.stopOnce.Do(func() {
+		w.watcher.Close()
+		<-w.done // Wait for loop to exit
+		close(w.changes)
+		close(w.interventions)
+	})
 }
 
 // SendIntervention enqueues an intervention signal on the internal channel.
