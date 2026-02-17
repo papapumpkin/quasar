@@ -321,9 +321,13 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	if useTUI {
 		for {
 			// Run workers in a goroutine; block on TUI.
+			// Capture tuiProgram in a local variable so the goroutine
+			// always sends to the correct program instance, even if
+			// tuiProgram is reassigned for a subsequent nebula.
+			prog := tuiProgram
 			go func() {
 				results, runErr := wg.Run(ctx)
-				tuiProgram.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
+				prog.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
 			}()
 
 			finalModel, tuiErr := tuiProgram.Run()
@@ -354,16 +358,19 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				}
 
 				// Rebuild context and worker group for the new nebula.
+				// cancel() was already called above after the TUI exited;
+				// create a fresh context for the next iteration.
 				ctx, cancel = context.WithCancel(context.Background())
-				defer cancel() //nolint:gocritic // deferred cancel is fine in a bounded loop
 
 				nextPlan, planErr := nebula.BuildPlan(ctx, nextN, nextState, client)
 				if planErr != nil {
+					cancel()
 					printer.Error(fmt.Sprintf("failed to build plan: %v", planErr))
 					return planErr
 				}
 				if nextPlan.HasChanges() {
 					if applyErr := nebula.Apply(ctx, nextPlan, nextN, nextState, client); applyErr != nil {
+						cancel()
 						printer.Error(fmt.Sprintf("failed to apply: %v", applyErr))
 						return applyErr
 					}
