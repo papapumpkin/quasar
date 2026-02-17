@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'TUI Bug Fixes'
-total_cost_usd = 1.4109410000000002
+total_cost_usd = 2.7186517500000003
 
 [phases]
 [phases.architect-wiring]
@@ -17,9 +17,15 @@ summary = 'Straightforward bug fix that adds architect function wiring to `NewNe
 
 [phases.beads-plan-views]
 bead_id = 'quasar-tmw'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-17T11:52:42.856203-05:00
-updated_at = 2026-02-17T12:39:54.056052-05:00
+updated_at = 2026-02-17T12:44:38.847642-05:00
+
+[phases.beads-plan-views.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Test-only change adding 6 regression tests confirming existing mutual exclusivity logic in handleInfoKey/handleDiffKey/handleBeadsKey — clean, well-structured, no production code modified.'
 
 [phases.detail-refresh]
 bead_id = 'quasar-t36'
