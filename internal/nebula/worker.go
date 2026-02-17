@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/aaronsalm/quasar/internal/beads"
 )
 
 // PhaseRunnerResult holds the outcome of a single phase execution.
@@ -40,6 +42,10 @@ type phaseLoopHandle struct {
 	RefactorCh chan<- string
 }
 
+// HotAddFunc is called after a new phase is dynamically inserted into the DAG.
+// Parameters: phaseID, title, dependsOn.
+type HotAddFunc func(phaseID, title string, dependsOn []string)
+
 // WorkerGroup executes phases in dependency order using a pool of workers.
 type WorkerGroup struct {
 	Runner       PhaseRunner
@@ -50,11 +56,13 @@ type WorkerGroup struct {
 	Committer    GitCommitter // nil = no phase-boundary commits
 	Gater        Gater        // nil = trust mode (no prompts)
 	Dashboard    *Dashboard   // nil = no dashboard; used to coordinate watch-mode output
+	BeadsClient  beads.Client // nil = hot-added phases cannot create beads
 	GlobalCycles int
 	GlobalBudget float64
 	GlobalModel  string
 	OnProgress   ProgressFunc                       // optional progress callback
 	OnRefactor   func(phaseID string, pending bool) // optional callback for refactor notifications
+	OnHotAdd     HotAddFunc                         // optional callback for hot-added phases
 	Metrics      *Metrics                           // optional; nil = no collection
 	Logger       io.Writer                          // optional; nil = os.Stderr
 
@@ -64,6 +72,12 @@ type WorkerGroup struct {
 	gateSignals      []gateSignal                // collected after each batch
 	phaseLoops       map[string]*phaseLoopHandle // running phase → refactor handle
 	pendingRefactors map[string]string           // phaseID → updated body (not yet dispatched)
+	liveGraph        *Graph                      // DAG updated at runtime for hot-adds
+	livePhasesByID   map[string]*PhaseSpec       // all phases indexed by ID
+	liveDone         map[string]bool             // phases that have completed
+	liveFailed       map[string]bool             // phases that have failed
+	liveInFlight     map[string]bool             // phases currently executing
+	hotAdded         chan string                 // signals newly ready hot-added phase IDs
 }
 
 // buildPhasePrompt prepends nebula context (goals, constraints) to the phase body.
@@ -372,6 +386,31 @@ func (wg *WorkerGroup) recordResult(
 		fmt.Fprintf(wg.logger(), "warning: failed to save state: %v\n", err)
 	}
 	wg.reportProgress()
+
+	// Check if any hot-added phases are now unblocked by this completion.
+	wg.checkHotAddedReady()
+}
+
+// checkHotAddedReady signals any hot-added phases whose dependencies are now satisfied.
+// Must be called with wg.mu held.
+func (wg *WorkerGroup) checkHotAddedReady() {
+	if wg.liveGraph == nil || wg.hotAdded == nil {
+		return
+	}
+	for _, id := range wg.liveGraph.Ready(wg.liveDone) {
+		if wg.liveInFlight[id] || wg.liveFailed[id] {
+			continue
+		}
+		// Only signal phases that were hot-added (not in original wave plan).
+		ps := wg.State.Phases[id]
+		if ps == nil || ps.Status != PhaseStatusPending {
+			continue
+		}
+		select {
+		case wg.hotAdded <- id:
+		default:
+		}
+	}
 }
 
 // recordFailure marks a phase as failed when it has no valid bead ID.
@@ -608,6 +647,15 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	phasesByID, done, failed := wg.initPhaseState()
 	graph := NewGraph(wg.Nebula.Phases)
 
+	// Expose live state for hot-add support.
+	wg.mu.Lock()
+	wg.liveGraph = graph
+	wg.livePhasesByID = phasesByID
+	wg.liveDone = done
+	wg.liveFailed = failed
+	wg.hotAdded = make(chan string, 16)
+	wg.mu.Unlock()
+
 	// Gate the execution plan before dispatching any phases.
 	if err := wg.gatePlan(ctx, graph); err != nil {
 		return nil, err
@@ -620,6 +668,9 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	}
 
 	inFlight := make(map[string]bool)
+	wg.mu.Lock()
+	wg.liveInFlight = inFlight
+	wg.mu.Unlock()
 	var wgSync sync.WaitGroup
 
 	for _, wave := range waves {
@@ -750,10 +801,53 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	}
 	wgSync.Wait()
 
+	// Process any hot-added phases that became ready during or after waves.
+	wg.drainHotAdded(ctx, &wgSync, done, failed, inFlight, phasesByID)
+
 	wg.mu.Lock()
 	results := wg.results
 	wg.mu.Unlock()
 	return results, nil
+}
+
+// drainHotAdded dispatches hot-added phases that are ready to execute.
+// It keeps draining until no more phases arrive within a short window.
+func (wg *WorkerGroup) drainHotAdded(
+	ctx context.Context,
+	wgSync *sync.WaitGroup,
+	done, failed, inFlight map[string]bool,
+	phasesByID map[string]*PhaseSpec,
+) {
+	for {
+		select {
+		case phaseID := <-wg.hotAdded:
+			if ctx.Err() != nil {
+				return
+			}
+			wg.mu.Lock()
+			if done[phaseID] || inFlight[phaseID] || failed[phaseID] {
+				wg.mu.Unlock()
+				continue
+			}
+			inFlight[phaseID] = true
+			wg.mu.Unlock()
+
+			wgSync.Add(1)
+			go func(id string) {
+				defer wgSync.Done()
+				wg.executePhase(ctx, id, 0, phasesByID, done, failed, inFlight)
+			}(phaseID)
+			wgSync.Wait()
+
+			// Re-evaluate readiness after each phase completes, in case
+			// a previously dropped signal left a phase stuck.
+			wg.mu.Lock()
+			wg.checkHotAddedReady()
+			wg.mu.Unlock()
+		default:
+			return
+		}
+	}
 }
 
 // processGateSignals handles pending gate signals after a batch completes.
@@ -847,14 +941,122 @@ func (wg *WorkerGroup) handlePhaseModified(change Change) {
 	fmt.Fprintf(wg.logger(), "phase %q modified — refactor queued\n", change.PhaseID)
 }
 
-// handlePhaseAdded logs the addition of a new phase file. Full DAG insertion
-// is handled by a higher-level orchestrator; the worker group records the event.
+// handlePhaseAdded parses a newly added phase file, validates it, and inserts
+// it into the live DAG. If the phase's dependencies are already satisfied it
+// is immediately queued for execution via the hotAdded channel.
 func (wg *WorkerGroup) handlePhaseAdded(change Change) {
-	fmt.Fprintf(wg.logger(), "phase %q added (file: %s) — noted for future DAG insertion\n", change.PhaseID, filepath.Base(change.File))
+	var defaults Defaults
+	if wg.Nebula != nil {
+		defaults = wg.Nebula.Manifest.Defaults
+	}
+	phase, err := parsePhaseFile(change.File, defaults)
+	if err != nil {
+		fmt.Fprintf(wg.logger(), "warning: failed to parse new phase %q: %v\n", change.PhaseID, err)
+		return
+	}
+	phase.SourceFile = filepath.Base(change.File)
 
 	wg.mu.Lock()
-	wg.pendingRefactors[change.PhaseID] = "" // placeholder; body loaded on demand
-	wg.mu.Unlock()
+	defer wg.mu.Unlock()
+
+	// Bail out if live state is not yet initialized (Run hasn't started).
+	if wg.liveGraph == nil || wg.Nebula == nil {
+		wg.pendingRefactors[change.PhaseID] = ""
+		fmt.Fprintf(wg.logger(), "phase %q added (file: %s) — noted for future DAG insertion\n", phase.ID, filepath.Base(change.File))
+		return
+	}
+
+	// Build the set of existing IDs for validation.
+	existingIDs := make(map[string]bool, len(wg.livePhasesByID))
+	for id := range wg.livePhasesByID {
+		existingIDs[id] = true
+	}
+
+	// Validate the hot-add.
+	vErrs := ValidateHotAdd(phase, existingIDs, wg.liveGraph)
+	if len(vErrs) > 0 {
+		for _, ve := range vErrs {
+			fmt.Fprintf(wg.logger(), "warning: hot-add rejected: %s\n", ve.Error())
+		}
+		return
+	}
+
+	// Handle reverse dependencies (blocks field).
+	// ValidateHotAdd added all blocks edges for cycle detection; now remove
+	// edges for blocked phases that are already in-flight or done, since we
+	// cannot modify their dependencies.
+	for _, blockedID := range phase.Blocks {
+		if wg.liveInFlight[blockedID] || wg.liveDone[blockedID] {
+			fmt.Fprintf(wg.logger(), "warning: phase %q is already started/done — ignoring blocks entry for %q\n", blockedID, phase.ID)
+			// Remove the phantom edge that ValidateHotAdd added.
+			wg.liveGraph.RemoveEdge(blockedID, phase.ID)
+			continue
+		}
+		// Edge is already in the graph from ValidateHotAdd — update the
+		// blocked phase's DependsOn slice for consistency.
+		if bp, ok := wg.livePhasesByID[blockedID]; ok {
+			bp.DependsOn = append(bp.DependsOn, phase.ID)
+		}
+	}
+
+	// Register the phase in all live data structures.
+	wg.Nebula.Phases = append(wg.Nebula.Phases, phase)
+	wg.livePhasesByID[phase.ID] = &wg.Nebula.Phases[len(wg.Nebula.Phases)-1]
+
+	// Create a bead for the hot-added phase so that executePhase can use it.
+	beadID := ""
+	if wg.BeadsClient != nil {
+		wg.mu.Unlock()
+		var createErr error
+		beadID, createErr = wg.BeadsClient.Create(context.Background(), phase.Title, beads.CreateOpts{
+			Description: phase.Body,
+			Type:        phase.Type,
+			Labels:      phase.Labels,
+			Assignee:    phase.Assignee,
+			Priority:    priorityStr(phase.Priority),
+		})
+		wg.mu.Lock()
+		if createErr != nil {
+			fmt.Fprintf(wg.logger(), "warning: failed to create bead for hot-added phase %q: %v\n", phase.ID, createErr)
+			wg.liveFailed[phase.ID] = true
+			wg.liveDone[phase.ID] = true
+			wg.State.SetPhaseState(phase.ID, "", PhaseStatusFailed)
+			if saveErr := SaveState(wg.Nebula.Dir, wg.State); saveErr != nil {
+				fmt.Fprintf(wg.logger(), "warning: failed to save state: %v\n", saveErr)
+			}
+			// Check if this failure unblocks any hot-added phases waiting on it.
+			wg.checkHotAddedReady()
+			return
+		}
+	}
+
+	// Create state entry with bead ID.
+	wg.State.SetPhaseState(phase.ID, beadID, PhaseStatusPending)
+	if saveErr := SaveState(wg.Nebula.Dir, wg.State); saveErr != nil {
+		fmt.Fprintf(wg.logger(), "warning: failed to save state after hot-add: %v\n", saveErr)
+	}
+
+	// Update progress counts.
+	wg.reportProgress()
+
+	// Notify TUI.
+	if wg.OnHotAdd != nil {
+		wg.OnHotAdd(phase.ID, phase.Title, phase.DependsOn)
+	}
+
+	fmt.Fprintf(wg.logger(), "phase %q hot-added to nebula DAG\n", phase.ID)
+
+	// Check if the phase is immediately ready to execute.
+	allDeps := wg.liveGraph.Ready(wg.liveDone)
+	for _, id := range allDeps {
+		if id == phase.ID {
+			select {
+			case wg.hotAdded <- phase.ID:
+			default:
+			}
+			break
+		}
+	}
 }
 
 // RegisterPhaseLoop records a running phase's refactor channel so that
