@@ -1,6 +1,8 @@
 package beads
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -450,5 +452,504 @@ func TestBuildShowArgs_IDPassedThrough(t *testing.T) {
 				t.Errorf("expected --json flag, got %q", args[2])
 			}
 		})
+	}
+}
+
+// --- Execution-path tests using injectable runner ---
+
+// fakeRunner returns a runFunc that records the args it was called with
+// and returns the given output or error.
+func fakeRunner(wantOutput string, wantErr error, capture *[]string) runFunc {
+	return func(_ context.Context, args ...string) (string, error) {
+		if capture != nil {
+			*capture = args
+		}
+		return wantOutput, wantErr
+	}
+}
+
+func TestQuickCreate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		title    string
+		opts     CreateOpts
+		fakeOut  string
+		fakeErr  error
+		wantID   string
+		wantErr  bool
+		wantArgs []string
+	}{
+		{
+			name:     "success returns bead ID",
+			title:    "fix bug",
+			opts:     CreateOpts{Type: "bug", Priority: "1"},
+			fakeOut:  "beads-abc123",
+			wantID:   "beads-abc123",
+			wantArgs: []string{"q", "fix bug", "-t", "bug", "-p", "1"},
+		},
+		{
+			name:    "run error propagated",
+			title:   "failing task",
+			opts:    CreateOpts{},
+			fakeErr: errors.New("command failed"),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var captured []string
+			cli := &CLI{
+				BeadsPath: "bd",
+				runner:    fakeRunner(tt.fakeOut, tt.fakeErr, &captured),
+			}
+
+			id, err := cli.QuickCreate(context.Background(), tt.title, tt.opts)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if id != tt.wantID {
+				t.Errorf("id = %q, want %q", id, tt.wantID)
+			}
+			if tt.wantArgs != nil {
+				assertArgsEqual(t, captured, tt.wantArgs)
+			}
+		})
+	}
+}
+
+func TestCreate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		title    string
+		opts     CreateOpts
+		fakeOut  string
+		fakeErr  error
+		wantID   string
+		wantErr  bool
+		wantArgs []string
+	}{
+		{
+			name:    "success with all opts",
+			title:   "new feature",
+			opts:    CreateOpts{Description: "desc", Type: "feature", Assignee: "alice", Priority: "0"},
+			fakeOut: "beads-xyz",
+			wantID:  "beads-xyz",
+			wantArgs: []string{
+				"create", "new feature", "--silent",
+				"-d", "desc", "-t", "feature", "-a", "alice", "-p", "0",
+			},
+		},
+		{
+			name:     "success minimal opts",
+			title:    "minimal",
+			opts:     CreateOpts{},
+			fakeOut:  "beads-min",
+			wantID:   "beads-min",
+			wantArgs: []string{"create", "minimal", "--silent"},
+		},
+		{
+			name:    "error propagated",
+			title:   "bad",
+			opts:    CreateOpts{},
+			fakeErr: errors.New("boom"),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var captured []string
+			cli := &CLI{
+				BeadsPath: "bd",
+				runner:    fakeRunner(tt.fakeOut, tt.fakeErr, &captured),
+			}
+
+			id, err := cli.Create(context.Background(), tt.title, tt.opts)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if id != tt.wantID {
+				t.Errorf("id = %q, want %q", id, tt.wantID)
+			}
+			if tt.wantArgs != nil {
+				assertArgsEqual(t, captured, tt.wantArgs)
+			}
+		})
+	}
+}
+
+func TestShow(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		id       string
+		fakeOut  string
+		fakeErr  error
+		wantBead *Bead
+		wantErr  string
+	}{
+		{
+			name: "success parses JSON",
+			id:   "beads-001",
+			fakeOut: `[{"id":"beads-001","title":"fix bug","description":"desc",` +
+				`"status":"open","priority":1,"issue_type":"bug","assignee":"alice",` +
+				`"labels":["urgent"]}]`,
+			wantBead: &Bead{
+				ID:          "beads-001",
+				Title:       "fix bug",
+				Description: "desc",
+				Status:      "open",
+				Priority:    1,
+				IssueType:   "bug",
+				Assignee:    "alice",
+				Labels:      []string{"urgent"},
+			},
+		},
+		{
+			name:    "run error propagated",
+			id:      "beads-002",
+			fakeErr: errors.New("not found"),
+			wantErr: "not found",
+		},
+		{
+			name:    "invalid JSON returns parse error",
+			id:      "beads-003",
+			fakeOut: "not json",
+			wantErr: "failed to parse beads JSON",
+		},
+		{
+			name:    "empty array returns not found",
+			id:      "beads-004",
+			fakeOut: "[]",
+			wantErr: "bead beads-004 not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var captured []string
+			cli := &CLI{
+				BeadsPath: "bd",
+				runner:    fakeRunner(tt.fakeOut, tt.fakeErr, &captured),
+			}
+
+			bead, err := cli.Show(context.Background(), tt.id)
+
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Errorf("error = %q, want containing %q", err.Error(), tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if bead.ID != tt.wantBead.ID {
+				t.Errorf("bead.ID = %q, want %q", bead.ID, tt.wantBead.ID)
+			}
+			if bead.Title != tt.wantBead.Title {
+				t.Errorf("bead.Title = %q, want %q", bead.Title, tt.wantBead.Title)
+			}
+			if bead.Status != tt.wantBead.Status {
+				t.Errorf("bead.Status = %q, want %q", bead.Status, tt.wantBead.Status)
+			}
+			if bead.Priority != tt.wantBead.Priority {
+				t.Errorf("bead.Priority = %d, want %d", bead.Priority, tt.wantBead.Priority)
+			}
+			if bead.IssueType != tt.wantBead.IssueType {
+				t.Errorf("bead.IssueType = %q, want %q", bead.IssueType, tt.wantBead.IssueType)
+			}
+			if bead.Assignee != tt.wantBead.Assignee {
+				t.Errorf("bead.Assignee = %q, want %q", bead.Assignee, tt.wantBead.Assignee)
+			}
+			// Verify the correct args were passed to the runner.
+			wantArgs := []string{"show", tt.id, "--json"}
+			assertArgsEqual(t, captured, wantArgs)
+		})
+	}
+}
+
+func TestUpdate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		id       string
+		opts     UpdateOpts
+		fakeErr  error
+		wantErr  bool
+		wantArgs []string
+	}{
+		{
+			name:     "success with status",
+			id:       "beads-001",
+			opts:     UpdateOpts{Status: "in_progress"},
+			wantArgs: []string{"update", "beads-001", "-s", "in_progress"},
+		},
+		{
+			name:     "success with assignee",
+			id:       "beads-002",
+			opts:     UpdateOpts{Assignee: "bob"},
+			wantArgs: []string{"update", "beads-002", "-a", "bob"},
+		},
+		{
+			name:     "success with both",
+			id:       "beads-003",
+			opts:     UpdateOpts{Status: "closed", Assignee: "alice"},
+			wantArgs: []string{"update", "beads-003", "-s", "closed", "-a", "alice"},
+		},
+		{
+			name:    "error propagated",
+			id:      "beads-004",
+			opts:    UpdateOpts{Status: "x"},
+			fakeErr: errors.New("update failed"),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var captured []string
+			cli := &CLI{
+				BeadsPath: "bd",
+				runner:    fakeRunner("", tt.fakeErr, &captured),
+			}
+
+			err := cli.Update(context.Background(), tt.id, tt.opts)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantArgs != nil {
+				assertArgsEqual(t, captured, tt.wantArgs)
+			}
+		})
+	}
+}
+
+func TestClose(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		id       string
+		reason   string
+		fakeErr  error
+		wantErr  bool
+		wantArgs []string
+	}{
+		{
+			name:     "success without reason",
+			id:       "beads-001",
+			reason:   "",
+			wantArgs: []string{"close", "beads-001"},
+		},
+		{
+			name:     "success with reason",
+			id:       "beads-002",
+			reason:   "done",
+			wantArgs: []string{"close", "beads-002", "-r", "done"},
+		},
+		{
+			name:    "error propagated",
+			id:      "beads-003",
+			reason:  "",
+			fakeErr: errors.New("close failed"),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var captured []string
+			cli := &CLI{
+				BeadsPath: "bd",
+				runner:    fakeRunner("", tt.fakeErr, &captured),
+			}
+
+			err := cli.Close(context.Background(), tt.id, tt.reason)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantArgs != nil {
+				assertArgsEqual(t, captured, tt.wantArgs)
+			}
+		})
+	}
+}
+
+func TestAddComment(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		id       string
+		body     string
+		fakeErr  error
+		wantErr  bool
+		wantArgs []string
+	}{
+		{
+			name:     "success",
+			id:       "beads-001",
+			body:     "LGTM",
+			wantArgs: []string{"comments", "add", "beads-001", "LGTM"},
+		},
+		{
+			name:     "body with spaces",
+			id:       "beads-002",
+			body:     "this is a multi-word comment",
+			wantArgs: []string{"comments", "add", "beads-002", "this is a multi-word comment"},
+		},
+		{
+			name:    "error propagated",
+			id:      "beads-003",
+			body:    "comment",
+			fakeErr: errors.New("comment failed"),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var captured []string
+			cli := &CLI{
+				BeadsPath: "bd",
+				runner:    fakeRunner("", tt.fakeErr, &captured),
+			}
+
+			err := cli.AddComment(context.Background(), tt.id, tt.body)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantArgs != nil {
+				assertArgsEqual(t, captured, tt.wantArgs)
+			}
+		})
+	}
+}
+
+func TestRun_VerboseNoRunner(t *testing.T) {
+	t.Parallel()
+
+	// Test that run with a non-existent binary returns an error.
+	cli := &CLI{
+		BeadsPath: "/nonexistent/binary",
+		Verbose:   true,
+	}
+	_, err := cli.run(context.Background(), "version")
+	if err == nil {
+		t.Fatal("expected error for non-existent binary, got nil")
+	}
+	if !strings.Contains(err.Error(), "beads command failed") {
+		t.Errorf("error = %q, want containing %q", err.Error(), "beads command failed")
+	}
+}
+
+func TestRun_RunnerOverridesExec(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	cli := &CLI{
+		BeadsPath: "/nonexistent/binary",
+		runner: func(_ context.Context, args ...string) (string, error) {
+			called = true
+			return "mocked", nil
+		},
+	}
+	out, err := cli.run(context.Background(), "anything")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Error("expected runner to be called")
+	}
+	if out != "mocked" {
+		t.Errorf("output = %q, want %q", out, "mocked")
+	}
+}
+
+func TestShow_MultipleBeadsReturnsFirst(t *testing.T) {
+	t.Parallel()
+
+	jsonOut := `[{"id":"beads-001","title":"first","description":"","status":"open","priority":0,"issue_type":"","assignee":"","labels":null},` +
+		`{"id":"beads-002","title":"second","description":"","status":"open","priority":0,"issue_type":"","assignee":"","labels":null}]`
+
+	cli := &CLI{
+		BeadsPath: "bd",
+		runner:    fakeRunner(jsonOut, nil, nil),
+	}
+
+	bead, err := cli.Show(context.Background(), "beads-001")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if bead.ID != "beads-001" {
+		t.Errorf("bead.ID = %q, want %q", bead.ID, "beads-001")
+	}
+	if bead.Title != "first" {
+		t.Errorf("bead.Title = %q, want %q", bead.Title, "first")
+	}
+}
+
+// assertArgsEqual is a test helper that compares two string slices.
+func assertArgsEqual(t *testing.T, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("args length = %d, want %d\n  got:  %v\n  want: %v", len(got), len(want), got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("args[%d] = %q, want %q", i, got[i], want[i])
+		}
 	}
 }

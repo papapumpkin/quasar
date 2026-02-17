@@ -10,13 +10,23 @@ import (
 	"strings"
 )
 
+// runFunc is the signature for the function that executes a beads command.
+type runFunc func(ctx context.Context, args ...string) (string, error)
+
 // CLI implements Client by shelling out to the beads CLI.
 type CLI struct {
 	BeadsPath string
 	Verbose   bool
+
+	// runner overrides the default exec-based run method (used in tests).
+	runner runFunc
 }
 
 func (c *CLI) run(ctx context.Context, args ...string) (string, error) {
+	if c.runner != nil {
+		return c.runner(ctx, args...)
+	}
+
 	if c.Verbose {
 		fmt.Fprintf(os.Stderr, "[beads] running: %s %s\n", c.BeadsPath, strings.Join(args, " "))
 	}
