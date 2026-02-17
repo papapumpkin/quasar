@@ -120,6 +120,16 @@ func (wg *WorkerGroup) logger() io.Writer {
 	return os.Stderr
 }
 
+// SnapshotNebula returns a deep copy of the Nebula under the WorkerGroup's
+// mutex, making it safe to call from any goroutine. The returned snapshot is
+// independent of the live Nebula and will not be affected by concurrent
+// mutations (e.g. hot-added phases).
+func (wg *WorkerGroup) SnapshotNebula() *Nebula {
+	wg.mu.Lock()
+	defer wg.mu.Unlock()
+	return wg.Nebula.Snapshot()
+}
+
 func (wg *WorkerGroup) reportProgress() {
 	if wg.OnProgress == nil {
 		return

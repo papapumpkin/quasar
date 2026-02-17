@@ -256,7 +256,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				PlanBody:  p.Body,
 			})
 		}
-		architectFunc := buildArchitectFunc(claudeInv, n)
+		architectFunc := buildArchitectFunc(claudeInv, wg.SnapshotNebula)
 		tuiProgram = tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir, architectFunc)
 		// Per-phase loops with PhaseUIBridge for hierarchical TUI tracking.
 		wg.Runner = &tuiLoopAdapter{
@@ -491,12 +491,12 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 }
 
 // buildArchitectFunc creates a closure that invokes the nebula architect via the given invoker.
-func buildArchitectFunc(invoker agent.Invoker, n *nebula.Nebula) func(ctx context.Context, msg tui.MsgArchitectStart) (*nebula.ArchitectResult, error) {
+func buildArchitectFunc(invoker agent.Invoker, snapshotFn func() *nebula.Nebula) func(ctx context.Context, msg tui.MsgArchitectStart) (*nebula.ArchitectResult, error) {
 	return func(ctx context.Context, msg tui.MsgArchitectStart) (*nebula.ArchitectResult, error) {
 		return nebula.RunArchitect(ctx, invoker, nebula.ArchitectRequest{
 			Mode:       nebula.ArchitectMode(msg.Mode),
 			UserPrompt: msg.Prompt,
-			Nebula:     n,
+			Nebula:     snapshotFn(),
 			PhaseID:    msg.PhaseID,
 		})
 	}
