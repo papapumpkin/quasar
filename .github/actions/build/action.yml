@@ -1,5 +1,5 @@
 name: Build
-description: Build quasar binary with version metadata via ldflags
+description: Build quasar binary using GoReleaser snapshot
 
 runs:
   using: composite
@@ -9,10 +9,11 @@ runs:
         go-version-file: go.mod
         cache: true
 
-    - name: Build binary
-      shell: bash
-      run: bash scripts/build.sh
+    - uses: goreleaser/goreleaser-action@v6
+      with:
+        version: latest
+        args: build --snapshot --clean --single-target
 
     - name: Verify binary
       shell: bash
-      run: ./quasar version
+      run: ./dist/quasar_*/quasar version

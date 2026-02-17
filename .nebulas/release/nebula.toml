@@ -1,0 +1,37 @@
+[nebula]
+name = "release"
+description = "Release pipeline: GoReleaser, Homebrew tap, CI gating"
+
+[[tasks]]
+id = "goreleaser-config"
+title = "Create .goreleaser.yml"
+file = "goreleaser-config.md"
+priority = 1
+
+[[tasks]]
+id = "update-release-workflow"
+title = "Replace release workflow with GoReleaser"
+file = "update-release-workflow.md"
+depends_on = ["goreleaser-config"]
+priority = 2
+
+[[tasks]]
+id = "homebrew-formula"
+title = "Homebrew formula and promote workflow"
+file = "homebrew-formula.md"
+depends_on = ["goreleaser-config"]
+priority = 2
+
+[[tasks]]
+id = "cleanup-old-build"
+title = "Remove old build infrastructure"
+file = "cleanup-old-build.md"
+depends_on = ["update-release-workflow"]
+priority = 2
+
+[[tasks]]
+id = "release-docs"
+title = "Create RELEASING.md"
+file = "release-docs.md"
+depends_on = ["cleanup-old-build", "homebrew-formula"]
+priority = 3

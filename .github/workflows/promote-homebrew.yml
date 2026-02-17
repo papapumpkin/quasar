@@ -1,0 +1,70 @@
+name: Promote to Homebrew
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to promote (e.g. v1.2.3)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    name: Update Homebrew tap
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download release archives
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.tag }}"
+          VERSION="${TAG#v}"
+          mkdir -p /tmp/release
+          for archive in \
+            "quasar_${VERSION}_darwin_arm64.tar.gz" \
+            "quasar_${VERSION}_darwin_amd64.tar.gz" \
+            "quasar_${VERSION}_linux_amd64.tar.gz"; do
+            gh release download "$TAG" --pattern "$archive" --dir /tmp/release
+          done
+
+      - name: Compute checksums and generate formula
+        run: |
+          TAG="${{ inputs.tag }}"
+          VERSION="${TAG#v}"
+
+          SHA256_DARWIN_ARM64=$(sha256sum /tmp/release/quasar_${VERSION}_darwin_arm64.tar.gz | awk '{print $1}')
+          SHA256_DARWIN_AMD64=$(sha256sum /tmp/release/quasar_${VERSION}_darwin_amd64.tar.gz | awk '{print $1}')
+          SHA256_LINUX_AMD64=$(sha256sum /tmp/release/quasar_${VERSION}_linux_amd64.tar.gz | awk '{print $1}')
+
+          sed \
+            -e "s/VERSION/${VERSION}/g" \
+            -e "s/SHA256_DARWIN_ARM64/${SHA256_DARWIN_ARM64}/g" \
+            -e "s/SHA256_DARWIN_AMD64/${SHA256_DARWIN_AMD64}/g" \
+            -e "s/SHA256_LINUX_AMD64/${SHA256_LINUX_AMD64}/g" \
+            .github/homebrew/quasar.rb.tmpl > /tmp/quasar.rb
+
+          echo "Generated formula:"
+          cat /tmp/quasar.rb
+
+      - name: Push formula to tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          TAG="${{ inputs.tag }}"
+          VERSION="${TAG#v}"
+
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/papapumpkin/homebrew-tap.git" /tmp/tap
+          mkdir -p /tmp/tap/Formula
+          cp /tmp/quasar.rb /tmp/tap/Formula/quasar.rb
+
+          cd /tmp/tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/quasar.rb
+          git commit -m "quasar ${VERSION}"
+          git push

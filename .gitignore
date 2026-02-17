@@ -21,5 +21,8 @@
 .DS_Store
 Thumbs.db
 
+# GoReleaser
+/dist/
+
 # Config overrides
 .quasar.yaml

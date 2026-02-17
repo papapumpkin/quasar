@@ -1,0 +1,52 @@
+version: 2
+
+builds:
+  - binary: quasar
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: linux
+        goarch: arm64
+    ldflags:
+      - -s -w -X github.com/papapumpkin/quasar/cmd.Version={{.Version}}
+
+archives:
+  - format: tar.gz
+    name_template: "quasar_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))?\!?:.+$'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*?fix(\(.+\))?\!?:.+$'
+      order: 1
+    - title: Performance
+      regexp: '^.*?perf(\(.+\))?\!?:.+$'
+      order: 2
+    - title: Refactoring
+      regexp: '^.*?refactor(\(.+\))?\!?:.+$'
+      order: 3
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - '^chore'
+      - '^ci'
+      - '^test'
+      - '^style'
+
+snapshot:
+  version_template: "{{ incr .Patch }}-next"
