@@ -1,13 +1,13 @@
 version = 1
 nebula_name = 'release'
-total_cost_usd = 1.2835032499999999
+total_cost_usd = 1.488397
 
 [phases]
 [phases.cleanup-old-build]
 bead_id = 'quasar-los'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-17T16:03:00.018828-05:00
-updated_at = 2026-02-17T16:03:00.018828-05:00
+updated_at = 2026-02-17T16:10:18.564928-05:00
 
 [phases.goreleaser-config]
 bead_id = 'quasar-nf4'
@@ -41,6 +41,12 @@ updated_at = 2026-02-17T16:03:00.993969-05:00
 
 [phases.update-release-workflow]
 bead_id = 'quasar-rn8'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-17T16:03:01.312747-05:00
-updated_at = 2026-02-17T16:09:06.04285-05:00
+updated_at = 2026-02-17T16:10:18.563876-05:00
+
+[phases.update-release-workflow.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Verified that all release workflow acceptance criteria (GoReleaser v6, CI gating, workflow_call trigger, fetch-depth: 0) were already satisfied in the existing codebase — no code changes required.'
