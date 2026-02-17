@@ -1,0 +1,45 @@
+version = 1
+nebula_name = 'Live Nebula Editing'
+
+[phases]
+[phases.detail-scroll]
+bead_id = 'quasar-7fi'
+status = 'in_progress'
+created_at = 2026-02-16T21:56:45.801929-05:00
+updated_at = 2026-02-16T21:56:49.631633-05:00
+
+[phases.dynamic-dag-insertion]
+bead_id = 'quasar-61e'
+status = 'created'
+created_at = 2026-02-16T21:56:45.917105-05:00
+updated_at = 2026-02-16T21:56:45.917105-05:00
+
+[phases.nebula-architect-agent]
+bead_id = 'quasar-e3b'
+status = 'created'
+created_at = 2026-02-16T21:56:46.033817-05:00
+updated_at = 2026-02-16T21:56:46.033817-05:00
+
+[phases.phase-change-pipeline]
+bead_id = 'quasar-4pq'
+status = 'created'
+created_at = 2026-02-16T21:56:46.153984-05:00
+updated_at = 2026-02-16T21:56:46.153984-05:00
+
+[phases.refactor-prompt-injection]
+bead_id = 'quasar-khc'
+status = 'created'
+created_at = 2026-02-16T21:56:46.270937-05:00
+updated_at = 2026-02-16T21:56:46.270937-05:00
+
+[phases.resource-monitor]
+bead_id = 'quasar-mrk'
+status = 'in_progress'
+created_at = 2026-02-16T21:56:46.385404-05:00
+updated_at = 2026-02-16T21:56:49.630547-05:00
+
+[phases.tui-architect-interface]
+bead_id = 'quasar-7d6'
+status = 'created'
+created_at = 2026-02-16T21:56:46.498838-05:00
+updated_at = 2026-02-16T21:56:46.498838-05:00

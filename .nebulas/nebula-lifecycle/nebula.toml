@@ -1,0 +1,32 @@
+[nebula]
+name = "Nebula Lifecycle"
+description = "Three-phase lifecycle for nebulas: Nursery (potential energy of markdown files), Constellation (formed work reviewed and iterated by users), and Neutron (compressed archival that can be decompressed for future work)."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "nebula", "lifecycle"]
+
+[execution]
+max_workers = 2
+max_review_cycles = 5
+max_budget_usd = 30.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Formalize the nebula lifecycle: nursery → constellation → neutron",
+    "Nursery is the current implementation — markdown files as potential energy, ready to become work",
+    "Constellation is post-execution: work takes form, user reviews/refactors, iterates until satisfied, saves back to nebula",
+    "Neutron is post-completion: all context compressed into a dense portable artifact that can be decompressed to resume or reference later",
+    "The lifecycle should feel natural — each phase flows into the next without ceremony",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "Build on existing nebula infrastructure (parse, validate, state, watcher)",
+    "Nursery phase must not break existing nebula behavior — it IS the current behavior, just named",
+    "Neutron compression must be lossless — decompressed output reconstructs the full nebula state",
+    "All new code must have tests",
+    "The loop and nebula packages must not import internal/tui",
+]
