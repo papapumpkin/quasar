@@ -13,10 +13,7 @@ import (
 func Apply(ctx context.Context, plan *Plan, n *Nebula, state *State, client beads.Client) error {
 	state.NebulaName = plan.NebulaName
 
-	phasesByID := make(map[string]*PhaseSpec)
-	for i := range n.Phases {
-		phasesByID[n.Phases[i].ID] = &n.Phases[i]
-	}
+	phasesByID := PhasesByID(n.Phases)
 
 	for _, action := range plan.Actions {
 		if ctx.Err() != nil {

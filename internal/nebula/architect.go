@@ -165,13 +165,10 @@ func buildArchitectPrompt(req ArchitectRequest) (string, error) {
 		fmt.Fprintf(&b, "Phase to refactor: `%s`\n\n", req.PhaseID)
 
 		// Find the existing phase body.
-		for _, p := range req.Nebula.Phases {
-			if p.ID == req.PhaseID {
-				b.WriteString("### Current Phase Body\n\n")
-				b.WriteString(p.Body)
-				b.WriteString("\n\n")
-				break
-			}
+		if p, ok := PhasesByID(req.Nebula.Phases)[req.PhaseID]; ok {
+			b.WriteString("### Current Phase Body\n\n")
+			b.WriteString(p.Body)
+			b.WriteString("\n\n")
 		}
 
 		fmt.Fprintf(&b, "User change request: %s\n\n", req.UserPrompt)

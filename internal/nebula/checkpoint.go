@@ -56,11 +56,8 @@ func BuildCheckpoint(ctx context.Context, git GitCommitter, phaseID string, resu
 	}
 
 	// Look up the phase title from the nebula spec.
-	for _, p := range nebula.Phases {
-		if p.ID == phaseID {
-			cp.PhaseTitle = p.Title
-			break
-		}
+	if p, ok := PhasesByID(nebula.Phases)[phaseID]; ok {
+		cp.PhaseTitle = p.Title
 	}
 
 	// Populate review summary from the report.
