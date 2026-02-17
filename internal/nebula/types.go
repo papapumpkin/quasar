@@ -77,6 +77,33 @@ type Nebula struct {
 	Phases   []PhaseSpec
 }
 
+// Snapshot returns a deep copy of the Nebula that is safe to read without
+// holding any lock. Scalar fields and the Manifest struct are shallow-copied
+// (they are value types). Each PhaseSpec and its sub-slices are independently
+// allocated so mutations to the original do not affect the snapshot.
+func (n *Nebula) Snapshot() *Nebula {
+	cp := *n
+	if n.Phases != nil {
+		cp.Phases = make([]PhaseSpec, len(n.Phases))
+		for i, p := range n.Phases {
+			cp.Phases[i] = p
+			if p.DependsOn != nil {
+				cp.Phases[i].DependsOn = append([]string{}, p.DependsOn...)
+			}
+			if p.Labels != nil {
+				cp.Phases[i].Labels = append([]string{}, p.Labels...)
+			}
+			if p.Scope != nil {
+				cp.Phases[i].Scope = append([]string{}, p.Scope...)
+			}
+			if p.Blocks != nil {
+				cp.Phases[i].Blocks = append([]string{}, p.Blocks...)
+			}
+		}
+	}
+	return &cp
+}
+
 // GateMode controls how human involvement is handled between phases.
 type GateMode string
 

@@ -699,3 +699,90 @@ func TestMsgArchitectStartStoresCancelFunc(t *testing.T) {
 		t.Error("expected context cancellation error")
 	}
 }
+
+// --- safeArchitectCall panic recovery tests ---
+
+func TestSafeArchitectCallPanicRecovery(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "setup", Status: PhaseDone},
+	})
+	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
+	m.Architect.StartWorking()
+
+	m.ArchitectFunc = func(_ context.Context, _ MsgArchitectStart) (*nebula.ArchitectResult, error) {
+		panic("boom")
+	}
+
+	msg := MsgArchitectStart{Mode: "create", Prompt: "build it"}
+	_, cmd := m.Update(msg)
+
+	if cmd == nil {
+		t.Fatal("expected a command to be returned")
+	}
+
+	// Execute the command — should not panic.
+	resultMsg := cmd()
+	archResult, ok := resultMsg.(MsgArchitectResult)
+	if !ok {
+		t.Fatalf("expected MsgArchitectResult, got %T", resultMsg)
+	}
+	if archResult.Err == nil {
+		t.Fatal("expected error from panic recovery, got nil")
+	}
+	if !strings.Contains(archResult.Err.Error(), "architect panic") {
+		t.Errorf("error = %q, want it to contain %q", archResult.Err, "architect panic")
+	}
+	if !strings.Contains(archResult.Err.Error(), "boom") {
+		t.Errorf("error = %q, want it to contain %q", archResult.Err, "boom")
+	}
+	if archResult.Result != nil {
+		t.Errorf("Result should be nil after panic, got %v", archResult.Result)
+	}
+}
+
+func TestSafeArchitectCallNormalOperation(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "setup", Status: PhaseDone},
+	})
+	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
+	m.Architect.StartWorking()
+
+	expected := &nebula.ArchitectResult{
+		Filename: "plan.md",
+		PhaseSpec: nebula.PhaseSpec{
+			ID:    "deploy",
+			Title: "Deploy Phase",
+		},
+		Body: "deploy body",
+	}
+
+	m.ArchitectFunc = func(_ context.Context, msg MsgArchitectStart) (*nebula.ArchitectResult, error) {
+		if msg.Prompt != "do it" {
+			t.Errorf("Prompt = %q, want %q", msg.Prompt, "do it")
+		}
+		return expected, nil
+	}
+
+	msg := MsgArchitectStart{Mode: "create", Prompt: "do it"}
+	_, cmd := m.Update(msg)
+
+	if cmd == nil {
+		t.Fatal("expected a command to be returned")
+	}
+
+	resultMsg := cmd()
+	archResult, ok := resultMsg.(MsgArchitectResult)
+	if !ok {
+		t.Fatalf("expected MsgArchitectResult, got %T", resultMsg)
+	}
+	if archResult.Err != nil {
+		t.Errorf("unexpected error: %v", archResult.Err)
+	}
+	if archResult.Result != expected {
+		t.Errorf("Result = %v, want %v", archResult.Result, expected)
+	}
+}

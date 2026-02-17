@@ -1,0 +1,32 @@
+[nebula]
+name = "Architect Crash Fix"
+description = "Fix TUI crash when using architect overlay (edit phase). Four contributing bugs: data race on Nebula.Phases, unrecovered panic in architect goroutine, overlay key priority mismatch, and subprocess terminal inheritance. Plus a pre-existing test mock data race."
+
+[defaults]
+type = "bug"
+priority = 1
+labels = ["quasar", "tui", "stability"]
+
+[execution]
+max_workers = 3
+max_budget_usd = 25.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Eliminate data race on Nebula.Phases between architect goroutine and handlePhaseAdded",
+    "Prevent panics in architect goroutine from killing the TUI process",
+    "Fix overlay key priority so architect overlay receives keys when active",
+    "Isolate claude subprocess from parent terminal session",
+    "Fix pre-existing data race in test mock mockRunner",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "Use Nebula.Snapshot() deep-copy pattern (like existing Metrics.Snapshot())",
+    "All TUI code lives in internal/tui/",
+    "Do not break the stderr Printer fallback path",
+    "Use only stdlib for synchronization primitives",
+    "Platform-specific code uses Go build tags (not runtime.GOOS checks)",
+    "Maintain backward compatibility with existing TUI message protocol",
+]

@@ -1,0 +1,33 @@
+version = 1
+nebula_name = 'Architect Crash Fix'
+
+[phases]
+[phases.overlay-priority]
+bead_id = 'quasar-2aj'
+status = 'created'
+created_at = 2026-02-17T12:23:47.839857-05:00
+updated_at = 2026-02-17T12:23:47.839857-05:00
+
+[phases.panic-recovery]
+bead_id = 'quasar-3q0'
+status = 'in_progress'
+created_at = 2026-02-17T12:23:48.194558-05:00
+updated_at = 2026-02-17T12:23:49.490973-05:00
+
+[phases.snapshot-phases]
+bead_id = 'quasar-dzp'
+status = 'in_progress'
+created_at = 2026-02-17T12:23:48.552927-05:00
+updated_at = 2026-02-17T12:23:49.492906-05:00
+
+[phases.subprocess-isolation]
+bead_id = 'quasar-ani'
+status = 'in_progress'
+created_at = 2026-02-17T12:23:48.879566-05:00
+updated_at = 2026-02-17T12:23:49.487027-05:00
+
+[phases.test-race-fix]
+bead_id = 'quasar-65c'
+status = 'created'
+created_at = 2026-02-17T12:23:49.212022-05:00
+updated_at = 2026-02-17T12:23:49.212022-05:00
