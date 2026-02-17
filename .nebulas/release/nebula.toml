@@ -2,36 +2,26 @@
 name = "release"
 description = "Release pipeline: GoReleaser, Homebrew tap, CI gating"
 
-[[tasks]]
-id = "goreleaser-config"
-title = "Create .goreleaser.yml"
-file = "goreleaser-config.md"
-priority = 1
-
-[[tasks]]
-id = "update-release-workflow"
-title = "Replace release workflow with GoReleaser"
-file = "update-release-workflow.md"
-depends_on = ["goreleaser-config"]
+[defaults]
+type = "task"
 priority = 2
 
-[[tasks]]
-id = "homebrew-formula"
-title = "Homebrew formula and promote workflow"
-file = "homebrew-formula.md"
-depends_on = ["goreleaser-config"]
-priority = 2
+[execution]
+max_workers = 1
 
-[[tasks]]
-id = "cleanup-old-build"
-title = "Remove old build infrastructure"
-file = "cleanup-old-build.md"
-depends_on = ["update-release-workflow"]
-priority = 2
-
-[[tasks]]
-id = "release-docs"
-title = "Create RELEASING.md"
-file = "release-docs.md"
-depends_on = ["cleanup-old-build", "homebrew-formula"]
-priority = 3
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Replace custom matrix build with GoReleaser for cross-compilation, archiving, checksums, and changelog",
+    "Gate releases on CI passing",
+    "Add manual Homebrew promotion workflow targeting papapumpkin/homebrew-tap",
+    "Document the release process",
+]
+constraints = [
+    "Versioning is manual via git tag vX.Y.Z",
+    "No quasar release CLI command — documented workflow only",
+    "Homebrew promotion is manual, not every release",
+    "Platforms: linux/amd64, darwin/arm64, darwin/amd64",
+    "GitHub org is papapumpkin",
+]

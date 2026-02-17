@@ -77,6 +77,98 @@ internal/
 3. `.quasar.yaml` config file
 4. Built-in defaults (lowest)
 
+## Nebula Authoring
+
+Nebulas are multi-phase task specifications in `.nebulas/<name>/`. Each nebula has a manifest (`nebula.toml`) and one or more phase files (`*.md`).
+
+### Manifest (`nebula.toml`)
+
+```toml
+[nebula]
+name = "my-nebula"
+description = "What this nebula accomplishes"
+
+[defaults]
+type = "task"        # default phase type: task | bug | feature
+priority = 2         # default priority (1=highest)
+labels = ["quasar"]  # default labels applied to phases
+assignee = ""        # default assignee
+
+[execution]
+max_workers = 1           # concurrent workers
+max_review_cycles = 5     # max coder-reviewer cycles per phase
+max_budget_usd = 50.0     # budget cap
+model = ""                # model override (empty = default)
+gate = ""                 # gate mode: trust | review | approve | watch
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = ["Goal 1", "Goal 2"]
+constraints = ["Constraint 1"]
+
+[dependencies]
+requires_beads = []    # bead IDs that must be closed first
+requires_nebulae = []  # nebula names that must complete first
+```
+
+### Phase Files (`*.md`)
+
+Each phase file **must** start with `+++` TOML frontmatter delimiters:
+
+```markdown
++++
+id = "phase-id"
+title = "Human-readable title"
+type = "task"
+priority = 2
+depends_on = ["other-phase-id"]
++++
+
+## Problem
+
+Description of what needs to change and why.
+
+## Solution
+
+How to solve it, including code snippets if useful.
+
+## Files
+
+- `path/to/file.go` — what to do
+
+## Acceptance Criteria
+
+- [ ] Criterion 1
+- [ ] Criterion 2
+```
+
+**Frontmatter fields** (between `+++` delimiters):
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | yes | Unique identifier within the nebula |
+| `title` | yes | Short description |
+| `type` | no | `task`, `bug`, `feature` (inherits from `[defaults]`) |
+| `priority` | no | Integer, 1=highest (inherits from `[defaults]`) |
+| `depends_on` | no | Array of phase IDs this phase depends on |
+| `labels` | no | Array of string labels |
+| `assignee` | no | Assignee override |
+| `max_review_cycles` | no | Override per-phase cycle limit |
+| `max_budget_usd` | no | Override per-phase budget |
+| `model` | no | Override model for this phase |
+| `gate` | no | Override gate mode for this phase |
+| `blocks` | no | Reverse deps: inject as dependency of listed phases |
+| `scope` | no | Glob patterns for owned files/dirs |
+| `allow_scope_overlap` | no | Permit scope overlap with other phases |
+
+### Validation
+
+```bash
+./quasar nebula validate .nebulas/my-nebula    # check for errors
+./quasar nebula apply .nebulas/my-nebula --auto # run all phases
+```
+
 ## Git
 
 - GitHub org is `papapumpkin`
