@@ -41,6 +41,7 @@ const (
 type AppModel struct {
 	Mode       Mode
 	StatusBar  StatusBar
+	Banner     Banner
 	LoopView   LoopView // used in loop mode (single task)
 	NebulaView NebulaView
 	Detail     DetailPanel
@@ -139,9 +140,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
+		m.Banner.Width = msg.Width
+		m.Banner.Height = msg.Height
 		m.StatusBar.Width = msg.Width
+		contentWidth := msg.Width - m.Banner.SidePanelWidth()
 		detailHeight := m.detailHeight()
-		m.Detail.SetSize(msg.Width-2, detailHeight)
+		m.Detail.SetSize(contentWidth-2, detailHeight)
 
 		// Clamp cursors so they remain valid after a resize that may shrink lists.
 		clampCursors(&m)
@@ -1275,39 +1279,62 @@ func (m AppModel) View() string {
 		return m.renderTooSmall()
 	}
 
+	// Compute content width: reduced by side panel in S-B mode.
+	contentWidth := m.Width - m.Banner.SidePanelWidth()
+
 	var sections []string
 
-	// Status bar — sync execution control state.
+	// Status bar — always full terminal width; sync execution control state.
 	m.StatusBar.Paused = m.Paused
 	m.StatusBar.Stopping = m.Stopping
 	sections = append(sections, m.StatusBar.View())
 
+	// Top banner (S-A or XS-A modes) — between status bar and content.
+	if bannerView := m.Banner.View(); bannerView != "" {
+		sections = append(sections, bannerView)
+	}
+
+	// Build the "middle" section: breadcrumb + main view + detail + gate + toasts.
+	// In side panel mode, this section sits to the right of the art panel.
+	var middle []string
+
 	// Breadcrumb (nebula drill-down) — hide if too narrow.
-	if m.Mode == ModeNebula && m.Depth > DepthPhases && m.Width >= CompactWidth {
-		sections = append(sections, m.renderBreadcrumb())
+	if m.Mode == ModeNebula && m.Depth > DepthPhases && contentWidth >= CompactWidth {
+		middle = append(middle, m.renderBreadcrumb())
 	}
 
 	// Main view.
-	sections = append(sections, m.renderMainView())
+	middle = append(middle, m.renderMainView())
 
 	// Detail panel (when drilled into agent output) — auto-collapse on short terminals.
 	if m.showDetailPanel() && m.Height >= DetailCollapseHeight {
-		sep := styleSectionBorder.Width(m.Width).Render("")
-		sections = append(sections, sep)
-		sections = append(sections, m.Detail.View())
+		sep := styleSectionBorder.Width(contentWidth).Render("")
+		middle = append(middle, sep)
+		middle = append(middle, m.Detail.View())
 	}
 
 	// Gate overlay.
 	if m.Gate != nil {
-		sections = append(sections, m.Gate.View())
+		middle = append(middle, m.Gate.View())
 	}
 
 	// Toast notifications (above footer).
 	if len(m.Toasts) > 0 {
-		sections = append(sections, RenderToasts(m.Toasts, m.Width))
+		middle = append(middle, RenderToasts(m.Toasts, contentWidth))
 	}
 
-	// Footer.
+	middleStr := lipgloss.JoinVertical(lipgloss.Left, middle...)
+
+	// Side panel mode (S-B): join art panel horizontally with middle content.
+	if m.Banner.Size() == BannerSB {
+		middleHeight := lipgloss.Height(middleStr)
+		artPanel := m.Banner.SidePanelView(middleHeight)
+		middleStr = lipgloss.JoinHorizontal(lipgloss.Top, artPanel, middleStr)
+	}
+
+	sections = append(sections, middleStr)
+
+	// Footer — always full terminal width.
 	footer := m.buildFooter()
 	sections = append(sections, footer.View())
 
@@ -1341,9 +1368,16 @@ func (m AppModel) renderTooSmall() string {
 	return style.Render(msg)
 }
 
+// contentWidth returns the available width for main content, accounting for the
+// side panel when in S-B mode.
+func (m AppModel) contentWidth() int {
+	return m.Width - m.Banner.SidePanelWidth()
+}
+
 // renderBreadcrumb renders the navigation path for drill-down.
-// Phase IDs are truncated with ellipsis if the breadcrumb would exceed the terminal width.
+// Phase IDs are truncated with ellipsis if the breadcrumb would exceed the content width.
 func (m AppModel) renderBreadcrumb() string {
+	w := m.contentWidth()
 	sep := " › "
 	parts := []string{"phases"}
 	if m.FocusedPhase != "" {
@@ -1353,7 +1387,7 @@ func (m AppModel) renderBreadcrumb() string {
 			overhead += len(sep) + len("output")
 		}
 		// Leave 4 chars padding for the breadcrumb style padding.
-		available := m.Width - overhead - 4
+		available := w - overhead - 4
 		if available < 4 {
 			available = 4
 		}
@@ -1364,25 +1398,26 @@ func (m AppModel) renderBreadcrumb() string {
 	}
 	renderedSep := styleBreadcrumbSep.Render(sep)
 	path := strings.Join(parts, renderedSep)
-	return styleBreadcrumb.Width(m.Width).Render(path)
+	return styleBreadcrumb.Width(w).Render(path)
 }
 
 // renderMainView renders the appropriate view for the current depth.
 func (m AppModel) renderMainView() string {
+	w := m.contentWidth()
 	switch m.Mode {
 	case ModeLoop:
-		m.LoopView.Width = m.Width
+		m.LoopView.Width = w
 		return m.LoopView.View()
 
 	case ModeNebula:
 		switch m.Depth {
 		case DepthPhases:
-			m.NebulaView.Width = m.Width
+			m.NebulaView.Width = w
 			return m.NebulaView.View()
 		default:
 			// Show the focused phase's loop view.
 			if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
-				lv.Width = m.Width
+				lv.Width = w
 				return lv.View()
 			}
 			return styleDetailDim.Render("  (no activity for this phase yet)")
