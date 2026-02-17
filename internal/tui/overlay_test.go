@@ -797,6 +797,7 @@ func TestOverlayTakesPrecedenceOverGate(t *testing.T) {
 	m := NewAppModel(ModeNebula)
 	m.Width = 80
 	m.Height = 24
+	m.Splash = false
 	m.Overlay = &CompletionOverlay{Kind: CompletionSuccess}
 
 	// With overlay active, pressing 'a' (accept gate key) should do nothing.
