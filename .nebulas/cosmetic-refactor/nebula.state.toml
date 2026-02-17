@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'cosmetic-refactor'
-total_cost_usd = 3.5836592500000006
+total_cost_usd = 4.6161062500000005
 
 [phases]
 [phases.claude-eliminate-pkg-vars]
@@ -77,9 +77,15 @@ updated_at = 2026-02-17T17:24:23.901679-05:00
 
 [phases.nebula-extract-scope-validation]
 bead_id = 'quasar-tqp'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-17T17:21:11.090843-05:00
-updated_at = 2026-02-17T17:24:59.629784-05:00
+updated_at = 2026-02-17T17:29:22.199587-05:00
+
+[phases.nebula-extract-scope-validation.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Straightforward file extraction of scope overlap validation logic into dedicated `scope.go`/`scope_test.go` files — purely cosmetic refactor with no behavior changes, all tests pass.'
 
 [phases.split-cmd-nebula-file]
 bead_id = 'quasar-uhd'
