@@ -145,6 +145,7 @@ func (l *Loop) drainRefactor(state *CycleState) {
 		default:
 			if latest != "" {
 				state.OriginalDescription = state.TaskTitle
+				state.RefactorDescription = latest
 				state.TaskTitle = latest
 				state.Refactored = true
 			}
@@ -208,9 +209,16 @@ func (l *Loop) reviewerAgent(budget float64) agent.Agent {
 }
 
 // runCoderPhase invokes the coder agent, updates state and UI, and records a bead comment.
+// When a refactor is pending, it posts a bead comment documenting the change before
+// building the prompt (which clears the refactor flag).
 func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBudget float64) error {
 	state.Phase = PhaseCoding
 	l.UI.AgentStart("coder")
+
+	// Capture refactor state before buildCoderPrompt clears the flag.
+	wasRefactored := state.Refactored
+	origDesc := state.OriginalDescription
+	refactorDesc := state.RefactorDescription
 
 	result, err := l.Invoker.Invoke(ctx, l.coderAgent(perAgentBudget), l.buildCoderPrompt(state), l.WorkDir)
 	if err != nil {
@@ -225,6 +233,14 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	l.UI.AgentDone("coder", result.CostUSD, result.DurationMs)
 	l.emitCycleSummary(state, PhaseCodeComplete, result)
 
+	if wasRefactored {
+		comment := fmt.Sprintf("[refactor cycle %d] User updated task description mid-execution.\nOriginal: %s\nUpdated: %s",
+			state.Cycle, truncate(origDesc, 500), truncate(refactorDesc, 500))
+		if err := l.Beads.AddComment(ctx, state.TaskBeadID, comment); err != nil {
+			l.UI.Error(fmt.Sprintf("failed to add refactor bead comment: %v", err))
+		}
+		l.UI.RefactorApplied(state.TaskBeadID)
+	}
 	if err := l.Beads.AddComment(ctx, state.TaskBeadID,
 		fmt.Sprintf("[coder cycle %d]\n%s", state.Cycle, truncate(result.ResultText, 2000))); err != nil {
 		l.UI.Error(fmt.Sprintf("failed to add bead comment: %v", err))
@@ -372,6 +388,16 @@ func (l *Loop) createFindingBeads(ctx context.Context, state *CycleState) []stri
 func (l *Loop) buildCoderPrompt(state *CycleState) string {
 	var b strings.Builder
 
+	if state.Refactored {
+		b.WriteString(l.buildRefactorPrompt(state))
+		// Clear refactor flag so subsequent cycles use the normal prompt
+		// with the updated description as the new baseline.
+		state.Refactored = false
+		state.OriginalDescription = ""
+		state.RefactorDescription = ""
+		return b.String()
+	}
+
 	if state.Cycle == 1 {
 		fmt.Fprintf(&b, "Task (bead %s): %s\n\n", state.TaskBeadID, state.TaskTitle)
 		b.WriteString("Implement this task. Read existing code first to understand the codebase, then make the necessary changes.")
@@ -382,6 +408,44 @@ func (l *Loop) buildCoderPrompt(state *CycleState) string {
 			fmt.Fprintf(&b, "%d. [%s] %s\n", i+1, f.Severity, f.Description)
 		}
 		b.WriteString("\nFix these issues. Read the relevant files to understand current state before making changes.")
+	}
+
+	return b.String()
+}
+
+// buildRefactorPrompt constructs the coder prompt when the user has updated
+// the task description mid-execution. It includes both the original and updated
+// descriptions so the coder understands the course correction, plus previous
+// cycle context to preserve good progress.
+func (l *Loop) buildRefactorPrompt(state *CycleState) string {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "Task (bead %s):\n\n", state.TaskBeadID)
+	b.WriteString("[REFACTOR — USER UPDATE]\n")
+	b.WriteString("The user has updated the task description while you were working.\n")
+	b.WriteString("The original task was:\n---\n")
+	b.WriteString(state.OriginalDescription)
+	b.WriteString("\n---\n\n")
+	b.WriteString("The UPDATED task description is:\n---\n")
+	b.WriteString(state.RefactorDescription)
+	b.WriteString("\n---\n\n")
+	b.WriteString("Important: The user is actively watching and has provided this updated\n")
+	b.WriteString("guidance based on your work so far. Prioritize the new instructions\n")
+	b.WriteString("while preserving any good progress from previous cycles.\n\n")
+
+	if state.CoderOutput != "" || len(state.Findings) > 0 {
+		b.WriteString("[PREVIOUS WORK]\n")
+		if state.CoderOutput != "" {
+			b.WriteString("Your output from the last cycle:\n")
+			b.WriteString(truncate(state.CoderOutput, 2000))
+			b.WriteString("\n\n")
+		}
+		if len(state.Findings) > 0 {
+			b.WriteString("Reviewer feedback:\n")
+			for i, f := range state.Findings {
+				fmt.Fprintf(&b, "%d. [%s] %s\n", i+1, f.Severity, f.Description)
+			}
+		}
 	}
 
 	return b.String()

@@ -105,6 +105,21 @@ END_PHASE_FILE`,
 			output:  "PHASE_FILE: test.md\n+++\ninvalid = [toml\n+++\nbody\nEND_PHASE_FILE",
 			wantErr: true,
 		},
+		{
+			name:    "path traversal in filename",
+			output:  "PHASE_FILE: ../../../etc/passwd\n+++\nid = \"test\"\ntitle = \"Test\"\n+++\nbody\nEND_PHASE_FILE",
+			wantErr: true,
+		},
+		{
+			name:    "directory separator in filename",
+			output:  "PHASE_FILE: subdir/test.md\n+++\nid = \"test\"\ntitle = \"Test\"\n+++\nbody\nEND_PHASE_FILE",
+			wantErr: true,
+		},
+		{
+			name:    "filename without .md extension",
+			output:  "PHASE_FILE: test.txt\n+++\nid = \"test\"\ntitle = \"Test\"\n+++\nbody\nEND_PHASE_FILE",
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -482,13 +497,17 @@ END_PHASE_FILE`
 
 		found := false
 		for _, e := range result.Errors {
-			if strings.Contains(e, "already exists") {
+			if strings.Contains(e, "duplicate phase ID") {
 				found = true
 				break
 			}
 		}
 		if !found {
 			t.Errorf("expected error about duplicate ID, got %v", result.Errors)
+		}
+		// Ensure no duplicate error messages (issue #2: only ValidateHotAdd should report this).
+		if len(result.Errors) != 1 {
+			t.Errorf("expected exactly 1 error for duplicate ID, got %d: %v", len(result.Errors), result.Errors)
 		}
 	})
 
@@ -584,6 +603,26 @@ func TestValidateAgainstDAG(t *testing.T) {
 		}
 	})
 
+	t.Run("create mode duplicate id produces single error", func(t *testing.T) {
+		t.Parallel()
+
+		result := &ArchitectResult{
+			PhaseSpec: PhaseSpec{
+				ID:    "a",
+				Title: "Duplicate A",
+			},
+		}
+
+		req := ArchitectRequest{Mode: ArchitectModeCreate, Nebula: nebula}
+		errs := validateAgainstDAG(result, req)
+		if len(errs) != 1 {
+			t.Errorf("expected exactly 1 error for duplicate ID, got %d: %v", len(errs), errs)
+		}
+		if len(errs) > 0 && !strings.Contains(errs[0], "duplicate phase ID") {
+			t.Errorf("expected duplicate phase ID error, got: %v", errs[0])
+		}
+	})
+
 	t.Run("refactor mode allows same id", func(t *testing.T) {
 		t.Parallel()
 
@@ -596,11 +635,8 @@ func TestValidateAgainstDAG(t *testing.T) {
 
 		req := ArchitectRequest{Mode: ArchitectModeRefactor, Nebula: nebula, PhaseID: "a"}
 		errs := validateAgainstDAG(result, req)
-		// Refactor mode should not report "already exists" for the same phase.
-		for _, e := range errs {
-			if strings.Contains(e, "already exists") {
-				t.Errorf("refactor mode should not flag same-id: %v", e)
-			}
+		if len(errs) != 0 {
+			t.Errorf("expected no errors for refactor mode, got: %v", errs)
 		}
 	})
 }

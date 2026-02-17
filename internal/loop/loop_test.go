@@ -26,6 +26,7 @@ func (n *noopUI) Error(string)                                      {}
 func (n *noopUI) Info(string)                                       {}
 func (n *noopUI) AgentOutput(string, int, string)                   {}
 func (n *noopUI) BeadUpdate(string, string, string, []ui.BeadChild) {}
+func (n *noopUI) RefactorApplied(string)                            {}
 
 func TestParseReviewFindings(t *testing.T) {
 	tests := []struct {

@@ -37,6 +37,58 @@ func NewGraph(phases []PhaseSpec) *Graph {
 	return g
 }
 
+// AddNode adds a new node to the graph. It is a no-op if the node already exists.
+func (g *Graph) AddNode(id string) {
+	if g.adjacency[id] == nil {
+		g.adjacency[id] = make(map[string]bool)
+	}
+	if g.reverse[id] == nil {
+		g.reverse[id] = make(map[string]bool)
+	}
+}
+
+// AddEdge adds a dependency edge: from depends on to.
+func (g *Graph) AddEdge(from, to string) {
+	if g.adjacency[from] == nil {
+		g.adjacency[from] = make(map[string]bool)
+	}
+	g.adjacency[from][to] = true
+	if g.reverse[to] == nil {
+		g.reverse[to] = make(map[string]bool)
+	}
+	g.reverse[to][from] = true
+}
+
+// RemoveEdge removes the dependency edge from → to. It is a no-op if the
+// edge does not exist.
+func (g *Graph) RemoveEdge(from, to string) {
+	if g.adjacency[from] != nil {
+		delete(g.adjacency[from], to)
+	}
+	if g.reverse[to] != nil {
+		delete(g.reverse[to], from)
+	}
+}
+
+// RemoveNode removes a node and all its edges from the graph.
+func (g *Graph) RemoveNode(id string) {
+	// Remove all edges from this node to its dependencies.
+	for dep := range g.adjacency[id] {
+		if g.reverse[dep] != nil {
+			delete(g.reverse[dep], id)
+		}
+	}
+	delete(g.adjacency, id)
+
+	// Remove all edges from nodes that depend on this node.
+	for dependent := range g.reverse[id] {
+		if g.adjacency[dependent] != nil {
+			delete(g.adjacency[dependent], id)
+		}
+	}
+	delete(g.reverse, id)
+}
+
 // Sort returns phase IDs in topological order (dependencies first).
 // Returns an error if a cycle is detected.
 func (g *Graph) Sort() ([]string, error) {

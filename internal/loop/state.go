@@ -64,4 +64,5 @@ type CycleState struct {
 	ChildBeadIDs        []string        // accumulated child bead IDs across all cycles
 	Refactored          bool            // true when a mid-run phase edit was applied
 	OriginalDescription string          // task description before the refactor
+	RefactorDescription string          // the new description from the user edit
 }

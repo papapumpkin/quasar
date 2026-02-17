@@ -61,6 +61,7 @@ type Watcher struct {
 	interventions chan InterventionKind // Internal write channel
 	done          chan struct{}
 	watcher       *fsnotify.Watcher
+	knownFiles    map[string]bool // Phase files present at startup; used to detect hot-adds
 }
 
 // NewWatcher creates a new watcher for the given nebula directory.
@@ -80,8 +81,17 @@ func NewWatcher(dir string) (*Watcher, error) {
 		interventions: iv,
 		done:          make(chan struct{}),
 		watcher:       fw,
+		knownFiles:    make(map[string]bool),
 	}
 	return w, nil
+}
+
+// SeedKnownFiles registers existing phase files so the watcher can distinguish
+// newly added files (ChangeAdded) from modifications to existing ones (ChangeModified).
+func (w *Watcher) SeedKnownFiles(files []string) {
+	for _, f := range files {
+		w.knownFiles[f] = true
+	}
 }
 
 // Start begins watching the nebula directory for changes.
@@ -224,8 +234,14 @@ func (w *Watcher) emitChange(file string) {
 		return
 	}
 
+	kind := ChangeModified
+	if !w.knownFiles[file] {
+		kind = ChangeAdded
+		w.knownFiles[file] = true
+	}
+
 	w.changes <- Change{
-		Kind:    ChangeModified,
+		Kind:    kind,
 		PhaseID: phase.ID,
 		File:    file,
 	}

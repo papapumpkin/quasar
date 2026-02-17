@@ -23,6 +23,8 @@ type StatusBar struct {
 	Width        int
 	Paused       bool
 	Stopping     bool
+	Resources    ResourceSnapshot
+	Thresholds   ResourceThresholds
 }
 
 // View renders the status bar as a single line.
@@ -98,7 +100,13 @@ func (s StatusBar) buildRightSegments(compact bool) []statusSegment {
 		})
 	}
 
-	// Elapsed segment (priority 1 — dropped first).
+	// Resource indicator segment (priority 0 — dropped before elapsed).
+	resText := s.renderResourceSegment(compact)
+	if resText != "" {
+		segments = append(segments, statusSegment{text: "  " + resText, priority: 0})
+	}
+
+	// Elapsed segment (priority 1 — dropped after resources).
 	var elapsed time.Duration
 	if s.FinalElapsed > 0 {
 		elapsed = s.FinalElapsed
@@ -113,6 +121,29 @@ func (s StatusBar) buildRightSegments(compact bool) []statusSegment {
 	}
 
 	return segments
+}
+
+// renderResourceSegment renders the compact resource indicator with color coding.
+// Format: "◈2  48MB  3.2%" with optional "⚡2 quasars" suffix.
+func (s StatusBar) renderResourceSegment(compact bool) string {
+	indicator := FormatResourceIndicator(s.Resources)
+	if indicator == "" {
+		return ""
+	}
+
+	// Choose style based on worst resource level.
+	style := resourceLevelStyle(s.Resources.WorstLevel(s.Thresholds))
+	result := style.Render(indicator)
+
+	// Multi-quasar detection (skip in compact mode to save space).
+	if !compact {
+		qCount := FormatQuasarCount(s.Resources.QuasarCount)
+		if qCount != "" {
+			result += "  " + styleResourceWarning.Render(qCount)
+		}
+	}
+
+	return result
 }
 
 // buildFixedLeftPrefix returns the mode label + progress text (without the name).
@@ -314,6 +345,18 @@ func progressColor(ratio float64) lipgloss.Color {
 		return colorPrimary
 	default:
 		return colorBlue
+	}
+}
+
+// resourceLevelStyle returns the appropriate style for the given resource level.
+func resourceLevelStyle(level ResourceLevel) lipgloss.Style {
+	switch level {
+	case ResourceDanger:
+		return styleResourceDanger
+	case ResourceWarning:
+		return styleResourceWarning
+	default:
+		return styleResourceNormal
 	}
 }
 

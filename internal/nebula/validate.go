@@ -160,6 +160,83 @@ func Validate(n *Nebula) []ValidationError {
 	return errs
 }
 
+// ValidateHotAdd checks whether a new phase can be safely inserted into a
+// running nebula. It validates required fields, ID uniqueness against the
+// existing registry, and cycle detection against the live graph.
+// On success, the phase's nodes and edges (including blocks edges) remain in
+// the graph. On failure, they are rolled back. The caller is responsible for
+// removing any blocks edges that should not be kept (e.g. for in-flight or
+// done phases).
+func ValidateHotAdd(phase PhaseSpec, existingIDs map[string]bool, graph *Graph) []ValidationError {
+	var errs []ValidationError
+
+	if phase.ID == "" {
+		errs = append(errs, ValidationError{
+			SourceFile: phase.SourceFile,
+			Field:      "id",
+			Err:        fmt.Errorf("%w: id", ErrMissingField),
+		})
+		return errs
+	}
+	if phase.Title == "" {
+		errs = append(errs, ValidationError{
+			PhaseID:    phase.ID,
+			SourceFile: phase.SourceFile,
+			Field:      "title",
+			Err:        fmt.Errorf("%w: title", ErrMissingField),
+		})
+	}
+	if existingIDs[phase.ID] {
+		errs = append(errs, ValidationError{
+			PhaseID:    phase.ID,
+			SourceFile: phase.SourceFile,
+			Err:        fmt.Errorf("%w: %q", ErrDuplicateID, phase.ID),
+		})
+	}
+	if len(errs) > 0 {
+		return errs
+	}
+
+	// Tentatively add the node and edges to check for cycles.
+	graph.AddNode(phase.ID)
+	for _, dep := range phase.DependsOn {
+		graph.AddEdge(phase.ID, dep)
+	}
+	for _, blocked := range phase.Blocks {
+		graph.AddEdge(blocked, phase.ID)
+	}
+
+	if _, err := graph.Sort(); err != nil {
+		errs = append(errs, ValidationError{
+			PhaseID:    phase.ID,
+			SourceFile: phase.SourceFile,
+			Err:        fmt.Errorf("%w: adding %q would create a cycle", ErrDependencyCycle, phase.ID),
+		})
+		// Roll back the tentative graph mutations.
+		rollbackHotAdd(graph, phase)
+	}
+
+	return errs
+}
+
+// rollbackHotAdd removes a phase node and its edges from the graph.
+func rollbackHotAdd(graph *Graph, phase PhaseSpec) {
+	for _, dep := range phase.DependsOn {
+		delete(graph.adjacency[phase.ID], dep)
+		if graph.reverse[dep] != nil {
+			delete(graph.reverse[dep], phase.ID)
+		}
+	}
+	for _, blocked := range phase.Blocks {
+		delete(graph.adjacency[blocked], phase.ID)
+		if graph.reverse[phase.ID] != nil {
+			delete(graph.reverse[phase.ID], blocked)
+		}
+	}
+	delete(graph.adjacency, phase.ID)
+	delete(graph.reverse, phase.ID)
+}
+
 // validateScopeOverlaps checks that parallel phases (not connected by
 // dependencies) do not declare overlapping file scopes.
 func validateScopeOverlaps(phases []PhaseSpec) []ValidationError {

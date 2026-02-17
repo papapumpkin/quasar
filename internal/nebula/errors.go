@@ -24,6 +24,8 @@ var (
 	ErrPlanRejected = errors.New("execution plan rejected")
 	// ErrScopeOverlap indicates two or more phases declare overlapping file ownership scopes.
 	ErrScopeOverlap = errors.New("scope overlap")
+	// ErrPhaseAlreadyStarted indicates a reverse-dep target has already begun executing.
+	ErrPhaseAlreadyStarted = errors.New("phase already started")
 )
 
 // ValidationError records a validation problem with source context.

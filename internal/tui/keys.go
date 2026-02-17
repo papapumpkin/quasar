@@ -4,20 +4,28 @@ import "github.com/charmbracelet/bubbles/key"
 
 // KeyMap defines all keybindings for the TUI.
 type KeyMap struct {
-	Up     key.Binding
-	Down   key.Binding
-	Enter  key.Binding
-	Back   key.Binding
-	Pause  key.Binding
-	Stop   key.Binding
-	Retry  key.Binding
-	Quit   key.Binding
-	Accept key.Binding
-	Reject key.Binding
-	Skip   key.Binding
-	Info   key.Binding
-	Diff   key.Binding
-	Beads  key.Binding
+	Up       key.Binding
+	Down     key.Binding
+	Enter    key.Binding
+	Back     key.Binding
+	Pause    key.Binding
+	Stop     key.Binding
+	Retry    key.Binding
+	Quit     key.Binding
+	Accept   key.Binding
+	Reject   key.Binding
+	Skip     key.Binding
+	Info     key.Binding
+	Diff     key.Binding
+	Beads    key.Binding
+	PageUp   key.Binding
+	PageDown key.Binding
+	Home     key.Binding
+	End      key.Binding
+
+	// Architect overlay keys (nebula mode).
+	NewPhase  key.Binding
+	EditPhase key.Binding
 }
 
 // DefaultKeyMap returns the default keybinding configuration.
@@ -78,6 +86,30 @@ func DefaultKeyMap() KeyMap {
 		Beads: key.NewBinding(
 			key.WithKeys("b"),
 			key.WithHelp("b", "beads"),
+		),
+		PageUp: key.NewBinding(
+			key.WithKeys("pgup"),
+			key.WithHelp("pgup", "page up"),
+		),
+		PageDown: key.NewBinding(
+			key.WithKeys("pgdown"),
+			key.WithHelp("pgdn", "page down"),
+		),
+		Home: key.NewBinding(
+			key.WithKeys("home", "g"),
+			key.WithHelp("home/g", "top"),
+		),
+		End: key.NewBinding(
+			key.WithKeys("end", "G"),
+			key.WithHelp("end/G", "bottom"),
+		),
+		NewPhase: key.NewBinding(
+			key.WithKeys("n"),
+			key.WithHelp("n", "new phase"),
+		),
+		EditPhase: key.NewBinding(
+			key.WithKeys("e"),
+			key.WithHelp("e", "edit phase"),
 		),
 	}
 }

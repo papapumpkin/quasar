@@ -118,3 +118,60 @@ func splitFrontmatter(content string) (string, string, error) {
 
 	return frontmatter, body, nil
 }
+
+// phaseSpecFrontmatter is the serialization-only subset of PhaseSpec for TOML
+// frontmatter. It omits Body and SourceFile (not part of the on-disk format)
+// and uses omitempty to keep generated files tidy.
+type phaseSpecFrontmatter struct {
+	ID                string   `toml:"id"`
+	Title             string   `toml:"title"`
+	Type              string   `toml:"type,omitempty"`
+	Priority          int      `toml:"priority,omitempty"`
+	DependsOn         []string `toml:"depends_on,omitempty"`
+	Labels            []string `toml:"labels,omitempty"`
+	Assignee          string   `toml:"assignee,omitempty"`
+	MaxReviewCycles   int      `toml:"max_review_cycles,omitempty"`
+	MaxBudgetUSD      float64  `toml:"max_budget_usd,omitempty"`
+	Model             string   `toml:"model,omitempty"`
+	Gate              GateMode `toml:"gate,omitempty"`
+	Blocks            []string `toml:"blocks,omitempty"`
+	Scope             []string `toml:"scope,omitempty"`
+	AllowScopeOverlap bool     `toml:"allow_scope_overlap,omitempty"`
+}
+
+// MarshalPhaseFile serializes a PhaseSpec into the +++TOML+++ frontmatter
+// format expected by parsePhaseFile. The spec's Body field is appended after
+// the closing delimiter.
+func MarshalPhaseFile(spec PhaseSpec) ([]byte, error) {
+	fm := phaseSpecFrontmatter{
+		ID:                spec.ID,
+		Title:             spec.Title,
+		Type:              spec.Type,
+		Priority:          spec.Priority,
+		DependsOn:         spec.DependsOn,
+		Labels:            spec.Labels,
+		Assignee:          spec.Assignee,
+		MaxReviewCycles:   spec.MaxReviewCycles,
+		MaxBudgetUSD:      spec.MaxBudgetUSD,
+		Model:             spec.Model,
+		Gate:              spec.Gate,
+		Blocks:            spec.Blocks,
+		Scope:             spec.Scope,
+		AllowScopeOverlap: spec.AllowScopeOverlap,
+	}
+	tomlBytes, err := toml.Marshal(fm)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling phase frontmatter: %w", err)
+	}
+
+	var b strings.Builder
+	b.WriteString("+++\n")
+	b.Write(tomlBytes)
+	b.WriteString("+++\n")
+	if body := strings.TrimSpace(spec.Body); body != "" {
+		b.WriteString("\n")
+		b.WriteString(body)
+		b.WriteString("\n")
+	}
+	return []byte(b.String()), nil
+}

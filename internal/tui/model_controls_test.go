@@ -1,9 +1,13 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/aaronsalm/quasar/internal/nebula"
 )
 
 // --- handlePauseKey tests ---
@@ -473,6 +477,98 @@ func TestHandleInfoKey(t *testing.T) {
 	})
 }
 
+// --- MsgArchitectStart handler tests ---
+
+func TestMsgArchitectStartWithFunc(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "setup", Status: PhaseDone},
+	})
+	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
+	m.Architect.StartWorking()
+
+	called := false
+	m.ArchitectFunc = func(_ context.Context, msg MsgArchitectStart) (*nebula.ArchitectResult, error) {
+		called = true
+		if msg.Mode != "create" {
+			t.Errorf("Mode = %q, want %q", msg.Mode, "create")
+		}
+		return &nebula.ArchitectResult{
+			Filename: "test.md",
+			PhaseSpec: nebula.PhaseSpec{
+				ID:    "test",
+				Title: "Test Phase",
+			},
+			Body: "test body",
+		}, nil
+	}
+
+	msg := MsgArchitectStart{Mode: "create", Prompt: "build it"}
+	result, cmd := m.Update(msg)
+	updated := result.(AppModel)
+
+	if cmd == nil {
+		t.Fatal("expected a command to be returned for architect dispatch")
+	}
+
+	// Execute the command to trigger the ArchitectFunc.
+	resultMsg := cmd()
+	archResult, ok := resultMsg.(MsgArchitectResult)
+	if !ok {
+		t.Fatalf("expected MsgArchitectResult, got %T", resultMsg)
+	}
+	if !called {
+		t.Error("ArchitectFunc was not called")
+	}
+	if archResult.Err != nil {
+		t.Errorf("unexpected error: %v", archResult.Err)
+	}
+	if archResult.Result.PhaseSpec.ID != "test" {
+		t.Errorf("Result.PhaseSpec.ID = %q, want %q", archResult.Result.PhaseSpec.ID, "test")
+	}
+
+	// Feed the result back to Update.
+	result2, _ := updated.Update(archResult)
+	updated2 := result2.(AppModel)
+	if updated2.Architect == nil {
+		t.Fatal("Architect should not be nil after successful result")
+	}
+	if updated2.Architect.Step != stepPreview {
+		t.Errorf("Step = %d, want stepPreview", updated2.Architect.Step)
+	}
+}
+
+func TestMsgArchitectStartWithoutFunc(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "setup", Status: PhaseDone},
+	})
+	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
+	m.Architect.StartWorking()
+	// Do not set ArchitectFunc — it should handle gracefully.
+
+	msg := MsgArchitectStart{Mode: "create", Prompt: "build it"}
+	result, _ := m.Update(msg)
+	updated := result.(AppModel)
+
+	// Architect should be cleared and an error message added.
+	if updated.Architect != nil {
+		t.Error("Architect should be nil when no ArchitectFunc is set")
+	}
+	found := false
+	for _, m := range updated.Messages {
+		if strings.Contains(m, "not available") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected 'not available' message in Messages")
+	}
+}
+
 // --- Test helpers ---
 
 // newNebulaModel creates an AppModel in nebula mode at DepthPhases with
@@ -497,5 +593,109 @@ func assertNoFile(t *testing.T, path string) {
 	t.Helper()
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("expected file %s to not exist", path)
+	}
+}
+
+// --- MsgArchitectConfirm handler tests ---
+
+func TestMsgArchitectConfirmWritesFullPhaseFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	m := newNebulaModelWithPhases(dir, []PhaseEntry{
+		{ID: "setup", Status: PhaseDone},
+	})
+
+	msg := MsgArchitectConfirm{
+		Result: &nebula.ArchitectResult{
+			Filename: "rate-limiting.md",
+			PhaseSpec: nebula.PhaseSpec{
+				ID:    "rate-limiting",
+				Title: "Add rate limiting",
+				Type:  "feature",
+				Body:  "Implement token bucket algorithm.",
+			},
+			Body: "Implement token bucket algorithm.",
+		},
+		DependsOn: []string{"setup"},
+	}
+
+	result, _ := m.Update(msg)
+	_ = result.(AppModel)
+
+	// Read the written file and verify it has proper frontmatter.
+	filePath := filepath.Join(dir, "rate-limiting.md")
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("failed to read written file: %v", err)
+	}
+
+	content := string(data)
+	if !strings.HasPrefix(content, "+++\n") {
+		t.Error("written file should start with +++ frontmatter delimiter")
+	}
+	if !strings.Contains(content, "id = ") || !strings.Contains(content, "rate-limiting") {
+		t.Error("written file should contain phase ID in frontmatter")
+	}
+	if !strings.Contains(content, "title = ") || !strings.Contains(content, "Add rate limiting") {
+		t.Error("written file should contain phase title in frontmatter")
+	}
+	if !strings.Contains(content, "depends_on") || !strings.Contains(content, "setup") {
+		t.Errorf("written file should contain user-selected dependencies, got:\n%s", content)
+	}
+	if !strings.Contains(content, "Implement token bucket algorithm.") {
+		t.Error("written file should contain body text after frontmatter")
+	}
+
+	// Verify it round-trips through the parser.
+	spec, err := nebula.MarshalPhaseFile(msg.Result.PhaseSpec)
+	if err != nil {
+		t.Fatalf("MarshalPhaseFile: %v", err)
+	}
+	if !strings.HasPrefix(string(spec), "+++\n") {
+		t.Error("marshaled spec should start with +++ delimiter")
+	}
+}
+
+// --- MsgArchitectStart cancellation tests ---
+
+func TestMsgArchitectStartStoresCancelFunc(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "setup", Status: PhaseDone},
+	})
+	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
+	m.Architect.StartWorking()
+
+	m.ArchitectFunc = func(ctx context.Context, msg MsgArchitectStart) (*nebula.ArchitectResult, error) {
+		// Block until context is cancelled.
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+
+	msg := MsgArchitectStart{Mode: "create", Prompt: "build it"}
+	result, cmd := m.Update(msg)
+	updated := result.(AppModel)
+
+	if updated.Architect == nil {
+		t.Fatal("Architect should not be nil after start")
+	}
+	if updated.Architect.CancelFunc == nil {
+		t.Fatal("CancelFunc should be set on the overlay after MsgArchitectStart")
+	}
+
+	// Verify cancel actually stops the goroutine.
+	updated.Architect.CancelFunc()
+	if cmd == nil {
+		t.Fatal("expected a command to be returned")
+	}
+	resultMsg := cmd()
+	archResult, ok := resultMsg.(MsgArchitectResult)
+	if !ok {
+		t.Fatalf("expected MsgArchitectResult, got %T", resultMsg)
+	}
+	if archResult.Err == nil {
+		t.Error("expected context cancellation error")
 	}
 }

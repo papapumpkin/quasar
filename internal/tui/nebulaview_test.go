@@ -181,6 +181,58 @@ func TestNebulaViewView_NoWaveSeparatorForWaveZero(t *testing.T) {
 	}
 }
 
+func TestNebulaViewView_RefactoredIndicator(t *testing.T) {
+	t.Parallel()
+	nv := NewNebulaView()
+	nv.Phases = []PhaseEntry{
+		{ID: "auth", Status: PhaseWorking, Wave: 1, Cycles: 2, MaxCycles: 5, StartedAt: time.Now(), Refactored: true},
+	}
+	nv.Width = 80
+
+	view := nv.View()
+
+	if !strings.Contains(view, "⟳ refactored") {
+		t.Errorf("expected refactored indicator in view, got:\n%s", view)
+	}
+}
+
+func TestNebulaViewView_RefactoredIndicatorNotShownWhenFalse(t *testing.T) {
+	t.Parallel()
+	nv := NewNebulaView()
+	nv.Phases = []PhaseEntry{
+		{ID: "auth", Status: PhaseWorking, Wave: 1, Cycles: 2, MaxCycles: 5, StartedAt: time.Now(), Refactored: false},
+	}
+	nv.Width = 80
+
+	view := nv.View()
+
+	if strings.Contains(view, "refactored") {
+		t.Errorf("should not show refactored indicator when Refactored is false, got:\n%s", view)
+	}
+}
+
+func TestSetPhaseRefactored(t *testing.T) {
+	t.Parallel()
+	nv := NewNebulaView()
+	nv.Phases = []PhaseEntry{
+		{ID: "a", Status: PhaseWorking, Wave: 1},
+		{ID: "b", Status: PhaseWaiting, Wave: 1},
+	}
+
+	nv.SetPhaseRefactored("a", true)
+	if !nv.Phases[0].Refactored {
+		t.Error("expected phase 'a' Refactored=true")
+	}
+	if nv.Phases[1].Refactored {
+		t.Error("expected phase 'b' Refactored=false")
+	}
+
+	nv.SetPhaseRefactored("a", false)
+	if nv.Phases[0].Refactored {
+		t.Error("expected phase 'a' Refactored=false after clear")
+	}
+}
+
 func TestNebulaViewView_AllStatuses(t *testing.T) {
 	t.Parallel()
 	nv := NewNebulaView()

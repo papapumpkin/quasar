@@ -237,6 +237,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		Nebula:       n,
 		State:        state,
 		MaxWorkers:   maxWorkers,
+		BeadsClient:  client,
 		GlobalCycles: cfg.MaxReviewCycles,
 		GlobalBudget: cfg.MaxBudgetUSD,
 		GlobalModel:  cfg.Model,
@@ -276,6 +277,11 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				ClosedBeads:  closedBeads,
 				TotalCostUSD: totalCostUSD,
 			})
+		}
+		wg.OnRefactor = func(phaseID string, pending bool) {
+			if pending {
+				tuiProgram.Send(tui.MsgPhaseRefactorPending{PhaseID: phaseID})
+			}
 		}
 	} else {
 		// Stderr path: single shared loop with Printer UI.
@@ -398,6 +404,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					Nebula:       nextN,
 					State:        nextState,
 					MaxWorkers:   maxWorkers,
+					BeadsClient:  client,
 					GlobalCycles: cfg.MaxReviewCycles,
 					GlobalBudget: cfg.MaxBudgetUSD,
 					GlobalModel:  cfg.Model,

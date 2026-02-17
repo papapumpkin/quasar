@@ -150,3 +150,81 @@ func TestHasPath_DisconnectedComponents(t *testing.T) {
 		})
 	}
 }
+
+func TestRemoveEdge(t *testing.T) {
+	t.Parallel()
+
+	phases := []PhaseSpec{
+		{ID: "a", DependsOn: []string{"b"}},
+		{ID: "b", DependsOn: []string{"c"}},
+		{ID: "c"},
+	}
+	g := NewGraph(phases)
+
+	// a depends on b; removing that edge should break the path.
+	if !g.HasPath("a", "b") {
+		t.Fatal("expected path a → b before removal")
+	}
+	g.RemoveEdge("a", "b")
+	if g.HasPath("a", "b") {
+		t.Error("expected no path a → b after removal")
+	}
+
+	// b → c should still exist.
+	if !g.HasPath("b", "c") {
+		t.Error("expected path b → c to remain after removing a → b")
+	}
+
+	// Removing a non-existent edge is a no-op.
+	g.RemoveEdge("a", "c")
+	g.RemoveEdge("nonexistent", "c")
+}
+
+func TestRemoveNode(t *testing.T) {
+	t.Parallel()
+
+	phases := []PhaseSpec{
+		{ID: "a"},
+		{ID: "b", DependsOn: []string{"a"}},
+		{ID: "c", DependsOn: []string{"b"}},
+	}
+	g := NewGraph(phases)
+
+	// b depends on a, c depends on b.
+	if !g.HasPath("c", "a") {
+		t.Fatal("expected path c → a before removal")
+	}
+
+	// Remove node b: should sever connections.
+	g.RemoveNode("b")
+
+	if g.HasPath("c", "a") {
+		t.Error("expected no path c → a after removing b")
+	}
+
+	// a and c should still be in the graph as nodes.
+	sorted, err := g.Sort()
+	if err != nil {
+		t.Fatalf("unexpected cycle after removal: %v", err)
+	}
+	foundA, foundC, foundB := false, false, false
+	for _, id := range sorted {
+		switch id {
+		case "a":
+			foundA = true
+		case "b":
+			foundB = true
+		case "c":
+			foundC = true
+		}
+	}
+	if !foundA || !foundC {
+		t.Errorf("expected a and c to remain, got sorted: %v", sorted)
+	}
+	if foundB {
+		t.Errorf("expected b to be removed, got sorted: %v", sorted)
+	}
+
+	// Removing a non-existent node is a no-op.
+	g.RemoveNode("nonexistent")
+}

@@ -23,16 +23,18 @@ const (
 
 // PhaseEntry represents one phase in the nebula view.
 type PhaseEntry struct {
-	ID        string
-	Title     string
-	Status    PhaseStatus
-	Wave      int
-	CostUSD   float64
-	Cycles    int
-	MaxCycles int
-	BlockedBy string
-	StartedAt time.Time
-	PlanBody  string // markdown content from the phase file
+	ID         string
+	Title      string
+	Status     PhaseStatus
+	Wave       int
+	CostUSD    float64
+	Cycles     int
+	MaxCycles  int
+	BlockedBy  string
+	DependsOn  []string // original dependency IDs from the phase spec
+	StartedAt  time.Time
+	PlanBody   string // markdown content from the phase file
+	Refactored bool   // true when a mid-run refactor was applied this cycle
 }
 
 // NebulaView renders the phase table for multi-task orchestration.
@@ -93,9 +95,29 @@ func (nv *NebulaView) InitPhases(phases []PhaseInfo) {
 			Title:     p.Title,
 			Status:    PhaseWaiting,
 			BlockedBy: blocked,
+			DependsOn: p.DependsOn,
 			PlanBody:  p.PlanBody,
 		}
 	}
+}
+
+// AppendPhase adds a hot-added phase to the end of the phase table.
+func (nv *NebulaView) AppendPhase(info PhaseInfo) {
+	blocked := ""
+	if len(info.DependsOn) > 0 {
+		blocked = info.DependsOn[0]
+		if len(info.DependsOn) > 1 {
+			blocked += fmt.Sprintf(" +%d", len(info.DependsOn)-1)
+		}
+	}
+	nv.Phases = append(nv.Phases, PhaseEntry{
+		ID:        info.ID,
+		Title:     info.Title,
+		Status:    PhaseWaiting,
+		BlockedBy: blocked,
+		DependsOn: info.DependsOn,
+		PlanBody:  info.PlanBody,
+	})
 }
 
 // SetPhaseStatus updates the status of a phase by ID.
@@ -127,6 +149,16 @@ func (nv *NebulaView) SetPhaseCycles(phaseID string, cycles, maxCycles int) {
 		if nv.Phases[i].ID == phaseID {
 			nv.Phases[i].Cycles = cycles
 			nv.Phases[i].MaxCycles = maxCycles
+			return
+		}
+	}
+}
+
+// SetPhaseRefactored marks a phase as having received a mid-run refactor.
+func (nv *NebulaView) SetPhaseRefactored(phaseID string, refactored bool) {
+	for i := range nv.Phases {
+		if nv.Phases[i].ID == phaseID {
+			nv.Phases[i].Refactored = refactored
 			return
 		}
 	}
@@ -224,6 +256,9 @@ func (nv NebulaView) phaseDetail(p PhaseEntry) string {
 			cycleProgress = fmt.Sprintf("cycle %d", p.Cycles)
 		}
 		parts := []string{}
+		if p.Refactored {
+			parts = append(parts, "⟳ refactored")
+		}
 		if cycleProgress != "" {
 			parts = append(parts, cycleProgress)
 		}

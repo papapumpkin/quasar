@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestHighlightOutput(t *testing.T) {
@@ -456,6 +458,174 @@ func TestUpdateDetailFromSelectionNebulaAgentOutput(t *testing.T) {
 	}
 	if !strings.Contains(view, "coder") {
 		t.Error("expected agent role in header")
+	}
+}
+
+func TestDetailPanelScrollsAtDepthAgentOutput(t *testing.T) {
+	t.Parallel()
+	m := NewAppModel(ModeLoop)
+	m.Detail = NewDetailPanel(80, 5) // small viewport
+	m.Width = 80
+	m.Height = 40
+	m.Depth = DepthAgentOutput
+
+	// Generate content larger than viewport.
+	var sb strings.Builder
+	for i := range 50 {
+		fmt.Fprintf(&sb, "line %d\n", i+1)
+	}
+	m.Detail.SetContent("scroll test", sb.String())
+
+	// Initially at top — linesAbove should be 0.
+	if m.Detail.linesAbove() != 0 {
+		t.Errorf("linesAbove before scroll = %d, want 0", m.Detail.linesAbove())
+	}
+	if m.Detail.linesBelow() <= 0 {
+		t.Errorf("linesBelow before scroll = %d, want > 0", m.Detail.linesBelow())
+	}
+
+	// Pressing down arrow at DepthAgentOutput should scroll the detail panel.
+	// AppModel.Update is a value receiver, so use the returned model.
+	downKey := tea.KeyMsg{Type: tea.KeyDown}
+	result, _ := m.Update(downKey)
+	updated := result.(AppModel)
+	if updated.Detail.linesAbove() <= 0 {
+		t.Errorf("linesAbove after down = %d, want > 0", updated.Detail.linesAbove())
+	}
+}
+
+func TestDetailPanelUpDownDoNotMoveCursorAtDepthAgentOutput(t *testing.T) {
+	t.Parallel()
+	m := NewAppModel(ModeLoop)
+	m.Detail = NewDetailPanel(80, 5)
+	m.Width = 80
+	m.Height = 40
+	m.Depth = DepthAgentOutput
+
+	// Add some agents to the loop view.
+	m.LoopView.StartCycle(1)
+	m.LoopView.StartAgent("coder")
+	m.LoopView.FinishAgent("coder", 0.5, 5000)
+
+	initialCursor := m.LoopView.Cursor
+
+	// Pressing up/down at DepthAgentOutput should NOT move the loop view cursor.
+	downKey := tea.KeyMsg{Type: tea.KeyDown}
+	result, _ := m.Update(downKey)
+	updated := result.(AppModel)
+	if updated.LoopView.Cursor != initialCursor {
+		t.Errorf("cursor moved from %d to %d at DepthAgentOutput", initialCursor, updated.LoopView.Cursor)
+	}
+}
+
+func TestDetailPanelScrollPreservesNavigationAtOtherDepths(t *testing.T) {
+	t.Parallel()
+	m := NewAppModel(ModeLoop)
+	m.Detail = NewDetailPanel(80, 5)
+	m.Width = 80
+	m.Height = 40
+	m.Depth = DepthPhases // NOT DepthAgentOutput
+
+	// Add agents so cursor can move.
+	m.LoopView.StartCycle(1)
+	m.LoopView.StartAgent("coder")
+	m.LoopView.FinishAgent("coder", 0.5, 5000)
+
+	// At DepthPhases, ↓ should still move the cursor, not scroll.
+	downKey := tea.KeyMsg{Type: tea.KeyDown}
+	result, _ := m.Update(downKey)
+	updated := result.(AppModel)
+	if updated.LoopView.Cursor == 0 {
+		t.Error("cursor should have moved at DepthPhases")
+	}
+}
+
+func TestDetailPanelScrollIndicatorsUpdate(t *testing.T) {
+	t.Parallel()
+	d := NewDetailPanel(80, 3)
+
+	// Generate content larger than viewport.
+	var sb strings.Builder
+	for i := range 20 {
+		fmt.Fprintf(&sb, "line %d\n", i+1)
+	}
+	d.SetContent("test", sb.String())
+
+	// At top, no up indicator expected.
+	view := d.View()
+	if strings.Contains(view, "↑") {
+		t.Error("should not show up indicator at top")
+	}
+	if !strings.Contains(view, "↓") {
+		t.Error("should show down indicator when content overflows")
+	}
+
+	// Scroll down — DetailPanel.Update is a pointer receiver, so mutation is direct.
+	downKey := tea.KeyMsg{Type: tea.KeyDown}
+	d.Update(downKey)
+
+	view = d.View()
+	if !strings.Contains(view, "↑") {
+		t.Error("should show up indicator after scrolling down")
+	}
+}
+
+func TestDetailPanelGotoTopBottom(t *testing.T) {
+	t.Parallel()
+	d := NewDetailPanel(80, 3)
+
+	// Generate content larger than viewport.
+	var sb strings.Builder
+	for i := range 30 {
+		fmt.Fprintf(&sb, "line %d\n", i+1)
+	}
+	d.SetContent("test", sb.String())
+
+	// Start at top.
+	if d.linesAbove() != 0 {
+		t.Fatalf("expected linesAbove=0 at start, got %d", d.linesAbove())
+	}
+
+	tests := []struct {
+		name         string
+		goBottom     tea.KeyMsg
+		goTop        tea.KeyMsg
+		wantAboveGtZ bool
+	}{
+		{
+			name:         "G goes to bottom",
+			goBottom:     tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}},
+			goTop:        tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}},
+			wantAboveGtZ: true,
+		},
+		{
+			name:         "end goes to bottom",
+			goBottom:     tea.KeyMsg{Type: tea.KeyEnd},
+			goTop:        tea.KeyMsg{Type: tea.KeyHome},
+			wantAboveGtZ: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			dp := NewDetailPanel(80, 3)
+			dp.SetContent("test", sb.String())
+
+			// Go to bottom.
+			dp.Update(tt.goBottom)
+			if dp.linesAbove() <= 0 {
+				t.Errorf("after go-to-bottom, linesAbove = %d, want > 0", dp.linesAbove())
+			}
+			if dp.linesBelow() != 0 {
+				t.Errorf("after go-to-bottom, linesBelow = %d, want 0", dp.linesBelow())
+			}
+
+			// Go back to top.
+			dp.Update(tt.goTop)
+			if dp.linesAbove() != 0 {
+				t.Errorf("after go-to-top, linesAbove = %d, want 0", dp.linesAbove())
+			}
+		})
 	}
 }
 

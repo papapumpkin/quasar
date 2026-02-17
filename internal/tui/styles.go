@@ -339,6 +339,22 @@ var (
 				Foreground(colorMuted)
 )
 
+// Resource indicator styles — color-coded by severity level.
+var (
+	// styleResourceNormal styles resource metrics when within safe bounds (green).
+	styleResourceNormal = lipgloss.NewStyle().
+				Foreground(colorSuccess)
+
+	// styleResourceWarning styles resource metrics at elevated levels (orange).
+	styleResourceWarning = lipgloss.NewStyle().
+				Foreground(colorAccent)
+
+	// styleResourceDanger styles resource metrics at dangerously high levels (red).
+	styleResourceDanger = lipgloss.NewStyle().
+				Foreground(colorDanger).
+				Bold(true)
+)
+
 // Toast notification styles.
 var styleToast = lipgloss.NewStyle().
 	Background(colorDanger).

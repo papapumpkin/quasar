@@ -213,6 +213,11 @@ func parseArchitectOutput(output string) (*ArchitectResult, error) {
 	}
 	filename := strings.TrimSpace(afterMarker[:newlineIdx])
 
+	// Sanitize the filename to prevent path traversal.
+	if err := validateFilename(filename); err != nil {
+		return nil, fmt.Errorf("invalid filename %q: %w", filename, err)
+	}
+
 	// Extract content between the PHASE_FILE line and END_PHASE_FILE.
 	contentStart := startIdx + len(startMarker) + newlineIdx + 1
 	endIdx := strings.Index(output[contentStart:], endMarker)
@@ -245,6 +250,24 @@ func parseArchitectOutput(output string) (*ArchitectResult, error) {
 	return result, nil
 }
 
+// validateFilename rejects filenames that contain path traversal components or
+// directory separators, and ensures the filename ends with ".md".
+func validateFilename(name string) error {
+	if name == "" {
+		return fmt.Errorf("filename is empty")
+	}
+	if strings.Contains(name, "/") || strings.Contains(name, "\\") {
+		return fmt.Errorf("filename must not contain path separators")
+	}
+	if strings.Contains(name, "..") {
+		return fmt.Errorf("filename must not contain '..' components")
+	}
+	if !strings.HasSuffix(name, ".md") {
+		return fmt.Errorf("filename must end with .md")
+	}
+	return nil
+}
+
 // applyDefaults fills in zero-valued fields from the manifest defaults.
 func applyDefaults(spec *PhaseSpec, defaults Defaults) {
 	if spec.Type == "" {
@@ -272,20 +295,25 @@ func validateAgainstDAG(result *ArchitectResult, req ArchitectRequest) []string 
 		existingIDs[p.ID] = true
 	}
 
-	// For create mode, check that the ID doesn't already exist.
-	if req.Mode == ArchitectModeCreate && existingIDs[result.PhaseSpec.ID] {
-		errs = append(errs, fmt.Sprintf("phase id %q already exists", result.PhaseSpec.ID))
+	// For refactor mode, remove the refactored phase's ID from existingIDs
+	// so that ValidateHotAdd does not flag it as a duplicate.
+	if req.Mode == ArchitectModeRefactor {
+		delete(existingIDs, req.PhaseID)
 	}
 
 	// Validate that all depends_on targets exist (or will exist).
 	for _, dep := range result.PhaseSpec.DependsOn {
-		if !existingIDs[dep] {
+		if !existingIDs[dep] && dep != result.PhaseSpec.ID {
 			errs = append(errs, fmt.Sprintf("dependency %q does not exist", dep))
 		}
 	}
 
-	// Check for cycles using the graph.
+	// Check for duplicates and cycles using the graph.
 	graph := NewGraph(req.Nebula.Phases)
+	// For refactor mode, remove the old phase from the graph so it can be re-added cleanly.
+	if req.Mode == ArchitectModeRefactor {
+		graph.RemoveNode(req.PhaseID)
+	}
 	validationErrs := ValidateHotAdd(result.PhaseSpec, existingIDs, graph)
 	for _, ve := range validationErrs {
 		errs = append(errs, ve.Error())

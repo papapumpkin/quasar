@@ -106,6 +106,10 @@ func (b *UIBridge) AgentOutput(role string, cycle int, output string) {
 	b.program.Send(MsgAgentOutput{Role: role, Cycle: cycle, Output: output})
 }
 
+// RefactorApplied is a no-op for the single-task UIBridge; refactor indicators
+// are only meaningful in nebula phase views where PhaseUIBridge is used.
+func (b *UIBridge) RefactorApplied(phaseID string) {}
+
 // BeadUpdate sends MsgBeadUpdate with the bead hierarchy.
 func (b *UIBridge) BeadUpdate(taskBeadID, title, status string, children []ui.BeadChild) {
 	root := buildBeadInfoTree(taskBeadID, title, status, children)
@@ -243,6 +247,12 @@ func (b *PhaseUIBridge) Info(msg string) {
 // AgentOutput sends MsgPhaseAgentOutput.
 func (b *PhaseUIBridge) AgentOutput(role string, cycle int, output string) {
 	b.program.Send(MsgPhaseAgentOutput{PhaseID: b.phaseID, Role: role, Cycle: cycle, Output: output})
+}
+
+// RefactorApplied sends MsgPhaseRefactorApplied to notify the TUI that the
+// loop consumed the pending refactor for this phase.
+func (b *PhaseUIBridge) RefactorApplied(phaseID string) {
+	b.program.Send(MsgPhaseRefactorApplied{PhaseID: b.phaseID})
 }
 
 // BeadUpdate sends MsgPhaseBeadUpdate with the bead hierarchy for this phase.

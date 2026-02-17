@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -76,6 +77,14 @@ type AppModel struct {
 	AvailableNebulae []NebulaChoice // populated on MsgNebulaDone via discovery
 	NextNebula       string         // set when user selects one; read after Run() returns
 	PickerCursor     int            // cursor position in the nebula picker list
+
+	// Resource monitoring.
+	Resources  ResourceSnapshot   // latest resource usage snapshot
+	Thresholds ResourceThresholds // thresholds for color-coding
+
+	// Architect overlay state (nebula mode).
+	Architect     *ArchitectOverlay
+	ArchitectFunc func(ctx context.Context, msg MsgArchitectStart) (*nebula.ArchitectResult, error) // injected by caller
 }
 
 // NewAppModel creates a root model configured for the given mode.
@@ -88,17 +97,20 @@ func NewAppModel(mode Mode) AppModel {
 		StartTime:  time.Now(),
 		PhaseLoops: make(map[string]*LoopView),
 		PhaseBeads: make(map[string]*BeadInfo),
+		Thresholds: DefaultResourceThresholds(),
 	}
 	m.StatusBar.StartTime = m.StartTime
+	m.StatusBar.Thresholds = m.Thresholds
 	return m
 }
 
-// Init starts the spinner and tick timer.
+// Init starts the spinner, tick timer, and resource sampler.
 func (m AppModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.LoopView.Spinner.Tick,
 		m.NebulaView.Spinner.Tick,
 		tickCmd(),
+		resourceTickCmd(),
 	)
 }
 
@@ -106,6 +118,14 @@ func (m AppModel) Init() tea.Cmd {
 func tickCmd() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
 		return MsgTick{Time: t}
+	})
+}
+
+// resourceTickCmd returns a command that samples resources every 5 seconds.
+// Uses context.Background since tea.Tick callbacks don't carry a context.
+func resourceTickCmd() tea.Cmd {
+	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+		return MsgResourceUpdate{Snapshot: SampleResourcesFromSelf(context.Background())}
 	})
 }
 
@@ -127,6 +147,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 
+	case tea.MouseMsg:
+		if m.showDetailPanel() {
+			m.Detail.Update(msg)
+		}
+
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.LoopView.Spinner, cmd = m.LoopView.Spinner.Update(msg)
@@ -138,10 +163,22 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			lv.Spinner, cmd = lv.Spinner.Update(msg)
 			cmds = append(cmds, cmd)
 		}
+		// Update architect overlay spinner.
+		if m.Architect != nil && m.Architect.Step == stepWorking {
+			m.Architect.Spinner, cmd = m.Architect.Spinner.Update(msg)
+			cmds = append(cmds, cmd)
+		}
 
 	case MsgTick:
 		if !m.Done {
 			cmds = append(cmds, tickCmd())
+		}
+
+	case MsgResourceUpdate:
+		m.Resources = msg.Snapshot
+		m.StatusBar.Resources = msg.Snapshot
+		if !m.Done {
+			cmds = append(cmds, resourceTickCmd())
 		}
 
 	// --- Loop mode (single task) ---
@@ -210,6 +247,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lv := m.ensurePhaseLoop(msg.PhaseID)
 		lv.StartCycle(msg.Cycle)
 		m.NebulaView.SetPhaseCycles(msg.PhaseID, msg.Cycle, msg.MaxCycles)
+		// Clear refactored indicator from previous cycle.
+		m.NebulaView.SetPhaseRefactored(msg.PhaseID, false)
 	case MsgPhaseAgentStart:
 		lv := m.ensurePhaseLoop(msg.PhaseID)
 		lv.StartAgent(msg.Role)
@@ -244,6 +283,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			lv.Approved = true
 		}
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseDone)
+		// Clear refactored indicator on completion.
+		m.NebulaView.SetPhaseRefactored(msg.PhaseID, false)
+	case MsgPhaseRefactorPending:
+		m.addMessage("[%s] refactor pending — will apply after current cycle", msg.PhaseID)
+		toast, cmd := NewToast(fmt.Sprintf("[%s] refactor pending", msg.PhaseID), false)
+		m.Toasts = append(m.Toasts, toast)
+		cmds = append(cmds, cmd)
+	case MsgPhaseRefactorApplied:
+		m.NebulaView.SetPhaseRefactored(msg.PhaseID, true)
+		toast, cmd := NewToast(fmt.Sprintf("[%s] refactor applied", msg.PhaseID), false)
+		m.Toasts = append(m.Toasts, toast)
+		cmds = append(cmds, cmd)
 	case MsgPhaseError:
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseFailed)
 		m.addMessage("[%s] %s", msg.PhaseID, msg.Msg)
@@ -252,6 +303,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case MsgPhaseInfo:
 		// Informational — don't change phase status.
+
+	// --- Hot-added phase ---
+	case MsgPhaseHotAdded:
+		m.NebulaView.AppendPhase(PhaseInfo{
+			ID:        msg.PhaseID,
+			Title:     msg.Title,
+			DependsOn: msg.DependsOn,
+		})
+		m.StatusBar.Total = len(m.NebulaView.Phases)
+		toast, cmd := NewToast(fmt.Sprintf("+ %s added to nebula", msg.PhaseID), false)
+		m.Toasts = append(m.Toasts, toast)
+		cmds = append(cmds, cmd)
 
 	// --- Bead hierarchy ---
 	case MsgBeadUpdate:
@@ -303,6 +366,67 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.AvailableNebulae = msg.Choices
 		if m.Overlay != nil {
 			m.Overlay.NebulaChoices = msg.Choices
+		}
+
+	// --- Architect overlay ---
+	case MsgArchitectConfirm:
+		if m.NebulaDir != "" && msg.Result != nil {
+			// Override the dependencies with the user's selection.
+			msg.Result.PhaseSpec.DependsOn = msg.DependsOn
+
+			// Reconstruct the full phase file (+++TOML+++ frontmatter + body).
+			fileData, err := nebula.MarshalPhaseFile(msg.Result.PhaseSpec)
+			if err != nil {
+				m.addMessage("failed to marshal phase file: %s", err)
+				toast, cmd := NewToast(fmt.Sprintf("marshal failed: %s", err), true)
+				m.Toasts = append(m.Toasts, toast)
+				cmds = append(cmds, cmd)
+			} else {
+				filePath := filepath.Join(m.NebulaDir, msg.Result.Filename)
+				if err := os.WriteFile(filePath, fileData, 0644); err != nil {
+					m.addMessage("failed to write phase file: %s", err)
+					toast, cmd := NewToast(fmt.Sprintf("write failed: %s", err), true)
+					m.Toasts = append(m.Toasts, toast)
+					cmds = append(cmds, cmd)
+				} else {
+					m.addMessage("wrote %s — watcher will pick it up", msg.Result.Filename)
+					toast, cmd := NewToast(fmt.Sprintf("wrote %s", msg.Result.Filename), false)
+					m.Toasts = append(m.Toasts, toast)
+					cmds = append(cmds, cmd)
+				}
+			}
+		}
+
+	case MsgArchitectStart:
+		if m.Architect != nil && m.ArchitectFunc != nil {
+			fn := m.ArchitectFunc
+			startMsg := msg
+			ctx, cancel := context.WithCancel(context.Background())
+			m.Architect.CancelFunc = cancel
+			cmds = append(cmds, func() tea.Msg {
+				result, err := fn(ctx, startMsg)
+				return MsgArchitectResult{Result: result, Err: err}
+			})
+		} else if m.Architect != nil {
+			// No architect function wired up — report an error.
+			m.Architect = nil
+			m.addMessage("architect not available (no invoker configured)")
+			toast, cmd := NewToast("architect not available", true)
+			m.Toasts = append(m.Toasts, toast)
+			cmds = append(cmds, cmd)
+		}
+
+	case MsgArchitectResult:
+		if m.Architect != nil {
+			if msg.Err != nil {
+				m.Architect = nil
+				m.addMessage("architect error: %s", msg.Err)
+				toast, cmd := NewToast(fmt.Sprintf("architect: %s", msg.Err), true)
+				m.Toasts = append(m.Toasts, toast)
+				cmds = append(cmds, cmd)
+			} else {
+				m.Architect.SetResult(msg.Result, m.NebulaView.Phases)
+			}
 		}
 
 	// --- Toast auto-dismiss ---
@@ -382,9 +506,57 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Architect overlay intercepts all keys.
+	if m.Architect != nil {
+		return m.handleArchitectKey(msg)
+	}
+
 	// Gate mode overrides normal keys.
 	if m.Gate != nil {
 		return m.handleGateKey(msg)
+	}
+
+	// At DepthAgentOutput, reroute ↑/↓ to scroll the detail panel
+	// instead of moving the list cursor. PageUp/PageDown/Home/End
+	// also scroll the detail panel when it is visible.
+	if m.Depth == DepthAgentOutput {
+		switch {
+		case key.Matches(msg, m.Keys.Up):
+			m.Detail.Update(msg)
+			return m, nil
+		case key.Matches(msg, m.Keys.Down):
+			m.Detail.Update(msg)
+			return m, nil
+		case key.Matches(msg, m.Keys.PageUp):
+			m.Detail.Update(msg)
+			return m, nil
+		case key.Matches(msg, m.Keys.PageDown):
+			m.Detail.Update(msg)
+			return m, nil
+		case key.Matches(msg, m.Keys.Home):
+			m.Detail.Update(msg)
+			return m, nil
+		case key.Matches(msg, m.Keys.End):
+			m.Detail.Update(msg)
+			return m, nil
+		}
+	} else if m.showDetailPanel() {
+		// At other depths with detail panel visible (e.g. beads/plan),
+		// PageUp/PageDown/Home/End scroll the detail panel.
+		switch {
+		case key.Matches(msg, m.Keys.PageUp):
+			m.Detail.Update(msg)
+			return m, nil
+		case key.Matches(msg, m.Keys.PageDown):
+			m.Detail.Update(msg)
+			return m, nil
+		case key.Matches(msg, m.Keys.Home):
+			m.Detail.Update(msg)
+			return m, nil
+		case key.Matches(msg, m.Keys.End):
+			m.Detail.Update(msg)
+			return m, nil
+		}
 	}
 
 	switch {
@@ -420,6 +592,12 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.Keys.Beads):
 		m.handleBeadsKey()
+
+	case key.Matches(msg, m.Keys.NewPhase):
+		m.handleNewPhaseKey()
+
+	case key.Matches(msg, m.Keys.EditPhase):
+		m.handleEditPhaseKey()
 	}
 
 	return m, nil
@@ -554,6 +732,109 @@ func (m *AppModel) handleBeadsKey() {
 		m.ShowDiff = false
 		m.updateBeadDetail()
 	}
+}
+
+// handleNewPhaseKey opens the architect overlay in create mode.
+// Only active in nebula mode at the phase table level.
+func (m *AppModel) handleNewPhaseKey() {
+	if m.Mode != ModeNebula || m.Depth != DepthPhases {
+		return
+	}
+	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
+}
+
+// handleEditPhaseKey opens the architect overlay in refactor mode for the selected phase.
+// Only active for in-progress or waiting phases.
+func (m *AppModel) handleEditPhaseKey() {
+	if m.Mode != ModeNebula || m.Depth != DepthPhases {
+		return
+	}
+	p := m.NebulaView.SelectedPhase()
+	if p == nil {
+		return
+	}
+	if p.Status != PhaseWorking && p.Status != PhaseWaiting {
+		return
+	}
+	m.Architect = NewArchitectOverlay("refactor", p.ID, m.NebulaView.Phases)
+}
+
+// handleArchitectKey processes keyboard input while the architect overlay is active.
+func (m AppModel) handleArchitectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	a := m.Architect
+
+	switch a.Step {
+	case stepInput:
+		switch {
+		case key.Matches(msg, m.Keys.Back):
+			m.Architect = nil
+			return m, nil
+		case key.Matches(msg, m.Keys.Enter):
+			prompt := a.InputValue()
+			if prompt == "" {
+				return m, nil
+			}
+			a.StartWorking()
+			// The actual architect invocation is done via a command that the
+			// caller wires up. We send MsgArchitectStart so the bridge can
+			// dispatch the agent call.
+			return m, func() tea.Msg {
+				return MsgArchitectStart{
+					Mode:    a.Mode,
+					PhaseID: a.PhaseID,
+					Prompt:  prompt,
+				}
+			}
+		default:
+			// Forward to textarea.
+			var cmd tea.Cmd
+			a.TextArea, cmd = a.TextArea.Update(msg)
+			return m, cmd
+		}
+
+	case stepWorking:
+		if key.Matches(msg, m.Keys.Back) {
+			if a.CancelFunc != nil {
+				a.CancelFunc()
+			}
+			m.Architect = nil
+			return m, nil
+		}
+		return m, nil
+
+	case stepPreview:
+		switch {
+		case key.Matches(msg, m.Keys.Back):
+			m.Architect = nil
+			return m, nil
+		case key.Matches(msg, m.Keys.Enter):
+			// Confirm: write the file.
+			result := a.Result
+			deps := a.SelectedDeps()
+			m.Architect = nil
+			return m, func() tea.Msg {
+				return MsgArchitectConfirm{
+					Result:    result,
+					DependsOn: deps,
+				}
+			}
+		case key.Matches(msg, m.Keys.Up):
+			a.MoveDepUp()
+		case key.Matches(msg, m.Keys.Down):
+			a.MoveDepDown()
+		case msg.String() == " ":
+			newPhaseID := ""
+			if a.Result != nil {
+				newPhaseID = a.Result.PhaseSpec.ID
+			}
+			a.ToggleDep(newPhaseID, func(deps []string) bool {
+				return WouldCreateCycle(m.NebulaView.Phases, newPhaseID, deps)
+			})
+		}
+		return m, nil
+	}
+
+	return m, nil
 }
 
 // updateBeadDetail populates the detail panel with the bead hierarchy.
@@ -944,6 +1225,13 @@ func (m AppModel) View() string {
 	sections = append(sections, footer.View())
 
 	base := lipgloss.JoinVertical(lipgloss.Left, sections...)
+
+	// Architect overlay — rendered over a dimmed background.
+	if m.Architect != nil {
+		dimmed := styleOverlayDimmed.Width(m.Width).Height(m.Height).Render(base)
+		overlayBox := m.Architect.View(m.Width, m.Height)
+		return compositeOverlay(dimmed, overlayBox, m.Width, m.Height)
+	}
 
 	// Completion overlay — rendered over a dimmed background.
 	if m.Overlay != nil {

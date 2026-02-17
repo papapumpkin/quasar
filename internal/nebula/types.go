@@ -63,6 +63,7 @@ type PhaseSpec struct {
 	MaxBudgetUSD      float64  `toml:"max_budget_usd"`      // 0 = use default
 	Model             string   `toml:"model"`               // "" = use default
 	Gate              GateMode `toml:"gate"`                // "" = inherit from manifest
+	Blocks            []string `toml:"blocks"`              // Reverse deps: inject as dep of listed phases
 	Scope             []string `toml:"scope"`               // Glob patterns for owned files/dirs
 	AllowScopeOverlap bool     `toml:"allow_scope_overlap"` // Override: permit overlap
 	Body              string   // Markdown body after +++ block

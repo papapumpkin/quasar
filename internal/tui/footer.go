@@ -47,7 +47,7 @@ func LoopFooterBindings(km KeyMap) []key.Binding {
 
 // NebulaFooterBindings returns footer bindings for nebula mode.
 func NebulaFooterBindings(km KeyMap) []key.Binding {
-	return []key.Binding{km.Up, km.Down, km.Enter, km.Info, km.Beads, km.Pause, km.Stop, km.Quit}
+	return []key.Binding{km.Up, km.Down, km.Enter, km.Info, km.Beads, km.NewPhase, km.EditPhase, km.Pause, km.Stop, km.Quit}
 }
 
 // NebulaDetailFooterBindings returns footer bindings when drilled into a phase.

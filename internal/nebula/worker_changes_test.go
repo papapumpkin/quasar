@@ -2,6 +2,8 @@ package nebula
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -143,7 +145,7 @@ func TestHandlePhaseAdded_NoLiveState(t *testing.T) {
 
 	path := writeTestPhaseFile(t, dir, "new-phase", "New phase body")
 
-	wg.handlePhaseAdded(Change{
+	wg.handlePhaseAdded(context.Background(), Change{
 		Kind:    ChangeAdded,
 		PhaseID: "new-phase",
 		File:    path,
@@ -168,7 +170,7 @@ func TestHandlePhaseAdded_BadFile(t *testing.T) {
 	wg.phaseLoops = make(map[string]*phaseLoopHandle)
 	wg.pendingRefactors = make(map[string]string)
 
-	wg.handlePhaseAdded(Change{
+	wg.handlePhaseAdded(context.Background(), Change{
 		Kind:    ChangeAdded,
 		PhaseID: "bad-phase",
 		File:    "/nonexistent/bad-phase.md",
@@ -209,7 +211,7 @@ func TestHandlePhaseAdded_WithLiveState(t *testing.T) {
 
 	path := writeTestPhaseFile(t, dir, "hot-phase", "Hot phase body")
 
-	wg.handlePhaseAdded(Change{
+	wg.handlePhaseAdded(context.Background(), Change{
 		Kind:    ChangeAdded,
 		PhaseID: "hot-phase",
 		File:    path,
@@ -273,7 +275,7 @@ func TestHandlePhaseAdded_DuplicateID(t *testing.T) {
 
 	path := writeTestPhaseFile(t, dir, "dup", "Duplicate phase body")
 
-	wg.handlePhaseAdded(Change{
+	wg.handlePhaseAdded(context.Background(), Change{
 		Kind:    ChangeAdded,
 		PhaseID: "dup",
 		File:    path,
@@ -333,7 +335,7 @@ func TestHandlePhaseAdded_WithBlocks(t *testing.T) {
 		t.Fatalf("failed to write phase file: %v", err)
 	}
 
-	wg.handlePhaseAdded(Change{
+	wg.handlePhaseAdded(context.Background(), Change{
 		Kind:    ChangeAdded,
 		PhaseID: "middleware",
 		File:    path,
@@ -397,7 +399,7 @@ func TestHandlePhaseAdded_BlocksRunningPhase(t *testing.T) {
 		t.Fatalf("failed to write phase file: %v", err)
 	}
 
-	wg.handlePhaseAdded(Change{
+	wg.handlePhaseAdded(context.Background(), Change{
 		Kind:    ChangeAdded,
 		PhaseID: "blocker",
 		File:    path,
@@ -462,7 +464,7 @@ func TestHandlePhaseAdded_OnHotAddCallback(t *testing.T) {
 		t.Fatalf("failed to write phase file: %v", err)
 	}
 
-	wg.handlePhaseAdded(Change{
+	wg.handlePhaseAdded(context.Background(), Change{
 		Kind:    ChangeAdded,
 		PhaseID: "callback-phase",
 		File:    path,
@@ -476,6 +478,124 @@ func TestHandlePhaseAdded_OnHotAddCallback(t *testing.T) {
 	}
 	if len(callbackDeps) != 1 || callbackDeps[0] != "existing" {
 		t.Errorf("callback deps = %v, want [existing]", callbackDeps)
+	}
+}
+
+func TestHandlePhaseAdded_CreatesBead(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	var buf bytes.Buffer
+	neb := &Nebula{
+		Dir:      dir,
+		Manifest: Manifest{},
+		Phases:   []PhaseSpec{{ID: "existing", Title: "Existing"}},
+	}
+	state := &State{
+		Version: 1,
+		Phases:  map[string]*PhaseState{"existing": {Status: PhaseStatusDone}},
+	}
+	graph := NewGraph(neb.Phases)
+	client := newMockBeadsClient()
+	wg := &WorkerGroup{
+		Logger:         &buf,
+		Nebula:         neb,
+		State:          state,
+		BeadsClient:    client,
+		liveGraph:      graph,
+		livePhasesByID: map[string]*PhaseSpec{"existing": &neb.Phases[0]},
+		liveDone:       map[string]bool{"existing": true},
+		liveFailed:     map[string]bool{},
+		liveInFlight:   map[string]bool{},
+		hotAdded:       make(chan string, 16),
+	}
+	wg.phaseLoops = make(map[string]*phaseLoopHandle)
+	wg.pendingRefactors = make(map[string]string)
+
+	path := writeTestPhaseFile(t, dir, "bead-phase", "Bead phase body")
+
+	wg.handlePhaseAdded(context.Background(), Change{
+		Kind:    ChangeAdded,
+		PhaseID: "bead-phase",
+		File:    path,
+	})
+
+	wg.mu.Lock()
+	ps := wg.State.Phases["bead-phase"]
+	wg.mu.Unlock()
+
+	if ps == nil {
+		t.Fatal("expected state entry for bead-phase")
+	}
+	if ps.BeadID == "" {
+		t.Error("expected non-empty bead ID after hot-add with BeadsClient")
+	}
+	if ps.Status != PhaseStatusPending {
+		t.Errorf("expected status pending, got %v", ps.Status)
+	}
+	if len(client.created) == 0 {
+		t.Error("expected BeadsClient.Create to be called")
+	}
+}
+
+func TestHandlePhaseAdded_BeadCreateFails(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	var buf bytes.Buffer
+	neb := &Nebula{
+		Dir:      dir,
+		Manifest: Manifest{},
+		Phases:   []PhaseSpec{{ID: "existing", Title: "Existing"}},
+	}
+	state := &State{
+		Version: 1,
+		Phases:  map[string]*PhaseState{"existing": {Status: PhaseStatusDone}},
+	}
+	graph := NewGraph(neb.Phases)
+	client := newMockBeadsClient()
+	client.createErr = fmt.Errorf("bead creation failed")
+	wg := &WorkerGroup{
+		Logger:         &buf,
+		Nebula:         neb,
+		State:          state,
+		BeadsClient:    client,
+		liveGraph:      graph,
+		livePhasesByID: map[string]*PhaseSpec{"existing": &neb.Phases[0]},
+		liveDone:       map[string]bool{"existing": true},
+		liveFailed:     map[string]bool{},
+		liveInFlight:   map[string]bool{},
+		hotAdded:       make(chan string, 16),
+	}
+	wg.phaseLoops = make(map[string]*phaseLoopHandle)
+	wg.pendingRefactors = make(map[string]string)
+
+	path := writeTestPhaseFile(t, dir, "fail-bead", "Fail bead body")
+
+	wg.handlePhaseAdded(context.Background(), Change{
+		Kind:    ChangeAdded,
+		PhaseID: "fail-bead",
+		File:    path,
+	})
+
+	wg.mu.Lock()
+	ps := wg.State.Phases["fail-bead"]
+	wg.mu.Unlock()
+
+	if ps == nil {
+		t.Fatal("expected state entry for fail-bead")
+	}
+	if ps.Status != PhaseStatusFailed {
+		t.Errorf("expected status failed when bead creation fails, got %v", ps.Status)
+	}
+
+	// Phase should NOT be signaled as ready.
+	select {
+	case id := <-wg.hotAdded:
+		t.Errorf("phase %q should not be on hotAdded channel after bead creation failure", id)
+	default:
+	}
+
+	if !strings.Contains(buf.String(), "failed to create bead") {
+		t.Error("expected warning about bead creation failure")
 	}
 }
 
@@ -499,7 +619,7 @@ func TestConsumeChanges(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		wg.consumeChanges()
+		wg.consumeChanges(context.Background())
 		close(done)
 	}()
 	<-done

@@ -78,6 +78,7 @@ type WorkerGroup struct {
 	liveFailed       map[string]bool             // phases that have failed
 	liveInFlight     map[string]bool             // phases currently executing
 	hotAdded         chan string                 // signals newly ready hot-added phase IDs
+	hotAddWg         sync.WaitGroup              // tracks in-flight handlePhaseAdded calls
 }
 
 // buildPhasePrompt prepends nebula context (goals, constraints) to the phase body.
@@ -641,7 +642,7 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 
 	// Consume file-change events from the watcher in a background goroutine.
 	if wg.Watcher != nil {
-		go wg.consumeChanges()
+		go wg.consumeChanges(ctx)
 	}
 
 	phasesByID, done, failed := wg.initPhaseState()
@@ -804,6 +805,13 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	// Process any hot-added phases that became ready during or after waves.
 	wg.drainHotAdded(ctx, &wgSync, done, failed, inFlight, phasesByID)
 
+	// Wait for any in-flight handlePhaseAdded call to finish, then drain
+	// one more time. This closes the race window where handlePhaseAdded
+	// sends to hotAdded right after drainHotAdded returns on an empty
+	// channel.
+	wg.hotAddWg.Wait()
+	wg.drainHotAdded(ctx, &wgSync, done, failed, inFlight, phasesByID)
+
 	wg.mu.Lock()
 	results := wg.results
 	wg.mu.Unlock()
@@ -895,13 +903,15 @@ func (wg *WorkerGroup) collectResults() []WorkerResult {
 
 // consumeChanges reads from Watcher.Changes and dispatches to the appropriate
 // handler. It runs until the channel is closed (watcher stopped).
-func (wg *WorkerGroup) consumeChanges() {
+func (wg *WorkerGroup) consumeChanges(ctx context.Context) {
 	for change := range wg.Watcher.Changes {
 		switch change.Kind {
 		case ChangeModified:
 			wg.handlePhaseModified(change)
 		case ChangeAdded:
-			wg.handlePhaseAdded(change)
+			wg.hotAddWg.Add(1)
+			wg.handlePhaseAdded(ctx, change)
+			wg.hotAddWg.Done()
 		case ChangeRemoved:
 			fmt.Fprintf(wg.logger(), "warning: phase file removed: %s (ignored)\n", change.File)
 		}
@@ -944,7 +954,7 @@ func (wg *WorkerGroup) handlePhaseModified(change Change) {
 // handlePhaseAdded parses a newly added phase file, validates it, and inserts
 // it into the live DAG. If the phase's dependencies are already satisfied it
 // is immediately queued for execution via the hotAdded channel.
-func (wg *WorkerGroup) handlePhaseAdded(change Change) {
+func (wg *WorkerGroup) handlePhaseAdded(ctx context.Context, change Change) {
 	var defaults Defaults
 	if wg.Nebula != nil {
 		defaults = wg.Nebula.Manifest.Defaults
@@ -1008,7 +1018,7 @@ func (wg *WorkerGroup) handlePhaseAdded(change Change) {
 	if wg.BeadsClient != nil {
 		wg.mu.Unlock()
 		var createErr error
-		beadID, createErr = wg.BeadsClient.Create(context.Background(), phase.Title, beads.CreateOpts{
+		beadID, createErr = wg.BeadsClient.Create(ctx, phase.Title, beads.CreateOpts{
 			Description: phase.Body,
 			Type:        phase.Type,
 			Labels:      phase.Labels,

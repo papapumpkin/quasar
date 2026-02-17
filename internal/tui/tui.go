@@ -19,6 +19,7 @@ func NewProgram(mode Mode, opts ...tea.ProgramOption) *Program {
 
 	allOpts := []tea.ProgramOption{
 		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
 	}
 	allOpts = append(allOpts, opts...)
 
@@ -43,7 +44,7 @@ func NewNebulaProgram(name string, phases []PhaseInfo, nebulaDir string) *Progra
 	model.StatusBar.Total = len(phases)
 	model.NebulaView.InitPhases(phases)
 	model.NebulaDir = nebulaDir
-	return tea.NewProgram(model, tea.WithAltScreen())
+	return tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 }
 
 // Run creates and runs a TUI program, blocking until it exits.

@@ -51,6 +51,7 @@ type UI interface {
 	Info(msg string)
 	AgentOutput(role string, cycle int, output string)
 	BeadUpdate(taskBeadID, title, status string, children []BeadChild)
+	RefactorApplied(phaseID string)
 }
 
 // BeadChild carries display information for a child bead in the hierarchy.
@@ -147,6 +148,10 @@ func (p *Printer) AgentOutput(role string, cycle int, output string) {}
 // BeadUpdate is a no-op for the stderr printer; bead hierarchy is only
 // displayed in the TUI bead tracker view.
 func (p *Printer) BeadUpdate(taskBeadID, title, status string, children []BeadChild) {}
+
+// RefactorApplied is a no-op for the stderr printer; refactor indicators
+// are only displayed in the TUI phase view.
+func (p *Printer) RefactorApplied(phaseID string) {}
 
 // TaskStarted prints a status line when a task begins.
 func (p *Printer) TaskStarted(beadID, title string) {

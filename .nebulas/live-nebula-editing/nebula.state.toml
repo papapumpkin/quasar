@@ -1,45 +1,88 @@
 version = 1
 nebula_name = 'Live Nebula Editing'
+total_cost_usd = 44.56413325
 
 [phases]
 [phases.detail-scroll]
 bead_id = 'quasar-7fi'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-16T21:56:45.801929-05:00
-updated_at = 2026-02-16T21:56:49.631633-05:00
+updated_at = 2026-02-16T22:06:44.707158-05:00
+
+[phases.detail-scroll.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Detail panel scrolling is correctly implemented with comprehensive tests; the commit also bundles unrelated resource monitoring changes that are outside the phase scope but are harmless.'
 
 [phases.dynamic-dag-insertion]
-bead_id = 'quasar-61e'
-status = 'created'
+bead_id = 'quasar-7ra'
+status = 'done'
 created_at = 2026-02-16T21:56:45.917105-05:00
-updated_at = 2026-02-16T21:56:45.917105-05:00
+updated_at = 2026-02-16T22:54:48.21149-05:00
+
+[phases.dynamic-dag-insertion.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Two targeted concurrency fixes — context propagation for bead creation and a WaitGroup-based race fix for hot-added phase signaling — both correct with good test coverage.'
 
 [phases.nebula-architect-agent]
 bead_id = 'quasar-e3b'
-status = 'created'
+status = 'done'
 created_at = 2026-02-16T21:56:46.033817-05:00
-updated_at = 2026-02-16T21:56:46.033817-05:00
+updated_at = 2026-02-16T23:06:20.947062-05:00
+
+[phases.nebula-architect-agent.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Three focused bug fixes (refactor-mode false duplicates, duplicate error reporting, filename sanitization) with solid test coverage and clean code following project conventions.'
 
 [phases.phase-change-pipeline]
 bead_id = 'quasar-4pq'
-status = 'created'
+status = 'done'
 created_at = 2026-02-16T21:56:46.153984-05:00
-updated_at = 2026-02-16T21:56:46.153984-05:00
+updated_at = 2026-02-16T22:14:01.724575-05:00
+
+[phases.phase-change-pipeline.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean implementation wiring Watcher.Changes into WorkerGroup with channel-based refactor signaling to the loop, proper concurrency safety, and thorough tests — all acceptance criteria met.'
 
 [phases.refactor-prompt-injection]
-bead_id = 'quasar-khc'
-status = 'created'
+bead_id = 'quasar-6gv'
+status = 'done'
 created_at = 2026-02-16T21:56:46.270937-05:00
-updated_at = 2026-02-16T21:56:46.270937-05:00
+updated_at = 2026-02-16T22:30:53.777358-05:00
+
+[phases.refactor-prompt-injection.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented mid-run refactor context injection with proper prompt formatting, state management, TUI notifications, bead audit trail, and comprehensive test coverage.'
 
 [phases.resource-monitor]
 bead_id = 'quasar-mrk'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-16T21:56:46.385404-05:00
-updated_at = 2026-02-16T21:56:49.630547-05:00
+updated_at = 2026-02-16T22:06:36.479412-05:00
+
+[phases.resource-monitor.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented resource monitoring with correct context propagation, platform-aware process enumeration, graceful error handling, and comprehensive tests — plus bonus detail panel scroll improvements.'
 
 [phases.tui-architect-interface]
 bead_id = 'quasar-7d6'
-status = 'created'
+status = 'done'
 created_at = 2026-02-16T21:56:46.498838-05:00
-updated_at = 2026-02-16T21:56:46.498838-05:00
+updated_at = 2026-02-16T23:29:01.967835-05:00
+
+[phases.tui-architect-interface.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Three well-scoped fixes — phase file serialization with proper TOML frontmatter, cancellable architect goroutine, and comprehensive tests — all clean with good error handling and idiomatic Go.'

@@ -75,7 +75,19 @@ func (d *DetailPanel) SetEmpty(hint string) {
 }
 
 // Update handles viewport scroll messages.
+// Home/g and End/G are handled explicitly because the viewport's built-in
+// KeyMap does not bind those keys — only GotoTop()/GotoBottom() methods exist.
 func (d *DetailPanel) Update(msg tea.Msg) {
+	if km, ok := msg.(tea.KeyMsg); ok {
+		switch km.String() {
+		case "home", "g":
+			d.viewport.GotoTop()
+			return
+		case "end", "G":
+			d.viewport.GotoBottom()
+			return
+		}
+	}
 	d.viewport, _ = d.viewport.Update(msg)
 }
 
