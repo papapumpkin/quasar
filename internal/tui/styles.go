@@ -310,10 +310,6 @@ var (
 	styleBeadTitle = lipgloss.NewStyle().
 			Foreground(colorWhite)
 
-	// styleBeadID styles bead IDs in muted text.
-	styleBeadID = lipgloss.NewStyle().
-			Foreground(colorMuted)
-
 	// styleBeadCycleHeader styles cycle group headers.
 	styleBeadCycleHeader = lipgloss.NewStyle().
 				Foreground(colorMutedLight).
