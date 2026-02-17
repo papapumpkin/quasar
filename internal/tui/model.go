@@ -88,6 +88,9 @@ type AppModel struct {
 	// Architect overlay state (nebula mode).
 	Architect     *ArchitectOverlay
 	ArchitectFunc func(ctx context.Context, msg MsgArchitectStart) (*nebula.ArchitectResult, error) // injected by caller
+
+	// Splash screen state.
+	Splash bool // true while the startup splash is visible
 }
 
 // NewAppModel creates a root model configured for the given mode.
@@ -101,19 +104,26 @@ func NewAppModel(mode Mode) AppModel {
 		PhaseLoops: make(map[string]*LoopView),
 		PhaseBeads: make(map[string]*BeadInfo),
 		Thresholds: DefaultResourceThresholds(),
+		Splash:     true,
 	}
 	m.StatusBar.StartTime = m.StartTime
 	m.StatusBar.Thresholds = m.Thresholds
 	return m
 }
 
-// Init starts the spinner, tick timer, and resource sampler.
+// splashDuration is how long the splash screen is shown at startup.
+const splashDuration = 1500 * time.Millisecond
+
+// Init starts the spinner, tick timer, resource sampler, and splash timer.
 func (m AppModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.LoopView.Spinner.Tick,
 		m.NebulaView.Spinner.Tick,
 		tickCmd(),
 		resourceTickCmd(),
+		tea.Tick(splashDuration, func(time.Time) tea.Msg {
+			return MsgSplashDone{}
+		}),
 	)
 }
 
@@ -441,6 +451,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgToastExpired:
 		m.Toasts = removeToast(m.Toasts, msg.ID)
 
+	// --- Splash screen ---
+	case MsgSplashDone:
+		m.Splash = false
+
 	// --- External difftool ---
 	case MsgDiffToolDone:
 		if msg.Err != nil {
@@ -499,6 +513,14 @@ func clampCursors(m *AppModel) {
 
 // handleKey processes keyboard input.
 func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Splash screen: only q quits; all other keys are ignored.
+	if m.Splash {
+		if key.Matches(msg, m.Keys.Quit) {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	// Completion overlay takes precedence — q to exit, arrow keys for picker.
 	if m.Overlay != nil {
 		switch {
@@ -1279,6 +1301,11 @@ func (m AppModel) View() string {
 		return m.renderTooSmall()
 	}
 
+	// Splash screen — show centered quasar art for the first 1.5s.
+	if m.Splash {
+		return m.renderSplash()
+	}
+
 	// Compute content width: reduced by side panel in S-B mode.
 	contentWidth := m.Width - m.Banner.SidePanelWidth()
 
@@ -1366,6 +1393,27 @@ func (m AppModel) renderTooSmall() string {
 		Width(m.Width).
 		Height(m.Height)
 	return style.Render(msg)
+}
+
+// renderSplash renders the splash screen with the best-fitting quasar art centered.
+// Falls back to smaller art variants if the terminal is too narrow for XL.
+func (m AppModel) renderSplash() string {
+	var splash string
+	switch {
+	case m.Width >= 92:
+		splash = m.Banner.SplashView()
+	default:
+		// Use the normal banner view (XS or S-A) for narrower terminals.
+		splash = m.Banner.View()
+	}
+	if splash == "" {
+		// Terminal too narrow for any art — show just the name.
+		splash = lipgloss.NewStyle().
+			Foreground(colorStarYellow).
+			Bold(true).
+			Render("Q  U  A  S  A  R")
+	}
+	return lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center, splash)
 }
 
 // contentWidth returns the available width for main content, accounting for the

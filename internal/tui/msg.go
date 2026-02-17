@@ -321,3 +321,6 @@ type MsgArchitectConfirm struct {
 
 // MsgDiffToolDone is sent when an external difftool process exits.
 type MsgDiffToolDone struct{ Err error }
+
+// MsgSplashDone signals that the splash screen timer has elapsed.
+type MsgSplashDone struct{}
