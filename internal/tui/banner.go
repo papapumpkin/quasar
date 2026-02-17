@@ -22,13 +22,15 @@ const (
 const sidePanelWidth = 48
 
 // artXS is the XS-A Pill variant (34 cols × 6 rows).
+// The QUASAR text line uses 4-space gaps (matching SA/SB/XL) so that
+// renderDopplerArt's text detection works consistently across all variants.
 var artXS = []string{
 	`       .·::··::···::··::·.`,
 	`    .::\|/::··::··::\|/::·:.`,
 	`   ::---@---::····::---@---::`,
 	`    .::/|\ ::··::··::/|\::·:.`,
 	`       .·::··::···::··::·.`,
-	`       ···· Q U A S A R ····`,
+	`    Q    U    A    S    A    R`,
 }
 
 // artSA is the S-A Wide Ellipse variant (52 cols × 10 rows).
@@ -275,8 +277,8 @@ func renderDopplerArt(art []string, width int, size BannerSize) string {
 }
 
 // renderQuasarText returns the "Q U A S A R" text with logo-style coloring.
-// Only the XS-A Pill variant includes "····" decorators; other variants render
-// the text without them, matching the original art designs.
+// The XS-A Pill variant includes "····" decorators flanking the text to match
+// the compact pill aesthetic; other variants render the text alone.
 func renderQuasarText(size BannerSize) string {
 	core := styleLogoCore.Render("Q    U    A    S    A    R")
 	if size == BannerXS {
