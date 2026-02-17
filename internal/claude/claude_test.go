@@ -1,11 +1,264 @@
 package claude
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/papapumpkin/quasar/internal/agent"
 )
+
+// ---------------------------------------------------------------------------
+// TestHelperProcess — fake claude binary for subprocess tests.
+//
+// This is not a real test. Tests that need to simulate the claude CLI set
+// execCommandContext / execCommand to return a command that re-execs the test
+// binary with -test.run=^TestHelperProcess$ and GO_WANT_HELPER_PROCESS=1.
+// The HELPER_MODE env var selects which fake behavior to produce.
+// ---------------------------------------------------------------------------
+
+func TestHelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
+		return
+	}
+
+	mode := os.Getenv("HELPER_MODE")
+	switch mode {
+	case "success":
+		resp := CLIResponse{
+			Type:         "result",
+			Subtype:      "success",
+			IsError:      false,
+			DurationMs:   1234,
+			NumTurns:     3,
+			Result:       "all tests passed",
+			SessionID:    "sess-abc123",
+			TotalCostUSD: 0.42,
+		}
+		out, _ := json.Marshal(resp)
+		fmt.Fprint(os.Stdout, string(out))
+		os.Exit(0)
+	case "is_error":
+		resp := CLIResponse{
+			IsError: true,
+			Result:  "something went wrong in claude",
+		}
+		out, _ := json.Marshal(resp)
+		fmt.Fprint(os.Stdout, string(out))
+		os.Exit(0)
+	case "invalid_json":
+		fmt.Fprint(os.Stdout, "this is not json {{{")
+		os.Exit(0)
+	case "exit_error":
+		fmt.Fprint(os.Stderr, "fatal: out of tokens")
+		os.Exit(1)
+	case "version":
+		fmt.Fprint(os.Stdout, "claude 1.2.3\n")
+		os.Exit(0)
+	case "hang":
+		// Block until killed to test context cancellation.
+		select {}
+	default:
+		fmt.Fprintf(os.Stderr, "unknown HELPER_MODE: %s", mode)
+		os.Exit(2)
+	}
+}
+
+// fakeExecCommandContext returns a function matching the exec.CommandContext
+// signature that spawns the test binary as a helper process with the given mode.
+func fakeExecCommandContext(mode string) func(context.Context, string, ...string) *exec.Cmd {
+	return func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestHelperProcess$")
+		cmd.Env = append(os.Environ(),
+			"GO_WANT_HELPER_PROCESS=1",
+			"HELPER_MODE="+mode,
+		)
+		return cmd
+	}
+}
+
+// fakeExecCommand returns a function matching the exec.Command signature that
+// spawns the test binary as a helper process with the given mode.
+func fakeExecCommand(mode string) func(string, ...string) *exec.Cmd {
+	return func(_ string, _ ...string) *exec.Cmd {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestHelperProcess$")
+		cmd.Env = append(os.Environ(),
+			"GO_WANT_HELPER_PROCESS=1",
+			"HELPER_MODE="+mode,
+		)
+		return cmd
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Invoke tests
+// ---------------------------------------------------------------------------
+
+func TestInvoke_Success(t *testing.T) {
+	origExec := execCommandContext
+	execCommandContext = fakeExecCommandContext("success")
+	defer func() { execCommandContext = origExec }()
+
+	inv := &Invoker{ClaudePath: "claude"}
+	a := agent.Agent{}
+	result, err := inv.Invoke(context.Background(), a, "do stuff", t.TempDir())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.ResultText != "all tests passed" {
+		t.Errorf("ResultText = %q, want %q", result.ResultText, "all tests passed")
+	}
+	if result.CostUSD != 0.42 {
+		t.Errorf("CostUSD = %v, want %v", result.CostUSD, 0.42)
+	}
+	if result.DurationMs != 1234 {
+		t.Errorf("DurationMs = %v, want %v", result.DurationMs, 1234)
+	}
+	if result.SessionID != "sess-abc123" {
+		t.Errorf("SessionID = %q, want %q", result.SessionID, "sess-abc123")
+	}
+}
+
+func TestInvoke_IsError(t *testing.T) {
+	origExec := execCommandContext
+	execCommandContext = fakeExecCommandContext("is_error")
+	defer func() { execCommandContext = origExec }()
+
+	inv := &Invoker{ClaudePath: "claude"}
+	a := agent.Agent{}
+	_, err := inv.Invoke(context.Background(), a, "do stuff", t.TempDir())
+	if err == nil {
+		t.Fatal("expected error when IsError is true, got nil")
+	}
+	if !strings.Contains(err.Error(), "claude returned error") {
+		t.Errorf("error = %q, want it to contain %q", err.Error(), "claude returned error")
+	}
+	if !strings.Contains(err.Error(), "something went wrong in claude") {
+		t.Errorf("error = %q, want it to contain the error message", err.Error())
+	}
+}
+
+func TestInvoke_InvalidJSON(t *testing.T) {
+	origExec := execCommandContext
+	execCommandContext = fakeExecCommandContext("invalid_json")
+	defer func() { execCommandContext = origExec }()
+
+	inv := &Invoker{ClaudePath: "claude"}
+	a := agent.Agent{}
+	_, err := inv.Invoke(context.Background(), a, "do stuff", t.TempDir())
+	if err == nil {
+		t.Fatal("expected error for invalid JSON, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to parse claude JSON output") {
+		t.Errorf("error = %q, want it to contain %q", err.Error(), "failed to parse claude JSON output")
+	}
+}
+
+func TestInvoke_ExitError(t *testing.T) {
+	origExec := execCommandContext
+	execCommandContext = fakeExecCommandContext("exit_error")
+	defer func() { execCommandContext = origExec }()
+
+	inv := &Invoker{ClaudePath: "claude"}
+	a := agent.Agent{}
+	_, err := inv.Invoke(context.Background(), a, "do stuff", t.TempDir())
+	if err == nil {
+		t.Fatal("expected error for non-zero exit code, got nil")
+	}
+	if !strings.Contains(err.Error(), "claude invocation failed") {
+		t.Errorf("error = %q, want it to contain %q", err.Error(), "claude invocation failed")
+	}
+	if !strings.Contains(err.Error(), "fatal: out of tokens") {
+		t.Errorf("error = %q, want it to contain stderr output", err.Error())
+	}
+}
+
+func TestInvoke_ContextCancellation(t *testing.T) {
+	origExec := execCommandContext
+	execCommandContext = fakeExecCommandContext("hang")
+	defer func() { execCommandContext = origExec }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	inv := &Invoker{ClaudePath: "claude"}
+	a := agent.Agent{}
+	_, err := inv.Invoke(ctx, a, "do stuff", t.TempDir())
+	if err == nil {
+		t.Fatal("expected error for cancelled context, got nil")
+	}
+	if !strings.Contains(err.Error(), "claude invocation failed") {
+		t.Errorf("error = %q, want it to contain %q", err.Error(), "claude invocation failed")
+	}
+}
+
+func TestInvoke_VerboseLogging(t *testing.T) {
+	origExec := execCommandContext
+	execCommandContext = fakeExecCommandContext("success")
+	defer func() { execCommandContext = origExec }()
+
+	inv := &Invoker{ClaudePath: "claude", Verbose: true}
+	a := agent.Agent{}
+	result, err := inv.Invoke(context.Background(), a, "do stuff", t.TempDir())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Verbose mode should still produce a valid result.
+	if result.ResultText != "all tests passed" {
+		t.Errorf("ResultText = %q, want %q", result.ResultText, "all tests passed")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Validate tests
+// ---------------------------------------------------------------------------
+
+func TestValidate_Success(t *testing.T) {
+	origExec := execCommand
+	execCommand = fakeExecCommand("version")
+	defer func() { execCommand = origExec }()
+
+	inv := &Invoker{ClaudePath: "claude"}
+	if err := inv.Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_VerboseLogging(t *testing.T) {
+	origExec := execCommand
+	execCommand = fakeExecCommand("version")
+	defer func() { execCommand = origExec }()
+
+	inv := &Invoker{ClaudePath: "claude", Verbose: true}
+	if err := inv.Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_BinaryNotFound(t *testing.T) {
+	origExec := execCommand
+	execCommand = fakeExecCommand("exit_error")
+	defer func() { execCommand = origExec }()
+
+	inv := &Invoker{ClaudePath: "/nonexistent/path/to/claude"}
+	err := inv.Validate()
+	if err == nil {
+		t.Fatal("expected error for missing binary, got nil")
+	}
+	if !strings.Contains(err.Error(), "claude CLI not found") {
+		t.Errorf("error = %q, want it to contain %q", err.Error(), "claude CLI not found")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Existing buildArgs / buildEnv tests
+// ---------------------------------------------------------------------------
 
 func TestBuildArgs_AllowedTools(t *testing.T) {
 	a := agent.Agent{

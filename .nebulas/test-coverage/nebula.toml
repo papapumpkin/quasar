@@ -1,0 +1,31 @@
+[nebula]
+name = "Test Coverage Improvements"
+description = "Improve test coverage across the codebase before a large Go refactor. Current overall: 67.7%. Focus on untested core logic in loop (47%), ui (32%), beads (45%), and claude (40%) packages."
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["quasar", "testing", "coverage"]
+
+[execution]
+max_workers = 3
+max_budget_usd = 30.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Increase loop package coverage from 47% to ~80% by testing core state machine methods",
+    "Increase ui package coverage from 32% to ~70% by testing Printer output methods",
+    "Increase beads package coverage from 45% to ~75% by testing exec-path methods",
+    "Increase claude package coverage from 40% to ~70% by testing Invoke and Validate",
+    "Ensure critical refactor-sensitive paths have regression tests",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "Use stdlib testing only — no external test frameworks",
+    "Table-driven tests with t.Run subtests",
+    "Mock interfaces for unit tests, follow existing mock patterns",
+    "Do not modify production code unless strictly necessary for testability",
+    "Test behavior and output, not implementation details",
+]

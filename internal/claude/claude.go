@@ -12,6 +12,15 @@ import (
 	"github.com/papapumpkin/quasar/internal/agent"
 )
 
+// execCommandContext is the function used to create exec.Cmd instances.
+// It is a package-level var to allow tests to substitute a fake command.
+var execCommandContext = exec.CommandContext
+
+// execCommand is the function used to create exec.Cmd instances without context.
+// It is a package-level var to allow tests to substitute a fake command.
+var execCommand = exec.Command
+
+// Invoker runs the Claude CLI as a subprocess and parses JSON output.
 type Invoker struct {
 	ClaudePath string
 	Verbose    bool
@@ -65,7 +74,7 @@ func buildArgs(a agent.Agent, prompt string) []string {
 func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, workDir string) (agent.InvocationResult, error) {
 	args := buildArgs(a, prompt)
 
-	cmd := exec.CommandContext(ctx, inv.ClaudePath, args...)
+	cmd := execCommandContext(ctx, inv.ClaudePath, args...)
 	cmd.Dir = workDir
 	cmd.SysProcAttr = sessionAttr()
 
@@ -101,7 +110,7 @@ func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, wo
 }
 
 func (inv *Invoker) Validate() error {
-	cmd := exec.Command(inv.ClaudePath, "--version")
+	cmd := execCommand(inv.ClaudePath, "--version")
 	cmd.Env = buildEnv(os.Environ())
 
 	out, err := cmd.Output()
