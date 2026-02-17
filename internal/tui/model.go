@@ -60,9 +60,10 @@ type AppModel struct {
 	PhaseLoops   map[string]*LoopView // per-phase cycle timelines
 
 	// Detail panel state.
-	ShowPlan  bool // whether the plan viewer is toggled on
-	ShowDiff  bool // whether the diff viewer is toggled on (vs raw output)
-	ShowBeads bool // whether the bead tracker is toggled on
+	ShowPlan     bool          // whether the plan viewer is toggled on
+	ShowDiff     bool          // whether the diff viewer is toggled on (vs raw output)
+	DiffFileList *FileListView // navigable file list when diff view is active
+	ShowBeads    bool          // whether the bead tracker is toggled on
 
 	// Bead hierarchy state.
 	LoopBeads  *BeadInfo            // bead hierarchy for loop mode
@@ -720,7 +721,29 @@ func (m *AppModel) handleDiffKey() {
 		return
 	}
 	m.ShowDiff = !m.ShowDiff
+	if m.ShowDiff {
+		m.DiffFileList = m.buildDiffFileList()
+	} else {
+		m.DiffFileList = nil
+	}
 	m.updateDetailFromSelection()
+}
+
+// buildDiffFileList constructs a FileListView from the currently selected agent's diff metadata.
+func (m *AppModel) buildDiffFileList() *FileListView {
+	var agent *AgentEntry
+	switch m.Mode {
+	case ModeLoop:
+		agent = m.LoopView.SelectedAgent()
+	case ModeNebula:
+		if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
+			agent = lv.SelectedAgent()
+		}
+	}
+	if agent == nil || len(agent.DiffFiles) == 0 {
+		return nil
+	}
+	return NewFileListView(agent.DiffFiles, m.Width-4, agent.BaseRef, agent.HeadRef, agent.WorkDir)
 }
 
 // handleBeadsKey toggles the bead tracker view in the detail panel.
@@ -732,6 +755,7 @@ func (m *AppModel) handleBeadsKey() {
 		// Dismiss other panel modes.
 		m.ShowPlan = false
 		m.ShowDiff = false
+		m.DiffFileList = nil
 		m.updateBeadDetail()
 	}
 }
@@ -901,6 +925,7 @@ func (m *AppModel) drillDown() {
 	// Drilling down dismisses the plan, diff, and beads viewers.
 	m.ShowPlan = false
 	m.ShowDiff = false
+	m.DiffFileList = nil
 	m.ShowBeads = false
 
 	switch m.Mode {
@@ -986,7 +1011,13 @@ func (m *AppModel) resolveGate(action nebula.GateAction) {
 }
 
 // moveUp delegates to the active view based on depth.
+// When the diff file list is active, navigation targets it instead of the main list.
 func (m *AppModel) moveUp() {
+	if m.ShowDiff && m.DiffFileList != nil {
+		m.DiffFileList.MoveUp()
+		m.updateDetailFromSelection()
+		return
+	}
 	switch m.Mode {
 	case ModeLoop:
 		m.LoopView.MoveUp()
@@ -1003,7 +1034,13 @@ func (m *AppModel) moveUp() {
 }
 
 // moveDown delegates to the active view based on depth.
+// When the diff file list is active, navigation targets it instead of the main list.
 func (m *AppModel) moveDown() {
+	if m.ShowDiff && m.DiffFileList != nil {
+		m.DiffFileList.MoveDown()
+		m.updateDetailFromSelection()
+		return
+	}
 	switch m.Mode {
 	case ModeLoop:
 		m.LoopView.MoveDown()
@@ -1048,7 +1085,12 @@ func (m *AppModel) updateDetailFromSelection() {
 			Done:       agent.Done,
 		})
 		if m.ShowDiff && agent.Diff != "" {
-			body := RenderDiffView(agent.Diff, m.Width-4)
+			var body string
+			if m.DiffFileList != nil {
+				body = m.DiffFileList.View()
+			} else {
+				body = RenderDiffView(agent.Diff, m.Width-4)
+			}
 			m.Detail.SetContentWithHeader(agent.Role+" diff", header, body)
 			return
 		}
@@ -1121,7 +1163,12 @@ func (m *AppModel) updateNebulaDetail() {
 
 		if m.ShowDiff && agent.Diff != "" {
 			title := fmt.Sprintf("%s → %s diff", m.FocusedPhase, agent.Role)
-			body := RenderDiffView(agent.Diff, m.Width-4)
+			var body string
+			if m.DiffFileList != nil {
+				body = m.DiffFileList.View()
+			} else {
+				body = RenderDiffView(agent.Diff, m.Width-4)
+			}
 			m.Detail.SetContentWithHeader(title, header, body)
 			return
 		}
