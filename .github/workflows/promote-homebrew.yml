@@ -21,8 +21,8 @@ jobs:
       - name: Download release archives
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
         run: |
-          TAG="${{ inputs.tag }}"
           VERSION="${TAG#v}"
           mkdir -p /tmp/release
           for archive in \
@@ -33,8 +33,9 @@ jobs:
           done
 
       - name: Compute checksums and generate formula
+        env:
+          TAG: ${{ inputs.tag }}
         run: |
-          TAG="${{ inputs.tag }}"
           VERSION="${TAG#v}"
 
           SHA256_DARWIN_ARM64=$(sha256sum /tmp/release/quasar_${VERSION}_darwin_arm64.tar.gz | awk '{print $1}')
@@ -54,8 +55,8 @@ jobs:
       - name: Push formula to tap
         env:
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG: ${{ inputs.tag }}
         run: |
-          TAG="${{ inputs.tag }}"
           VERSION="${TAG#v}"
 
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/papapumpkin/homebrew-tap.git" /tmp/tap
