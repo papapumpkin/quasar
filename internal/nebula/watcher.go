@@ -215,15 +215,7 @@ func (w *Watcher) handleIntervention(event fsnotify.Event) bool {
 }
 
 func (w *Watcher) isPhaseFile(name string) bool {
-	base := filepath.Base(name)
-	if !strings.HasSuffix(base, ".md") {
-		return false
-	}
-	// Ignore non-phase files.
-	if base == "nebula.toml" || base == "nebula.state.toml" {
-		return false
-	}
-	return true
+	return strings.HasSuffix(filepath.Base(name), ".md")
 }
 
 func (w *Watcher) emitChange(file string) {
