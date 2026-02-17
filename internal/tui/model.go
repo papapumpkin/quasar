@@ -212,6 +212,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateDetailFromSelection()
 	case MsgAgentDiff:
 		m.LoopView.SetAgentDiff(msg.Role, msg.Cycle, msg.Diff)
+		m.LoopView.SetAgentDiffFiles(msg.Role, msg.Cycle, msg.Files, msg.BaseRef, msg.HeadRef, msg.WorkDir)
 		m.updateDetailFromSelection()
 	case MsgError:
 		m.addMessage("error: %s", msg.Msg)
@@ -266,6 +267,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgPhaseAgentDiff:
 		lv := m.ensurePhaseLoop(msg.PhaseID)
 		lv.SetAgentDiff(msg.Role, msg.Cycle, msg.Diff)
+		lv.SetAgentDiffFiles(msg.Role, msg.Cycle, msg.Files, msg.BaseRef, msg.HeadRef, msg.WorkDir)
 		if m.FocusedPhase == msg.PhaseID {
 			m.updateDetailFromSelection()
 		}

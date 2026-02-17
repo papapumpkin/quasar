@@ -18,6 +18,10 @@ type AgentEntry struct {
 	IssueCount int
 	Output     string
 	Diff       string
+	DiffFiles  []FileStatEntry // parsed file stats for the diff
+	BaseRef    string          // git ref before this cycle
+	HeadRef    string          // git ref after this cycle
+	WorkDir    string          // working directory for git difftool
 	StartedAt  time.Time
 }
 
@@ -168,6 +172,41 @@ func (lv *LoopView) SetAgentDiff(role string, cycle int, diff string) {
 		for j := len(lv.Cycles[i].Agents) - 1; j >= 0; j-- {
 			if lv.Cycles[i].Agents[j].Role == role {
 				lv.Cycles[i].Agents[j].Diff = diff
+				return
+			}
+		}
+	}
+}
+
+// SetAgentDiffFiles stores structured diff metadata (file stats, refs, workdir)
+// for the given agent in the given cycle. It uses the same lookup strategy as
+// SetAgentDiff: exact cycle match first, then fallback to the most recent agent
+// with the given role.
+func (lv *LoopView) SetAgentDiffFiles(role string, cycle int, files []FileStatEntry, baseRef, headRef, workDir string) {
+	// Try exact cycle match first.
+	for i := range lv.Cycles {
+		if lv.Cycles[i].Number != cycle {
+			continue
+		}
+		for j := range lv.Cycles[i].Agents {
+			if lv.Cycles[i].Agents[j].Role == role {
+				lv.Cycles[i].Agents[j].DiffFiles = files
+				lv.Cycles[i].Agents[j].BaseRef = baseRef
+				lv.Cycles[i].Agents[j].HeadRef = headRef
+				lv.Cycles[i].Agents[j].WorkDir = workDir
+				return
+			}
+		}
+	}
+
+	// Fallback: store on the most recent agent with this role.
+	for i := len(lv.Cycles) - 1; i >= 0; i-- {
+		for j := len(lv.Cycles[i].Agents) - 1; j >= 0; j-- {
+			if lv.Cycles[i].Agents[j].Role == role {
+				lv.Cycles[i].Agents[j].DiffFiles = files
+				lv.Cycles[i].Agents[j].BaseRef = baseRef
+				lv.Cycles[i].Agents[j].HeadRef = headRef
+				lv.Cycles[i].Agents[j].WorkDir = workDir
 				return
 			}
 		}

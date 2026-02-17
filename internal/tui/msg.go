@@ -130,9 +130,13 @@ type MsgPhaseAgentOutput struct {
 
 // MsgAgentDiff carries a git diff for an agent's changes (loop mode).
 type MsgAgentDiff struct {
-	Role  string
-	Cycle int
-	Diff  string
+	Role    string
+	Cycle   int
+	Diff    string
+	BaseRef string          // git ref before this cycle (empty when unavailable)
+	HeadRef string          // git ref after this cycle (empty when unavailable)
+	Files   []FileStatEntry // pre-parsed file stats
+	WorkDir string          // working directory for running git difftool
 }
 
 // MsgPhaseAgentDiff carries a git diff for an agent's changes (nebula mode).
@@ -141,6 +145,10 @@ type MsgPhaseAgentDiff struct {
 	Role    string
 	Cycle   int
 	Diff    string
+	BaseRef string          // git ref before this cycle (empty when unavailable)
+	HeadRef string          // git ref after this cycle (empty when unavailable)
+	Files   []FileStatEntry // pre-parsed file stats
+	WorkDir string          // working directory for running git difftool
 }
 
 // MsgPhaseCycleSummary is sent after each coder/reviewer step within a phase.

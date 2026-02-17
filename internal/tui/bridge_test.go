@@ -1122,17 +1122,105 @@ func TestHandleDiffKeyNoopAtWrongDepth(t *testing.T) {
 }
 
 func TestCaptureGitDiffEmptyWorkDir(t *testing.T) {
-	// Empty workDir should return empty string.
-	result := captureGitDiff("")
-	if result != "" {
-		t.Errorf("expected empty diff for empty workDir, got %q", result)
+	// Empty workDir should return zero diffResult.
+	result := captureGitDiff("", "", "")
+	if result.Diff != "" {
+		t.Errorf("expected empty diff for empty workDir, got %q", result.Diff)
 	}
 }
 
 func TestCaptureGitDiffInvalidDir(t *testing.T) {
-	// Non-existent directory should return empty string (no error).
-	result := captureGitDiff("/nonexistent/path/that/does/not/exist")
-	if result != "" {
-		t.Errorf("expected empty diff for invalid dir, got %q", result)
+	// Non-existent directory should return zero diffResult (no error).
+	result := captureGitDiff("/nonexistent/path/that/does/not/exist", "", "")
+	if result.Diff != "" {
+		t.Errorf("expected empty diff for invalid dir, got %q", result.Diff)
+	}
+}
+
+func TestParseNumstat(t *testing.T) {
+	t.Run("typical output", func(t *testing.T) {
+		input := "10\t2\tsrc/main.go\n3\t0\tREADME.md\n"
+		entries := parseNumstat(input)
+		if len(entries) != 2 {
+			t.Fatalf("got %d entries, want 2", len(entries))
+		}
+		if entries[0].Path != "src/main.go" || entries[0].Additions != 10 || entries[0].Deletions != 2 {
+			t.Errorf("entry[0] = %+v, want {src/main.go +10 -2}", entries[0])
+		}
+		if entries[1].Path != "README.md" || entries[1].Additions != 3 || entries[1].Deletions != 0 {
+			t.Errorf("entry[1] = %+v, want {README.md +3 -0}", entries[1])
+		}
+	})
+
+	t.Run("binary file", func(t *testing.T) {
+		input := "-\t-\timage.png\n"
+		entries := parseNumstat(input)
+		if len(entries) != 1 {
+			t.Fatalf("got %d entries, want 1", len(entries))
+		}
+		if entries[0].Path != "image.png" || entries[0].Additions != 0 || entries[0].Deletions != 0 {
+			t.Errorf("entry[0] = %+v, want {image.png +0 -0}", entries[0])
+		}
+	})
+
+	t.Run("empty output", func(t *testing.T) {
+		entries := parseNumstat("")
+		if entries != nil {
+			t.Errorf("got %v, want nil", entries)
+		}
+	})
+}
+
+func TestSetAgentDiffFilesExactCycleMatch(t *testing.T) {
+	lv := NewLoopView()
+	lv.StartCycle(1)
+	lv.StartAgent("coder")
+
+	files := []FileStatEntry{{Path: "main.go", Additions: 5, Deletions: 2}}
+	lv.SetAgentDiffFiles("coder", 1, files, "abc123", "def456", "/tmp/repo")
+
+	a := lv.Cycles[0].Agents[0]
+	if len(a.DiffFiles) != 1 || a.DiffFiles[0].Path != "main.go" {
+		t.Errorf("DiffFiles = %+v, want [{main.go +5 -2}]", a.DiffFiles)
+	}
+	if a.BaseRef != "abc123" {
+		t.Errorf("BaseRef = %q, want %q", a.BaseRef, "abc123")
+	}
+	if a.HeadRef != "def456" {
+		t.Errorf("HeadRef = %q, want %q", a.HeadRef, "def456")
+	}
+	if a.WorkDir != "/tmp/repo" {
+		t.Errorf("WorkDir = %q, want %q", a.WorkDir, "/tmp/repo")
+	}
+}
+
+func TestSetAgentDiffFilesFallback(t *testing.T) {
+	lv := NewLoopView()
+	lv.StartCycle(1)
+	lv.StartAgent("coder")
+
+	files := []FileStatEntry{{Path: "a.go", Additions: 1, Deletions: 0}}
+	lv.SetAgentDiffFiles("coder", 99, files, "aaa", "bbb", "/work")
+
+	a := lv.Cycles[0].Agents[0]
+	if len(a.DiffFiles) != 1 {
+		t.Errorf("DiffFiles = %+v, want 1 entry (fallback)", a.DiffFiles)
+	}
+}
+
+func TestSetAgentDiffFilesNoMatchDoesNotPanic(t *testing.T) {
+	lv := NewLoopView()
+	files := []FileStatEntry{{Path: "orphan.go"}}
+	lv.SetAgentDiffFiles("coder", 1, files, "x", "y", "/z")
+	// Should not panic with no cycles.
+}
+
+func TestCaptureGitDiffFallsBackToDefaultRefs(t *testing.T) {
+	// When both refs are empty, captureGitDiff should use HEAD~1..HEAD.
+	// We can't easily verify the actual git command, but we can verify
+	// the function doesn't panic and returns a zero result for a bad dir.
+	result := captureGitDiff("/nonexistent", "", "")
+	if result.Diff != "" {
+		t.Errorf("expected empty diff, got %q", result.Diff)
 	}
 }

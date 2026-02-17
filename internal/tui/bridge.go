@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -60,8 +62,16 @@ func (b *UIBridge) AgentStart(role string) {
 func (b *UIBridge) AgentDone(role string, costUSD float64, durationMs int64) {
 	b.program.Send(MsgAgentDone{Role: role, CostUSD: costUSD, DurationMs: durationMs})
 	if role == "coder" {
-		if diff := captureGitDiff(b.workDir); diff != "" {
-			b.program.Send(MsgAgentDiff{Role: role, Cycle: b.cycle, Diff: diff})
+		if dr := captureGitDiff(b.workDir, "", ""); dr.Diff != "" {
+			b.program.Send(MsgAgentDiff{
+				Role:    role,
+				Cycle:   b.cycle,
+				Diff:    dr.Diff,
+				BaseRef: dr.BaseRef,
+				HeadRef: dr.HeadRef,
+				Files:   dr.Files,
+				WorkDir: b.workDir,
+			})
 		}
 	}
 }
@@ -138,25 +148,100 @@ func buildBeadInfoTree(taskBeadID, title, status string, children []ui.BeadChild
 	return root
 }
 
-// captureGitDiff runs "git diff HEAD~1..HEAD" in the given directory and
-// returns the unified diff output. Returns empty string on any error (no git
-// repo, no commits, command failure) — diff capture is best-effort.
-func captureGitDiff(workDir string) string {
+// diffResult holds the raw unified diff and pre-parsed structured metadata
+// returned by captureGitDiff.
+type diffResult struct {
+	Diff    string
+	BaseRef string
+	HeadRef string
+	Files   []FileStatEntry
+}
+
+// captureGitDiff runs "git diff <base>..<head>" in the given directory and
+// returns both the raw unified diff and pre-parsed file stats. When baseRef or
+// headRef are empty it falls back to HEAD~1..HEAD. Returns a zero diffResult on
+// any error (no git repo, no commits, command failure) — diff capture is
+// best-effort.
+func captureGitDiff(workDir, baseRef, headRef string) diffResult {
 	if workDir == "" {
-		return ""
+		return diffResult{}
 	}
+
+	// Fall back to HEAD~1..HEAD when refs are not provided.
+	if baseRef == "" || headRef == "" {
+		baseRef = "HEAD~1"
+		headRef = "HEAD"
+	}
+
+	refRange := baseRef + ".." + headRef
 	ctx, cancel := context.WithTimeout(context.Background(), gitDiffTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "diff", "HEAD~1..HEAD")
+	// Capture raw unified diff.
+	cmd := exec.CommandContext(ctx, "git", "diff", refRange)
 	cmd.Dir = workDir
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = nil // discard stderr
 	if err := cmd.Run(); err != nil {
-		return ""
+		return diffResult{}
 	}
-	return out.String()
+	rawDiff := out.String()
+	if rawDiff == "" {
+		return diffResult{}
+	}
+
+	// Parse file stats from git diff --stat.
+	files := captureGitDiffStat(workDir, refRange)
+
+	return diffResult{
+		Diff:    rawDiff,
+		BaseRef: baseRef,
+		HeadRef: headRef,
+		Files:   files,
+	}
+}
+
+// captureGitDiffStat runs "git diff --stat <refRange>" and parses the per-file
+// stats into FileStatEntry slices. Returns nil on any error.
+func captureGitDiffStat(workDir, refRange string) []FileStatEntry {
+	ctx, cancel := context.WithTimeout(context.Background(), gitDiffTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", "diff", "--numstat", refRange)
+	cmd.Dir = workDir
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = nil
+	if err := cmd.Run(); err != nil {
+		return nil
+	}
+	return parseNumstat(out.String())
+}
+
+// parseNumstat parses the output of "git diff --numstat" into FileStatEntry
+// slices. Each line has the format: <additions>\t<deletions>\t<path>.
+// Binary files show "-" for additions/deletions and are recorded as zero.
+func parseNumstat(output string) []FileStatEntry {
+	var entries []FileStatEntry
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 3)
+		if len(parts) < 3 {
+			continue
+		}
+		adds, _ := strconv.Atoi(parts[0]) // "-" for binary → 0
+		dels, _ := strconv.Atoi(parts[1])
+		entries = append(entries, FileStatEntry{
+			Path:      parts[2],
+			Additions: adds,
+			Deletions: dels,
+		})
+	}
+	return entries
 }
 
 // PhaseUIBridge implements ui.UI by sending phase-contextualized messages.
@@ -203,8 +288,17 @@ func (b *PhaseUIBridge) AgentStart(role string) {
 func (b *PhaseUIBridge) AgentDone(role string, costUSD float64, durationMs int64) {
 	b.program.Send(MsgPhaseAgentDone{PhaseID: b.phaseID, Role: role, CostUSD: costUSD, DurationMs: durationMs})
 	if role == "coder" {
-		if diff := captureGitDiff(b.workDir); diff != "" {
-			b.program.Send(MsgPhaseAgentDiff{PhaseID: b.phaseID, Role: role, Cycle: b.cycle, Diff: diff})
+		if dr := captureGitDiff(b.workDir, "", ""); dr.Diff != "" {
+			b.program.Send(MsgPhaseAgentDiff{
+				PhaseID: b.phaseID,
+				Role:    role,
+				Cycle:   b.cycle,
+				Diff:    dr.Diff,
+				BaseRef: dr.BaseRef,
+				HeadRef: dr.HeadRef,
+				Files:   dr.Files,
+				WorkDir: b.workDir,
+			})
 		}
 	}
 }
