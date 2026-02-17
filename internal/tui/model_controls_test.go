@@ -561,6 +561,135 @@ func TestHandleDiffKeyMutualExclusivity(t *testing.T) {
 	})
 }
 
+// --- drillDown state preservation tests (Bug 3) ---
+
+func TestDrillDownPreservesDiffStateAtAgentOutput(t *testing.T) {
+	t.Parallel()
+
+	t.Run("loop mode at DepthAgentOutput preserves diff state", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeLoop)
+		m.Detail = NewDetailPanel(80, 10)
+		m.Width = 80
+		m.Height = 24
+		m.LoopView.StartCycle(1)
+		m.LoopView.StartAgent("coder")
+		m.LoopView.FinishAgent("coder", 0.5, 5000)
+		m.LoopView.SetAgentOutput("coder", 1, "wrote code")
+		m.LoopView.SetAgentDiff("coder", 1, "diff --git a/f.go b/f.go\n+line\n")
+		m.Depth = DepthAgentOutput
+		m.LoopView.Cursor = 1
+		m.ShowDiff = true
+		m.DiffFileList = &FileListView{} // non-nil sentinel
+
+		m.drillDown()
+
+		if !m.ShowDiff {
+			t.Error("expected ShowDiff to remain true at DepthAgentOutput in loop mode")
+		}
+		if m.DiffFileList == nil {
+			t.Error("expected DiffFileList to remain non-nil at DepthAgentOutput in loop mode")
+		}
+	})
+
+	t.Run("loop mode at DepthAgentOutput preserves beads and plan state", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeLoop)
+		m.Detail = NewDetailPanel(80, 10)
+		m.Width = 80
+		m.Height = 24
+		m.Depth = DepthAgentOutput
+		m.ShowBeads = true
+		m.ShowPlan = true
+
+		m.drillDown()
+
+		if !m.ShowBeads {
+			t.Error("expected ShowBeads to remain true at DepthAgentOutput in loop mode")
+		}
+		if !m.ShowPlan {
+			t.Error("expected ShowPlan to remain true at DepthAgentOutput in loop mode")
+		}
+	})
+
+	t.Run("nebula mode clears state when transitioning from DepthPhases", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "phase-1", Title: "Phase 1"},
+		})
+		m.ShowDiff = true
+		m.ShowBeads = true
+		m.ShowPlan = true
+		m.DiffFileList = &FileListView{}
+
+		m.drillDown()
+
+		if m.ShowDiff {
+			t.Error("expected ShowDiff to be cleared on nebula depth transition")
+		}
+		if m.ShowBeads {
+			t.Error("expected ShowBeads to be cleared on nebula depth transition")
+		}
+		if m.ShowPlan {
+			t.Error("expected ShowPlan to be cleared on nebula depth transition")
+		}
+		if m.DiffFileList != nil {
+			t.Error("expected DiffFileList to be nil on nebula depth transition")
+		}
+	})
+}
+
+// --- handleDiffKey no-diff-files guard tests (Bug 4) ---
+
+func TestHandleDiffKeyNoDiffFiles(t *testing.T) {
+	t.Parallel()
+
+	t.Run("resets ShowDiff when no diff files and no raw diff text", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeLoop)
+		m.Detail = NewDetailPanel(80, 10)
+		m.Width = 80
+		m.Height = 24
+		m.LoopView.StartCycle(1)
+		m.LoopView.StartAgent("coder")
+		m.LoopView.FinishAgent("coder", 0.5, 5000)
+		m.LoopView.SetAgentOutput("coder", 1, "wrote code")
+		// No diff set — agent has no diff files and no raw diff text.
+		m.Depth = DepthAgentOutput
+		m.LoopView.Cursor = 1
+
+		m.handleDiffKey()
+
+		if m.ShowDiff {
+			t.Error("expected ShowDiff to be false when no diff files or raw diff text exist")
+		}
+		if m.DiffFileList != nil {
+			t.Error("expected DiffFileList to remain nil when no diff data available")
+		}
+	})
+
+	t.Run("keeps ShowDiff true when raw diff text exists but no file list", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeLoop)
+		m.Detail = NewDetailPanel(80, 10)
+		m.Width = 80
+		m.Height = 24
+		m.LoopView.StartCycle(1)
+		m.LoopView.StartAgent("coder")
+		m.LoopView.FinishAgent("coder", 0.5, 5000)
+		m.LoopView.SetAgentOutput("coder", 1, "wrote code")
+		m.LoopView.SetAgentDiff("coder", 1, "diff --git a/f.go b/f.go\n+line\n")
+		m.Depth = DepthAgentOutput
+		m.LoopView.Cursor = 1
+
+		m.handleDiffKey()
+
+		if !m.ShowDiff {
+			t.Error("expected ShowDiff to remain true when raw diff text exists")
+		}
+	})
+}
+
 // --- handleBeadsKey mutual exclusivity tests ---
 
 func TestHandleBeadsKeyMutualExclusivity(t *testing.T) {
