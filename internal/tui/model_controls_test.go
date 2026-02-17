@@ -476,6 +476,133 @@ func TestHandleInfoKey(t *testing.T) {
 			t.Error("expected showDetailPanel to return true when ShowPlan is true at DepthPhases")
 		}
 	})
+
+	t.Run("toggles plan on dismisses beads", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "phase-1", Title: "Phase 1", PlanBody: "# Plan"},
+		})
+		m.ShowBeads = true
+
+		m.handleInfoKey()
+
+		if !m.ShowPlan {
+			t.Error("expected ShowPlan to be true")
+		}
+		if m.ShowBeads {
+			t.Error("expected ShowBeads to be false when plan toggled on")
+		}
+	})
+
+	t.Run("toggles plan on dismisses diff and file list", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "phase-1", Title: "Phase 1", PlanBody: "# Plan"},
+		})
+		m.ShowDiff = true
+		m.DiffFileList = &FileListView{} // non-nil sentinel
+
+		m.handleInfoKey()
+
+		if !m.ShowPlan {
+			t.Error("expected ShowPlan to be true")
+		}
+		if m.ShowDiff {
+			t.Error("expected ShowDiff to be false when plan toggled on")
+		}
+		if m.DiffFileList != nil {
+			t.Error("expected DiffFileList to be nil when plan toggled on")
+		}
+	})
+}
+
+// --- handleDiffKey mutual exclusivity tests ---
+
+func TestHandleDiffKeyMutualExclusivity(t *testing.T) {
+	t.Parallel()
+
+	newLoopModelWithDiff := func() *AppModel {
+		m := NewAppModel(ModeLoop)
+		m.Detail = NewDetailPanel(80, 10)
+		m.Width = 80
+		m.Height = 24
+		m.LoopView.StartCycle(1)
+		m.LoopView.StartAgent("coder")
+		m.LoopView.FinishAgent("coder", 0.5, 5000)
+		m.LoopView.SetAgentOutput("coder", 1, "wrote code")
+		m.LoopView.SetAgentDiff("coder", 1, "diff --git a/f.go b/f.go\n+line\n")
+		m.Depth = DepthAgentOutput
+		m.LoopView.Cursor = 1
+		return &m
+	}
+
+	t.Run("toggles diff on dismisses plan", func(t *testing.T) {
+		t.Parallel()
+		m := newLoopModelWithDiff()
+		m.ShowPlan = true
+
+		m.handleDiffKey()
+
+		if m.ShowPlan {
+			t.Error("expected ShowPlan to be false when diff toggled on")
+		}
+	})
+
+	t.Run("toggles diff on dismisses beads", func(t *testing.T) {
+		t.Parallel()
+		m := newLoopModelWithDiff()
+		m.ShowBeads = true
+
+		m.handleDiffKey()
+
+		if m.ShowBeads {
+			t.Error("expected ShowBeads to be false when diff toggled on")
+		}
+	})
+}
+
+// --- handleBeadsKey mutual exclusivity tests ---
+
+func TestHandleBeadsKeyMutualExclusivity(t *testing.T) {
+	t.Parallel()
+
+	t.Run("toggles beads on dismisses plan", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "phase-1", Title: "Phase 1"},
+		})
+		m.ShowPlan = true
+
+		m.handleBeadsKey()
+
+		if !m.ShowBeads {
+			t.Error("expected ShowBeads to be true")
+		}
+		if m.ShowPlan {
+			t.Error("expected ShowPlan to be false when beads toggled on")
+		}
+	})
+
+	t.Run("toggles beads on dismisses diff and file list", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "phase-1", Title: "Phase 1"},
+		})
+		m.ShowDiff = true
+		m.DiffFileList = &FileListView{}
+
+		m.handleBeadsKey()
+
+		if !m.ShowBeads {
+			t.Error("expected ShowBeads to be true")
+		}
+		if m.ShowDiff {
+			t.Error("expected ShowDiff to be false when beads toggled on")
+		}
+		if m.DiffFileList != nil {
+			t.Error("expected DiffFileList to be nil when beads toggled on")
+		}
+	})
 }
 
 // --- MsgArchitectStart handler tests ---
