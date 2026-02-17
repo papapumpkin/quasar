@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestBannerSize(t *testing.T) {
@@ -206,6 +207,19 @@ func TestArtVariantsNotEmpty(t *testing.T) {
 			}
 		})
 	}
+}
+
+// artWidth returns the maximum visual width of an art variant's lines.
+// This is a test helper — it exists only in tests to validate art dimensions.
+func artWidth(art []string) int {
+	max := 0
+	for _, line := range art {
+		w := utf8.RuneCountInString(line)
+		if w > max {
+			max = w
+		}
+	}
+	return max
 }
 
 func TestArtWidth(t *testing.T) {

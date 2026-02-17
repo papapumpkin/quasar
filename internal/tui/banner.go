@@ -3,7 +3,6 @@ package tui
 import (
 	"strings"
 	"sync"
-	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -124,8 +123,9 @@ var (
 )
 
 type bannerCacheKey struct {
-	size  BannerSize
-	width int
+	size   BannerSize
+	width  int
+	height int
 }
 
 // Size returns the appropriate BannerSize for the current dimensions.
@@ -168,7 +168,7 @@ func (b Banner) View() string {
 		return ""
 	}
 
-	result := renderDopplerArt(art, b.Width)
+	result := renderDopplerArt(art, b.Width, size)
 
 	renderCacheMu.Lock()
 	renderCache[key] = result
@@ -192,7 +192,7 @@ func (b Banner) SidePanelView(height int) string {
 		return ""
 	}
 
-	key := bannerCacheKey{size: BannerSB, width: height} // use height as secondary key
+	key := bannerCacheKey{size: BannerSB, width: b.Width, height: height}
 	renderCacheMu.Lock()
 	if cached, ok := renderCache[key]; ok {
 		renderCacheMu.Unlock()
@@ -200,7 +200,7 @@ func (b Banner) SidePanelView(height int) string {
 	}
 	renderCacheMu.Unlock()
 
-	styled := renderDopplerArt(artSB, sidePanelWidth)
+	styled := renderDopplerArt(artSB, sidePanelWidth, BannerSB)
 	lines := strings.Split(styled, "\n")
 	artHeight := len(lines)
 
@@ -241,7 +241,7 @@ func (b Banner) SplashView() string {
 	}
 	renderCacheMu.Unlock()
 
-	result := renderDopplerArt(artXL, b.Width)
+	result := renderDopplerArt(artXL, b.Width, BannerXL)
 
 	renderCacheMu.Lock()
 	renderCache[key] = result
@@ -252,7 +252,7 @@ func (b Banner) SplashView() string {
 // renderDopplerArt applies red/blue Doppler shift coloring to art lines and
 // centers the result within the given width. The "Q U A S A R" text line
 // gets logo-style coloring instead of Doppler shift.
-func renderDopplerArt(art []string, width int) string {
+func renderDopplerArt(art []string, width int, size BannerSize) string {
 	var rendered []string
 	for _, line := range art {
 		if line == "" {
@@ -263,7 +263,7 @@ func renderDopplerArt(art []string, width int) string {
 		// Detect the QUASAR text line.
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "Q    U    A    S    A    R" {
-			styled := renderQuasarText()
+			styled := renderQuasarText(size)
 			rendered = append(rendered, centerLine(styled, width))
 			continue
 		}
@@ -275,10 +275,14 @@ func renderDopplerArt(art []string, width int) string {
 }
 
 // renderQuasarText returns the "Q U A S A R" text with logo-style coloring.
-func renderQuasarText() string {
-	return styleLogoJet.Render("····") + " " +
-		styleLogoCore.Render("Q    U    A    S    A    R") + " " +
-		styleLogoJet.Render("····")
+// Only the XS-A Pill variant includes "····" decorators; other variants render
+// the text without them, matching the original art designs.
+func renderQuasarText(size BannerSize) string {
+	core := styleLogoCore.Render("Q    U    A    S    A    R")
+	if size == BannerXS {
+		return styleLogoJet.Render("····") + " " + core + " " + styleLogoJet.Render("····")
+	}
+	return core
 }
 
 // centerLine pads a styled line to center it within the given width.
@@ -359,16 +363,4 @@ func colorDopplerLine(line string) string {
 // isFadeChar returns true if the rune is a dot/particle that should fade at edges.
 func isFadeChar(r rune) bool {
 	return r == '.' || r == '·' || r == ':'
-}
-
-// artWidth returns the maximum visual width of an art variant's lines.
-func artWidth(art []string) int {
-	max := 0
-	for _, line := range art {
-		w := utf8.RuneCountInString(line)
-		if w > max {
-			max = w
-		}
-	}
-	return max
 }
