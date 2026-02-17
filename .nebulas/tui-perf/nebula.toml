@@ -1,0 +1,27 @@
+[nebula]
+name = "TUI Performance & Fixes"
+description = "Fix diff viewer freeze bug and add compact bead graph view"
+
+[defaults]
+type = "bug"
+priority = 1
+labels = ["quasar", "tui"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 30.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Fix diff file selection to show inline per-file diff instead of launching external difftool",
+    "Add compact graph visualization for bead hierarchy (replacing verbose text tree)",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "All TUI code lives in internal/tui/",
+    "Use only charmbracelet ecosystem (bubbletea, lipgloss, bubbles)",
+    "Maintain backward compatibility with existing TUI message protocol",
+]

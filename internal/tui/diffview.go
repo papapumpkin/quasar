@@ -339,6 +339,18 @@ func RenderDiffView(raw string, width int) string {
 	return b.String()
 }
 
+// RenderSingleFileDiff parses a raw unified diff and renders the diff for a single file.
+// Returns a placeholder message if the file is not found in the diff.
+func RenderSingleFileDiff(raw string, path string, width int) string {
+	files := ParseUnifiedDiff(raw)
+	for _, f := range files {
+		if f.Path == path {
+			return renderFileDiff(f, width)
+		}
+	}
+	return styleDiffContext.Render("(no diff for " + path + ")")
+}
+
 // renderDiffStat renders the stat summary block.
 func renderDiffStat(stat DiffStat) string {
 	var b strings.Builder

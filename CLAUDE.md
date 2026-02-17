@@ -79,6 +79,8 @@ internal/
 
 ## Nebula Authoring
 
+When prompted to write a nebula, do not write any code unless explicitly instructed to. Only produce the nebula manifest and phase files.
+
 Nebulas are multi-phase task specifications in `.nebulas/<name>/`. Each nebula has a manifest (`nebula.toml`) and one or more phase files (`*.md`).
 
 ### Manifest (`nebula.toml`)

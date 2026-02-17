@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -625,8 +624,8 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// When the diff file list is active, Enter opens the external difftool
-	// instead of drilling down into the loop view.
+	// When the diff file list is active, Enter shows the selected file's
+	// diff inline instead of drilling down into the loop view.
 	if m.ShowDiff && m.DiffFileList != nil && key.Matches(msg, m.Keys.OpenDiff) {
 		return m.openDiffTool()
 	}
@@ -840,26 +839,38 @@ func (m *AppModel) hasSelectedAgentDiff() bool {
 	return agent != nil && agent.Diff != ""
 }
 
-// openDiffTool launches the user's configured git difftool for the selected file.
-// It suspends the TUI via tea.ExecProcess and resumes when the tool exits.
-// Returns a no-op when refs or files are unavailable.
+// openDiffTool renders the selected file's diff inline in the detail panel.
+// Replaces the previous approach of launching an external git difftool which
+// could freeze the TUI when the tool exited instantly.
 func (m AppModel) openDiffTool() (tea.Model, tea.Cmd) {
 	fl := m.DiffFileList
 	if fl == nil || len(fl.Files) == 0 {
 		return m, nil
 	}
-	if fl.BaseRef == "" || fl.HeadRef == "" {
+
+	file := fl.SelectedFile()
+
+	// Get the agent's raw diff.
+	var rawDiff string
+	switch m.Mode {
+	case ModeLoop:
+		if agent := m.LoopView.SelectedAgent(); agent != nil {
+			rawDiff = agent.Diff
+		}
+	case ModeNebula:
+		if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
+			if agent := lv.SelectedAgent(); agent != nil {
+				rawDiff = agent.Diff
+			}
+		}
+	}
+	if rawDiff == "" {
 		return m, nil
 	}
 
-	file := fl.SelectedFile()
-	c := exec.Command("git", "difftool", "--no-prompt",
-		fl.BaseRef+".."+fl.HeadRef,
-		"--", file.Path)
-	c.Dir = fl.WorkDir
-	return m, tea.ExecProcess(c, func(err error) tea.Msg {
-		return MsgDiffToolDone{Err: err}
-	})
+	body := RenderSingleFileDiff(rawDiff, file.Path, m.contentWidth()-4)
+	m.Detail.SetContent(file.Path, body)
+	return m, nil
 }
 
 // handleBeadsKey toggles the bead tracker view in the detail panel.
