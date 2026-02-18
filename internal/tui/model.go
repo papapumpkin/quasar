@@ -186,7 +186,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 
-
 	case MsgTick:
 		if !m.Done {
 			cmds = append(cmds, tickCmd())
