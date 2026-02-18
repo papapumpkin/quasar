@@ -23,7 +23,8 @@ type GitCommitter interface {
 
 // gitCommitter implements GitCommitter using the git CLI.
 type gitCommitter struct {
-	dir string // working directory for git commands
+	dir    string // working directory for git commands
+	branch string // expected branch; empty = no enforcement
 }
 
 // NewGitCommitter creates a GitCommitter for the given directory.
@@ -43,9 +44,27 @@ func NewGitCommitter(ctx context.Context, dir string) GitCommitter {
 	return &gitCommitter{dir: dir}
 }
 
+// NewGitCommitterWithBranch creates a GitCommitter that verifies the working
+// directory is on the expected branch before every commit. If branch is empty,
+// no enforcement is applied.
+func NewGitCommitterWithBranch(ctx context.Context, dir, branch string) GitCommitter {
+	if _, err := exec.LookPath("git"); err != nil {
+		return nil
+	}
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--git-dir")
+	if err := cmd.Run(); err != nil {
+		return nil
+	}
+	return &gitCommitter{dir: dir, branch: branch}
+}
+
 // CommitPhase stages all changes and creates a commit for the completed phase.
 // If the working tree is clean (nothing to commit), this is a no-op.
 func (g *gitCommitter) CommitPhase(ctx context.Context, nebulaName, phaseID string) error {
+	if err := g.ensureBranch(ctx); err != nil {
+		return err
+	}
+
 	// Check for changes first.
 	statusCmd := exec.CommandContext(ctx, "git", "-C", g.dir, "status", "--porcelain")
 	out, err := statusCmd.Output()
@@ -105,6 +124,26 @@ func (g *gitCommitter) DiffStatLastCommit(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("git diff --stat HEAD~1..HEAD: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.String(), nil
+}
+
+// ensureBranch verifies the working directory is on the expected branch.
+// If branch is empty, this is a no-op.
+func (g *gitCommitter) ensureBranch(ctx context.Context) error {
+	if g.branch == "" {
+		return nil
+	}
+	cmd := exec.CommandContext(ctx, "git", "-C", g.dir, "rev-parse", "--abbrev-ref", "HEAD")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("checking current branch: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	current := strings.TrimSpace(stdout.String())
+	if current != g.branch {
+		return fmt.Errorf("branch mismatch: expected %q, on %q", g.branch, current)
+	}
+	return nil
 }
 
 // InterventionFileNames returns the filenames that should be excluded from

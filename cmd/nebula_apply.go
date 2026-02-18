@@ -127,7 +127,20 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		workDir = wd
 	}
 
-	git := loop.NewCycleCommitter(ctx, workDir)
+	// Create nebula branch if in a git repo. Non-fatal if git is unavailable.
+	branchMgr, branchErr := nebula.NewBranchManager(ctx, workDir, n.Manifest.Nebula.Name)
+	if branchErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: branch management unavailable: %v\n", branchErr)
+	}
+	if branchMgr != nil {
+		if err := branchMgr.CreateOrCheckout(ctx); err != nil {
+			return fmt.Errorf("failed to create nebula branch: %w", err)
+		}
+	}
+	branchName := branchMgr.Branch() // "" if branchMgr is nil (nil-safe)
+
+	git := loop.NewCycleCommitterWithBranch(ctx, workDir, branchName)
+	phaseCommitter := nebula.NewGitCommitterWithBranch(ctx, workDir, branchName)
 
 	noTUI, _ := cmd.Flags().GetBool("no-tui")
 	noSplash, _ := cmd.Flags().GetBool("no-splash")
@@ -141,6 +154,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		nebula.WithGlobalCycles(cfg.MaxReviewCycles),
 		nebula.WithGlobalBudget(cfg.MaxBudgetUSD),
 		nebula.WithGlobalModel(cfg.Model),
+		nebula.WithCommitter(phaseCommitter),
 	)
 
 	if useTUI {
@@ -292,6 +306,19 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					nextWorkDir = nextN.Manifest.Context.WorkingDir
 				}
 
+				// Create/checkout branch for the next nebula.
+				nextBranchMgr, nextBranchErr := nebula.NewBranchManager(ctx, nextWorkDir, nextN.Manifest.Nebula.Name)
+				if nextBranchErr != nil {
+					fmt.Fprintf(os.Stderr, "warning: branch management unavailable: %v\n", nextBranchErr)
+				}
+				if nextBranchMgr != nil {
+					if brErr := nextBranchMgr.CreateOrCheckout(ctx); brErr != nil {
+						cancel()
+						return fmt.Errorf("failed to create nebula branch: %w", brErr)
+					}
+				}
+				nextBranchName := nextBranchMgr.Branch()
+
 				phases := make([]tui.PhaseInfo, 0, len(nextN.Phases))
 				for _, p := range nextN.Phases {
 					phases = append(phases, tui.PhaseInfo{
@@ -304,6 +331,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				// Create WorkerGroup first so its SnapshotNebula method can be
 				// captured by the architect closure. The Runner is set after the
 				// TUI program is created (it depends on the program).
+				nextPhaseCommitter := nebula.NewGitCommitterWithBranch(ctx, nextWorkDir, nextBranchName)
 				wg = nebula.NewWorkerGroup(nextN, nextState,
 					nebula.WithMaxWorkers(maxWorkers),
 					nebula.WithBeadsClient(client),
@@ -311,6 +339,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					nebula.WithGlobalBudget(cfg.MaxBudgetUSD),
 					nebula.WithGlobalModel(cfg.Model),
 					nebula.WithLogger(io.Discard),
+					nebula.WithCommitter(nextPhaseCommitter),
 				)
 				nextArchitectFunc := buildArchitectFunc(claudeInv, wg.SnapshotNebula)
 				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, noSplash, nextArchitectFunc)
@@ -318,7 +347,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					program:      tuiProgram,
 					invoker:      claudeInv,
 					beads:        client,
-					git:          loop.NewCycleCommitter(ctx, nextWorkDir),
+					git:          loop.NewCycleCommitterWithBranch(ctx, nextWorkDir, nextBranchName),
 					maxCycles:    cfg.MaxReviewCycles,
 					maxBudget:    cfg.MaxBudgetUSD,
 					model:        cfg.Model,
