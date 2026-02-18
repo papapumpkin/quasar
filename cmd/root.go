@@ -60,6 +60,8 @@ func runRootDefault(cmd *cobra.Command, args []string) error {
 	nebulaeDir := filepath.Join(wd, ".nebulas")
 	if _, err := os.Stat(nebulaeDir); os.IsNotExist(err) {
 		return cmd.Help()
+	} else if err != nil {
+		return fmt.Errorf("failed to access %s: %w", nebulaeDir, err)
 	}
 	// Delegate to the tui subcommand.
 	return runTUI(tuiCmd, nil)

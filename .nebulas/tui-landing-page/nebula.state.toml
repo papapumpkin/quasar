@@ -5,9 +5,9 @@ total_cost_usd = 10.26113575
 [phases]
 [phases.cmd-entry-point]
 bead_id = 'quasar-34c'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-02-18T15:39:42.122217-05:00
-updated_at = 2026-02-18T16:07:41.991267-05:00
+updated_at = 2026-02-18T16:16:33.263689-05:00
 
 [phases.home-key-handling]
 bead_id = 'quasar-2nm'

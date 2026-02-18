@@ -56,6 +56,8 @@ func runTUI(cmd *cobra.Command, _ []string) error {
 	nebulaeDir := filepath.Join(baseDir, ".nebulas")
 	if _, err := os.Stat(nebulaeDir); os.IsNotExist(err) {
 		return fmt.Errorf("no .nebulas/ directory found in %s", baseDir)
+	} else if err != nil {
+		return fmt.Errorf("failed to access %s: %w", nebulaeDir, err)
 	}
 
 	if !isStderrTTY() {
@@ -73,6 +75,7 @@ func runTUI(cmd *cobra.Command, _ []string) error {
 
 	noSplash, _ := cmd.Flags().GetBool("no-splash")
 	maxWorkers, _ := cmd.Flags().GetInt("max-workers")
+	maxWorkersExplicit := cmd.Flags().Changed("max-workers")
 
 	// Home-to-execution loop: discover → select → run → repeat.
 	for {
@@ -100,7 +103,7 @@ func runTUI(cmd *cobra.Command, _ []string) error {
 		}
 
 		// Run the selected nebula.
-		runErr := runSelectedNebula(cfg, printer, selectedDir, noSplash, maxWorkers)
+		runErr := runSelectedNebula(cfg, printer, selectedDir, noSplash, maxWorkers, maxWorkersExplicit)
 		if runErr != nil {
 			printer.Error(fmt.Sprintf("nebula execution error: %v", runErr))
 			// Don't exit — return to the home screen.
@@ -113,7 +116,9 @@ func runTUI(cmd *cobra.Command, _ []string) error {
 
 // runSelectedNebula loads, validates, and executes a single nebula in TUI mode.
 // It reuses the same setup logic as runNebulaApply's TUI path.
-func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSplash bool, maxWorkers int) error {
+// maxWorkersExplicit indicates whether the user explicitly set --max-workers;
+// when false, the nebula manifest's MaxWorkers value takes precedence.
+func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSplash bool, maxWorkers int, maxWorkersExplicit bool) error {
 	n, err := nebula.Load(dir)
 	if err != nil {
 		return fmt.Errorf("failed to load nebula: %w", err)
@@ -152,7 +157,7 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 	if maxWorkers <= 0 {
 		maxWorkers = 1
 	}
-	if n.Manifest.Execution.MaxWorkers > 0 {
+	if !maxWorkersExplicit && n.Manifest.Execution.MaxWorkers > 0 {
 		maxWorkers = n.Manifest.Execution.MaxWorkers
 	}
 
