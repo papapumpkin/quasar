@@ -11,9 +11,10 @@ import (
 // CycleCommitter creates git commits at coder-cycle boundaries.
 type CycleCommitter interface {
 	// CommitCycle stages all changes and creates a commit for the given cycle.
+	// The summary is a short human-readable description included in the commit message.
 	// Returns the HEAD SHA after the commit. If the working tree is clean,
 	// no commit is created and the current HEAD SHA is returned.
-	CommitCycle(ctx context.Context, label string, cycle int) (sha string, err error)
+	CommitCycle(ctx context.Context, label string, cycle int, summary string) (sha string, err error)
 	// HeadSHA returns the current HEAD commit SHA.
 	HeadSHA(ctx context.Context) (string, error)
 }
@@ -55,7 +56,7 @@ func NewCycleCommitterWithBranch(ctx context.Context, dir, branch string) CycleC
 // CommitCycle stages all changes and creates a commit for the given cycle.
 // If the working tree is clean, no commit is created and the current HEAD SHA
 // is returned.
-func (g *gitCycleCommitter) CommitCycle(ctx context.Context, label string, cycle int) (string, error) {
+func (g *gitCycleCommitter) CommitCycle(ctx context.Context, label string, cycle int, summary string) (string, error) {
 	if g == nil {
 		return "", nil
 	}
@@ -78,7 +79,7 @@ func (g *gitCycleCommitter) CommitCycle(ctx context.Context, label string, cycle
 	}
 
 	// Create commit with descriptive message.
-	msg := fmt.Sprintf("quasar: %s cycle-%d", label, cycle)
+	msg := fmt.Sprintf("%s/cycle-%d: %s", label, cycle, summary)
 	commitCmd := exec.CommandContext(ctx, "git", "-C", g.dir, "commit", "-m", msg)
 	if err := commitCmd.Run(); err != nil {
 		return "", fmt.Errorf("git commit: %w", err)

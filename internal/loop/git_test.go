@@ -64,7 +64,7 @@ func TestCommitCycle(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		sha, err := c.CommitCycle(ctx, "task-1", 3)
+		sha, err := c.CommitCycle(ctx, "task-1", 3, "Fix status bar wrapping")
 		if err != nil {
 			t.Fatalf("CommitCycle: %v", err)
 		}
@@ -79,7 +79,7 @@ func TestCommitCycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		msg := strings.TrimSpace(string(out))
-		want := "quasar: task-1 cycle-3"
+		want := "task-1/cycle-3: Fix status bar wrapping"
 		if msg != want {
 			t.Errorf("commit message = %q, want %q", msg, want)
 		}
@@ -91,7 +91,7 @@ func TestCommitCycle(t *testing.T) {
 		c := NewCycleCommitter(context.Background(), dir)
 
 		ctx := context.Background()
-		sha, err := c.CommitCycle(ctx, "task-1", 1)
+		sha, err := c.CommitCycle(ctx, "task-1", 1, "No changes")
 		if err != nil {
 			t.Fatalf("CommitCycle on clean tree: %v", err)
 		}
@@ -130,7 +130,7 @@ func TestNilCycleCommitter(t *testing.T) {
 
 	t.Run("CommitCycle is no-op", func(t *testing.T) {
 		t.Parallel()
-		sha, err := c.CommitCycle(ctx, "x", 1)
+		sha, err := c.CommitCycle(ctx, "x", 1, "test")
 		if err != nil {
 			t.Fatalf("nil CommitCycle: %v", err)
 		}

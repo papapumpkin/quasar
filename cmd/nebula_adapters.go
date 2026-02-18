@@ -21,7 +21,7 @@ type loopAdapter struct {
 	loop *loop.Loop
 }
 
-func (a *loopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
+func (a *loopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, phaseTitle, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
 	// Apply per-phase execution overrides to the loop.
 	if exec.MaxReviewCycles > 0 {
 		a.loop.MaxCycles = exec.MaxReviewCycles
@@ -32,6 +32,7 @@ func (a *loopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, pha
 	if exec.Model != "" {
 		a.loop.Model = exec.Model
 	}
+	a.loop.CommitSummary = phaseTitle
 
 	result, err := a.loop.RunExistingTask(ctx, beadID, phaseDescription)
 	if err != nil {
@@ -60,21 +61,22 @@ type tuiLoopAdapter struct {
 	workDir      string
 }
 
-func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
+func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, phaseTitle, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
 	// Create a per-phase UI bridge so messages carry the phase ID.
 	phaseUI := tui.NewPhaseUIBridge(a.program, phaseID, a.workDir)
 
 	l := &loop.Loop{
-		Invoker:      a.invoker,
-		UI:           phaseUI,
-		Git:          a.git,
-		Hooks:        []loop.Hook{&loop.BeadHook{Beads: a.beads, UI: phaseUI}},
-		MaxCycles:    a.maxCycles,
-		MaxBudgetUSD: a.maxBudget,
-		Model:        a.model,
-		CoderPrompt:  a.coderPrompt,
-		ReviewPrompt: a.reviewPrompt,
-		WorkDir:      a.workDir,
+		Invoker:       a.invoker,
+		UI:            phaseUI,
+		Git:           a.git,
+		Hooks:         []loop.Hook{&loop.BeadHook{Beads: a.beads, UI: phaseUI}},
+		MaxCycles:     a.maxCycles,
+		MaxBudgetUSD:  a.maxBudget,
+		Model:         a.model,
+		CoderPrompt:   a.coderPrompt,
+		ReviewPrompt:  a.reviewPrompt,
+		WorkDir:       a.workDir,
+		CommitSummary: phaseTitle,
 	}
 
 	// Apply per-phase execution overrides.
