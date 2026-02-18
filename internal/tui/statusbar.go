@@ -396,15 +396,17 @@ func resourceLevelStyle(level ResourceLevel) lipgloss.Style {
 }
 
 // budgetColor returns a color based on budget consumption ratio.
-// Under 50%: amber (colorAccent), 50-80%: orange warning, over 80%: red danger.
+// Under 30%: muted (calm), 30-50%: amber, 50-80%: orange warning, over 80%: red danger.
 func budgetColor(ratio float64) lipgloss.Color {
 	switch {
 	case ratio >= 0.8:
 		return colorDanger
 	case ratio >= 0.5:
 		return colorBudgetWarn
-	default:
+	case ratio >= 0.3:
 		return colorAccent
+	default:
+		return colorMutedLight
 	}
 }
 

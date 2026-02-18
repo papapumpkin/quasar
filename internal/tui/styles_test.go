@@ -472,7 +472,11 @@ func TestBudgetColor(t *testing.T) {
 		ratio float64
 		want  lipgloss.Color
 	}{
-		{"low spend", 0.2, colorAccent},
+		{"very low spend", 0.05, colorMutedLight},
+		{"low spend", 0.2, colorMutedLight},
+		{"just under moderate", 0.29, colorMutedLight},
+		{"at moderate", 0.3, colorAccent},
+		{"moderate spend", 0.4, colorAccent},
 		{"just under half", 0.49, colorAccent},
 		{"at half", 0.5, colorBudgetWarn},
 		{"mid spend", 0.6, colorBudgetWarn},
