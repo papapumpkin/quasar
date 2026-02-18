@@ -187,11 +187,14 @@ func buildLoop(cfg *config.Config, uiHandler ui.UI, coderPrompt, reviewerPrompt 
 
 	git := loop.NewCycleCommitter(context.Background(), workDir)
 
+	beadHook := &loop.BeadHook{Beads: beadsClient, UI: uiHandler}
+
 	return &loop.Loop{
 		Invoker:      claudeInv,
 		Beads:        beadsClient,
 		UI:           uiHandler,
 		Git:          git,
+		Hooks:        []loop.Hook{beadHook},
 		MaxCycles:    cfg.MaxReviewCycles,
 		MaxBudgetUSD: cfg.MaxBudgetUSD,
 		Model:        cfg.Model,

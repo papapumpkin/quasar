@@ -1013,10 +1013,9 @@ func TestCreateFindingBeads(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		t.Parallel()
 		rb := newRecordingBeads()
-		rUI := &noopUI{}
 		l := &Loop{
-			UI:    rUI,
-			Hooks: []Hook{newBeadHook(rb, rUI)},
+			UI:    &noopUI{},
+			Beads: rb,
 		}
 		state := &CycleState{
 			TaskBeadID: "bead-1",
@@ -1044,7 +1043,7 @@ func TestCreateFindingBeads(t *testing.T) {
 		errBeads := &errorBeads{createErr: errors.New("create failed")}
 		l := &Loop{
 			UI:    rUI,
-			Hooks: []Hook{newBeadHook(errBeads, rUI)},
+			Beads: errBeads,
 		}
 		state := &CycleState{
 			TaskBeadID: "bead-1",
@@ -1063,8 +1062,7 @@ func TestCreateFindingBeads(t *testing.T) {
 
 	t.Run("NoFindings", func(t *testing.T) {
 		t.Parallel()
-		nui := &noopUI{}
-		l := &Loop{UI: nui, Hooks: []Hook{newBeadHook(&noopBeads{}, nui)}}
+		l := &Loop{UI: &noopUI{}, Beads: &noopBeads{}}
 		state := &CycleState{TaskBeadID: "bead-1"}
 		ids := l.createFindingBeads(context.Background(), state)
 		if len(ids) != 0 {
@@ -1146,8 +1144,8 @@ func TestRunLoop(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:      inv,
+			Beads:        rb,
 			UI:           rUI,
-			Hooks:        []Hook{newBeadHook(rb, rUI)},
 			MaxCycles:    3,
 			MaxBudgetUSD: 10.0,
 		}
@@ -1187,8 +1185,8 @@ func TestRunLoop(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:      inv,
+			Beads:        rb,
 			UI:           rUI,
-			Hooks:        []Hook{newBeadHook(rb, rUI)},
 			MaxCycles:    3,
 			MaxBudgetUSD: 10.0,
 		}
