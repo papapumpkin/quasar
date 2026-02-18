@@ -12,7 +12,7 @@ import (
 type GitCommitter interface {
 	// CommitPhase stages all changes and creates a commit for the completed phase.
 	// If the working tree is clean, this is a no-op.
-	CommitPhase(ctx context.Context, nebulaName, phaseID string) error
+	CommitPhase(ctx context.Context, nebulaName, phaseID, phaseTitle string) error
 	// Diff returns the diff of unstaged/staged changes since the last commit.
 	Diff(ctx context.Context) (string, error)
 	// DiffLastCommit returns the diff of the most recent commit (HEAD~1..HEAD).
@@ -60,7 +60,7 @@ func NewGitCommitterWithBranch(ctx context.Context, dir, branch string) GitCommi
 
 // CommitPhase stages all changes and creates a commit for the completed phase.
 // If the working tree is clean (nothing to commit), this is a no-op.
-func (g *gitCommitter) CommitPhase(ctx context.Context, nebulaName, phaseID string) error {
+func (g *gitCommitter) CommitPhase(ctx context.Context, nebulaName, phaseID, phaseTitle string) error {
 	if err := g.ensureBranch(ctx); err != nil {
 		return err
 	}
@@ -82,7 +82,14 @@ func (g *gitCommitter) CommitPhase(ctx context.Context, nebulaName, phaseID stri
 	}
 
 	// Create commit with descriptive message.
-	msg := fmt.Sprintf("nebula(%s): %s", nebulaName, phaseID)
+	// Truncate phaseTitle to keep the commit message under ~80 chars.
+	prefix := fmt.Sprintf("%s/%s: ", nebulaName, phaseID)
+	maxTitle := 80 - len(prefix)
+	title := phaseTitle
+	if maxTitle > 0 && len(title) > maxTitle {
+		title = title[:maxTitle-3] + "..."
+	}
+	msg := prefix + title
 	commitCmd := exec.CommandContext(ctx, "git", "-C", g.dir, "commit", "-m", msg)
 	if err := commitCmd.Run(); err != nil {
 		return fmt.Errorf("git commit: %w", err)

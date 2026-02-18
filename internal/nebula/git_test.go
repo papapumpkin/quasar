@@ -102,12 +102,12 @@ func TestGitCommitter_CommitPhase(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := gc.CommitPhase(ctx, "CI/CD Pipeline", "test-script-action"); err != nil {
+		if err := gc.CommitPhase(ctx, "CI/CD Pipeline", "test-script-action", "Run CI test scripts"); err != nil {
 			t.Fatalf("CommitPhase: %v", err)
 		}
 
 		msg := lastCommitMessage(ctx, t, dir)
-		want := "nebula(CI/CD Pipeline): test-script-action"
+		want := "CI/CD Pipeline/test-script-action: Run CI test scripts"
 		if msg != want {
 			t.Errorf("commit message = %q, want %q", msg, want)
 		}
@@ -122,7 +122,7 @@ func TestGitCommitter_CommitPhase(t *testing.T) {
 		}
 
 		before := commitCount(ctx, t, dir)
-		if err := gc.CommitPhase(ctx, "test", "phase-1"); err != nil {
+		if err := gc.CommitPhase(ctx, "test", "phase-1", "Test phase one"); err != nil {
 			t.Fatalf("CommitPhase: %v", err)
 		}
 		after := commitCount(ctx, t, dir)
@@ -151,7 +151,7 @@ func TestGitCommitter_CommitPhase(t *testing.T) {
 			}
 		}
 
-		if err := gc.CommitPhase(ctx, "multi-file", "phase-2"); err != nil {
+		if err := gc.CommitPhase(ctx, "multi-file", "phase-2", "Stage and commit all changes"); err != nil {
 			t.Fatalf("CommitPhase: %v", err)
 		}
 

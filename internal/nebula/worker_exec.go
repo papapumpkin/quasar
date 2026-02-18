@@ -41,7 +41,7 @@ func (wg *WorkerGroup) executePhase(ctx context.Context, phaseID string, waveNum
 	}
 
 	if err == nil && wg.Committer != nil {
-		if commitErr := wg.Committer.CommitPhase(ctx, wg.Nebula.Manifest.Nebula.Name, phaseID); commitErr != nil {
+		if commitErr := wg.Committer.CommitPhase(ctx, wg.Nebula.Manifest.Nebula.Name, phaseID, phase.Title); commitErr != nil {
 			fmt.Fprintf(wg.logger(), "warning: failed to commit phase %q: %v\n", phaseID, commitErr)
 		}
 	}
