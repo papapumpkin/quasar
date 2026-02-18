@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'tui-refinement-visual-polish'
-total_cost_usd = 17.388016
+total_cost_usd = 21.6532075
 
 [phases]
 [phases.beads-dag-fix]
@@ -83,9 +83,15 @@ updated_at = 2026-02-18T13:25:55.435749-05:00
 
 [phases.selection-indicator-only]
 bead_id = 'quasar-pun'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T11:27:29.335242-05:00
-updated_at = 2026-02-18T13:26:55.551912-05:00
+updated_at = 2026-02-18T13:36:46.541592-05:00
+
+[phases.selection-indicator-only.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean fix-up commit removing architect-related test references and updating binding counts after the architect overlay removal; all builds and tests pass.'
 
 [phases.status-bar-colors]
 bead_id = 'quasar-dui'
