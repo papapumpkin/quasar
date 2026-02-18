@@ -26,6 +26,10 @@ type StatusBar struct {
 	Stopping     bool
 	Resources    ResourceSnapshot
 	Thresholds   ResourceThresholds
+
+	// Home mode fields.
+	HomeMode        bool // true when displaying the home landing page
+	HomeNebulaCount int  // number of discovered nebulas
 }
 
 // View renders the status bar as a single line.
@@ -175,6 +179,9 @@ func (s StatusBar) renderResourceSegment(compact bool) string {
 
 // buildFixedLeftPrefix returns the mode label + progress text (without the name).
 func (s StatusBar) buildFixedLeftPrefix(compact bool) string {
+	if s.HomeMode {
+		return styleStatusMode.Render("home: ")
+	}
 	if s.Total > 0 {
 		// Nebula mode.
 		if compact {
@@ -204,6 +211,15 @@ func (s StatusBar) buildNameSegment(compact bool, maxWidth int) string {
 	barBg := lipgloss.NewStyle().Background(colorSurface)
 	if maxWidth < 0 {
 		maxWidth = 0
+	}
+
+	if s.HomeMode {
+		label := fmt.Sprintf("%d nebulas", s.HomeNebulaCount)
+		if s.HomeNebulaCount == 1 {
+			label = "1 nebula"
+		}
+		label = TruncateWithEllipsis(label, maxWidth)
+		return styleStatusName.Render(label)
 	}
 
 	if s.Total > 0 {

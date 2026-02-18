@@ -63,6 +63,15 @@ func DiffFileListFooterBindings(km KeyMap) []key.Binding {
 	return []key.Binding{km.Up, km.Down, km.OpenDiff, diffToggle, km.Quit}
 }
 
+// HomeFooterBindings returns footer bindings for home mode.
+func HomeFooterBindings(km KeyMap) []key.Binding {
+	enter := key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "run"),
+	)
+	return []key.Binding{km.Up, km.Down, enter, km.Quit}
+}
+
 // GateFooterBindings returns footer bindings during gate prompts.
 // Includes Esc (back/skip) so users know they can dismiss the prompt.
 func GateFooterBindings(km KeyMap) []key.Binding {
