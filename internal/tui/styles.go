@@ -101,7 +101,6 @@ var styleBreadcrumbSep = lipgloss.NewStyle().
 var (
 	styleRowSelected = lipgloss.NewStyle().
 				Foreground(colorBrightWhite).
-				Background(colorSelectionBg).
 				Bold(true)
 
 	styleRowNormal = lipgloss.NewStyle().
