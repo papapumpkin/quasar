@@ -156,7 +156,7 @@ func TestBeadViewCycleOrdering(t *testing.T) {
 
 func TestBeadViewTitleTruncation(t *testing.T) {
 	bv := NewBeadView()
-	bv.Width = 25 // Very narrow — prefix is 9 chars, leaving 16 for title.
+	bv.Width = 25 // Very narrow — prefix is 7 chars, leaving 18 for title.
 	bv.SetRoot(BeadInfo{
 		ID:     "root",
 		Title:  "Narrow task",
