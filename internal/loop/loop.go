@@ -475,7 +475,7 @@ func (l *Loop) emitBeadUpdate(state *CycleState, status string) {
 		severity := "major"
 		cycle := 0
 		if i < len(state.AllFindings) {
-			title = truncate(state.AllFindings[i].Description, 80)
+			title = firstLine(state.AllFindings[i].Description, 80)
 			severity = state.AllFindings[i].Severity
 			cycle = state.AllFindings[i].Cycle
 		}

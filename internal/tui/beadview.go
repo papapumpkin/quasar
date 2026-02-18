@@ -97,9 +97,9 @@ func (v BeadView) View() string {
 		}
 		icon, iconStyle := beadStatusIcon(c.Status)
 
-		// Truncate title to fit available width.
+		// Strip newlines and truncate title to fit available width.
 		maxTitle := v.Width - treePrefixLen
-		title := c.Title
+		title := strings.ReplaceAll(c.Title, "\n", " ")
 		if maxTitle > 0 {
 			title = TruncateWithEllipsis(title, maxTitle)
 		}
