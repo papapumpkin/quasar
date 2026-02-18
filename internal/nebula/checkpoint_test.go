@@ -17,7 +17,7 @@ type mockGitCommitter struct {
 	diffStatErr        error
 }
 
-func (m *mockGitCommitter) CommitPhase(_ context.Context, _, _ string) error {
+func (m *mockGitCommitter) CommitPhase(_ context.Context, _, _, _ string) error {
 	return nil
 }
 

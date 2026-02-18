@@ -10,18 +10,19 @@ import (
 
 // Loop orchestrates the coder-reviewer cycle for a single task.
 type Loop struct {
-	Invoker      agent.Invoker
-	UI           ui.UI
-	Git          CycleCommitter // Optional; nil disables per-cycle commits.
-	Hooks        []Hook         // Lifecycle hooks (e.g., BeadHook for tracking).
-	MaxCycles    int
-	MaxBudgetUSD float64
-	Model        string
-	CoderPrompt  string
-	ReviewPrompt string
-	WorkDir      string
-	MCP          *agent.MCPConfig // Optional MCP server config passed to agents.
-	RefactorCh   <-chan string    // Optional channel carrying updated task descriptions from phase edits.
+	Invoker       agent.Invoker
+	UI            ui.UI
+	Git           CycleCommitter // Optional; nil disables per-cycle commits.
+	Hooks         []Hook         // Lifecycle hooks (e.g., BeadHook for tracking).
+	MaxCycles     int
+	MaxBudgetUSD  float64
+	Model         string
+	CoderPrompt   string
+	ReviewPrompt  string
+	WorkDir       string
+	MCP           *agent.MCPConfig // Optional MCP server config passed to agents.
+	RefactorCh    <-chan string    // Optional channel carrying updated task descriptions from phase edits.
+	CommitSummary string           // Short label for cycle commit messages. If empty, derived from task title.
 }
 
 // TaskResult holds the outcome of a completed task loop.
@@ -259,7 +260,11 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 
 	// Commit the coder's changes for this cycle.
 	if l.Git != nil {
-		sha, err := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle)
+		summary := l.CommitSummary
+		if summary == "" {
+			summary = firstLine(state.TaskTitle, 72)
+		}
+		sha, err := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle, summary)
 		if err != nil {
 			l.UI.Error(fmt.Sprintf("failed to commit cycle %d: %v", state.Cycle, err))
 		} else {

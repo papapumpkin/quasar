@@ -12,7 +12,7 @@ import (
 type GitCommitter interface {
 	// CommitPhase stages all changes and creates a commit for the completed phase.
 	// If the working tree is clean, this is a no-op.
-	CommitPhase(ctx context.Context, nebulaName, phaseID string) error
+	CommitPhase(ctx context.Context, nebulaName, phaseID, phaseTitle string) error
 	// Diff returns the diff of unstaged/staged changes since the last commit.
 	Diff(ctx context.Context) (string, error)
 	// DiffLastCommit returns the diff of the most recent commit (HEAD~1..HEAD).
@@ -23,7 +23,8 @@ type GitCommitter interface {
 
 // gitCommitter implements GitCommitter using the git CLI.
 type gitCommitter struct {
-	dir string // working directory for git commands
+	dir    string // working directory for git commands
+	branch string // expected branch; empty = no enforcement
 }
 
 // NewGitCommitter creates a GitCommitter for the given directory.
@@ -43,9 +44,27 @@ func NewGitCommitter(ctx context.Context, dir string) GitCommitter {
 	return &gitCommitter{dir: dir}
 }
 
+// NewGitCommitterWithBranch creates a GitCommitter that verifies the working
+// directory is on the expected branch before every commit. If branch is empty,
+// no enforcement is applied.
+func NewGitCommitterWithBranch(ctx context.Context, dir, branch string) GitCommitter {
+	if _, err := exec.LookPath("git"); err != nil {
+		return nil
+	}
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--git-dir")
+	if err := cmd.Run(); err != nil {
+		return nil
+	}
+	return &gitCommitter{dir: dir, branch: branch}
+}
+
 // CommitPhase stages all changes and creates a commit for the completed phase.
 // If the working tree is clean (nothing to commit), this is a no-op.
-func (g *gitCommitter) CommitPhase(ctx context.Context, nebulaName, phaseID string) error {
+func (g *gitCommitter) CommitPhase(ctx context.Context, nebulaName, phaseID, phaseTitle string) error {
+	if err := g.ensureBranch(ctx); err != nil {
+		return err
+	}
+
 	// Check for changes first.
 	statusCmd := exec.CommandContext(ctx, "git", "-C", g.dir, "status", "--porcelain")
 	out, err := statusCmd.Output()
@@ -63,7 +82,14 @@ func (g *gitCommitter) CommitPhase(ctx context.Context, nebulaName, phaseID stri
 	}
 
 	// Create commit with descriptive message.
-	msg := fmt.Sprintf("nebula(%s): %s", nebulaName, phaseID)
+	// Truncate phaseTitle to keep the commit message under ~80 chars.
+	prefix := fmt.Sprintf("%s/%s: ", nebulaName, phaseID)
+	maxTitle := 80 - len(prefix)
+	title := phaseTitle
+	if maxTitle > 3 && len(title) > maxTitle {
+		title = title[:maxTitle-3] + "..."
+	}
+	msg := prefix + title
 	commitCmd := exec.CommandContext(ctx, "git", "-C", g.dir, "commit", "-m", msg)
 	if err := commitCmd.Run(); err != nil {
 		return fmt.Errorf("git commit: %w", err)
@@ -105,6 +131,26 @@ func (g *gitCommitter) DiffStatLastCommit(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("git diff --stat HEAD~1..HEAD: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.String(), nil
+}
+
+// ensureBranch verifies the working directory is on the expected branch.
+// If branch is empty, this is a no-op.
+func (g *gitCommitter) ensureBranch(ctx context.Context) error {
+	if g.branch == "" {
+		return nil
+	}
+	cmd := exec.CommandContext(ctx, "git", "-C", g.dir, "rev-parse", "--abbrev-ref", "HEAD")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("checking current branch: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	current := strings.TrimSpace(stdout.String())
+	if current != g.branch {
+		return fmt.Errorf("branch mismatch: expected %q, on %q", g.branch, current)
+	}
+	return nil
 }
 
 // InterventionFileNames returns the filenames that should be excluded from

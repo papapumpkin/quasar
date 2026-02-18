@@ -78,3 +78,13 @@ func truncate(s string, maxLen int) string {
 	}
 	return s[:maxLen] + "... [truncated]"
 }
+
+// firstLine extracts the first line of text and truncates to maxLen characters.
+func firstLine(s string, maxLen int) string {
+	line, _, _ := strings.Cut(s, "\n")
+	line = strings.TrimSpace(line)
+	if len(line) > maxLen {
+		return line[:maxLen]
+	}
+	return line
+}

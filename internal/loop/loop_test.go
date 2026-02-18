@@ -247,7 +247,7 @@ func (g *fakeGit) HeadSHA(_ context.Context) (string, error) {
 	return g.headSHA, g.headErr
 }
 
-func (g *fakeGit) CommitCycle(_ context.Context, _ string, _ int) (string, error) {
+func (g *fakeGit) CommitCycle(_ context.Context, _ string, _ int, _ string) (string, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.commitErr != nil {

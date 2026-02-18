@@ -1,0 +1,37 @@
+[nebula]
+name = "TUI Refinement & Visual Polish"
+description = "Fix status bar color regression, solid header background, beads DAG bug, selection highlighting, quit confirmation, and remove architect overlay."
+
+[defaults]
+type = "bug"
+priority = 2
+labels = ["quasar", "tui", "visual"]
+
+[execution]
+max_workers = 2
+max_review_cycles = 5
+max_budget_usd = 40.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Fix the status bar color regression: restore per-segment coloring instead of uniform colorMutedLight",
+    "Make the header background solid full-width dusk purple with no gaps or patchiness",
+    "Remove background color from the QUASAR logo text",
+    "Color-code phase progress to visually indicate doneness ratio",
+    "Fix the beads view to render the DAG tree instead of a wall of text",
+    "Remove full-width selection highlighting, keep only the blue indicator bar",
+    "Add quit confirmation prompt when exiting an in-progress nebula",
+    "Remove the architect overlay (edit phase / add phase) functionality entirely",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "All TUI code lives in internal/tui/",
+    "Do not break the stderr Printer fallback path",
+    "Use only charmbracelet ecosystem (bubbletea, lipgloss, bubbles) — no other TUI deps",
+    "All new code must have tests",
+    "The loop and nebula packages must not import internal/tui",
+    "Keep the existing galactic color palette — enhance, don't replace",
+    "Keep the red/orange coloring for high CPU/memory/cost usage",
+]

@@ -34,14 +34,14 @@ func (wg *WorkerGroup) executePhase(ctx context.Context, phaseID string, waveNum
 
 	exec := ResolveExecution(wg.GlobalCycles, wg.GlobalBudget, wg.GlobalModel, &wg.Nebula.Manifest.Execution, phase)
 	prompt := buildPhasePrompt(phase, &wg.Nebula.Manifest.Context)
-	phaseResult, err := wg.Runner.RunExistingPhase(ctx, phaseID, ps.BeadID, prompt, exec)
+	phaseResult, err := wg.Runner.RunExistingPhase(ctx, phaseID, ps.BeadID, phase.Title, prompt, exec)
 
 	if phaseResult != nil {
 		wg.progress.RecordPhaseComplete(phaseID, *phaseResult)
 	}
 
 	if err == nil && wg.Committer != nil {
-		if commitErr := wg.Committer.CommitPhase(ctx, wg.Nebula.Manifest.Nebula.Name, phaseID); commitErr != nil {
+		if commitErr := wg.Committer.CommitPhase(ctx, wg.Nebula.Manifest.Nebula.Name, phaseID, phase.Title); commitErr != nil {
 			fmt.Fprintf(wg.logger(), "warning: failed to commit phase %q: %v\n", phaseID, commitErr)
 		}
 	}

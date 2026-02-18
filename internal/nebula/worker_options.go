@@ -17,7 +17,7 @@ type PhaseRunnerResult struct {
 
 // PhaseRunner is the interface for executing a phase (satisfied by loop.Loop).
 type PhaseRunner interface {
-	RunExistingPhase(ctx context.Context, phaseID, beadID, phaseDescription string, exec ResolvedExecution) (*PhaseRunnerResult, error)
+	RunExistingPhase(ctx context.Context, phaseID, beadID, phaseTitle, phaseDescription string, exec ResolvedExecution) (*PhaseRunnerResult, error)
 	GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error)
 }
 
