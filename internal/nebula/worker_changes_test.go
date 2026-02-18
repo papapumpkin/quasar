@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -20,14 +21,25 @@ func writeTestPhaseFile(t *testing.T, dir, id, body string) string {
 	return path
 }
 
+// newTestHotReloader creates a minimal HotReloader for testing change handlers.
+func newTestHotReloader(t *testing.T, buf *bytes.Buffer, mu *sync.Mutex) *HotReloader {
+	t.Helper()
+	return NewHotReloader(HotReloaderConfig{
+		Logger: buf,
+		Mu:     mu,
+	})
+}
+
 func newTestWorkerGroup(t *testing.T) *WorkerGroup {
 	t.Helper()
 	var buf bytes.Buffer
 	wg := &WorkerGroup{
 		Logger: &buf,
 	}
-	wg.phaseLoops = make(map[string]*phaseLoopHandle)
-	wg.pendingRefactors = make(map[string]string)
+	wg.hotReload = NewHotReloader(HotReloaderConfig{
+		Logger: &buf,
+		Mu:     &wg.mu,
+	})
 	return wg
 }
 
@@ -37,14 +49,14 @@ func TestHandlePhaseModified_StoresPending(t *testing.T) {
 	wg := newTestWorkerGroup(t)
 	path := writeTestPhaseFile(t, dir, "phase-1", "Updated instructions")
 
-	wg.handlePhaseModified(Change{
+	wg.hotReload.handlePhaseModified(Change{
 		Kind:    ChangeModified,
 		PhaseID: "phase-1",
 		File:    path,
 	})
 
 	wg.mu.Lock()
-	body, ok := wg.pendingRefactors["phase-1"]
+	body, ok := wg.hotReload.pendingRefactors["phase-1"]
 	wg.mu.Unlock()
 	if !ok {
 		t.Fatal("expected pending refactor for phase-1")
@@ -63,7 +75,7 @@ func TestHandlePhaseModified_SendsToRunningLoop(t *testing.T) {
 
 	path := writeTestPhaseFile(t, dir, "phase-1", "New body for running phase")
 
-	wg.handlePhaseModified(Change{
+	wg.hotReload.handlePhaseModified(Change{
 		Kind:    ChangeModified,
 		PhaseID: "phase-1",
 		File:    path,
@@ -83,14 +95,14 @@ func TestHandlePhaseModified_BadFile(t *testing.T) {
 	t.Parallel()
 	wg := newTestWorkerGroup(t)
 
-	wg.handlePhaseModified(Change{
+	wg.hotReload.handlePhaseModified(Change{
 		Kind:    ChangeModified,
 		PhaseID: "phase-bad",
 		File:    "/nonexistent/phase-bad.md",
 	})
 
 	wg.mu.Lock()
-	_, ok := wg.pendingRefactors["phase-bad"]
+	_, ok := wg.hotReload.pendingRefactors["phase-bad"]
 	wg.mu.Unlock()
 	if ok {
 		t.Error("should not store pending refactor for unparseable file")
@@ -103,7 +115,7 @@ func TestRegisterPhaseLoop_FlushPending(t *testing.T) {
 
 	// Store a pending refactor before registration.
 	wg.mu.Lock()
-	wg.pendingRefactors["phase-2"] = "pre-registered body"
+	wg.hotReload.pendingRefactors["phase-2"] = "pre-registered body"
 	wg.mu.Unlock()
 
 	ch := make(chan string, 1)
@@ -128,7 +140,7 @@ func TestUnregisterPhaseLoop(t *testing.T) {
 	wg.UnregisterPhaseLoop("phase-3")
 
 	wg.mu.Lock()
-	_, ok := wg.phaseLoops["phase-3"]
+	_, ok := wg.hotReload.phaseLoops["phase-3"]
 	wg.mu.Unlock()
 	if ok {
 		t.Error("phase-3 should be unregistered")
@@ -139,21 +151,23 @@ func TestHandlePhaseAdded_NoLiveState(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	var buf bytes.Buffer
-	wg := &WorkerGroup{Logger: &buf}
-	wg.phaseLoops = make(map[string]*phaseLoopHandle)
-	wg.pendingRefactors = make(map[string]string)
+	var mu sync.Mutex
+	hr := NewHotReloader(HotReloaderConfig{
+		Logger: &buf,
+		Mu:     &mu,
+	})
 
 	path := writeTestPhaseFile(t, dir, "new-phase", "New phase body")
 
-	wg.handlePhaseAdded(context.Background(), Change{
+	hr.handlePhaseAdded(context.Background(), Change{
 		Kind:    ChangeAdded,
 		PhaseID: "new-phase",
 		File:    path,
 	})
 
-	wg.mu.Lock()
-	_, ok := wg.pendingRefactors["new-phase"]
-	wg.mu.Unlock()
+	mu.Lock()
+	_, ok := hr.pendingRefactors["new-phase"]
+	mu.Unlock()
 	if !ok {
 		t.Error("expected pending entry for new-phase")
 	}
@@ -166,11 +180,13 @@ func TestHandlePhaseAdded_NoLiveState(t *testing.T) {
 func TestHandlePhaseAdded_BadFile(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	wg := &WorkerGroup{Logger: &buf}
-	wg.phaseLoops = make(map[string]*phaseLoopHandle)
-	wg.pendingRefactors = make(map[string]string)
+	var mu sync.Mutex
+	hr := NewHotReloader(HotReloaderConfig{
+		Logger: &buf,
+		Mu:     &mu,
+	})
 
-	wg.handlePhaseAdded(context.Background(), Change{
+	hr.handlePhaseAdded(context.Background(), Change{
 		Kind:    ChangeAdded,
 		PhaseID: "bad-phase",
 		File:    "/nonexistent/bad-phase.md",
@@ -181,10 +197,36 @@ func TestHandlePhaseAdded_BadFile(t *testing.T) {
 	}
 }
 
+func newTestHotReloaderWithLiveState(t *testing.T, buf *bytes.Buffer, mu *sync.Mutex, neb *Nebula, state *State, graph *Graph, phasesByID map[string]*PhaseSpec, done, failed, inFlight map[string]bool, opts ...func(*HotReloaderConfig)) *HotReloader {
+	t.Helper()
+	tracker := &PhaseTracker{
+		phasesByID: phasesByID,
+		done:       done,
+		failed:     failed,
+		inFlight:   inFlight,
+	}
+	progress := NewProgressReporter(neb, state, nil, nil, buf)
+	cfg := HotReloaderConfig{
+		Nebula:   neb,
+		State:    state,
+		Tracker:  tracker,
+		Progress: progress,
+		Logger:   buf,
+		Mu:       mu,
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	hr := NewHotReloader(cfg)
+	hr.InitLiveState(graph, phasesByID)
+	return hr
+}
+
 func TestHandlePhaseAdded_WithLiveState(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	var buf bytes.Buffer
+	var mu sync.Mutex
 	neb := &Nebula{
 		Dir:      dir,
 		Manifest: Manifest{},
@@ -195,33 +237,26 @@ func TestHandlePhaseAdded_WithLiveState(t *testing.T) {
 		Phases:  map[string]*PhaseState{"existing": {Status: PhaseStatusDone}},
 	}
 	graph := NewGraph(neb.Phases)
-	wg := &WorkerGroup{
-		Logger:         &buf,
-		Nebula:         neb,
-		State:          state,
-		liveGraph:      graph,
-		livePhasesByID: map[string]*PhaseSpec{"existing": &neb.Phases[0]},
-		liveDone:       map[string]bool{"existing": true},
-		liveFailed:     map[string]bool{},
-		liveInFlight:   map[string]bool{},
-		hotAdded:       make(chan string, 16),
-	}
-	wg.phaseLoops = make(map[string]*phaseLoopHandle)
-	wg.pendingRefactors = make(map[string]string)
+	phasesByID := map[string]*PhaseSpec{"existing": &neb.Phases[0]}
+	done := map[string]bool{"existing": true}
+	failed := map[string]bool{}
+	inFlight := map[string]bool{}
+
+	hr := newTestHotReloaderWithLiveState(t, &buf, &mu, neb, state, graph, phasesByID, done, failed, inFlight)
 
 	path := writeTestPhaseFile(t, dir, "hot-phase", "Hot phase body")
 
-	wg.handlePhaseAdded(context.Background(), Change{
+	hr.handlePhaseAdded(context.Background(), Change{
 		Kind:    ChangeAdded,
 		PhaseID: "hot-phase",
 		File:    path,
 	})
 
 	// Phase should be in live data structures.
-	wg.mu.Lock()
-	_, inLive := wg.livePhasesByID["hot-phase"]
-	ps := wg.State.Phases["hot-phase"]
-	wg.mu.Unlock()
+	mu.Lock()
+	_, inLive := hr.livePhasesByID["hot-phase"]
+	ps := state.Phases["hot-phase"]
+	mu.Unlock()
 
 	if !inLive {
 		t.Error("expected hot-phase in livePhasesByID")
@@ -232,7 +267,7 @@ func TestHandlePhaseAdded_WithLiveState(t *testing.T) {
 
 	// Phase has no deps and all deps are satisfied, should be on hotAdded channel.
 	select {
-	case id := <-wg.hotAdded:
+	case id := <-hr.hotAdded:
 		if id != "hot-phase" {
 			t.Errorf("expected hot-phase on hotAdded channel, got %q", id)
 		}
@@ -249,6 +284,7 @@ func TestHandlePhaseAdded_DuplicateID(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	var buf bytes.Buffer
+	var mu sync.Mutex
 	neb := &Nebula{
 		Dir:      dir,
 		Manifest: Manifest{},
@@ -259,23 +295,13 @@ func TestHandlePhaseAdded_DuplicateID(t *testing.T) {
 		Phases:  map[string]*PhaseState{"dup": {Status: PhaseStatusPending}},
 	}
 	graph := NewGraph(neb.Phases)
-	wg := &WorkerGroup{
-		Logger:         &buf,
-		Nebula:         neb,
-		State:          state,
-		liveGraph:      graph,
-		livePhasesByID: map[string]*PhaseSpec{"dup": &neb.Phases[0]},
-		liveDone:       map[string]bool{},
-		liveFailed:     map[string]bool{},
-		liveInFlight:   map[string]bool{},
-		hotAdded:       make(chan string, 16),
-	}
-	wg.phaseLoops = make(map[string]*phaseLoopHandle)
-	wg.pendingRefactors = make(map[string]string)
+	phasesByID := map[string]*PhaseSpec{"dup": &neb.Phases[0]}
+
+	hr := newTestHotReloaderWithLiveState(t, &buf, &mu, neb, state, graph, phasesByID, map[string]bool{}, map[string]bool{}, map[string]bool{})
 
 	path := writeTestPhaseFile(t, dir, "dup", "Duplicate phase body")
 
-	wg.handlePhaseAdded(context.Background(), Change{
+	hr.handlePhaseAdded(context.Background(), Change{
 		Kind:    ChangeAdded,
 		PhaseID: "dup",
 		File:    path,
@@ -287,7 +313,7 @@ func TestHandlePhaseAdded_DuplicateID(t *testing.T) {
 
 	// Should not be on hotAdded channel.
 	select {
-	case id := <-wg.hotAdded:
+	case id := <-hr.hotAdded:
 		t.Errorf("unexpected phase on hotAdded: %q", id)
 	default:
 		// Expected: rejected phase is not queued.
@@ -298,6 +324,7 @@ func TestHandlePhaseAdded_WithBlocks(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	var buf bytes.Buffer
+	var mu sync.Mutex
 	neb := &Nebula{
 		Dir:      dir,
 		Manifest: Manifest{},
@@ -314,19 +341,10 @@ func TestHandlePhaseAdded_WithBlocks(t *testing.T) {
 		},
 	}
 	graph := NewGraph(neb.Phases)
-	wg := &WorkerGroup{
-		Logger:         &buf,
-		Nebula:         neb,
-		State:          state,
-		liveGraph:      graph,
-		livePhasesByID: map[string]*PhaseSpec{"setup": &neb.Phases[0], "tests": &neb.Phases[1]},
-		liveDone:       map[string]bool{"setup": true},
-		liveFailed:     map[string]bool{},
-		liveInFlight:   map[string]bool{},
-		hotAdded:       make(chan string, 16),
-	}
-	wg.phaseLoops = make(map[string]*phaseLoopHandle)
-	wg.pendingRefactors = make(map[string]string)
+	phasesByID := map[string]*PhaseSpec{"setup": &neb.Phases[0], "tests": &neb.Phases[1]}
+	done := map[string]bool{"setup": true}
+
+	hr := newTestHotReloaderWithLiveState(t, &buf, &mu, neb, state, graph, phasesByID, done, map[string]bool{}, map[string]bool{})
 
 	// Write a phase file with blocks field.
 	content := "+++\nid = \"middleware\"\ntitle = \"Middleware\"\ndepends_on = [\"setup\"]\nblocks = [\"tests\"]\n+++\nMiddleware body"
@@ -335,15 +353,15 @@ func TestHandlePhaseAdded_WithBlocks(t *testing.T) {
 		t.Fatalf("failed to write phase file: %v", err)
 	}
 
-	wg.handlePhaseAdded(context.Background(), Change{
+	hr.handlePhaseAdded(context.Background(), Change{
 		Kind:    ChangeAdded,
 		PhaseID: "middleware",
 		File:    path,
 	})
 
-	wg.mu.Lock()
-	testsPhase := wg.livePhasesByID["tests"]
-	wg.mu.Unlock()
+	mu.Lock()
+	testsPhase := hr.livePhasesByID["tests"]
+	mu.Unlock()
 
 	// The "tests" phase should now depend on "middleware".
 	found := false
@@ -362,6 +380,7 @@ func TestHandlePhaseAdded_BlocksRunningPhase(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	var buf bytes.Buffer
+	var mu sync.Mutex
 	neb := &Nebula{
 		Dir:      dir,
 		Manifest: Manifest{},
@@ -378,19 +397,11 @@ func TestHandlePhaseAdded_BlocksRunningPhase(t *testing.T) {
 		},
 	}
 	graph := NewGraph(neb.Phases)
-	wg := &WorkerGroup{
-		Logger:         &buf,
-		Nebula:         neb,
-		State:          state,
-		liveGraph:      graph,
-		livePhasesByID: map[string]*PhaseSpec{"setup": &neb.Phases[0], "running": &neb.Phases[1]},
-		liveDone:       map[string]bool{"setup": true},
-		liveFailed:     map[string]bool{},
-		liveInFlight:   map[string]bool{"running": true},
-		hotAdded:       make(chan string, 16),
-	}
-	wg.phaseLoops = make(map[string]*phaseLoopHandle)
-	wg.pendingRefactors = make(map[string]string)
+	phasesByID := map[string]*PhaseSpec{"setup": &neb.Phases[0], "running": &neb.Phases[1]}
+	done := map[string]bool{"setup": true}
+	inFlight := map[string]bool{"running": true}
+
+	hr := newTestHotReloaderWithLiveState(t, &buf, &mu, neb, state, graph, phasesByID, done, map[string]bool{}, inFlight)
 
 	// Write a phase that tries to block a running phase.
 	content := "+++\nid = \"blocker\"\ntitle = \"Blocker\"\ndepends_on = [\"setup\"]\nblocks = [\"running\"]\n+++\nBlocker body"
@@ -399,7 +410,7 @@ func TestHandlePhaseAdded_BlocksRunningPhase(t *testing.T) {
 		t.Fatalf("failed to write phase file: %v", err)
 	}
 
-	wg.handlePhaseAdded(context.Background(), Change{
+	hr.handlePhaseAdded(context.Background(), Change{
 		Kind:    ChangeAdded,
 		PhaseID: "blocker",
 		File:    path,
@@ -411,9 +422,9 @@ func TestHandlePhaseAdded_BlocksRunningPhase(t *testing.T) {
 	}
 
 	// The running phase should NOT have blocker as a dependency.
-	wg.mu.Lock()
-	runningPhase := wg.livePhasesByID["running"]
-	wg.mu.Unlock()
+	mu.Lock()
+	runningPhase := hr.livePhasesByID["running"]
+	mu.Unlock()
 	for _, dep := range runningPhase.DependsOn {
 		if dep == "blocker" {
 			t.Error("running phase should not have blocker as dependency")
@@ -425,6 +436,7 @@ func TestHandlePhaseAdded_OnHotAddCallback(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	var buf bytes.Buffer
+	var mu sync.Mutex
 	neb := &Nebula{
 		Dir:      dir,
 		Manifest: Manifest{},
@@ -435,28 +447,18 @@ func TestHandlePhaseAdded_OnHotAddCallback(t *testing.T) {
 		Phases:  map[string]*PhaseState{"existing": {Status: PhaseStatusDone}},
 	}
 	graph := NewGraph(neb.Phases)
+	phasesByID := map[string]*PhaseSpec{"existing": &neb.Phases[0]}
 
 	var callbackPhaseID, callbackTitle string
 	var callbackDeps []string
 
-	wg := &WorkerGroup{
-		Logger:         &buf,
-		Nebula:         neb,
-		State:          state,
-		liveGraph:      graph,
-		livePhasesByID: map[string]*PhaseSpec{"existing": &neb.Phases[0]},
-		liveDone:       map[string]bool{"existing": true},
-		liveFailed:     map[string]bool{},
-		liveInFlight:   map[string]bool{},
-		hotAdded:       make(chan string, 16),
-		OnHotAdd: func(phaseID, title string, dependsOn []string) {
+	hr := newTestHotReloaderWithLiveState(t, &buf, &mu, neb, state, graph, phasesByID, map[string]bool{"existing": true}, map[string]bool{}, map[string]bool{}, func(cfg *HotReloaderConfig) {
+		cfg.OnHotAdd = func(phaseID, title string, dependsOn []string) {
 			callbackPhaseID = phaseID
 			callbackTitle = title
 			callbackDeps = dependsOn
-		},
-	}
-	wg.phaseLoops = make(map[string]*phaseLoopHandle)
-	wg.pendingRefactors = make(map[string]string)
+		}
+	})
 
 	content := "+++\nid = \"callback-phase\"\ntitle = \"Callback Phase\"\ndepends_on = [\"existing\"]\n+++\nBody"
 	path := filepath.Join(dir, "callback-phase.md")
@@ -464,7 +466,7 @@ func TestHandlePhaseAdded_OnHotAddCallback(t *testing.T) {
 		t.Fatalf("failed to write phase file: %v", err)
 	}
 
-	wg.handlePhaseAdded(context.Background(), Change{
+	hr.handlePhaseAdded(context.Background(), Change{
 		Kind:    ChangeAdded,
 		PhaseID: "callback-phase",
 		File:    path,
@@ -485,6 +487,7 @@ func TestHandlePhaseAdded_CreatesBead(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	var buf bytes.Buffer
+	var mu sync.Mutex
 	neb := &Nebula{
 		Dir:      dir,
 		Manifest: Manifest{},
@@ -496,32 +499,23 @@ func TestHandlePhaseAdded_CreatesBead(t *testing.T) {
 	}
 	graph := NewGraph(neb.Phases)
 	client := newMockBeadsClient()
-	wg := &WorkerGroup{
-		Logger:         &buf,
-		Nebula:         neb,
-		State:          state,
-		BeadsClient:    client,
-		liveGraph:      graph,
-		livePhasesByID: map[string]*PhaseSpec{"existing": &neb.Phases[0]},
-		liveDone:       map[string]bool{"existing": true},
-		liveFailed:     map[string]bool{},
-		liveInFlight:   map[string]bool{},
-		hotAdded:       make(chan string, 16),
-	}
-	wg.phaseLoops = make(map[string]*phaseLoopHandle)
-	wg.pendingRefactors = make(map[string]string)
+	phasesByID := map[string]*PhaseSpec{"existing": &neb.Phases[0]}
+
+	hr := newTestHotReloaderWithLiveState(t, &buf, &mu, neb, state, graph, phasesByID, map[string]bool{"existing": true}, map[string]bool{}, map[string]bool{}, func(cfg *HotReloaderConfig) {
+		cfg.BeadsClient = client
+	})
 
 	path := writeTestPhaseFile(t, dir, "bead-phase", "Bead phase body")
 
-	wg.handlePhaseAdded(context.Background(), Change{
+	hr.handlePhaseAdded(context.Background(), Change{
 		Kind:    ChangeAdded,
 		PhaseID: "bead-phase",
 		File:    path,
 	})
 
-	wg.mu.Lock()
-	ps := wg.State.Phases["bead-phase"]
-	wg.mu.Unlock()
+	mu.Lock()
+	ps := state.Phases["bead-phase"]
+	mu.Unlock()
 
 	if ps == nil {
 		t.Fatal("expected state entry for bead-phase")
@@ -541,6 +535,7 @@ func TestHandlePhaseAdded_BeadCreateFails(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	var buf bytes.Buffer
+	var mu sync.Mutex
 	neb := &Nebula{
 		Dir:      dir,
 		Manifest: Manifest{},
@@ -553,32 +548,23 @@ func TestHandlePhaseAdded_BeadCreateFails(t *testing.T) {
 	graph := NewGraph(neb.Phases)
 	client := newMockBeadsClient()
 	client.createErr = fmt.Errorf("bead creation failed")
-	wg := &WorkerGroup{
-		Logger:         &buf,
-		Nebula:         neb,
-		State:          state,
-		BeadsClient:    client,
-		liveGraph:      graph,
-		livePhasesByID: map[string]*PhaseSpec{"existing": &neb.Phases[0]},
-		liveDone:       map[string]bool{"existing": true},
-		liveFailed:     map[string]bool{},
-		liveInFlight:   map[string]bool{},
-		hotAdded:       make(chan string, 16),
-	}
-	wg.phaseLoops = make(map[string]*phaseLoopHandle)
-	wg.pendingRefactors = make(map[string]string)
+	phasesByID := map[string]*PhaseSpec{"existing": &neb.Phases[0]}
+
+	hr := newTestHotReloaderWithLiveState(t, &buf, &mu, neb, state, graph, phasesByID, map[string]bool{"existing": true}, map[string]bool{}, map[string]bool{}, func(cfg *HotReloaderConfig) {
+		cfg.BeadsClient = client
+	})
 
 	path := writeTestPhaseFile(t, dir, "fail-bead", "Fail bead body")
 
-	wg.handlePhaseAdded(context.Background(), Change{
+	hr.handlePhaseAdded(context.Background(), Change{
 		Kind:    ChangeAdded,
 		PhaseID: "fail-bead",
 		File:    path,
 	})
 
-	wg.mu.Lock()
-	ps := wg.State.Phases["fail-bead"]
-	wg.mu.Unlock()
+	mu.Lock()
+	ps := state.Phases["fail-bead"]
+	mu.Unlock()
 
 	if ps == nil {
 		t.Fatal("expected state entry for fail-bead")
@@ -589,7 +575,7 @@ func TestHandlePhaseAdded_BeadCreateFails(t *testing.T) {
 
 	// Phase should NOT be signaled as ready.
 	select {
-	case id := <-wg.hotAdded:
+	case id := <-hr.hotAdded:
 		t.Errorf("phase %q should not be on hotAdded channel after bead creation failure", id)
 	default:
 	}
@@ -616,16 +602,17 @@ func TestConsumeChanges(t *testing.T) {
 
 	// Override watcher with a fake one that has our channel.
 	wg.Watcher = &Watcher{Changes: ch}
+	wg.hotReload.watcher = wg.Watcher
 
 	done := make(chan struct{})
 	go func() {
-		wg.consumeChanges(context.Background())
+		wg.hotReload.ConsumeChanges(context.Background())
 		close(done)
 	}()
 	<-done
 
 	wg.mu.Lock()
-	_, hasC := wg.pendingRefactors["phase-c"]
+	_, hasC := wg.hotReload.pendingRefactors["phase-c"]
 	wg.mu.Unlock()
 
 	if !hasC {
@@ -636,17 +623,22 @@ func TestConsumeChanges(t *testing.T) {
 func TestOnRefactorCallback(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	wg := newTestWorkerGroup(t)
+	var buf bytes.Buffer
+	var mu sync.Mutex
 
 	var callbackPhaseID string
 	var callbackPending bool
-	wg.OnRefactor = func(phaseID string, pending bool) {
-		callbackPhaseID = phaseID
-		callbackPending = pending
-	}
+	hr := NewHotReloader(HotReloaderConfig{
+		Logger: &buf,
+		Mu:     &mu,
+		OnRefactor: func(phaseID string, pending bool) {
+			callbackPhaseID = phaseID
+			callbackPending = pending
+		},
+	})
 
 	path := writeTestPhaseFile(t, dir, "phase-cb", "Callback body")
-	wg.handlePhaseModified(Change{
+	hr.handlePhaseModified(Change{
 		Kind:    ChangeModified,
 		PhaseID: "phase-cb",
 		File:    path,

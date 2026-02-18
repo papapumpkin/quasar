@@ -32,10 +32,10 @@ type HotReloader struct {
 	pendingRefactors map[string]string
 
 	// Live DAG state — shared with the orchestrator via the tracker.
-	liveGraph    *Graph
+	liveGraph      *Graph
 	livePhasesByID map[string]*PhaseSpec
-	hotAdded     chan string
-	hotAddWg     sync.WaitGroup
+	hotAdded       chan string
+	hotAddWg       sync.WaitGroup
 }
 
 // HotReloaderConfig holds the configuration for creating a HotReloader.

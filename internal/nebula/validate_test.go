@@ -1,7 +1,9 @@
 package nebula
 
 import (
+	"bytes"
 	"errors"
+	"sync"
 	"testing"
 )
 
@@ -150,23 +152,35 @@ func TestCheckHotAddedReady(t *testing.T) {
 		},
 	}
 	graph := NewGraph(neb.Phases)
-	hotAdded := make(chan string, 16)
-	wg := &WorkerGroup{
-		Nebula:         neb,
-		State:          state,
-		liveGraph:      graph,
-		livePhasesByID: map[string]*PhaseSpec{"a": &neb.Phases[0], "b": &neb.Phases[1]},
-		liveDone:       map[string]bool{"a": true},
-		liveFailed:     map[string]bool{},
-		liveInFlight:   map[string]bool{},
-		hotAdded:       hotAdded,
+	phasesByID := map[string]*PhaseSpec{"a": &neb.Phases[0], "b": &neb.Phases[1]}
+	done := map[string]bool{"a": true}
+	failed := map[string]bool{}
+	inFlight := map[string]bool{}
+
+	var buf bytes.Buffer
+	var mu sync.Mutex
+	tracker := &PhaseTracker{
+		phasesByID: phasesByID,
+		done:       done,
+		failed:     failed,
+		inFlight:   inFlight,
 	}
+	progress := NewProgressReporter(neb, state, nil, nil, &buf)
+	hr := NewHotReloader(HotReloaderConfig{
+		Nebula:   neb,
+		State:    state,
+		Tracker:  tracker,
+		Progress: progress,
+		Logger:   &buf,
+		Mu:       &mu,
+	})
+	hr.InitLiveState(graph, phasesByID)
 
 	// b has deps satisfied and is pending — should be signaled.
-	wg.checkHotAddedReady()
+	hr.CheckHotAddedReady()
 
 	select {
-	case id := <-hotAdded:
+	case id := <-hr.HotAdded():
 		if id != "b" {
 			t.Errorf("expected b on hotAdded, got %q", id)
 		}
