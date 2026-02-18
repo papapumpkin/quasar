@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -325,4 +326,96 @@ func TestStatusBarMultipleSegments(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestStatusBarWidthClamping(t *testing.T) {
+	t.Parallel()
+
+	// Configurations that exercise all code paths: nebula, loop, stopping, paused, resources.
+	configs := []struct {
+		label string
+		bar   StatusBar
+	}{
+		{
+			label: "nebula with budget and elapsed",
+			bar: StatusBar{
+				Name:      "very-long-nebula-task-name-that-should-be-truncated",
+				Total:     10,
+				Completed: 3,
+				CostUSD:   1.24,
+				BudgetUSD: 10.00,
+				StartTime: time.Now().Add(-5 * time.Minute),
+			},
+		},
+		{
+			label: "loop with cycle and cost",
+			bar: StatusBar{
+				BeadID:    "quasar-extremely-long-bead-identifier",
+				Cycle:     4,
+				MaxCycles: 7,
+				CostUSD:   3.75,
+				BudgetUSD: 50.00,
+				StartTime: time.Now().Add(-90 * time.Second),
+			},
+		},
+		{
+			label: "stopping indicator",
+			bar: StatusBar{
+				BeadID:    "quasar-stop",
+				Cycle:     2,
+				MaxCycles: 5,
+				CostUSD:   0.50,
+				StartTime: time.Now().Add(-10 * time.Second),
+				Stopping:  true,
+			},
+		},
+		{
+			label: "paused indicator",
+			bar: StatusBar{
+				Name:      "paused-task",
+				Total:     3,
+				Completed: 1,
+				Paused:    true,
+			},
+		},
+		{
+			label: "with resources",
+			bar: StatusBar{
+				BeadID:    "quasar-res",
+				Cycle:     1,
+				MaxCycles: 5,
+				CostUSD:   0.10,
+				StartTime: time.Now().Add(-2 * time.Second),
+				Resources: ResourceSnapshot{
+					NumProcesses: 4,
+					MemoryMB:     512,
+					CPUPercent:   45.0,
+				},
+			},
+		},
+	}
+
+	widths := []int{MinWidth, 50, CompactWidth - 1, CompactWidth, 80, 100, 120, 200}
+
+	for _, cfg := range configs {
+		for _, w := range widths {
+			label := cfg.label + "_" + fmt.Sprintf("w%d", w)
+			t.Run(label, func(t *testing.T) {
+				t.Parallel()
+				sb := cfg.bar
+				sb.Width = w
+				view := sb.View()
+				lines := strings.Split(view, "\n")
+				for i, line := range lines {
+					lineWidth := lipgloss.Width(line)
+					if lineWidth > w {
+						t.Errorf("line %d: rendered width %d > target %d: %q", i, lineWidth, w, line)
+					}
+				}
+				if len(lines) > 1 {
+					t.Errorf("expected single line, got %d lines", len(lines))
+				}
+			})
+		}
+	}
 }

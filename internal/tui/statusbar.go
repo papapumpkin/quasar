@@ -33,6 +33,14 @@ type StatusBar struct {
 func (s StatusBar) View() string {
 	compact := s.Width < CompactWidth
 
+	// The outer styleStatusBar applies Padding(0,1), consuming 2 columns.
+	// All inner content must fit within this inner width.
+	const barPadding = 2
+	innerWidth := s.Width - barPadding
+	if innerWidth < 0 {
+		innerWidth = 0
+	}
+
 	// Build the right-side segments first so we know how much space remains for the name.
 	rightSegments := s.buildRightSegments(compact)
 	right := joinSegments(rightSegments)
@@ -52,26 +60,34 @@ func (s StatusBar) View() string {
 
 	// Minimum padding between left and right.
 	const minGap = 1
-	availableForName := s.Width - fixedLeftWidth - stateWidth - rightWidth - minGap - 2 // 2 for bar padding
+	availableForName := innerWidth - fixedLeftWidth - stateWidth - rightWidth - minGap
 
 	// Build the name segment, truncated to fit.
 	nameSegment := s.buildNameSegment(compact, availableForName)
 
 	// If even after truncation we overflow, drop right segments progressively.
 	left := logo + fixedLeft + nameSegment + stateIndicator
-	if lipgloss.Width(left)+rightWidth+minGap > s.Width {
-		rightSegments = dropSegments(rightSegments, s.Width-lipgloss.Width(left)-minGap)
+	leftWidth := lipgloss.Width(left)
+	if leftWidth+rightWidth+minGap > innerWidth {
+		rightSegments = dropSegments(rightSegments, innerWidth-leftWidth-minGap)
 		right = joinSegments(rightSegments)
+		rightWidth = lipgloss.Width(right)
 	}
 
 	// Pad the gap between left and right.
-	gap := s.Width - lipgloss.Width(left) - lipgloss.Width(right)
+	gap := innerWidth - leftWidth - rightWidth
 	if gap < 1 {
 		gap = 1
 	}
 	padding := strings.Repeat(" ", gap)
 
 	line := left + padding + right
+
+	// Safety clamp: if the assembled line still exceeds inner width, hard-truncate.
+	if lipgloss.Width(line) > innerWidth {
+		line = truncateToWidth(line, innerWidth)
+	}
+
 	return styleStatusBar.Width(s.Width).Render(line)
 }
 
@@ -354,4 +370,40 @@ func resourceLevelStyle(level ResourceLevel) lipgloss.Style {
 // budgetColor returns the uniform bar foreground color regardless of budget ratio.
 func budgetColor(_ float64) lipgloss.Color {
 	return colorMutedLight
+}
+
+// truncateToWidth hard-truncates a string (which may contain ANSI escape sequences)
+// so that its rendered width does not exceed maxWidth. It walks rune-by-rune,
+// skipping ANSI escape sequences from the width count, and stops once the
+// visual width would exceed the limit.
+func truncateToWidth(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	var b strings.Builder
+	width := 0
+	inEscape := false
+	for _, r := range s {
+		if r == '\x1b' {
+			inEscape = true
+			b.WriteRune(r)
+			continue
+		}
+		if inEscape {
+			b.WriteRune(r)
+			// ESC sequences end at a letter (A-Z, a-z).
+			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+				inEscape = false
+			}
+			continue
+		}
+		// Approximate: CJK and wide runes would need special handling,
+		// but status bar content is ASCII/Latin only.
+		if width+1 > maxWidth {
+			break
+		}
+		b.WriteRune(r)
+		width++
+	}
+	return b.String()
 }

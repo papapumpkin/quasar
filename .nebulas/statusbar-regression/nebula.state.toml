@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'statusbar-regression'
-total_cost_usd = 2.977483
+total_cost_usd = 4.3708775
 
 [phases]
 [phases.diff-jk-scroll]
@@ -17,15 +17,21 @@ summary = 'Added DiffFileOpen state tracking to fix j/k scrolling within single-
 
 [phases.fix-wrapping]
 bead_id = 'quasar-pwo'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-18T10:23:41.922551-05:00
-updated_at = 2026-02-18T10:43:21.962277-05:00
+updated_at = 2026-02-18T10:48:04.437671-05:00
 
 [phases.selected-row-highlight]
 bead_id = 'quasar-23g'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T10:23:42.266618-05:00
-updated_at = 2026-02-18T10:43:22.030534-05:00
+updated_at = 2026-02-18T10:48:04.436666-05:00
+
+[phases.selected-row-highlight.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, well-structured addition of a dim nebula-tinted background highlight for selected rows in both TUI views, with consistent styling and proper edge-case handling.'
 
 [phases.unify-bar-color]
 bead_id = 'quasar-g0m'
