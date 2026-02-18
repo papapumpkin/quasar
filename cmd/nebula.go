@@ -295,9 +295,9 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		// Stderr path: single shared loop with Printer UI.
 		taskLoop := &loop.Loop{
 			Invoker:      claudeInv,
-			Beads:        client,
 			UI:           printer,
 			Git:          git,
+			Hooks:        []loop.Hook{&loop.BeadHook{Beads: client, UI: printer}},
 			MaxCycles:    cfg.MaxReviewCycles,
 			MaxBudgetUSD: cfg.MaxBudgetUSD,
 			Model:        cfg.Model,
@@ -555,9 +555,9 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 
 	l := &loop.Loop{
 		Invoker:      a.invoker,
-		Beads:        a.beads,
 		UI:           phaseUI,
 		Git:          a.git,
+		Hooks:        []loop.Hook{&loop.BeadHook{Beads: a.beads, UI: phaseUI}},
 		MaxCycles:    a.maxCycles,
 		MaxBudgetUSD: a.maxBudget,
 		Model:        a.model,
@@ -588,9 +588,9 @@ func (a *tuiLoopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDe
 	phaseUI := tui.NewPhaseUIBridge(a.program, "checkpoint", a.workDir)
 	l := &loop.Loop{
 		Invoker:      a.invoker,
-		Beads:        a.beads,
 		UI:           phaseUI,
 		Git:          a.git,
+		Hooks:        []loop.Hook{&loop.BeadHook{Beads: a.beads, UI: phaseUI}},
 		MaxCycles:    a.maxCycles,
 		MaxBudgetUSD: a.maxBudget,
 		Model:        a.model,

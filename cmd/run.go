@@ -191,7 +191,6 @@ func buildLoop(cfg *config.Config, uiHandler ui.UI, coderPrompt, reviewerPrompt 
 
 	return &loop.Loop{
 		Invoker:      claudeInv,
-		Beads:        beadsClient,
 		UI:           uiHandler,
 		Git:          git,
 		Hooks:        []loop.Hook{beadHook},

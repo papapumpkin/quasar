@@ -5,14 +5,12 @@ import (
 	"fmt"
 
 	"github.com/papapumpkin/quasar/internal/agent"
-	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
 // Loop orchestrates the coder-reviewer cycle for a single task.
 type Loop struct {
 	Invoker      agent.Invoker
-	Beads        beads.Client // Used only by RunTask to create the initial task bead.
 	UI           ui.UI
 	Git          CycleCommitter // Optional; nil disables per-cycle commits.
 	Hooks        []Hook         // Lifecycle hooks (e.g., BeadHook for tracking).
@@ -34,17 +32,24 @@ type TaskResult struct {
 }
 
 // RunTask creates a new bead for the given task and runs the coder-reviewer loop.
+// Bead creation is delegated to hooks that implement TaskCreator.
 func (l *Loop) RunTask(ctx context.Context, taskDescription string) (*TaskResult, error) {
-	// Create task bead.
-	beadID, err := l.Beads.Create(ctx, taskDescription, beads.CreateOpts{
-		Type:        "task",
-		Labels:      []string{"quasar"},
-		Description: taskDescription,
-	})
+	beadID, err := l.createTask(ctx, taskDescription)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create task bead: %w", err)
 	}
 	return l.runLoop(ctx, beadID, taskDescription)
+}
+
+// createTask delegates task bead creation to the first hook implementing TaskCreator.
+// Returns an error if no hook provides the capability.
+func (l *Loop) createTask(ctx context.Context, description string) (string, error) {
+	for _, h := range l.Hooks {
+		if tc, ok := h.(TaskCreator); ok {
+			return tc.CreateTask(ctx, description)
+		}
+	}
+	return "", fmt.Errorf("no TaskCreator hook registered")
 }
 
 // RunExistingTask runs the coder-reviewer loop for an already-created bead.

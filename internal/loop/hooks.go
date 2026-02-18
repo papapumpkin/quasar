@@ -47,6 +47,12 @@ type HookFunc func(ctx context.Context, event Event)
 // OnEvent calls the wrapped function.
 func (f HookFunc) OnEvent(ctx context.Context, event Event) { f(ctx, event) }
 
+// TaskCreator creates a new task bead and returns its ID. This is separate
+// from Hook because the loop needs the return value to proceed.
+type TaskCreator interface {
+	CreateTask(ctx context.Context, description string) (string, error)
+}
+
 // FindingCreator creates child beads for review findings and returns
 // their IDs. This is separate from Hook because the loop needs the return values.
 type FindingCreator interface {

@@ -9,7 +9,7 @@ import (
 )
 
 // BeadHook translates loop lifecycle events into bead operations.
-// It satisfies both Hook and FindingCreator.
+// It satisfies Hook, TaskCreator, and FindingCreator.
 type BeadHook struct {
 	Beads beads.Client
 	UI    ui.UI
@@ -18,8 +18,18 @@ type BeadHook struct {
 // Compile-time interface checks.
 var (
 	_ Hook           = (*BeadHook)(nil)
+	_ TaskCreator    = (*BeadHook)(nil)
 	_ FindingCreator = (*BeadHook)(nil)
 )
+
+// CreateTask creates a new task bead and returns its ID.
+func (h *BeadHook) CreateTask(ctx context.Context, description string) (string, error) {
+	return h.Beads.Create(ctx, description, beads.CreateOpts{
+		Type:        "task",
+		Labels:      []string{"quasar"},
+		Description: description,
+	})
+}
 
 // OnEvent dispatches a lifecycle event to the appropriate bead operation.
 func (h *BeadHook) OnEvent(ctx context.Context, event Event) {

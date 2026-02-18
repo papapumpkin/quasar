@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'cosmetic-refactor'
-total_cost_usd = 28.36664425
+total_cost_usd = 45.05937075
 
 [phases]
 [phases.claude-eliminate-pkg-vars]
@@ -137,9 +137,15 @@ summary = 'Straightforward, well-executed file split of `internal/ui/ui.go` into
 
 [phases.unify-review-report]
 bead_id = 'quasar-4er'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-17T17:21:13.165737-05:00
-updated_at = 2026-02-17T19:38:39.234912-05:00
+updated_at = 2026-02-17T20:10:35.394147-05:00
+
+[phases.unify-review-report.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean DRY refactor unifying duplicate `ReviewReport` types into `internal/agent` with proper dependency direction, eliminating a field-by-field copy adapter.'
 
 [phases.watcher-remove-dead-check]
 bead_id = 'quasar-1p1'
