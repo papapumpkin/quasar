@@ -78,9 +78,10 @@ type AppModel struct {
 	NebulaDir string // path to nebula directory for intervention files
 
 	// Home mode state (landing page).
-	HomeCursor  int            // cursor position in the home nebula list
-	HomeNebulae []NebulaChoice // discovered nebulas for the home view
-	HomeDir     string         // the .nebulas/ parent directory
+	HomeCursor     int            // cursor position in the home nebula list
+	HomeNebulae    []NebulaChoice // discovered nebulas for the home view
+	HomeDir        string         // the .nebulas/ parent directory
+	SelectedNebula string         // set when user selects a nebula from home; read after Run() returns
 
 	// Nebula picker state (post-completion).
 	AvailableNebulae []NebulaChoice // populated on MsgNebulaDone via discovery
@@ -116,6 +117,10 @@ func NewAppModel(mode Mode) AppModel {
 	}
 	m.StatusBar.StartTime = m.StartTime
 	m.StatusBar.Thresholds = m.Thresholds
+	// In home mode, show the detail panel by default.
+	if mode == ModeHome {
+		m.ShowPlan = true
+	}
 	return m
 }
 
@@ -637,7 +642,9 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Home mode: Enter selects a nebula and exits the TUI.
 	if m.Mode == ModeHome && key.Matches(msg, m.Keys.Enter) {
 		if m.HomeCursor >= 0 && m.HomeCursor < len(m.HomeNebulae) {
-			m.NextNebula = m.HomeNebulae[m.HomeCursor].Path
+			selected := m.HomeNebulae[m.HomeCursor].Path
+			m.SelectedNebula = selected
+			m.NextNebula = selected
 			return m, tea.Quit
 		}
 		return m, nil
@@ -782,9 +789,17 @@ func (m *AppModel) handleRetryKey() {
 	m.addMessage("retrying phase %s", phaseID)
 }
 
-// handleInfoKey toggles the phase plan viewer in the detail panel.
-// Active in nebula mode at DepthPhases or DepthPhaseLoop.
+// handleInfoKey toggles the detail/plan viewer in the detail panel.
+// Active in home mode and nebula mode at DepthPhases or DepthPhaseLoop.
 func (m *AppModel) handleInfoKey() {
+	if m.Mode == ModeHome {
+		m.ShowPlan = !m.ShowPlan
+		if m.ShowPlan {
+			m.updateHomeDetail()
+		}
+		return
+	}
+
 	if m.Mode != ModeNebula {
 		return
 	}
@@ -1137,6 +1152,11 @@ func (m *AppModel) moveDown() {
 // updateDetailFromSelection updates the detail panel content
 // based on the current view depth and selected item.
 func (m *AppModel) updateDetailFromSelection() {
+	// Home mode always uses its own detail renderer.
+	if m.Mode == ModeHome {
+		m.updateHomeDetail()
+		return
+	}
 	// Bead tracker takes precedence when toggled on.
 	if m.ShowBeads {
 		m.updateBeadDetail()
@@ -1148,9 +1168,6 @@ func (m *AppModel) updateDetailFromSelection() {
 		return
 	}
 	switch m.Mode {
-	case ModeHome:
-		m.updateHomeDetail()
-		return
 
 	case ModeLoop:
 		agent := m.LoopView.SelectedAgent()
@@ -1191,18 +1208,28 @@ func (m *AppModel) updateDetailFromSelection() {
 	}
 }
 
-// updateHomeDetail populates the detail panel with the selected nebula's description.
+// updateHomeDetail populates the detail panel with the selected nebula's
+// description, phase count, and status breakdown.
 func (m *AppModel) updateHomeDetail() {
 	if m.HomeCursor < 0 || m.HomeCursor >= len(m.HomeNebulae) {
 		m.Detail.SetEmpty("No nebulas found")
 		return
 	}
 	nc := m.HomeNebulae[m.HomeCursor]
-	if nc.Description == "" {
-		m.Detail.SetContent(nc.Name, "(no description)")
-		return
+
+	var b strings.Builder
+	if nc.Description != "" {
+		b.WriteString(nc.Description)
+		b.WriteString("\n\n")
 	}
-	m.Detail.SetContent(nc.Name, nc.Description)
+	b.WriteString(fmt.Sprintf("Phases: %d", nc.Phases))
+	if nc.Done > 0 {
+		b.WriteString(fmt.Sprintf("  (%d done)", nc.Done))
+	}
+	b.WriteString("\nStatus: ")
+	b.WriteString(nc.Status)
+
+	m.Detail.SetContent(nc.Name, b.String())
 }
 
 // updateNebulaDetail updates the detail panel for nebula mode based on depth.
@@ -1314,7 +1341,8 @@ func (m AppModel) detailHeight() int {
 func (m AppModel) showDetailPanel() bool {
 	if m.Mode == ModeHome {
 		// Show the detail panel in home mode when there are nebulas to describe.
-		return len(m.HomeNebulae) > 0
+		// When ShowPlan is toggled off, hide the detail panel.
+		return len(m.HomeNebulae) > 0 && m.ShowPlan
 	}
 	if m.Mode == ModeLoop {
 		return m.Depth == DepthAgentOutput || m.ShowBeads

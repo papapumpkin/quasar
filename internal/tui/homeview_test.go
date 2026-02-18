@@ -245,14 +245,20 @@ func TestHomeFooterBindings(t *testing.T) {
 	km := DefaultKeyMap()
 	bindings := HomeFooterBindings(km)
 
-	if len(bindings) != 4 {
-		t.Fatalf("expected 4 home footer bindings, got %d", len(bindings))
+	if len(bindings) != 5 {
+		t.Fatalf("expected 5 home footer bindings, got %d", len(bindings))
 	}
 
 	// Verify the enter binding says "run".
 	enterHelp := bindings[2].Help()
 	if enterHelp.Desc != "run" {
 		t.Errorf("expected enter binding desc 'run', got %q", enterHelp.Desc)
+	}
+
+	// Verify the info binding says "info".
+	infoHelp := bindings[3].Help()
+	if infoHelp.Desc != "info" {
+		t.Errorf("expected info binding desc 'info', got %q", infoHelp.Desc)
 	}
 }
 

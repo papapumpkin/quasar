@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'tui-landing-page'
-total_cost_usd = 1.8407400000000003
+total_cost_usd = 6.069096249999999
 
 [phases]
 [phases.cmd-entry-point]
@@ -11,9 +11,9 @@ updated_at = 2026-02-18T15:48:10.577911-05:00
 
 [phases.home-key-handling]
 bead_id = 'quasar-2nm'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-18T15:39:41.752389-05:00
-updated_at = 2026-02-18T15:48:10.577131-05:00
+updated_at = 2026-02-18T15:59:43.327362-05:00
 
 [phases.home-mode-model]
 bead_id = 'quasar-5az'
@@ -29,9 +29,15 @@ summary = 'Clean addition of ModeHome constant, DiscoverAllNebulae function, Neb
 
 [phases.home-view-render]
 bead_id = 'quasar-z2b'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T15:39:41.408696-05:00
-updated_at = 2026-02-18T15:51:22.393198-05:00
+updated_at = 2026-02-18T15:59:43.326802-05:00
+
+[phases.home-view-render.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented home view landing page with correct rendering, navigation, status bar integration, and comprehensive tests following existing codebase patterns.'
 
 [phases.integration-test]
 bead_id = 'quasar-go4'

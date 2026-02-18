@@ -69,7 +69,7 @@ func HomeFooterBindings(km KeyMap) []key.Binding {
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "run"),
 	)
-	return []key.Binding{km.Up, km.Down, enter, km.Quit}
+	return []key.Binding{km.Up, km.Down, enter, km.Info, km.Quit}
 }
 
 // GateFooterBindings returns footer bindings during gate prompts.
