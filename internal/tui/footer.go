@@ -64,6 +64,9 @@ func DiffFileListFooterBindings(km KeyMap) []key.Binding {
 }
 
 // GateFooterBindings returns footer bindings during gate prompts.
+// Includes Esc (back/skip) so users know they can dismiss the prompt.
 func GateFooterBindings(km KeyMap) []key.Binding {
-	return []key.Binding{km.Accept, km.Reject, km.Retry, km.Skip}
+	esc := km.Back
+	esc.SetHelp("esc", "skip")
+	return []key.Binding{km.Accept, km.Reject, km.Retry, km.Skip, esc}
 }

@@ -586,8 +586,8 @@ func TestFooterBindings(t *testing.T) {
 	}
 
 	gate := GateFooterBindings(km)
-	if len(gate) != 4 {
-		t.Errorf("GateFooterBindings = %d bindings, want 4", len(gate))
+	if len(gate) != 5 {
+		t.Errorf("GateFooterBindings = %d bindings, want 5", len(gate))
 	}
 }
 

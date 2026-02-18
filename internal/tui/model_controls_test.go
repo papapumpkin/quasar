@@ -890,6 +890,64 @@ func TestMsgArchitectStartWithoutFunc(t *testing.T) {
 	}
 }
 
+// --- handleGateKey Esc tests ---
+
+func TestHandleGateKeyEscDismissesGate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Esc resolves gate with skip action", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "phase-1", Title: "Phase 1", Status: PhaseGate},
+		})
+		m.Splash = nil
+
+		ch := make(chan nebula.GateAction, 1)
+		m.Gate = NewGatePrompt(nil, ch)
+
+		escMsg := tea.KeyMsg{Type: tea.KeyEscape}
+		result, _ := m.handleKey(escMsg)
+		updated := result.(AppModel)
+
+		if updated.Gate != nil {
+			t.Error("expected Gate to be nil after Esc")
+		}
+
+		select {
+		case action := <-ch:
+			if action != nebula.GateActionSkip {
+				t.Errorf("expected GateActionSkip, got %q", action)
+			}
+		default:
+			t.Error("expected gate response channel to receive an action")
+		}
+	})
+}
+
+// --- Completion overlay Esc tests ---
+
+func TestCompletionOverlayEscQuits(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Esc on completion overlay triggers quit", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeNebula)
+		m.Splash = nil
+		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, Message: "done"}
+
+		escMsg := tea.KeyMsg{Type: tea.KeyEscape}
+		_, cmd := m.handleKey(escMsg)
+
+		if cmd == nil {
+			t.Fatal("expected a command to be returned for Esc on completion overlay")
+		}
+		resultMsg := cmd()
+		if _, ok := resultMsg.(tea.QuitMsg); !ok {
+			t.Errorf("expected tea.QuitMsg, got %T", resultMsg)
+		}
+	})
+}
+
 // --- Test helpers ---
 
 // newNebulaModel creates an AppModel in nebula mode at DepthPhases with

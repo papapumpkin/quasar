@@ -565,10 +565,10 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleArchitectKey(msg)
 	}
 
-	// Completion overlay — q to exit, arrow keys for picker.
+	// Completion overlay — q/Esc to exit, arrow keys for picker.
 	if m.Overlay != nil {
 		switch {
-		case key.Matches(msg, m.Keys.Quit):
+		case key.Matches(msg, m.Keys.Quit), key.Matches(msg, m.Keys.Back):
 			return m, tea.Quit
 		case key.Matches(msg, m.Keys.Up):
 			if len(m.AvailableNebulae) > 0 && m.PickerCursor > 0 {
@@ -1148,8 +1148,11 @@ func (m *AppModel) drillUp() {
 }
 
 // handleGateKey processes keys while a gate prompt is active.
+// Esc dismisses the gate by sending GateActionSkip (least destructive default).
 func (m AppModel) handleGateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
+	case key.Matches(msg, m.Keys.Back):
+		m.resolveGate(nebula.GateActionSkip)
 	case key.Matches(msg, m.Keys.Accept):
 		m.resolveGate(nebula.GateActionAccept)
 	case key.Matches(msg, m.Keys.Reject):
