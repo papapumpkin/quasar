@@ -192,6 +192,7 @@ func buildLoop(cfg *config.Config, uiHandler ui.UI, coderPrompt, reviewerPrompt 
 		Beads:        beadsClient,
 		UI:           uiHandler,
 		Git:          git,
+		Hooks:        []loop.Hook{&loop.BeadHook{Beads: beadsClient, UI: uiHandler}},
 		MaxCycles:    cfg.MaxReviewCycles,
 		MaxBudgetUSD: cfg.MaxBudgetUSD,
 		Model:        cfg.Model,

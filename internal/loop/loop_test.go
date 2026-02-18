@@ -257,14 +257,21 @@ func (g *fakeGit) CommitCycle(_ context.Context, _ string, _ int) (string, error
 }
 
 // ---------------------------------------------------------------------------
-// Existing tests (kept as-is)
+// newBeadHook is a test helper that creates a BeadHook with the given beads client and UI.
+// ---------------------------------------------------------------------------
+
+func newBeadHook(b beads.Client, u ui.UI) *BeadHook {
+	return &BeadHook{Beads: b, UI: u}
+}
+
+// ---------------------------------------------------------------------------
+// Existing tests
 // ---------------------------------------------------------------------------
 
 func TestNilGitDoesNotPanic(t *testing.T) {
 	t.Parallel()
 
 	l := &Loop{
-		Beads:     &noopBeads{},
 		UI:        &noopUI{},
 		Git:       nil,
 		MaxCycles: 1,
@@ -341,7 +348,6 @@ func TestCheckBudget(t *testing.T) {
 			l := &Loop{
 				MaxBudgetUSD: tt.maxBudget,
 				UI:           rUI,
-				Beads:        &noopBeads{},
 			}
 			state := &CycleState{
 				TaskBeadID:   "bead-1",
@@ -371,7 +377,6 @@ func TestInitCycleState(t *testing.T) {
 		git := &fakeGit{headSHA: "abc123"}
 		l := &Loop{
 			UI:        rUI,
-			Beads:     &noopBeads{},
 			Git:       git,
 			MaxCycles: 3,
 		}
@@ -402,7 +407,6 @@ func TestInitCycleState(t *testing.T) {
 		git := &fakeGit{headErr: errors.New("git error")}
 		l := &Loop{
 			UI:        rUI,
-			Beads:     &noopBeads{},
 			Git:       git,
 			MaxCycles: 1,
 		}
@@ -495,7 +499,6 @@ func TestRunCoderPhase(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:   inv,
-			Beads:     &noopBeads{},
 			UI:        rUI,
 			MaxCycles: 3,
 		}
@@ -531,7 +534,6 @@ func TestRunCoderPhase(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:   inv,
-			Beads:     &noopBeads{},
 			UI:        &noopUI{},
 			MaxCycles: 1,
 		}
@@ -558,7 +560,6 @@ func TestRunCoderPhase(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:   inv,
-			Beads:     &noopBeads{},
 			UI:        &noopUI{},
 			Git:       git,
 			MaxCycles: 1,
@@ -584,7 +585,6 @@ func TestRunCoderPhase(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:   inv,
-			Beads:     &noopBeads{},
 			UI:        rUI,
 			Git:       git,
 			MaxCycles: 1,
@@ -613,8 +613,8 @@ func TestRunCoderPhase(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:   inv,
-			Beads:     rb,
 			UI:        rUI,
+			Hooks:     []Hook{newBeadHook(rb, rUI)},
 			MaxCycles: 3,
 		}
 		state := &CycleState{
@@ -629,7 +629,7 @@ func TestRunCoderPhase(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		// Should have posted a refactor comment
+		// Should have posted a refactor comment via BeadHook.
 		foundRefactorComment := false
 		for _, c := range rb.comments {
 			if strings.Contains(c, "[refactor cycle") {
@@ -663,7 +663,6 @@ func TestRunReviewerPhase(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:   inv,
-			Beads:     &noopBeads{},
 			UI:        rUI,
 			MaxCycles: 3,
 		}
@@ -700,7 +699,6 @@ func TestRunReviewerPhase(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:   inv,
-			Beads:     &noopBeads{},
 			UI:        &noopUI{},
 			MaxCycles: 3,
 		}
@@ -730,7 +728,6 @@ func TestRunReviewerPhase(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:   inv,
-			Beads:     &noopBeads{},
 			UI:        &noopUI{},
 			MaxCycles: 1,
 		}
@@ -761,7 +758,7 @@ func TestHandleApproval(t *testing.T) {
 		rb := newRecordingBeads()
 		l := &Loop{
 			UI:        rUI,
-			Beads:     rb,
+			Hooks:     []Hook{newBeadHook(rb, rUI)},
 			MaxCycles: 3,
 		}
 		state := &CycleState{
@@ -798,9 +795,10 @@ func TestHandleApproval(t *testing.T) {
 	t.Run("WithReport", func(t *testing.T) {
 		t.Parallel()
 		rb := newRecordingBeads()
+		rUI := &recordingUI{}
 		l := &Loop{
-			UI:        &recordingUI{},
-			Beads:     rb,
+			UI:        rUI,
+			Hooks:     []Hook{newBeadHook(rb, rUI)},
 			MaxCycles: 3,
 		}
 		state := &CycleState{
@@ -820,7 +818,7 @@ func TestHandleApproval(t *testing.T) {
 		if result.Report.Satisfaction != "high" {
 			t.Errorf("Satisfaction = %q, want %q", result.Report.Satisfaction, "high")
 		}
-		// Should have added a report comment
+		// Should have added a report comment via BeadHook.
 		foundReportComment := false
 		for _, c := range rb.comments {
 			if strings.Contains(c, "[reviewer report]") {
@@ -1007,9 +1005,10 @@ func TestCreateFindingBeads(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		t.Parallel()
 		rb := newRecordingBeads()
+		rUI := &noopUI{}
 		l := &Loop{
-			UI:    &noopUI{},
-			Beads: rb,
+			UI:    rUI,
+			Hooks: []Hook{newBeadHook(rb, rUI)},
 		}
 		state := &CycleState{
 			TaskBeadID: "bead-1",
@@ -1037,7 +1036,7 @@ func TestCreateFindingBeads(t *testing.T) {
 		errBeads := &errorBeads{createErr: errors.New("create failed")}
 		l := &Loop{
 			UI:    rUI,
-			Beads: errBeads,
+			Hooks: []Hook{newBeadHook(errBeads, rUI)},
 		}
 		state := &CycleState{
 			TaskBeadID: "bead-1",
@@ -1056,11 +1055,28 @@ func TestCreateFindingBeads(t *testing.T) {
 
 	t.Run("NoFindings", func(t *testing.T) {
 		t.Parallel()
-		l := &Loop{UI: &noopUI{}, Beads: &noopBeads{}}
+		rUI := &noopUI{}
+		l := &Loop{
+			UI:    rUI,
+			Hooks: []Hook{newBeadHook(&noopBeads{}, rUI)},
+		}
 		state := &CycleState{TaskBeadID: "bead-1"}
 		ids := l.createFindingBeads(context.Background(), state)
 		if len(ids) != 0 {
 			t.Errorf("expected 0 IDs for no findings, got %d", len(ids))
+		}
+	})
+
+	t.Run("NoHooks", func(t *testing.T) {
+		t.Parallel()
+		l := &Loop{UI: &noopUI{}}
+		state := &CycleState{
+			TaskBeadID: "bead-1",
+			Findings:   []ReviewFinding{{Severity: "major", Description: "bug"}},
+		}
+		ids := l.createFindingBeads(context.Background(), state)
+		if len(ids) != 0 {
+			t.Errorf("expected 0 IDs with no hooks, got %d", len(ids))
 		}
 	})
 }
@@ -1138,8 +1154,8 @@ func TestRunLoop(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:      inv,
-			Beads:        rb,
 			UI:           rUI,
+			Hooks:        []Hook{newBeadHook(rb, rUI)},
 			MaxCycles:    3,
 			MaxBudgetUSD: 10.0,
 		}
@@ -1179,8 +1195,8 @@ func TestRunLoop(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:      inv,
-			Beads:        rb,
 			UI:           rUI,
+			Hooks:        []Hook{newBeadHook(rb, rUI)},
 			MaxCycles:    3,
 			MaxBudgetUSD: 10.0,
 		}
@@ -1197,7 +1213,7 @@ func TestRunLoop(t *testing.T) {
 		if len(rUI.issuesCounts) != 1 || rUI.issuesCounts[0] != 1 {
 			t.Errorf("IssuesFound calls = %v, want [1]", rUI.issuesCounts)
 		}
-		// Should have created child bead for the finding.
+		// Should have created child bead for the finding via BeadHook.
 		if len(rb.creates) == 0 {
 			t.Error("expected child bead to be created for finding")
 		}
@@ -1220,7 +1236,6 @@ func TestRunLoop(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:      inv,
-			Beads:        &noopBeads{},
 			UI:           rUI,
 			MaxCycles:    2,
 			MaxBudgetUSD: 10.0,
@@ -1247,7 +1262,6 @@ func TestRunLoop(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:      inv,
-			Beads:        &noopBeads{},
 			UI:           &recordingUI{},
 			MaxCycles:    3,
 			MaxBudgetUSD: 5.0,
@@ -1269,7 +1283,6 @@ func TestRunLoop(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:      inv,
-			Beads:        &noopBeads{},
 			UI:           &recordingUI{},
 			MaxCycles:    3,
 			MaxBudgetUSD: 5.0,
@@ -1288,7 +1301,6 @@ func TestRunLoop(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:      inv,
-			Beads:        &noopBeads{},
 			UI:           &noopUI{},
 			MaxCycles:    1,
 			MaxBudgetUSD: 10.0,
@@ -1313,7 +1325,6 @@ func TestRunLoop(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:      inv,
-			Beads:        &noopBeads{},
 			UI:           &noopUI{},
 			MaxCycles:    1,
 			MaxBudgetUSD: 10.0,
@@ -1338,9 +1349,31 @@ func TestRunLoop(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:      inv,
-			Beads:        &noopBeads{},
 			UI:           &noopUI{},
 			Git:          git,
+			MaxCycles:    3,
+			MaxBudgetUSD: 10.0,
+		}
+		result, err := l.runLoop(context.Background(), "bead-1", "task")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.CyclesUsed != 1 {
+			t.Errorf("CyclesUsed = %d, want 1", result.CyclesUsed)
+		}
+	})
+
+	t.Run("NoHooks", func(t *testing.T) {
+		t.Parallel()
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "coded", CostUSD: 0.30},
+				{ResultText: "APPROVED: Good.", CostUSD: 0.20},
+			},
+		}
+		l := &Loop{
+			Invoker:      inv,
+			UI:           &noopUI{},
 			MaxCycles:    3,
 			MaxBudgetUSD: 10.0,
 		}
@@ -1421,7 +1454,6 @@ func TestRunExistingTask(t *testing.T) {
 	}
 	l := &Loop{
 		Invoker:      inv,
-		Beads:        &noopBeads{},
 		UI:           &noopUI{},
 		MaxCycles:    3,
 		MaxBudgetUSD: 10.0,
@@ -1460,7 +1492,7 @@ func TestRunLoopWithRefactor(t *testing.T) {
 
 	l := &Loop{
 		Invoker:      inv,
-		Beads:        newRecordingBeads(),
+		Hooks:        []Hook{newBeadHook(newRecordingBeads(), rUI)},
 		UI:           rUI,
 		MaxCycles:    3,
 		MaxBudgetUSD: 10.0,
