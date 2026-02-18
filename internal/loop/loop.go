@@ -12,10 +12,10 @@ import (
 // Loop orchestrates the coder-reviewer cycle for a single task.
 type Loop struct {
 	Invoker      agent.Invoker
-	Beads        beads.Client     // Used only by RunTask to create the initial task bead.
+	Beads        beads.Client // Used only by RunTask to create the initial task bead.
 	UI           ui.UI
-	Git          CycleCommitter   // Optional; nil disables per-cycle commits.
-	Hooks        []Hook           // Lifecycle hooks (e.g., BeadHook for tracking).
+	Git          CycleCommitter // Optional; nil disables per-cycle commits.
+	Hooks        []Hook         // Lifecycle hooks (e.g., BeadHook for tracking).
 	MaxCycles    int
 	MaxBudgetUSD float64
 	Model        string
@@ -269,11 +269,11 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 		l.UI.RefactorApplied(state.TaskBeadID)
 	}
 	l.emit(ctx, Event{
-		Kind:   EventAgentDone,
-		BeadID: state.TaskBeadID,
-		Cycle:  state.Cycle,
-		Agent:  "coder",
-		Result: &result,
+		Kind:    EventAgentDone,
+		BeadID:  state.TaskBeadID,
+		Cycle:   state.Cycle,
+		Agent:   "coder",
+		Result:  &result,
 		Message: fmt.Sprintf("[coder cycle %d]\n%s", state.Cycle, truncate(result.ResultText, 2000)),
 	})
 	return nil
