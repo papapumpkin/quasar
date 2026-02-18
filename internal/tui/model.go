@@ -594,6 +594,21 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleGateKey(msg)
 	}
 
+	// When the diff file list is active, ↑/↓ navigate the file list
+	// instead of scrolling the detail panel or moving the main cursor.
+	if m.ShowDiff && m.DiffFileList != nil {
+		switch {
+		case key.Matches(msg, m.Keys.Up):
+			m.DiffFileList.MoveUp()
+			m.updateDetailFromSelection()
+			return m, nil
+		case key.Matches(msg, m.Keys.Down):
+			m.DiffFileList.MoveDown()
+			m.updateDetailFromSelection()
+			return m, nil
+		}
+	}
+
 	// At DepthAgentOutput, reroute ↑/↓ to scroll the detail panel
 	// instead of moving the list cursor. PageUp/PageDown/Home/End
 	// also scroll the detail panel when it is visible.
@@ -1102,7 +1117,12 @@ func (m *AppModel) drillDown() {
 
 // drillUp navigates back up the hierarchy.
 func (m *AppModel) drillUp() {
-	// Pressing esc dismisses plan/beads viewers first (without changing depth).
+	// Pressing esc dismisses overlay viewers first (without changing depth).
+	if m.ShowDiff {
+		m.ShowDiff = false
+		m.DiffFileList = nil
+		return
+	}
 	if m.ShowPlan {
 		m.ShowPlan = false
 		return

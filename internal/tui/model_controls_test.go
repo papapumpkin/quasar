@@ -466,6 +466,29 @@ func TestHandleInfoKey(t *testing.T) {
 		}
 	})
 
+	t.Run("drillUp dismisses diff without changing depth", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "phase-1", Title: "Phase 1"},
+		})
+		m.Depth = DepthAgentOutput
+		m.FocusedPhase = "phase-1"
+		m.ShowDiff = true
+		m.DiffFileList = &FileListView{Files: []FileStatEntry{{Path: "a.go"}}}
+
+		m.drillUp()
+
+		if m.ShowDiff {
+			t.Error("expected ShowDiff to be false after drillUp")
+		}
+		if m.DiffFileList != nil {
+			t.Error("expected DiffFileList to be nil after drillUp")
+		}
+		if m.Depth != DepthAgentOutput {
+			t.Errorf("expected depth to remain DepthAgentOutput, got %d", m.Depth)
+		}
+	})
+
 	t.Run("showDetailPanel true when plan is toggled on at DepthPhases", func(t *testing.T) {
 		t.Parallel()
 		m := newNebulaModelWithPhases("", []PhaseEntry{
@@ -687,6 +710,45 @@ func TestHandleDiffKeyNoDiffFiles(t *testing.T) {
 
 		if !m.ShowDiff {
 			t.Error("expected ShowDiff to remain true when raw diff text exists")
+		}
+	})
+}
+
+// --- Diff file list navigation at DepthAgentOutput ---
+
+func TestDiffFileListNavigationAtAgentOutput(t *testing.T) {
+	t.Parallel()
+
+	t.Run("up/down navigate file list instead of scrolling detail", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeLoop)
+		m.Width = 120
+		m.Height = 40
+		m.Detail = NewDetailPanel(80, 10)
+		m.Depth = DepthAgentOutput
+		m.LoopView.StartCycle(1)
+		m.LoopView.StartAgent("coder")
+		m.LoopView.FinishAgent("coder", 0.01, 100)
+		m.LoopView.SetAgentDiff("coder", 1, "diff --git a/f.go b/f.go\n+line\n")
+		m.LoopView.Cursor = 1
+		m.ShowDiff = true
+		m.DiffFileList = &FileListView{
+			Files: []FileStatEntry{
+				{Path: "a.go", Additions: 1, Deletions: 0},
+				{Path: "b.go", Additions: 2, Deletions: 1},
+				{Path: "c.go", Additions: 0, Deletions: 3},
+			},
+			Cursor: 0,
+			Width:  80,
+		}
+
+		// Simulate pressing "down" key.
+		downMsg := tea.KeyMsg{Type: tea.KeyDown}
+		result, _ := m.handleKey(downMsg)
+		updated := result.(AppModel)
+
+		if updated.DiffFileList.Cursor != 1 {
+			t.Errorf("expected file list cursor to be 1, got %d", updated.DiffFileList.Cursor)
 		}
 	})
 }
