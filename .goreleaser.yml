@@ -17,7 +17,8 @@ builds:
       - -s -w -X github.com/papapumpkin/quasar/cmd.Version={{.Version}}
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: "quasar_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
@@ -49,4 +50,4 @@ changelog:
       - '^style'
 
 snapshot:
-  version_template: "{{ incr .Patch }}-next"
+  name_template: "{{ .Version }}-next"
