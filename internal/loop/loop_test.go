@@ -167,6 +167,11 @@ func newRecordingBeads() *recordingBeads {
 	return &recordingBeads{createID: "test-bead"}
 }
 
+// newBeadHook creates a BeadHook wired to the given beads.Client and UI for testing.
+func newBeadHook(b beads.Client, u ui.UI) *BeadHook {
+	return &BeadHook{Beads: b, UI: u}
+}
+
 func (r *recordingBeads) Create(_ context.Context, title string, _ beads.CreateOpts) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -613,8 +618,8 @@ func TestRunCoderPhase(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:   inv,
-			Beads:     rb,
 			UI:        rUI,
+			Hooks:     []Hook{newBeadHook(rb, rUI)},
 			MaxCycles: 3,
 		}
 		state := &CycleState{
@@ -761,7 +766,7 @@ func TestHandleApproval(t *testing.T) {
 		rb := newRecordingBeads()
 		l := &Loop{
 			UI:        rUI,
-			Beads:     rb,
+			Hooks:     []Hook{newBeadHook(rb, rUI)},
 			MaxCycles: 3,
 		}
 		state := &CycleState{
@@ -798,9 +803,10 @@ func TestHandleApproval(t *testing.T) {
 	t.Run("WithReport", func(t *testing.T) {
 		t.Parallel()
 		rb := newRecordingBeads()
+		rUI := &recordingUI{}
 		l := &Loop{
-			UI:        &recordingUI{},
-			Beads:     rb,
+			UI:        rUI,
+			Hooks:     []Hook{newBeadHook(rb, rUI)},
 			MaxCycles: 3,
 		}
 		state := &CycleState{
@@ -1007,9 +1013,10 @@ func TestCreateFindingBeads(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		t.Parallel()
 		rb := newRecordingBeads()
+		rUI := &noopUI{}
 		l := &Loop{
-			UI:    &noopUI{},
-			Beads: rb,
+			UI:    rUI,
+			Hooks: []Hook{newBeadHook(rb, rUI)},
 		}
 		state := &CycleState{
 			TaskBeadID: "bead-1",
@@ -1037,7 +1044,7 @@ func TestCreateFindingBeads(t *testing.T) {
 		errBeads := &errorBeads{createErr: errors.New("create failed")}
 		l := &Loop{
 			UI:    rUI,
-			Beads: errBeads,
+			Hooks: []Hook{newBeadHook(errBeads, rUI)},
 		}
 		state := &CycleState{
 			TaskBeadID: "bead-1",
@@ -1056,7 +1063,8 @@ func TestCreateFindingBeads(t *testing.T) {
 
 	t.Run("NoFindings", func(t *testing.T) {
 		t.Parallel()
-		l := &Loop{UI: &noopUI{}, Beads: &noopBeads{}}
+		nui := &noopUI{}
+		l := &Loop{UI: nui, Hooks: []Hook{newBeadHook(&noopBeads{}, nui)}}
 		state := &CycleState{TaskBeadID: "bead-1"}
 		ids := l.createFindingBeads(context.Background(), state)
 		if len(ids) != 0 {
@@ -1138,8 +1146,8 @@ func TestRunLoop(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:      inv,
-			Beads:        rb,
 			UI:           rUI,
+			Hooks:        []Hook{newBeadHook(rb, rUI)},
 			MaxCycles:    3,
 			MaxBudgetUSD: 10.0,
 		}
@@ -1179,8 +1187,8 @@ func TestRunLoop(t *testing.T) {
 		}
 		l := &Loop{
 			Invoker:      inv,
-			Beads:        rb,
 			UI:           rUI,
+			Hooks:        []Hook{newBeadHook(rb, rUI)},
 			MaxCycles:    3,
 			MaxBudgetUSD: 10.0,
 		}
