@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'cosmetic-refactor'
-total_cost_usd = 57.630321
+total_cost_usd = 58.696509
 
 [phases]
 [phases.claude-eliminate-pkg-vars]
@@ -17,15 +17,21 @@ summary = 'Clean refactoring of package-level mutable exec vars into Invoker str
 
 [phases.cmd-extract-adapters]
 bead_id = 'quasar-fo5'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-17T17:21:13.848314-05:00
-updated_at = 2026-02-17T20:36:20.631148-05:00
+updated_at = 2026-02-17T20:39:42.192531-05:00
+
+[phases.cmd-extract-adapters.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Pure code-move refactor extracting loop↔nebula adapter types into `cmd/nebula_adapters.go` — zero behavior change, clean build, well-documented.'
 
 [phases.cmd-table-driven-registration]
-bead_id = 'quasar-q7m'
-status = 'created'
+bead_id = 'quasar-7bd'
+status = 'in_progress'
 created_at = 2026-02-17T17:21:15.547434-05:00
-updated_at = 2026-02-17T20:11:19.461782-05:00
+updated_at = 2026-02-18T08:54:49.341763-05:00
 
 [phases.config-handle-unmarshal-error]
 bead_id = 'quasar-7sp'

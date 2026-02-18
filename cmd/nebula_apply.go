@@ -21,11 +21,12 @@ import (
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
-var nebulaApplyCmd = &cobra.Command{
-	Use:   "apply <path>",
-	Short: "Create/update beads from a nebula blueprint",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runNebulaApply,
+// addNebulaApplyFlags registers flags specific to the apply subcommand.
+func addNebulaApplyFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("auto", false, "automatically start workers for ready phases")
+	cmd.Flags().Bool("watch", false, "watch for phase file changes during execution (with --auto)")
+	cmd.Flags().Int("max-workers", 1, "maximum concurrent workers (with --auto)")
+	cmd.Flags().Bool("no-tui", false, "disable TUI even on a TTY (use stderr output)")
 }
 
 func runNebulaApply(cmd *cobra.Command, args []string) error {

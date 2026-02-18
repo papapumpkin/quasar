@@ -9,14 +9,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
-var nebulaValidateCmd = &cobra.Command{
-	Use:   "validate <path>",
-	Short: "Validate a nebula directory structure and dependencies",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runNebulaValidate,
-}
-
-func runNebulaValidate(cmd *cobra.Command, args []string) error {
+func runNebulaValidate(_ *cobra.Command, args []string) error {
 	printer := ui.New()
 	dir := args[0]
 

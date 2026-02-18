@@ -12,14 +12,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
-var nebulaPlanCmd = &cobra.Command{
-	Use:   "plan <path>",
-	Short: "Show what beads changes a nebula would produce",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runNebulaPlan,
-}
-
-func runNebulaPlan(cmd *cobra.Command, args []string) error {
+func runNebulaPlan(_ *cobra.Command, args []string) error {
 	printer := ui.New()
 	cfg, err := config.Load()
 	if err != nil {

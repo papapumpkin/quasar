@@ -7,14 +7,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
-var nebulaShowCmd = &cobra.Command{
-	Use:   "show <path>",
-	Short: "Display current nebula state",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runNebulaShow,
-}
-
-func runNebulaShow(cmd *cobra.Command, args []string) error {
+func runNebulaShow(_ *cobra.Command, args []string) error {
 	printer := ui.New()
 	dir := args[0]
 

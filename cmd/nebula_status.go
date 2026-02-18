@@ -12,11 +12,9 @@ import (
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
-var nebulaStatusCmd = &cobra.Command{
-	Use:   "status <path>",
-	Short: "Display metrics summary for a nebula run",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runNebulaStatus,
+// addNebulaStatusFlags registers flags specific to the status subcommand.
+func addNebulaStatusFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("json", false, "output metrics as JSON to stdout")
 }
 
 func runNebulaStatus(cmd *cobra.Command, args []string) error {
