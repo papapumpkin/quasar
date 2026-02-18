@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'tui-refinement-visual-polish'
-total_cost_usd = 10.883911500000002
+total_cost_usd = 16.708658
 
 [phases]
 [phases.beads-dag-fix]
@@ -17,9 +17,15 @@ summary = 'No bug fix was made — coder added pipeline tests confirming the exi
 
 [phases.coder-lint-pass]
 bead_id = 'quasar-3t2'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T11:27:26.698925-05:00
-updated_at = 2026-02-18T13:12:27.626826-05:00
+updated_at = 2026-02-18T13:25:55.43529-05:00
+
+[phases.coder-lint-pass.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Two targeted fixes to CommandLinter.Run — skip stdout from successful auto-fix commands and correct the doc comment — both clean and well-tested.'
 
 [phases.header-solid-bg]
 bead_id = 'quasar-3q5'
@@ -65,9 +71,9 @@ updated_at = 2026-02-18T13:24:20.068472-05:00
 
 [phases.remove-architect-overlay]
 bead_id = 'quasar-e9u'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-18T11:27:28.934104-05:00
-updated_at = 2026-02-18T13:12:26.489408-05:00
+updated_at = 2026-02-18T13:25:55.435749-05:00
 
 [phases.selection-indicator-only]
 bead_id = 'quasar-pun'
