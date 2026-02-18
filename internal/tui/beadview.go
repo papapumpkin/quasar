@@ -39,8 +39,8 @@ func (v *BeadView) SetRoot(root BeadInfo) {
 	v.HasData = true
 }
 
-// treePrefixLen is the visual width of "  ├─ ✓ " (2 indent + connector + spaces + icon + space).
-const treePrefixLen = 9
+// treePrefixLen is the visual width of "  ├─ ✓ " (2 indent + 2 connector + 1 space + 1 icon + 1 space = 7).
+const treePrefixLen = 7
 
 // View renders the bead hierarchy as a tree with progress bar and inline titles.
 func (v BeadView) View() string {

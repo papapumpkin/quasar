@@ -326,11 +326,6 @@ var (
 	// styleBeadTitle styles bead titles.
 	styleBeadTitle = lipgloss.NewStyle().
 			Foreground(colorWhite)
-
-	// styleBeadCycleHeader styles cycle group headers.
-	styleBeadCycleHeader = lipgloss.NewStyle().
-				Foreground(colorMutedLight).
-				Bold(true)
 )
 
 // Resource indicator styles — color-coded by severity level.
