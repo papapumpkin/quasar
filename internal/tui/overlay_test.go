@@ -943,7 +943,8 @@ func TestCompletionOverlayGitStatus(t *testing.T) {
 			Kind:      CompletionSuccess,
 			DoneCount: 2,
 			GitResult: &nebula.PostCompletionResult{
-				PushBranch: "nebula/my-feature",
+				PushBranch:     "nebula/my-feature",
+				CheckoutBranch: "main",
 			},
 		}
 
@@ -984,8 +985,9 @@ func TestCompletionOverlayGitStatus(t *testing.T) {
 			Kind:      CompletionSuccess,
 			DoneCount: 1,
 			GitResult: &nebula.PostCompletionResult{
-				PushBranch:  "nebula/ok",
-				CheckoutErr: fmt.Errorf("dirty working tree"),
+				PushBranch:     "nebula/ok",
+				CheckoutBranch: "main",
+				CheckoutErr:    fmt.Errorf("dirty working tree"),
 			},
 		}
 

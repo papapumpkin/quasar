@@ -270,7 +270,7 @@ func TestPostCompletionResult_Summary(t *testing.T) {
 
 	t.Run("success summary", func(t *testing.T) {
 		t.Parallel()
-		r := &PostCompletionResult{PushBranch: "nebula/my-test"}
+		r := &PostCompletionResult{PushBranch: "nebula/my-test", CheckoutBranch: "main"}
 		s := r.Summary()
 		if !strings.Contains(s, "Pushed to origin/nebula/my-test") {
 			t.Errorf("expected push success in summary, got %q", s)
@@ -298,8 +298,9 @@ func TestPostCompletionResult_Summary(t *testing.T) {
 	t.Run("checkout error summary", func(t *testing.T) {
 		t.Parallel()
 		r := &PostCompletionResult{
-			PushBranch:  "nebula/fail",
-			CheckoutErr: fmt.Errorf("dirty worktree"),
+			PushBranch:     "nebula/fail",
+			CheckoutBranch: "main",
+			CheckoutErr:    fmt.Errorf("dirty worktree"),
 		}
 		s := r.Summary()
 		if !strings.Contains(s, "Checkout main failed") {
@@ -307,6 +308,34 @@ func TestPostCompletionResult_Summary(t *testing.T) {
 		}
 		if !strings.Contains(s, "dirty worktree") {
 			t.Errorf("expected error detail in summary, got %q", s)
+		}
+	})
+
+	t.Run("commit error summary", func(t *testing.T) {
+		t.Parallel()
+		r := &PostCompletionResult{
+			PushBranch:     "nebula/fail",
+			CommitErr:      fmt.Errorf("git add: permission denied"),
+			CheckoutBranch: "main",
+		}
+		s := r.Summary()
+		if !strings.Contains(s, "Commit failed") {
+			t.Errorf("expected commit failure in summary, got %q", s)
+		}
+		if !strings.Contains(s, "permission denied") {
+			t.Errorf("expected error detail in summary, got %q", s)
+		}
+	})
+
+	t.Run("checkout with master branch", func(t *testing.T) {
+		t.Parallel()
+		r := &PostCompletionResult{
+			PushBranch:     "nebula/test",
+			CheckoutBranch: "master",
+		}
+		s := r.Summary()
+		if !strings.Contains(s, "Checked out master") {
+			t.Errorf("expected 'Checked out master' in summary, got %q", s)
 		}
 	})
 }
@@ -408,11 +437,85 @@ func TestPostCompletion(t *testing.T) {
 		if result.CheckoutErr != nil {
 			t.Errorf("expected checkout to succeed: %v", result.CheckoutErr)
 		}
+		if result.CheckoutBranch != "main" {
+			t.Errorf("expected CheckoutBranch='main', got %q", result.CheckoutBranch)
+		}
 
 		// Verify we're on main now.
 		current := currentBranchHelper(ctx, t, dir)
 		if current != "main" {
 			t.Errorf("expected to be on main after PostCompletion, got %q", current)
+		}
+	})
+
+	t.Run("checkout succeeds when master is default", func(t *testing.T) {
+		dir := initTestRepo(t)
+		ctx := context.Background()
+
+		// Ensure "master" branch exists.
+		run(ctx, t, dir, "git", "branch", "-M", "master")
+
+		// Create nebula branch.
+		run(ctx, t, dir, "git", "checkout", "-b", "nebula/master-test")
+
+		result := PostCompletion(ctx, dir, "nebula/master-test")
+
+		if result.CheckoutErr != nil {
+			t.Errorf("expected checkout to succeed: %v", result.CheckoutErr)
+		}
+		if result.CheckoutBranch != "master" {
+			t.Errorf("expected CheckoutBranch='master', got %q", result.CheckoutBranch)
+		}
+
+		// Verify we're on master now.
+		current := currentBranchHelper(ctx, t, dir)
+		if current != "master" {
+			t.Errorf("expected to be on master after PostCompletion, got %q", current)
+		}
+	})
+}
+
+func TestDetectDefaultBranch(t *testing.T) {
+	t.Run("detects main branch", func(t *testing.T) {
+		dir := initTestRepo(t)
+		ctx := context.Background()
+
+		// Rename default branch to "main".
+		run(ctx, t, dir, "git", "branch", "-M", "main")
+
+		got := detectDefaultBranch(ctx, dir)
+		if got != "main" {
+			t.Errorf("expected 'main', got %q", got)
+		}
+	})
+
+	t.Run("detects master branch", func(t *testing.T) {
+		dir := initTestRepo(t)
+		ctx := context.Background()
+
+		// Rename default branch to "master".
+		run(ctx, t, dir, "git", "branch", "-M", "master")
+
+		got := detectDefaultBranch(ctx, dir)
+		if got != "master" {
+			t.Errorf("expected 'master', got %q", got)
+		}
+	})
+
+	t.Run("falls back to main when neither exists", func(t *testing.T) {
+		dir := initTestRepo(t)
+		ctx := context.Background()
+
+		// Rename default branch to something unusual.
+		run(ctx, t, dir, "git", "branch", "-M", "develop")
+
+		// Switch to another branch so "develop" can be checked.
+		run(ctx, t, dir, "git", "checkout", "-b", "nebula/test")
+
+		got := detectDefaultBranch(ctx, dir)
+		// Neither "main" nor "master" exists, so should fall back to "main".
+		if got != "main" {
+			t.Errorf("expected fallback to 'main', got %q", got)
 		}
 	})
 }
