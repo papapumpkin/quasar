@@ -12,10 +12,9 @@ import (
 // Loop orchestrates the coder-reviewer cycle for a single task.
 type Loop struct {
 	Invoker      agent.Invoker
-	Beads        beads.Client // Optional; only needed by RunTask to create the initial bead.
+	Beads        beads.Client
 	UI           ui.UI
 	Git          CycleCommitter // Optional; nil disables per-cycle commits.
-	Hooks        []Hook         // Lifecycle hooks for tracking (bead operations, metrics, etc.).
 	MaxCycles    int
 	MaxBudgetUSD float64
 	Model        string
@@ -81,7 +80,6 @@ func (l *Loop) GenerateCheckpoint(ctx context.Context, beadID, taskDescription s
 func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*TaskResult, error) {
 	perAgentBudget := l.perAgentBudget()
 	state := l.initCycleState(ctx, beadID, taskDescription)
-	l.emit(ctx, Event{Kind: EventCycleStart, BeadID: beadID})
 	l.emitBeadUpdate(state, "in_progress")
 
 	for cycle := 1; cycle <= l.MaxCycles; cycle++ {
@@ -118,21 +116,13 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 		newChildIDs := l.createFindingBeads(ctx, state)
 		state.ChildBeadIDs = append(state.ChildBeadIDs, newChildIDs...)
 		state.AllFindings = append(state.AllFindings, state.Findings...)
-		l.emit(ctx, Event{
-			Kind:     EventReviewComplete,
-			Cycle:    cycle,
-			BeadID:   beadID,
-			Findings: state.Findings,
-		})
 		l.emitBeadUpdate(state, "in_progress")
+
+		l.beadUpdate(ctx, beadID, beads.UpdateOpts{Assignee: "quasar-coder"})
 	}
 
 	l.UI.MaxCyclesReached(l.MaxCycles)
-	l.emit(ctx, Event{
-		Kind:    EventTaskFailed,
-		BeadID:  beadID,
-		Message: fmt.Sprintf("Max cycles reached (%d). Manual review recommended.", l.MaxCycles),
-	})
+	l.beadComment(ctx, beadID, fmt.Sprintf("Max cycles reached (%d). Manual review recommended.", l.MaxCycles))
 	return nil, ErrMaxCycles
 }
 
@@ -169,9 +159,10 @@ func (l *Loop) perAgentBudget() float64 {
 	return l.MaxBudgetUSD / float64(2*l.MaxCycles)
 }
 
-// initCycleState creates the initial cycle state.
+// initCycleState creates the initial cycle state and marks the bead as in-progress.
 func (l *Loop) initCycleState(ctx context.Context, beadID, taskDescription string) *CycleState {
 	l.UI.TaskStarted(beadID, taskDescription)
+	l.beadUpdate(ctx, beadID, beads.UpdateOpts{Status: "in_progress", Assignee: "quasar-coder"})
 
 	// Capture HEAD before the first cycle for later diffing.
 	var baseSHA string
@@ -224,9 +215,9 @@ func (l *Loop) reviewerAgent(budget float64) agent.Agent {
 	}
 }
 
-// runCoderPhase invokes the coder agent, updates state and UI, and emits lifecycle events.
-// When a refactor is pending, it emits a refactor event before building the prompt
-// (which clears the refactor flag).
+// runCoderPhase invokes the coder agent, updates state and UI, and records a bead comment.
+// When a refactor is pending, it posts a bead comment documenting the change before
+// building the prompt (which clears the refactor flag).
 func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBudget float64) error {
 	state.Phase = PhaseCoding
 	l.UI.AgentStart("coder")
@@ -262,30 +253,21 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	if wasRefactored {
 		comment := fmt.Sprintf("[refactor cycle %d] User updated task description mid-execution.\nOriginal: %s\nUpdated: %s",
 			state.Cycle, truncate(origDesc, 500), truncate(refactorDesc, 500))
-		l.emit(ctx, Event{
-			Kind:    EventRefactored,
-			Cycle:   state.Cycle,
-			BeadID:  state.TaskBeadID,
-			Message: comment,
-		})
+		l.beadComment(ctx, state.TaskBeadID, comment)
 		l.UI.RefactorApplied(state.TaskBeadID)
 	}
-	l.emit(ctx, Event{
-		Kind:    EventAgentDone,
-		Cycle:   state.Cycle,
-		Agent:   "coder",
-		BeadID:  state.TaskBeadID,
-		Result:  &result,
-		Message: result.ResultText,
-	})
+	l.beadComment(ctx, state.TaskBeadID,
+		fmt.Sprintf("[coder cycle %d]\n%s", state.Cycle, truncate(result.ResultText, 2000)))
 	return nil
 }
 
 // runReviewerPhase invokes the reviewer agent, updates state and UI, parses
-// findings, and emits lifecycle events.
+// findings, and records a bead comment.
 func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgentBudget float64) error {
 	state.Phase = PhaseReviewing
 	l.UI.AgentStart("reviewer")
+
+	l.beadUpdate(ctx, state.TaskBeadID, beads.UpdateOpts{Assignee: "quasar-reviewer"})
 
 	result, err := l.Invoker.Invoke(ctx, l.reviewerAgent(perAgentBudget), l.buildReviewerPrompt(state), l.WorkDir)
 	if err != nil {
@@ -298,14 +280,8 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	state.Phase = PhaseReviewComplete
 	l.UI.AgentOutput("reviewer", state.Cycle, result.ResultText)
 	l.UI.AgentDone("reviewer", result.CostUSD, result.DurationMs)
-	l.emit(ctx, Event{
-		Kind:    EventAgentDone,
-		Cycle:   state.Cycle,
-		Agent:   "reviewer",
-		BeadID:  state.TaskBeadID,
-		Result:  &result,
-		Message: result.ResultText,
-	})
+	l.beadComment(ctx, state.TaskBeadID,
+		fmt.Sprintf("[reviewer cycle %d]\n%s", state.Cycle, truncate(result.ResultText, 2000)))
 	state.Findings = ParseReviewFindings(result.ResultText)
 	l.emitCycleSummary(state, PhaseReviewComplete, result)
 	return nil
@@ -332,27 +308,22 @@ func (l *Loop) checkBudget(ctx context.Context, state *CycleState) error {
 		return nil
 	}
 	l.UI.BudgetExceeded(state.TotalCostUSD, l.MaxBudgetUSD)
-	l.emit(ctx, Event{
-		Kind:    EventTaskFailed,
-		BeadID:  state.TaskBeadID,
-		Message: fmt.Sprintf("Budget exceeded: $%.4f / $%.2f", state.TotalCostUSD, l.MaxBudgetUSD),
-	})
+	l.beadComment(ctx, state.TaskBeadID,
+		fmt.Sprintf("Budget exceeded: $%.4f / $%.2f", state.TotalCostUSD, l.MaxBudgetUSD))
 	return ErrBudgetExceeded
 }
 
-// handleApproval emits the success event, records the review report, and returns the final result.
+// handleApproval closes the bead, records the review report, and returns the final result.
 func (l *Loop) handleApproval(ctx context.Context, state *CycleState) (*TaskResult, error) {
 	state.Phase = PhaseApproved
 	l.UI.Approved()
 
 	report := ParseReviewReport(state.ReviewOutput)
-	l.emit(ctx, Event{
-		Kind:   EventTaskSuccess,
-		Cycle:  state.Cycle,
-		BeadID: state.TaskBeadID,
-		Report: report,
-	})
+	l.beadClose(ctx, state.TaskBeadID, "Approved by reviewer")
 	l.emitBeadUpdate(state, "closed")
+	if report != nil {
+		l.beadComment(ctx, state.TaskBeadID, FormatReportComment(report))
+	}
 
 	l.UI.TaskComplete(state.TaskBeadID, state.TotalCostUSD)
 	return &TaskResult{
@@ -394,20 +365,46 @@ func (l *Loop) emitBeadUpdate(state *CycleState, status string) {
 	l.UI.BeadUpdate(state.TaskBeadID, state.TaskTitle, status, children)
 }
 
-// emit fans out a lifecycle event to all registered hooks.
-func (l *Loop) emit(ctx context.Context, event Event) {
-	for _, h := range l.Hooks {
-		h.OnEvent(ctx, event)
+// beadComment logs a comment on the task bead, logging any error.
+func (l *Loop) beadComment(ctx context.Context, beadID, body string) {
+	if err := l.Beads.AddComment(ctx, beadID, body); err != nil {
+		l.UI.Error(fmt.Sprintf("failed to add bead comment: %v", err))
 	}
 }
 
-// createFindingBeads delegates to the first FindingCreator among the registered
-// hooks. If no hook satisfies FindingCreator, it returns nil.
-func (l *Loop) createFindingBeads(ctx context.Context, state *CycleState) []string {
-	for _, h := range l.Hooks {
-		if fc, ok := h.(FindingCreator); ok {
-			return fc.CreateFindingChildIDs(ctx, state.TaskBeadID, state.Findings)
-		}
+// beadUpdate updates the task bead, logging any error.
+func (l *Loop) beadUpdate(ctx context.Context, beadID string, opts beads.UpdateOpts) {
+	if err := l.Beads.Update(ctx, beadID, opts); err != nil {
+		l.UI.Error(fmt.Sprintf("failed to update bead: %v", err))
 	}
-	return nil
+}
+
+// beadClose closes the task bead with a reason, logging any error.
+func (l *Loop) beadClose(ctx context.Context, beadID, reason string) {
+	if err := l.Beads.Close(ctx, beadID, reason); err != nil {
+		l.UI.Error(fmt.Sprintf("failed to close bead: %v", err))
+	}
+}
+
+// createFindingBeads creates a child bead for each review finding and returns
+// the IDs of successfully created beads.
+func (l *Loop) createFindingBeads(ctx context.Context, state *CycleState) []string {
+	var ids []string
+	for _, f := range state.Findings {
+		childID, err := l.Beads.Create(ctx,
+			fmt.Sprintf("[%s] %s", f.Severity, truncate(f.Description, 80)),
+			beads.CreateOpts{
+				Type:        "bug",
+				Labels:      []string{"quasar", "review-finding"},
+				Parent:      state.TaskBeadID,
+				Description: f.Description,
+			},
+		)
+		if err != nil {
+			l.UI.Error(fmt.Sprintf("failed to create child bead: %v", err))
+			continue
+		}
+		ids = append(ids, childID)
+	}
+	return ids
 }
