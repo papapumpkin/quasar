@@ -336,8 +336,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 						PlanBody:  p.Body,
 					})
 				}
-				// Create WorkerGroup first so its SnapshotNebula method can be
-				// captured by the architect closure. The Runner is set after the
+				// Create WorkerGroup first. The Runner is set after the
 				// TUI program is created (it depends on the program).
 				nextPhaseCommitter := nebula.NewGitCommitterWithBranch(ctx, nextWorkDir, nextBranchName)
 				wg = nebula.NewWorkerGroup(nextN, nextState,
