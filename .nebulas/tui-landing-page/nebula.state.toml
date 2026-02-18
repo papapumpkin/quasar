@@ -1,5 +1,6 @@
 version = 1
 nebula_name = 'tui-landing-page'
+total_cost_usd = 0.7588957500000001
 
 [phases]
 [phases.cmd-entry-point]
@@ -16,9 +17,9 @@ updated_at = 2026-02-18T15:39:41.752389-05:00
 
 [phases.home-mode-model]
 bead_id = 'quasar-5az'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-18T15:39:41.03891-05:00
-updated_at = 2026-02-18T15:39:41.03891-05:00
+updated_at = 2026-02-18T15:42:44.237946-05:00
 
 [phases.home-view-render]
 bead_id = 'quasar-z2b'
@@ -40,6 +41,12 @@ updated_at = 2026-02-18T15:39:42.509792-05:00
 
 [phases.speed-up-splash]
 bead_id = 'quasar-d77'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T15:39:40.693521-05:00
-updated_at = 2026-02-18T15:39:43.289681-05:00
+updated_at = 2026-02-18T15:42:44.23749-05:00
+
+[phases.speed-up-splash.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Trivial config constant change (2.0 → 1.0 spins) correctly halves splash animation duration with no side effects; tests dynamically compute expected values so no updates needed.'

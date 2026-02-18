@@ -16,12 +16,13 @@ import (
 	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
-// Mode indicates whether the TUI is in loop or nebula mode.
+// Mode indicates which top-level view the TUI is displaying.
 type Mode int
 
 const (
 	ModeLoop Mode = iota
 	ModeNebula
+	ModeHome // landing page for browsing and selecting nebulas
 )
 
 // ViewDepth tracks the navigation level in nebula mode.
@@ -75,6 +76,11 @@ type AppModel struct {
 	Paused    bool   // whether execution is paused
 	Stopping  bool   // whether a stop has been requested
 	NebulaDir string // path to nebula directory for intervention files
+
+	// Home mode state (landing page).
+	HomeCursor  int            // cursor position in the home nebula list
+	HomeNebulae []NebulaChoice // discovered nebulas for the home view
+	HomeDir     string         // the .nebulas/ parent directory
 
 	// Nebula picker state (post-completion).
 	AvailableNebulae []NebulaChoice // populated on MsgNebulaDone via discovery

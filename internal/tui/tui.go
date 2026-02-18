@@ -55,6 +55,20 @@ func NewNebulaProgram(name string, phases []PhaseInfo, nebulaDir string, noSplas
 	return tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 }
 
+// NewHomeProgram creates a home-mode TUI with the nebula list pre-populated.
+// nebulaeDir is the parent directory containing all nebula subdirectories.
+// If noSplash is true, the binary-star splash animation is skipped.
+func NewHomeProgram(nebulaeDir string, choices []NebulaChoice, noSplash bool) *Program {
+	model := NewAppModel(ModeHome)
+	model.Detail = NewDetailPanel(80, 10)
+	if noSplash {
+		model.DisableSplash()
+	}
+	model.HomeNebulae = choices
+	model.HomeDir = nebulaeDir
+	return tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
+}
+
 // Run creates and runs a TUI program, blocking until it exits.
 // Returns an error if the program encounters a fatal error.
 func Run(mode Mode, noSplash bool) error {
