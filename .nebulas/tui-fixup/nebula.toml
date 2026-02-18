@@ -1,6 +1,6 @@
 [nebula]
 name = "TUI Fix-up & Polish"
-description = "Fix diff navigation bugs (multi-file nav, state corruption after d-press on cycle/phase) and polish the header/phase layout for visual consistency."
+description = "Fix diff navigation bugs (multi-file nav, state corruption after d-press on cycle/phase), ensure Esc is a universal escape hatch across all views, and polish the header/phase layout for visual consistency."
 
 [defaults]
 type = "bug"
@@ -19,6 +19,8 @@ goals = [
     "Fix pressing d on a cycle or phase corrupting TUI state",
     "Fix multi-file diff navigation (unable to move between files in large diffs)",
     "Fix inability to navigate after exiting a diff opened from the file list",
+    "Fix Esc not dismissing the diff view (ShowDiff left true in drillUp)",
+    "Make Esc a universal escape hatch — no overlay or modal should swallow it",
     "Unify purple color across the header bar for visual consistency",
     "Add spacing between header and content area",
     "Better visual distinction between phase rows and their status bars",

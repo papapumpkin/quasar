@@ -16,6 +16,12 @@ Three related diff navigation bugs:
 
 3. **Navigation locks after exiting diff**: After opening a diff from the file list and then exiting it, j/k navigation in the main view stops responding. The nebula continues to run but the UI is unresponsive to movement keys.
 
+4. **Esc doesn't dismiss diff view**: Pressing Esc while a diff is open calls `drillUp()` which changes the depth level but leaves `ShowDiff = true` and `DiffFileList` non-nil. This can leave the user stuck on the home screen with a stale diff panel still rendering.
+
+## Root Cause
+
+The `drillUp()` function (`model.go` ~line 1103) has a hierarchical dismiss pattern: it checks and clears `ShowPlan` and `ShowBeads` before changing depth, but **never checks `ShowDiff`**. This means Esc navigates backward without cleaning up diff state.
+
 ## Solution
 
 Investigate `internal/tui/model.go`, `internal/tui/diffview.go`, and `internal/tui/filelistview.go`:
@@ -25,6 +31,15 @@ Investigate `internal/tui/model.go`, `internal/tui/diffview.go`, and `internal/t
 2. **Multi-file navigation**: Check that the file list view's key handler properly passes j/k (or up/down) to the list model when `ShowDiff` is true and `DiffFileList` is active. The viewport may be capturing keys before the file list gets them.
 
 3. **Navigation lock after diff exit**: When exiting the diff view (Escape/q), ensure all focus state is properly restored — the main list cursor, the active depth, and any captured key handlers must be released.
+
+4. **ShowDiff not dismissed in drillUp()**: Add `ShowDiff`/`DiffFileList` dismissal to `drillUp()`, matching the existing pattern for `ShowPlan` and `ShowBeads`:
+   ```go
+   if m.ShowDiff {
+       m.ShowDiff = false
+       m.DiffFileList = nil
+       return
+   }
+   ```
 
 ## Files
 
@@ -38,4 +53,5 @@ Investigate `internal/tui/model.go`, `internal/tui/diffview.go`, and `internal/t
 - [ ] Pressing `d` on a cycle/phase with no diff data is a no-op
 - [ ] Can navigate between all files in a multi-file diff
 - [ ] Navigation works normally after exiting a diff view
+- [ ] Pressing Esc while viewing a diff dismisses the diff (before changing depth)
 - [ ] `go build` and `go test ./internal/tui/...` pass
