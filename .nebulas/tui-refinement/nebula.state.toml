@@ -16,10 +16,10 @@ needs_human_review = true
 summary = 'No bug fix was made — coder added pipeline tests confirming the existing bead view rendering code is correct, meaning the wall-of-text issue (if real) must originate from the data layer rather than the TUI rendering code, which warrants human review to verify the root cause assessment.'
 
 [phases.coder-lint-pass]
-bead_id = 'quasar-avf'
-status = 'created'
+bead_id = 'quasar-3t2'
+status = 'in_progress'
 created_at = 2026-02-18T11:27:26.698925-05:00
-updated_at = 2026-02-18T11:35:14.007993-05:00
+updated_at = 2026-02-18T13:12:27.626826-05:00
 
 [phases.header-solid-bg]
 bead_id = 'quasar-3q5'
@@ -34,43 +34,43 @@ needs_human_review = false
 summary = 'Solid fix for status bar background gaps by styling all bare space characters between ANSI-styled segments with colorSurface background; all tests pass, minor style duplication could be cleaned up.'
 
 [phases.logo-no-bg]
-bead_id = 'quasar-ytv'
+bead_id = 'quasar-axu'
 status = 'created'
 created_at = 2026-02-18T11:27:27.43406-05:00
-updated_at = 2026-02-18T11:35:14.008444-05:00
+updated_at = 2026-02-18T13:12:25.394648-05:00
 
 [phases.nebula-git-push]
-bead_id = 'quasar-53j'
+bead_id = 'quasar-d2m'
 status = 'in_progress'
 created_at = 2026-02-18T11:27:27.802325-05:00
-updated_at = 2026-02-18T11:42:26.895878-05:00
+updated_at = 2026-02-18T13:12:27.620964-05:00
 
 [phases.phase-progress-color]
 bead_id = 'quasar-cuh'
 status = 'created'
 created_at = 2026-02-18T11:27:28.193371-05:00
-updated_at = 2026-02-18T11:35:14.008849-05:00
+updated_at = 2026-02-18T13:12:25.746772-05:00
 
 [phases.quit-confirmation]
-bead_id = 'quasar-aec'
-status = 'in_progress'
+bead_id = 'quasar-jw2'
+status = 'created'
 created_at = 2026-02-18T11:27:28.564916-05:00
-updated_at = 2026-02-18T11:44:35.332186-05:00
+updated_at = 2026-02-18T13:12:26.121345-05:00
 
 [phases.remove-architect-overlay]
-bead_id = 'quasar-2ka'
+bead_id = 'quasar-e9u'
 status = 'created'
 created_at = 2026-02-18T11:27:28.934104-05:00
-updated_at = 2026-02-18T11:35:14.00924-05:00
+updated_at = 2026-02-18T13:12:26.489408-05:00
 
 [phases.selection-indicator-only]
-bead_id = 'quasar-aeo'
+bead_id = 'quasar-pun'
 status = 'created'
 created_at = 2026-02-18T11:27:29.335242-05:00
-updated_at = 2026-02-18T11:35:14.009453-05:00
+updated_at = 2026-02-18T13:12:26.857307-05:00
 
 [phases.status-bar-colors]
-bead_id = 'quasar-jmb'
+bead_id = 'quasar-dui'
 status = 'created'
 created_at = 2026-02-18T11:27:29.741936-05:00
-updated_at = 2026-02-18T11:35:14.009641-05:00
+updated_at = 2026-02-18T13:12:27.252972-05:00
