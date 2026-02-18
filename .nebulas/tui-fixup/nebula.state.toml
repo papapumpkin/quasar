@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'TUI Fix-up & Polish'
-total_cost_usd = 9.422486750000001
+total_cost_usd = 10.845648
 
 [phases]
 [phases.diff-nav-bugs]
@@ -41,6 +41,12 @@ summary = 'Correctly unifies the status bar background color across all nested s
 
 [phases.phase-status-distinction]
 bead_id = 'quasar-2ba'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T09:32:45.798334-05:00
-updated_at = 2026-02-18T09:56:39.520435-05:00
+updated_at = 2026-02-18T10:02:06.261839-05:00
+
+[phases.phase-status-distinction.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Added visual distinction between phase names (bold white) and status metadata (muted) in both nebula and loop views, plus fixed a selected-row highlighting inconsistency for in-progress agents — clean, minimal, correct changes.'
