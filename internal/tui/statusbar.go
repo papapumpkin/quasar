@@ -277,7 +277,7 @@ func totalWidth(segments []statusSegment) int {
 }
 
 // renderProgressBar creates a filled/empty bar showing completed/total progress.
-// Uses blue→green color transition as progress increases.
+// Uses a single muted foreground for uniform bar appearance.
 func renderProgressBar(completed, total, width int) string {
 	if total <= 0 || width <= 0 {
 		return ""
@@ -289,8 +289,7 @@ func renderProgressBar(completed, total, width int) string {
 	filled := int(ratio * float64(width))
 	empty := width - filled
 
-	barColor := progressColor(ratio)
-	style := lipgloss.NewStyle().Background(colorSurface).Foreground(barColor)
+	style := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMutedLight)
 	emptyStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMuted)
 
 	return style.Render(strings.Repeat("━", filled)) +
@@ -298,7 +297,7 @@ func renderProgressBar(completed, total, width int) string {
 }
 
 // renderBudgetBar creates an inline budget consumption indicator.
-// Color transitions green → yellow → red as budget approaches limit.
+// Uses a single muted foreground for uniform bar appearance.
 func renderBudgetBar(spent, budget float64, width int) string {
 	if budget <= 0 || width <= 0 {
 		return ""
@@ -310,8 +309,7 @@ func renderBudgetBar(spent, budget float64, width int) string {
 	filled := int(ratio * float64(width))
 	empty := width - filled
 
-	barColor := budgetColor(ratio)
-	style := lipgloss.NewStyle().Background(colorSurface).Foreground(barColor)
+	style := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMutedLight)
 	emptyStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMuted)
 
 	return style.Render(strings.Repeat("━", filled)) +
@@ -331,21 +329,14 @@ func renderCycleBar(cycle, maxCycles int) string {
 	empty := barWidth - filled
 
 	return "[" +
-		lipgloss.NewStyle().Background(colorSurface).Foreground(colorPrimary).Render(strings.Repeat("█", filled)) +
+		lipgloss.NewStyle().Background(colorSurface).Foreground(colorMutedLight).Render(strings.Repeat("█", filled)) +
 		lipgloss.NewStyle().Background(colorSurface).Foreground(colorMuted).Render(strings.Repeat("░", empty)) +
 		"]"
 }
 
-// progressColor returns a color that transitions from blue to green based on ratio (0.0-1.0).
-func progressColor(ratio float64) lipgloss.Color {
-	switch {
-	case ratio >= 0.8:
-		return colorSuccess
-	case ratio >= 0.4:
-		return colorPrimary
-	default:
-		return colorBlue
-	}
+// progressColor returns the uniform bar foreground color regardless of progress ratio.
+func progressColor(_ float64) lipgloss.Color {
+	return colorMutedLight
 }
 
 // resourceLevelStyle returns the appropriate style for the given resource level.
@@ -360,16 +351,7 @@ func resourceLevelStyle(level ResourceLevel) lipgloss.Style {
 	}
 }
 
-// budgetColor returns a color that transitions green → yellow → red based on ratio (0.0-1.0).
-func budgetColor(ratio float64) lipgloss.Color {
-	switch {
-	case ratio >= 0.9:
-		return colorDanger
-	case ratio >= 0.7:
-		return colorBudgetWarn
-	case ratio >= 0.5:
-		return colorAccent
-	default:
-		return colorSuccess
-	}
+// budgetColor returns the uniform bar foreground color regardless of budget ratio.
+func budgetColor(_ float64) lipgloss.Color {
+	return colorMutedLight
 }

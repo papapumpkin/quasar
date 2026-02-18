@@ -250,7 +250,7 @@ func TestDefaultResourceThresholds(t *testing.T) {
 func TestResourceLevelStyle(t *testing.T) {
 	t.Parallel()
 
-	t.Run("normal uses success color", func(t *testing.T) {
+	t.Run("normal is not bold", func(t *testing.T) {
 		t.Parallel()
 		style := resourceLevelStyle(ResourceNormal)
 		if style.GetBold() {
@@ -258,11 +258,11 @@ func TestResourceLevelStyle(t *testing.T) {
 		}
 	})
 
-	t.Run("danger is bold", func(t *testing.T) {
+	t.Run("danger uses uniform style", func(t *testing.T) {
 		t.Parallel()
 		style := resourceLevelStyle(ResourceDanger)
-		if !style.GetBold() {
-			t.Error("danger level should be bold")
+		if style.GetBold() {
+			t.Error("danger level should not be bold in uniform bar")
 		}
 	})
 }

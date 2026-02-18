@@ -1,0 +1,35 @@
+[nebula]
+name = "git-branching"
+description = "Nebula-scoped git branches with human-readable cycle commits"
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "git"]
+assignee = ""
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 15.0
+model = ""
+gate = ""
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+  "Each nebula runs on its own git branch (nebula/<name>) checked out from main",
+  "Branch enforcement is in code — spawned quasars cannot accidentally commit to the wrong branch",
+  "Cycle commits are human-readable: <beadID>/cycle-<N>: <summary>",
+]
+constraints = [
+  "Branch creation and enforcement live in internal/nebula/ and internal/loop/, not in agent prompts",
+  "Standalone quasar run (non-nebula) is unaffected by branch management — only commit format changes",
+  "Existing CycleCommitter and GitCommitter nil-safe patterns must be preserved",
+  "No external dependencies — use git CLI via os/exec like the existing committers",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

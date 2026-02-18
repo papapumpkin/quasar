@@ -42,8 +42,7 @@ const (
 var (
 	styleStatusBar = lipgloss.NewStyle().
 			Background(colorSurface).
-			Foreground(colorWhite).
-			Bold(true).
+			Foreground(colorMutedLight).
 			Padding(0, 1)
 
 	// styleStatusMode renders mode labels ("nebula:", "task") in a dimmer secondary color.
@@ -51,30 +50,30 @@ var (
 			Background(colorSurface).
 			Foreground(colorMutedLight)
 
-	// styleStatusName renders the task/nebula name in bright white for maximum readability.
+	// styleStatusName renders the task/nebula name — bold for emphasis but same bar foreground.
 	styleStatusName = lipgloss.NewStyle().
 			Background(colorSurface).
-			Foreground(colorBrightWhite).
+			Foreground(colorMutedLight).
 			Bold(true)
 
-	// styleStatusProgress renders progress text; switches to green when completed > 0.
+	// styleStatusProgress renders progress text in the uniform bar foreground.
 	styleStatusProgress = lipgloss.NewStyle().
 				Background(colorSurface).
-				Foreground(colorMuted)
+				Foreground(colorMutedLight)
 
-	// styleStatusProgressActive renders progress text when some items are completed.
+	// styleStatusProgressActive renders progress text when some items are completed (same uniform color).
 	styleStatusProgressActive = lipgloss.NewStyle().
 					Background(colorSurface).
-					Foreground(colorSuccess)
+					Foreground(colorMutedLight)
 
 	styleStatusCost = lipgloss.NewStyle().
 			Background(colorSurface).
-			Foreground(colorAccent)
+			Foreground(colorMutedLight)
 
-	// styleStatusElapsed renders the elapsed time in muted gray.
+	// styleStatusElapsed renders the elapsed time in the uniform bar foreground.
 	styleStatusElapsed = lipgloss.NewStyle().
 				Background(colorSurface).
-				Foreground(colorMuted)
+				Foreground(colorMutedLight)
 
 	styleStatusPaused = lipgloss.NewStyle().
 				Background(colorSurface).
@@ -328,23 +327,22 @@ var (
 			Foreground(colorWhite)
 )
 
-// Resource indicator styles — color-coded by severity level.
+// Resource indicator styles — uniform bar foreground for clean single-color bar.
 var (
-	// styleResourceNormal styles resource metrics when within safe bounds (green).
+	// styleResourceNormal styles resource metrics in the uniform bar foreground.
 	styleResourceNormal = lipgloss.NewStyle().
 				Background(colorSurface).
-				Foreground(colorSuccess)
+				Foreground(colorMutedLight)
 
-	// styleResourceWarning styles resource metrics at elevated levels (orange).
+	// styleResourceWarning styles resource metrics in the uniform bar foreground.
 	styleResourceWarning = lipgloss.NewStyle().
 				Background(colorSurface).
-				Foreground(colorAccent)
+				Foreground(colorMutedLight)
 
-	// styleResourceDanger styles resource metrics at dangerously high levels (red).
+	// styleResourceDanger styles resource metrics in the uniform bar foreground.
 	styleResourceDanger = lipgloss.NewStyle().
 				Background(colorSurface).
-				Foreground(colorDanger).
-				Bold(true)
+				Foreground(colorMutedLight)
 )
 
 // Toast notification styles.

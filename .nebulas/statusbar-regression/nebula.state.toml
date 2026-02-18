@@ -1,27 +1,34 @@
 version = 1
 nebula_name = 'statusbar-regression'
+total_cost_usd = 1.6008995000000001
 
 [phases]
 [phases.diff-jk-scroll]
 bead_id = 'quasar-jef'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T10:23:41.549914-05:00
-updated_at = 2026-02-18T10:23:42.860802-05:00
+updated_at = 2026-02-18T10:30:47.848226-05:00
+
+[phases.diff-jk-scroll.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Added DiffFileOpen state tracking to fix j/k scrolling within single-file diffs, with proper state cleanup across all transitions — clean, correct, low-risk TUI behavior fix.'
 
 [phases.fix-wrapping]
 bead_id = 'quasar-pwo'
 status = 'created'
 created_at = 2026-02-18T10:23:41.922551-05:00
-updated_at = 2026-02-18T10:23:41.922551-05:00
+updated_at = 2026-02-18T10:37:56.567878-05:00
 
 [phases.selected-row-highlight]
-bead_id = 'quasar-a6n'
+bead_id = 'quasar-23g'
 status = 'created'
 created_at = 2026-02-18T10:23:42.266618-05:00
-updated_at = 2026-02-18T10:23:42.266618-05:00
+updated_at = 2026-02-18T10:37:56.938933-05:00
 
 [phases.unify-bar-color]
-bead_id = 'quasar-asm'
-status = 'created'
+bead_id = 'quasar-g0m'
+status = 'in_progress'
 created_at = 2026-02-18T10:23:42.65324-05:00
-updated_at = 2026-02-18T10:23:42.65324-05:00
+updated_at = 2026-02-18T10:37:57.389218-05:00

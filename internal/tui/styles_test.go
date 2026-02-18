@@ -43,9 +43,6 @@ func TestStatusBarStyleProperties(t *testing.T) {
 	if _, noColor := bg.(lipgloss.NoColor); noColor {
 		t.Error("status bar should have a background color set")
 	}
-	if !styleStatusBar.GetBold() {
-		t.Error("status bar should be bold")
-	}
 }
 
 func TestDetailBorderIsRounded(t *testing.T) {
@@ -448,9 +445,9 @@ func TestProgressColor(t *testing.T) {
 		ratio float64
 		want  lipgloss.Color
 	}{
-		{"low", 0.1, colorBlue},
-		{"mid", 0.5, colorPrimary},
-		{"high", 0.9, colorSuccess},
+		{"low", 0.1, colorMutedLight},
+		{"mid", 0.5, colorMutedLight},
+		{"high", 0.9, colorMutedLight},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -470,10 +467,10 @@ func TestBudgetColor(t *testing.T) {
 		ratio float64
 		want  lipgloss.Color
 	}{
-		{"low spend", 0.2, colorSuccess},
-		{"mid spend", 0.6, colorAccent},
-		{"high spend", 0.75, colorBudgetWarn},
-		{"critical", 0.95, colorDanger},
+		{"low spend", 0.2, colorMutedLight},
+		{"mid spend", 0.6, colorMutedLight},
+		{"high spend", 0.75, colorMutedLight},
+		{"critical", 0.95, colorMutedLight},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
