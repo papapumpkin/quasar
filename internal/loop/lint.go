@@ -35,11 +35,12 @@ func NewLinter(commands []string, dir string) Linter {
 	return &CommandLinter{Commands: commands, Dir: dir}
 }
 
-// Run executes each lint command in sequence and collects any output.
-// Errors from individual commands are captured as output (lint findings)
-// rather than treated as fatal errors — a non-zero exit code from go vet
-// is expected when there are issues.
-// A fatal error is only returned if the command cannot be started at all.
+// Run executes each lint command in sequence and collects output from commands
+// that fail (non-zero exit). Commands that succeed (exit 0) are treated as
+// auto-fixers — any stdout they produce (e.g. `go fmt` printing reformatted
+// filenames) is informational and not reported as lint findings.
+// This implementation never returns a fatal error; all command failures
+// (including start failures) are captured as output text.
 func (l *CommandLinter) Run(ctx context.Context) (string, error) {
 	if l == nil || len(l.Commands) == 0 {
 		return "", nil
@@ -61,21 +62,26 @@ func (l *CommandLinter) Run(ctx context.Context) (string, error) {
 
 		err := cmd.Run()
 
-		// Collect any output (stdout + stderr) as lint findings.
+		if err == nil {
+			// Command succeeded (exit 0). Any stdout output is informational
+			// (e.g. `go fmt` prints filenames it reformatted but already fixed
+			// them). We don't treat this as lint findings.
+			continue
+		}
+
+		// Command failed (non-zero exit) — collect output as lint findings.
 		combined := strings.TrimSpace(stdout.String() + "\n" + stderr.String())
 		combined = strings.TrimSpace(combined)
 
-		if err != nil && combined == "" {
+		if combined == "" {
 			// Command failed but produced no output — include the error itself.
 			combined = fmt.Sprintf("%s: %v", cmdStr, err)
 		}
 
-		if combined != "" {
-			if results.Len() > 0 {
-				results.WriteString("\n\n")
-			}
-			fmt.Fprintf(&results, "$ %s\n%s", cmdStr, combined)
+		if results.Len() > 0 {
+			results.WriteString("\n\n")
 		}
+		fmt.Fprintf(&results, "$ %s\n%s", cmdStr, combined)
 	}
 
 	return results.String(), nil
