@@ -62,11 +62,6 @@ var (
 				Background(colorSurface).
 				Foreground(colorMutedLight)
 
-	// styleStatusProgressActive renders progress text when some items are completed — green tint.
-	styleStatusProgressActive = lipgloss.NewStyle().
-					Background(colorSurface).
-					Foreground(colorSuccess)
-
 	// styleStatusCost renders monetary values in amber/gold for visual distinction.
 	styleStatusCost = lipgloss.NewStyle().
 			Background(colorSurface).

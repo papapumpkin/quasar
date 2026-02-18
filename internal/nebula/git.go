@@ -192,13 +192,13 @@ type PostCompletionResult struct {
 func (r *PostCompletionResult) Summary() string {
 	var b strings.Builder
 	if r.CommitErr != nil {
-		b.WriteString(fmt.Sprintf("Commit failed: %v", r.CommitErr))
+		fmt.Fprintf(&b, "Commit failed: %v", r.CommitErr)
 		b.WriteString("\n")
 	}
 	if r.PushErr != nil {
-		b.WriteString(fmt.Sprintf("Push failed: %v", r.PushErr))
+		fmt.Fprintf(&b, "Push failed: %v", r.PushErr)
 	} else {
-		b.WriteString(fmt.Sprintf("Pushed to origin/%s", r.PushBranch))
+		fmt.Fprintf(&b, "Pushed to origin/%s", r.PushBranch)
 	}
 	b.WriteString("\n")
 	branch := r.CheckoutBranch
@@ -206,9 +206,9 @@ func (r *PostCompletionResult) Summary() string {
 		branch = "default branch"
 	}
 	if r.CheckoutErr != nil {
-		b.WriteString(fmt.Sprintf("Checkout %s failed: %v", branch, r.CheckoutErr))
+		fmt.Fprintf(&b, "Checkout %s failed: %v", branch, r.CheckoutErr)
 	} else {
-		b.WriteString(fmt.Sprintf("Checked out %s", branch))
+		fmt.Fprintf(&b, "Checked out %s", branch)
 	}
 	return b.String()
 }

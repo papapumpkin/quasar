@@ -21,15 +21,6 @@ func writeTestPhaseFile(t *testing.T, dir, id, body string) string {
 	return path
 }
 
-// newTestHotReloader creates a minimal HotReloader for testing change handlers.
-func newTestHotReloader(t *testing.T, buf *bytes.Buffer, mu *sync.Mutex) *HotReloader {
-	t.Helper()
-	return NewHotReloader(HotReloaderConfig{
-		Logger: buf,
-		Mu:     mu,
-	})
-}
-
 func newTestWorkerGroup(t *testing.T) *WorkerGroup {
 	t.Helper()
 	var buf bytes.Buffer
