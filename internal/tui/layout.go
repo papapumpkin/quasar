@@ -1,6 +1,11 @@
 package tui
 
-import "unicode/utf8"
+import (
+	"strings"
+	"unicode/utf8"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 // Minimum terminal dimensions for usable rendering.
 const (
@@ -46,4 +51,15 @@ func truncateToNRunes(s string, n int) string {
 		i += size
 	}
 	return s[:i]
+}
+
+// padToWidth pads a rendered (possibly ANSI-styled) string with spaces to fill
+// the given width, then applies a background color across the entire padded row.
+// This ensures selected-row highlighting spans the full terminal width.
+func padToWidth(s string, width int, bg lipgloss.Color) string {
+	visible := lipgloss.Width(s)
+	if visible < width {
+		s += strings.Repeat(" ", width-visible)
+	}
+	return lipgloss.NewStyle().Background(bg).Render(s)
 }

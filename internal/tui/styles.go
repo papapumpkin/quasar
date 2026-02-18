@@ -23,6 +23,7 @@ var (
 	colorNebulaDeep    = lipgloss.Color("#8B5CF6") // Deep nebula — selected backgrounds, borders
 	colorRedshift      = lipgloss.Color("#FF6B6B") // Warm red — Doppler left jet
 	colorBlueshift     = lipgloss.Color("#4FC3F7") // Cool cyan — Doppler right jet
+	colorSelectionBg   = lipgloss.Color("#2D2D5E") // Dim nebula tint — selected row background
 )
 
 // Selection indicator prepended to the active row.
@@ -100,6 +101,7 @@ var styleBreadcrumbSep = lipgloss.NewStyle().
 var (
 	styleRowSelected = lipgloss.NewStyle().
 				Foreground(colorBrightWhite).
+				Background(colorSelectionBg).
 				Bold(true)
 
 	styleRowNormal = lipgloss.NewStyle().

@@ -246,6 +246,7 @@ func (lv *LoopView) MoveDown() {
 }
 
 // View renders the cycle timeline with tree connector lines.
+// Selected rows get a full-width background highlight for visibility.
 func (lv LoopView) View() string {
 	var b strings.Builder
 	idx := 0
@@ -254,11 +255,17 @@ func (lv LoopView) View() string {
 		selected := idx == lv.Cursor
 		indicator := "  "
 		if selected {
-			indicator = styleSelectionIndicator.Render(selectionIndicator) + " "
+			indicator = styleSelectionIndicator.
+				Background(colorSelectionBg).
+				Render(selectionIndicator) + " "
 		}
 		header := fmt.Sprintf("%sCycle %d", indicator, c.Number)
 		if selected {
-			b.WriteString(styleRowSelected.Render(header))
+			row := styleRowSelected.Render(header)
+			if lv.Width > 0 {
+				row = padToWidth(row, lv.Width, colorSelectionBg)
+			}
+			b.WriteString(row)
 		} else {
 			b.WriteString(styleRowNormal.Render(header))
 		}
@@ -270,7 +277,9 @@ func (lv LoopView) View() string {
 			selected = idx == lv.Cursor
 			indicator = "  "
 			if selected {
-				indicator = styleSelectionIndicator.Render(selectionIndicator) + " "
+				indicator = styleSelectionIndicator.
+					Background(colorSelectionBg).
+					Render(selectionIndicator) + " "
 			}
 
 			// Tree connector: └── for last agent, ├── for others.
@@ -281,6 +290,7 @@ func (lv LoopView) View() string {
 			}
 			styledConnector := styleTreeConnector.Render(connector)
 
+			var line string
 			if a.Done {
 				secs := float64(a.DurationMs) / 1000.0
 				icon := styleRowDone.Render(iconDone)
@@ -294,9 +304,15 @@ func (lv LoopView) View() string {
 				if a.Role == "reviewer" && a.IssueCount > 0 {
 					stats += fmt.Sprintf("  → %d issue(s)", a.IssueCount)
 				}
-				styledStats := stylePhaseDetail.Render(stats)
-				line := fmt.Sprintf("%s%s%s %s  %s", indicator, styledConnector, icon, styledRole, styledStats)
-				b.WriteString(line)
+				var styledStats string
+				if selected {
+					styledStats = stylePhaseDetail.
+						Background(colorSelectionBg).
+						Render(stats)
+				} else {
+					styledStats = stylePhaseDetail.Render(stats)
+				}
+				line = fmt.Sprintf("%s%s%s %s  %s", indicator, styledConnector, icon, styledRole, styledStats)
 			} else {
 				icon := styleRowWorking.Render(iconWorking)
 				elapsed := formatElapsed(a.StartedAt)
@@ -307,10 +323,23 @@ func (lv LoopView) View() string {
 				} else {
 					styledRole = stylePhaseID.Render(a.Role)
 				}
-				styledDetail := stylePhaseDetail.Render(fmt.Sprintf("working… %s", elapsed))
-				line := fmt.Sprintf("%s%s%s %s  %s  %s", indicator, styledConnector, icon, styledRole, styledDetail, spinnerStr)
-				b.WriteString(line)
+				var styledDetail string
+				if selected {
+					styledDetail = stylePhaseDetail.
+						Background(colorSelectionBg).
+						Render(fmt.Sprintf("working… %s", elapsed))
+				} else {
+					styledDetail = stylePhaseDetail.Render(fmt.Sprintf("working… %s", elapsed))
+				}
+				line = fmt.Sprintf("%s%s%s %s  %s  %s", indicator, styledConnector, icon, styledRole, styledDetail, spinnerStr)
 			}
+
+			// Apply full-width background highlight for the selected row.
+			if selected && lv.Width > 0 {
+				line = padToWidth(line, lv.Width, colorSelectionBg)
+			}
+
+			b.WriteString(line)
 			b.WriteString("\n")
 			idx++
 		}

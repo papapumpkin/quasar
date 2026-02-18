@@ -194,11 +194,14 @@ func (nv NebulaView) renderWaveHeader(wave int) string {
 // renderPhaseRow renders a single phase row with aligned columns.
 // The phase ID is rendered in a brighter/bolder style while status
 // detail (cycles, elapsed, cost) uses a muted style for easy scanning.
+// When the row is selected, a full-width background highlight is applied.
 func (nv NebulaView) renderPhaseRow(i int, p PhaseEntry) string {
 	selected := i == nv.Cursor
 	indicator := "  "
 	if selected {
-		indicator = styleSelectionIndicator.Render(selectionIndicator) + " "
+		indicator = styleSelectionIndicator.
+			Background(colorSelectionBg).
+			Render(selectionIndicator) + " "
 	}
 
 	statusIcon, _ := nv.phaseIconAndStyle(p)
@@ -226,10 +229,23 @@ func (nv NebulaView) renderPhaseRow(i int, p PhaseEntry) string {
 	detail := nv.phaseDetail(p)
 	var styledDetail string
 	if detail != "" {
-		styledDetail = "  " + stylePhaseDetail.Render(detail)
+		if selected {
+			styledDetail = "  " + stylePhaseDetail.
+				Background(colorSelectionBg).
+				Render(detail)
+		} else {
+			styledDetail = "  " + stylePhaseDetail.Render(detail)
+		}
 	}
 
-	return fmt.Sprintf("%s%s %s%s", indicator, statusIcon, styledID, styledDetail)
+	row := fmt.Sprintf("%s%s %s%s", indicator, statusIcon, styledID, styledDetail)
+
+	// Apply full-width background highlight for the selected row.
+	if selected && nv.Width > 0 {
+		row = padToWidth(row, nv.Width, colorSelectionBg)
+	}
+
+	return row
 }
 
 // phaseIconAndStyle returns the status icon and row style for a phase.
