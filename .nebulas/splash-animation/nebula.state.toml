@@ -1,15 +1,22 @@
 version = 1
 nebula_name = 'Quasar Splash Animation'
+total_cost_usd = 1.00506325
 
 [phases]
 [phases.import-splash]
 bead_id = 'quasar-rti'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T09:05:31.457948-05:00
-updated_at = 2026-02-18T09:08:21.542152-05:00
+updated_at = 2026-02-18T09:10:56.703975-05:00
+
+[phases.import-splash.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-adapted binary-star ASCII splash animation as a self-contained Bubble Tea component with proper namespacing, Doppler color shifting, comprehensive tests, and clean build — low risk addition to the TUI package.'
 
 [phases.wire-startup]
 bead_id = 'quasar-699'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-18T09:05:31.848405-05:00
-updated_at = 2026-02-18T09:08:21.472706-05:00
+updated_at = 2026-02-18T09:10:56.704624-05:00

@@ -27,6 +27,7 @@ func addNebulaApplyFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("watch", false, "watch for phase file changes during execution (with --auto)")
 	cmd.Flags().Int("max-workers", 1, "maximum concurrent workers (with --auto)")
 	cmd.Flags().Bool("no-tui", false, "disable TUI even on a TTY (use stderr output)")
+	cmd.Flags().Bool("no-splash", false, "skip the startup splash animation")
 }
 
 func runNebulaApply(cmd *cobra.Command, args []string) error {
@@ -129,6 +130,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	git := loop.NewCycleCommitter(ctx, workDir)
 
 	noTUI, _ := cmd.Flags().GetBool("no-tui")
+	noSplash, _ := cmd.Flags().GetBool("no-splash")
 	useTUI := !noTUI && isStderrTTY()
 
 	// Build the runner and WorkerGroup, branching on TUI vs stderr.
@@ -153,7 +155,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			})
 		}
 		architectFunc := buildArchitectFunc(claudeInv, wg.SnapshotNebula)
-		tuiProgram = tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir, architectFunc)
+		tuiProgram = tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir, noSplash, architectFunc)
 		// Per-phase loops with PhaseUIBridge for hierarchical TUI tracking.
 		wg.Runner = &tuiLoopAdapter{
 			program:      tuiProgram,

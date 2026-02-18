@@ -88,12 +88,15 @@ type AppModel struct {
 	Architect     *ArchitectOverlay
 	ArchitectFunc func(ctx context.Context, msg MsgArchitectStart) (*nebula.ArchitectResult, error) // injected by caller
 
-	// Splash screen state.
-	Splash bool // true while the startup splash is visible
+	// Splash screen state — nil means splash is disabled (e.g. --no-splash).
+	Splash *SplashModel
 }
 
 // NewAppModel creates a root model configured for the given mode.
+// The binary-star splash animation is enabled by default; pass the model
+// through DisableSplash to skip it (e.g. for --no-splash or CI).
 func NewAppModel(mode Mode) AppModel {
+	splash := NewSplash(DefaultSplashConfig())
 	m := AppModel{
 		Mode:       mode,
 		LoopView:   NewLoopView(),
@@ -103,27 +106,31 @@ func NewAppModel(mode Mode) AppModel {
 		PhaseLoops: make(map[string]*LoopView),
 		PhaseBeads: make(map[string]*BeadInfo),
 		Thresholds: DefaultResourceThresholds(),
-		Splash:     true,
+		Splash:     &splash,
 	}
 	m.StatusBar.StartTime = m.StartTime
 	m.StatusBar.Thresholds = m.Thresholds
 	return m
 }
 
-// splashDuration is how long the splash screen is shown at startup.
-const splashDuration = 1500 * time.Millisecond
+// DisableSplash clears the splash animation so the main view loads immediately.
+func (m *AppModel) DisableSplash() {
+	m.Splash = nil
+}
 
-// Init starts the spinner, tick timer, resource sampler, and splash timer.
+// Init starts the spinner, tick timer, resource sampler, and (if enabled)
+// the binary-star splash animation.
 func (m AppModel) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		m.LoopView.Spinner.Tick,
 		m.NebulaView.Spinner.Tick,
 		tickCmd(),
 		resourceTickCmd(),
-		tea.Tick(splashDuration, func(time.Time) tea.Msg {
-			return MsgSplashDone{}
-		}),
-	)
+	}
+	if m.Splash != nil {
+		cmds = append(cmds, m.Splash.Init())
+	}
+	return tea.Batch(cmds...)
 }
 
 // tickCmd returns a command that sends a tick every second.
@@ -466,9 +473,21 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgToastExpired:
 		m.Toasts = removeToast(m.Toasts, msg.ID)
 
-	// --- Splash screen ---
+	// --- Splash animation ---
+	case splashTickMsg:
+		if m.Splash != nil {
+			updated, cmd := m.Splash.Update(msg)
+			sm := updated.(SplashModel)
+			m.Splash = &sm
+			if sm.Done() {
+				m.Splash = nil
+			}
+			cmds = append(cmds, cmd)
+		}
+
+	// MsgSplashDone is kept for programmatic splash dismissal (e.g. tests).
 	case MsgSplashDone:
-		m.Splash = false
+		m.Splash = nil
 
 	}
 
@@ -531,11 +550,13 @@ func safeArchitectCall(ctx context.Context, fn func(context.Context, MsgArchitec
 
 // handleKey processes keyboard input.
 func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Splash screen: only q quits; all other keys are ignored.
-	if m.Splash {
+	// Splash screen: q quits, any other key skips the animation.
+	if m.Splash != nil {
 		if key.Matches(msg, m.Keys.Quit) {
 			return m, tea.Quit
 		}
+		// Any keypress dismisses the splash.
+		m.Splash = nil
 		return m, nil
 	}
 
@@ -1362,8 +1383,8 @@ func (m AppModel) View() string {
 		return m.renderTooSmall()
 	}
 
-	// Splash screen — show centered quasar art for the first 1.5s.
-	if m.Splash {
+	// Splash screen — show binary-star animation until it finishes or is skipped.
+	if m.Splash != nil {
 		return m.renderSplash()
 	}
 
@@ -1456,25 +1477,12 @@ func (m AppModel) renderTooSmall() string {
 	return style.Render(msg)
 }
 
-// renderSplash renders the splash screen with the best-fitting quasar art centered.
-// Falls back to smaller art variants if the terminal is too narrow for XL.
+// renderSplash renders the binary-star splash animation centered in the terminal.
 func (m AppModel) renderSplash() string {
-	var splash string
-	switch {
-	case m.Width >= 92:
-		splash = m.Banner.SplashView()
-	default:
-		// Use the normal banner view (XS or S-A) for narrower terminals.
-		splash = m.Banner.View()
+	if m.Splash == nil {
+		return ""
 	}
-	if splash == "" {
-		// Terminal too narrow for any art — show just the name.
-		splash = lipgloss.NewStyle().
-			Foreground(colorStarYellow).
-			Bold(true).
-			Render("Q  U  A  S  A  R")
-	}
-	return lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center, splash)
+	return lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center, m.Splash.View())
 }
 
 // contentWidth returns the available width for main content, accounting for the
