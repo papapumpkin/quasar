@@ -722,6 +722,7 @@ func TestDiffFileListNavigationAtAgentOutput(t *testing.T) {
 	t.Run("up/down navigate file list instead of scrolling detail", func(t *testing.T) {
 		t.Parallel()
 		m := NewAppModel(ModeLoop)
+		m.Splash = nil // Disable splash so handleKey processes navigation keys.
 		m.Width = 120
 		m.Height = 40
 		m.Detail = NewDetailPanel(80, 10)
