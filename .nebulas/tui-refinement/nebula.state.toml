@@ -1,0 +1,63 @@
+version = 1
+nebula_name = 'tui-refinement-visual-polish'
+
+[phases]
+[phases.beads-dag-fix]
+bead_id = 'quasar-tl2'
+status = 'in_progress'
+created_at = 2026-02-18T11:27:26.317157-05:00
+updated_at = 2026-02-18T11:35:14.371221-05:00
+
+[phases.coder-lint-pass]
+bead_id = 'quasar-avf'
+status = 'created'
+created_at = 2026-02-18T11:27:26.698925-05:00
+updated_at = 2026-02-18T11:35:14.007993-05:00
+
+[phases.header-solid-bg]
+bead_id = 'quasar-3q5'
+status = 'in_progress'
+created_at = 2026-02-18T11:27:27.045202-05:00
+updated_at = 2026-02-18T11:35:14.363451-05:00
+
+[phases.logo-no-bg]
+bead_id = 'quasar-ytv'
+status = 'created'
+created_at = 2026-02-18T11:27:27.43406-05:00
+updated_at = 2026-02-18T11:35:14.008444-05:00
+
+[phases.nebula-git-push]
+bead_id = 'quasar-53j'
+status = 'created'
+created_at = 2026-02-18T11:27:27.802325-05:00
+updated_at = 2026-02-18T11:35:14.008652-05:00
+
+[phases.phase-progress-color]
+bead_id = 'quasar-cuh'
+status = 'created'
+created_at = 2026-02-18T11:27:28.193371-05:00
+updated_at = 2026-02-18T11:35:14.008849-05:00
+
+[phases.quit-confirmation]
+bead_id = 'quasar-aec'
+status = 'created'
+created_at = 2026-02-18T11:27:28.564916-05:00
+updated_at = 2026-02-18T11:35:14.009049-05:00
+
+[phases.remove-architect-overlay]
+bead_id = 'quasar-2ka'
+status = 'created'
+created_at = 2026-02-18T11:27:28.934104-05:00
+updated_at = 2026-02-18T11:35:14.00924-05:00
+
+[phases.selection-indicator-only]
+bead_id = 'quasar-aeo'
+status = 'created'
+created_at = 2026-02-18T11:27:29.335242-05:00
+updated_at = 2026-02-18T11:35:14.009453-05:00
+
+[phases.status-bar-colors]
+bead_id = 'quasar-jmb'
+status = 'created'
+created_at = 2026-02-18T11:27:29.741936-05:00
+updated_at = 2026-02-18T11:35:14.009641-05:00
