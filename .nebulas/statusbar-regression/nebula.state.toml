@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'statusbar-regression'
-total_cost_usd = 1.6008995000000001
+total_cost_usd = 2.977483
 
 [phases]
 [phases.diff-jk-scroll]
@@ -19,16 +19,22 @@ summary = 'Added DiffFileOpen state tracking to fix j/k scrolling within single-
 bead_id = 'quasar-pwo'
 status = 'created'
 created_at = 2026-02-18T10:23:41.922551-05:00
-updated_at = 2026-02-18T10:37:56.567878-05:00
+updated_at = 2026-02-18T10:43:21.962277-05:00
 
 [phases.selected-row-highlight]
 bead_id = 'quasar-23g'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-18T10:23:42.266618-05:00
-updated_at = 2026-02-18T10:37:56.938933-05:00
+updated_at = 2026-02-18T10:43:22.030534-05:00
 
 [phases.unify-bar-color]
 bead_id = 'quasar-g0m'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T10:23:42.65324-05:00
-updated_at = 2026-02-18T10:37:57.389218-05:00
+updated_at = 2026-02-18T10:42:16.084203-05:00
+
+[phases.unify-bar-color.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Status bar colors unified to single muted foreground as requested; clean, well-scoped change with minor dead code left behind.'
