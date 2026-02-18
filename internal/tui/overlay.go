@@ -24,6 +24,8 @@ type CompletionOverlay struct {
 	DoneCount    int
 	FailedCount  int
 	SkippedCount int
+	// Post-completion git workflow status (push/checkout results).
+	GitResult *nebula.PostCompletionResult
 	// Nebula picker state.
 	NebulaChoices []NebulaChoice
 	PickerCursor  int
@@ -70,6 +72,12 @@ func (o *CompletionOverlay) View(width, height int) string {
 	// Duration and cost.
 	if o.Duration > 0 || o.CostUSD > 0 {
 		b.WriteString(o.renderStats())
+		b.WriteString("\n")
+	}
+
+	// Git post-completion status.
+	if o.GitResult != nil {
+		b.WriteString(o.renderGitStatus())
 		b.WriteString("\n")
 	}
 
@@ -141,6 +149,39 @@ func (o *CompletionOverlay) renderStats() string {
 		parts = append(parts, fmt.Sprintf("Cost: $%.2f", o.CostUSD))
 	}
 	return styleDetailDim.Render(strings.Join(parts, "  "))
+}
+
+// renderGitStatus renders the post-completion git push/checkout results.
+func (o *CompletionOverlay) renderGitStatus() string {
+	r := o.GitResult
+	var parts []string
+
+	if r.CommitErr != nil {
+		parts = append(parts, lipgloss.NewStyle().Foreground(colorDanger).
+			Render(fmt.Sprintf("⚠ Commit failed: %v", r.CommitErr)))
+	}
+
+	if r.PushErr != nil {
+		parts = append(parts, lipgloss.NewStyle().Foreground(colorDanger).
+			Render(fmt.Sprintf("⚠ Push failed: %v", r.PushErr)))
+	} else {
+		parts = append(parts, lipgloss.NewStyle().Foreground(colorSuccess).
+			Render(fmt.Sprintf("✓ Pushed to origin/%s", r.PushBranch)))
+	}
+
+	branch := r.CheckoutBranch
+	if branch == "" {
+		branch = "default branch"
+	}
+	if r.CheckoutErr != nil {
+		parts = append(parts, lipgloss.NewStyle().Foreground(colorDanger).
+			Render(fmt.Sprintf("⚠ Checkout %s failed: %v", branch, r.CheckoutErr)))
+	} else {
+		parts = append(parts, lipgloss.NewStyle().Foreground(colorSuccess).
+			Render(fmt.Sprintf("✓ Checked out %s", branch)))
+	}
+
+	return strings.Join(parts, "\n")
 }
 
 // NewCompletionFromLoopDone creates a CompletionOverlay from a MsgLoopDone.
@@ -252,6 +293,22 @@ func centerOverlay(content string, width, height int) string {
 		PaddingLeft(leftPad).
 		PaddingTop(topPad).
 		Render(content)
+}
+
+// RenderQuitConfirm renders a centered quit confirmation overlay.
+func RenderQuitConfirm(width, height int) string {
+	var b strings.Builder
+
+	title := styleOverlayTitle.Foreground(colorAccent).
+		Render("⚠  Are you sure you want to exit?")
+	b.WriteString(title)
+	b.WriteString("\n\n")
+	b.WriteString("Nebula has in-progress phases.")
+	b.WriteString("\n\n")
+	b.WriteString(styleOverlayHint.Render("[y] Yes, exit    [n] Continue"))
+
+	boxContent := styleOverlayWarning.Render(b.String())
+	return centerOverlay(boxContent, width, height)
 }
 
 // compositeOverlay renders the overlay box on top of the dimmed background.

@@ -70,6 +70,39 @@ func TestStatusBarView(t *testing.T) {
 		}
 	})
 
+	t.Run("nebula mode shows active phases", func(t *testing.T) {
+		t.Parallel()
+		sb := StatusBar{
+			Name:       "test-nebula",
+			Total:      10,
+			Completed:  4,
+			InProgress: 2,
+			Width:      120,
+		}
+		view := sb.View()
+		if !strings.Contains(view, "4/10") {
+			t.Errorf("expected 4/10 progress in view, got: %s", view)
+		}
+		if !strings.Contains(view, "2 active") {
+			t.Errorf("expected '2 active' in view, got: %s", view)
+		}
+	})
+
+	t.Run("nebula mode hides active when zero in-progress", func(t *testing.T) {
+		t.Parallel()
+		sb := StatusBar{
+			Name:       "test-nebula",
+			Total:      10,
+			Completed:  10,
+			InProgress: 0,
+			Width:      120,
+		}
+		view := sb.View()
+		if strings.Contains(view, "active") {
+			t.Errorf("expected no 'active' label when InProgress=0, got: %s", view)
+		}
+	})
+
 	t.Run("loop mode shows cycle", func(t *testing.T) {
 		t.Parallel()
 		sb := StatusBar{

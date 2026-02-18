@@ -1,10 +1,8 @@
 package tui
 
 import (
-	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -798,98 +796,6 @@ func TestHandleBeadsKeyMutualExclusivity(t *testing.T) {
 	})
 }
 
-// --- MsgArchitectStart handler tests ---
-
-func TestMsgArchitectStartWithFunc(t *testing.T) {
-	t.Parallel()
-
-	m := newNebulaModelWithPhases("", []PhaseEntry{
-		{ID: "setup", Status: PhaseDone},
-	})
-	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
-	m.Architect.StartWorking()
-
-	called := false
-	m.ArchitectFunc = func(_ context.Context, msg MsgArchitectStart) (*nebula.ArchitectResult, error) {
-		called = true
-		if msg.Mode != "create" {
-			t.Errorf("Mode = %q, want %q", msg.Mode, "create")
-		}
-		return &nebula.ArchitectResult{
-			Filename: "test.md",
-			PhaseSpec: nebula.PhaseSpec{
-				ID:    "test",
-				Title: "Test Phase",
-			},
-			Body: "test body",
-		}, nil
-	}
-
-	msg := MsgArchitectStart{Mode: "create", Prompt: "build it"}
-	result, cmd := m.Update(msg)
-	updated := result.(AppModel)
-
-	if cmd == nil {
-		t.Fatal("expected a command to be returned for architect dispatch")
-	}
-
-	// Execute the command to trigger the ArchitectFunc.
-	resultMsg := cmd()
-	archResult, ok := resultMsg.(MsgArchitectResult)
-	if !ok {
-		t.Fatalf("expected MsgArchitectResult, got %T", resultMsg)
-	}
-	if !called {
-		t.Error("ArchitectFunc was not called")
-	}
-	if archResult.Err != nil {
-		t.Errorf("unexpected error: %v", archResult.Err)
-	}
-	if archResult.Result.PhaseSpec.ID != "test" {
-		t.Errorf("Result.PhaseSpec.ID = %q, want %q", archResult.Result.PhaseSpec.ID, "test")
-	}
-
-	// Feed the result back to Update.
-	result2, _ := updated.Update(archResult)
-	updated2 := result2.(AppModel)
-	if updated2.Architect == nil {
-		t.Fatal("Architect should not be nil after successful result")
-	}
-	if updated2.Architect.Step != stepPreview {
-		t.Errorf("Step = %d, want stepPreview", updated2.Architect.Step)
-	}
-}
-
-func TestMsgArchitectStartWithoutFunc(t *testing.T) {
-	t.Parallel()
-
-	m := newNebulaModelWithPhases("", []PhaseEntry{
-		{ID: "setup", Status: PhaseDone},
-	})
-	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
-	m.Architect.StartWorking()
-	// Do not set ArchitectFunc — it should handle gracefully.
-
-	msg := MsgArchitectStart{Mode: "create", Prompt: "build it"}
-	result, _ := m.Update(msg)
-	updated := result.(AppModel)
-
-	// Architect should be cleared and an error message added.
-	if updated.Architect != nil {
-		t.Error("Architect should be nil when no ArchitectFunc is set")
-	}
-	found := false
-	for _, m := range updated.Messages {
-		if strings.Contains(m, "not available") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected 'not available' message in Messages")
-	}
-}
-
 // --- handleGateKey Esc tests ---
 
 func TestHandleGateKeyEscDismissesGate(t *testing.T) {
@@ -975,267 +881,221 @@ func assertNoFile(t *testing.T, path string) {
 	}
 }
 
-// --- Overlay priority tests ---
+// --- MsgNebulaDone tests ---
 
-func TestArchitectOverlayTakesPriorityOverCompletion(t *testing.T) {
+func TestMsgNebulaDoneSetsOverlay(t *testing.T) {
 	t.Parallel()
 
 	m := newNebulaModelWithPhases("", []PhaseEntry{
 		{ID: "setup", Status: PhaseDone},
 	})
-	m.Splash = nil
-	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
-	m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, Message: "done"}
-
-	// Send a 'q' key — should be handled by architect (no quit), not completion.
-	qKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
-	result, cmd := m.Update(qKey)
+	msg := MsgNebulaDone{}
+	result, _ := m.Update(msg)
 	updated := result.(AppModel)
 
-	// The architect overlay should still be active (it doesn't quit on 'q' at input step).
-	if updated.Architect == nil {
-		t.Error("expected Architect overlay to still be active after key event")
+	if updated.Overlay == nil {
+		t.Error("expected Overlay to be set after MsgNebulaDone")
 	}
-	// Critically, the completion overlay should NOT have triggered tea.Quit.
+}
+
+// --- Quit confirmation tests ---
+
+func TestQuitShowsConfirmWhenPhasesInProgress(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "phase-1", Title: "Phase 1", Status: PhaseWorking},
+		{ID: "phase-2", Title: "Phase 2", Status: PhaseWaiting},
+	})
+	m.DisableSplash()
+
+	qMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
+	result, cmd := m.handleKey(qMsg)
+	updated := result.(AppModel)
+
+	if !updated.ShowQuitConfirm {
+		t.Error("expected ShowQuitConfirm to be true when phases are in-progress")
+	}
 	if cmd != nil {
-		resultMsg := cmd()
-		if _, ok := resultMsg.(tea.QuitMsg); ok {
-			t.Error("completion overlay stole 'q' key and triggered Quit; architect should have priority")
+		t.Error("expected no command (should not quit yet)")
+	}
+}
+
+func TestQuitExitsImmediatelyWhenNoPhasesInProgress(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "phase-1", Title: "Phase 1", Status: PhaseDone},
+		{ID: "phase-2", Title: "Phase 2", Status: PhaseWaiting},
+	})
+	m.DisableSplash()
+
+	qMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
+	_, cmd := m.handleKey(qMsg)
+
+	if cmd == nil {
+		t.Fatal("expected a quit command when no phases are in-progress")
+	}
+}
+
+func TestQuitConfirmYesExits(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "phase-1", Title: "Phase 1", Status: PhaseWorking},
+	})
+	m.DisableSplash()
+	m.ShowQuitConfirm = true
+
+	yMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}}
+	_, cmd := m.handleKey(yMsg)
+
+	if cmd == nil {
+		t.Fatal("expected a quit command on 'y' in confirmation overlay")
+	}
+}
+
+func TestQuitConfirmNDismisses(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "phase-1", Title: "Phase 1", Status: PhaseWorking},
+	})
+	m.DisableSplash()
+	m.ShowQuitConfirm = true
+
+	nMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}
+	result, cmd := m.handleKey(nMsg)
+	updated := result.(AppModel)
+
+	if updated.ShowQuitConfirm {
+		t.Error("expected ShowQuitConfirm to be false after pressing 'n'")
+	}
+	if cmd != nil {
+		t.Error("expected no command (should continue running)")
+	}
+}
+
+func TestQuitConfirmEscDismisses(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "phase-1", Title: "Phase 1", Status: PhaseWorking},
+	})
+	m.DisableSplash()
+	m.ShowQuitConfirm = true
+
+	escMsg := tea.KeyMsg{Type: tea.KeyEscape}
+	result, cmd := m.handleKey(escMsg)
+	updated := result.(AppModel)
+
+	if updated.ShowQuitConfirm {
+		t.Error("expected ShowQuitConfirm to be false after pressing Esc")
+	}
+	if cmd != nil {
+		t.Error("expected no command (should continue running)")
+	}
+}
+
+func TestCtrlCAlwaysQuits(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "phase-1", Title: "Phase 1", Status: PhaseWorking},
+	})
+	m.DisableSplash()
+
+	// Ctrl+C should force-quit even with in-progress phases.
+	ctrlCMsg := tea.KeyMsg{Type: tea.KeyCtrlC}
+	_, cmd := m.handleKey(ctrlCMsg)
+
+	if cmd == nil {
+		t.Fatal("expected Ctrl+C to always produce a quit command")
+	}
+}
+
+func TestCtrlCQuitsFromConfirmOverlay(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "phase-1", Title: "Phase 1", Status: PhaseWorking},
+	})
+	m.DisableSplash()
+	m.ShowQuitConfirm = true
+
+	ctrlCMsg := tea.KeyMsg{Type: tea.KeyCtrlC}
+	_, cmd := m.handleKey(ctrlCMsg)
+
+	if cmd == nil {
+		t.Fatal("expected Ctrl+C to quit from confirmation overlay")
+	}
+}
+
+func TestQuitExitsImmediatelyInLoopMode(t *testing.T) {
+	t.Parallel()
+
+	m := NewAppModel(ModeLoop)
+	qMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
+	_, cmd := m.handleKey(qMsg)
+
+	if cmd == nil {
+		t.Fatal("expected quit command in loop mode (no confirmation needed)")
+	}
+}
+
+func TestHasInProgressPhases(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns true when a phase is working", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "a", Status: PhaseDone},
+			{ID: "b", Status: PhaseWorking},
+		})
+		if !m.hasInProgressPhases() {
+			t.Error("expected hasInProgressPhases to return true")
 		}
-	}
-}
-
-// --- MsgNebulaDone architect cleanup tests ---
-
-func TestMsgNebulaDoneCleansUpArchitect(t *testing.T) {
-	t.Parallel()
-
-	m := newNebulaModelWithPhases("", []PhaseEntry{
-		{ID: "setup", Status: PhaseDone},
-	})
-	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
-
-	canceled := false
-	m.Architect.CancelFunc = func() { canceled = true }
-
-	msg := MsgNebulaDone{}
-	result, _ := m.Update(msg)
-	updated := result.(AppModel)
-
-	if updated.Architect != nil {
-		t.Error("expected Architect to be nil after MsgNebulaDone")
-	}
-	if !canceled {
-		t.Error("expected Architect CancelFunc to be called on MsgNebulaDone")
-	}
-	if updated.Overlay == nil {
-		t.Error("expected Overlay to be set after MsgNebulaDone")
-	}
-}
-
-func TestMsgNebulaDoneWithoutArchitect(t *testing.T) {
-	t.Parallel()
-
-	m := newNebulaModelWithPhases("", []PhaseEntry{
-		{ID: "setup", Status: PhaseDone},
-	})
-	// No architect set — should not panic.
-	msg := MsgNebulaDone{}
-	result, _ := m.Update(msg)
-	updated := result.(AppModel)
-
-	if updated.Overlay == nil {
-		t.Error("expected Overlay to be set after MsgNebulaDone")
-	}
-}
-
-// --- MsgArchitectConfirm handler tests ---
-
-func TestMsgArchitectConfirmWritesFullPhaseFile(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	m := newNebulaModelWithPhases(dir, []PhaseEntry{
-		{ID: "setup", Status: PhaseDone},
 	})
 
-	msg := MsgArchitectConfirm{
-		Result: &nebula.ArchitectResult{
-			Filename: "rate-limiting.md",
-			PhaseSpec: nebula.PhaseSpec{
-				ID:    "rate-limiting",
-				Title: "Add rate limiting",
-				Type:  "feature",
-				Body:  "Implement token bucket algorithm.",
-			},
-			Body: "Implement token bucket algorithm.",
-		},
-		DependsOn: []string{"setup"},
-	}
-
-	result, _ := m.Update(msg)
-	_ = result.(AppModel)
-
-	// Read the written file and verify it has proper frontmatter.
-	filePath := filepath.Join(dir, "rate-limiting.md")
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		t.Fatalf("failed to read written file: %v", err)
-	}
-
-	content := string(data)
-	if !strings.HasPrefix(content, "+++\n") {
-		t.Error("written file should start with +++ frontmatter delimiter")
-	}
-	if !strings.Contains(content, "id = ") || !strings.Contains(content, "rate-limiting") {
-		t.Error("written file should contain phase ID in frontmatter")
-	}
-	if !strings.Contains(content, "title = ") || !strings.Contains(content, "Add rate limiting") {
-		t.Error("written file should contain phase title in frontmatter")
-	}
-	if !strings.Contains(content, "depends_on") || !strings.Contains(content, "setup") {
-		t.Errorf("written file should contain user-selected dependencies, got:\n%s", content)
-	}
-	if !strings.Contains(content, "Implement token bucket algorithm.") {
-		t.Error("written file should contain body text after frontmatter")
-	}
-
-	// Verify it round-trips through the parser.
-	spec, err := nebula.MarshalPhaseFile(msg.Result.PhaseSpec)
-	if err != nil {
-		t.Fatalf("MarshalPhaseFile: %v", err)
-	}
-	if !strings.HasPrefix(string(spec), "+++\n") {
-		t.Error("marshaled spec should start with +++ delimiter")
-	}
-}
-
-// --- MsgArchitectStart cancellation tests ---
-
-func TestMsgArchitectStartStoresCancelFunc(t *testing.T) {
-	t.Parallel()
-
-	m := newNebulaModelWithPhases("", []PhaseEntry{
-		{ID: "setup", Status: PhaseDone},
-	})
-	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
-	m.Architect.StartWorking()
-
-	m.ArchitectFunc = func(ctx context.Context, msg MsgArchitectStart) (*nebula.ArchitectResult, error) {
-		// Block until context is canceled.
-		<-ctx.Done()
-		return nil, ctx.Err()
-	}
-
-	msg := MsgArchitectStart{Mode: "create", Prompt: "build it"}
-	result, cmd := m.Update(msg)
-	updated := result.(AppModel)
-
-	if updated.Architect == nil {
-		t.Fatal("Architect should not be nil after start")
-	}
-	if updated.Architect.CancelFunc == nil {
-		t.Fatal("CancelFunc should be set on the overlay after MsgArchitectStart")
-	}
-
-	// Verify cancel actually stops the goroutine.
-	updated.Architect.CancelFunc()
-	if cmd == nil {
-		t.Fatal("expected a command to be returned")
-	}
-	resultMsg := cmd()
-	archResult, ok := resultMsg.(MsgArchitectResult)
-	if !ok {
-		t.Fatalf("expected MsgArchitectResult, got %T", resultMsg)
-	}
-	if archResult.Err == nil {
-		t.Error("expected context cancellation error")
-	}
-}
-
-// --- safeArchitectCall panic recovery tests ---
-
-func TestSafeArchitectCallPanicRecovery(t *testing.T) {
-	t.Parallel()
-
-	m := newNebulaModelWithPhases("", []PhaseEntry{
-		{ID: "setup", Status: PhaseDone},
-	})
-	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
-	m.Architect.StartWorking()
-
-	m.ArchitectFunc = func(_ context.Context, _ MsgArchitectStart) (*nebula.ArchitectResult, error) {
-		panic("boom")
-	}
-
-	msg := MsgArchitectStart{Mode: "create", Prompt: "build it"}
-	_, cmd := m.Update(msg)
-
-	if cmd == nil {
-		t.Fatal("expected a command to be returned")
-	}
-
-	// Execute the command — should not panic.
-	resultMsg := cmd()
-	archResult, ok := resultMsg.(MsgArchitectResult)
-	if !ok {
-		t.Fatalf("expected MsgArchitectResult, got %T", resultMsg)
-	}
-	if archResult.Err == nil {
-		t.Fatal("expected error from panic recovery, got nil")
-	}
-	if !strings.Contains(archResult.Err.Error(), "architect panic") {
-		t.Errorf("error = %q, want it to contain %q", archResult.Err, "architect panic")
-	}
-	if !strings.Contains(archResult.Err.Error(), "boom") {
-		t.Errorf("error = %q, want it to contain %q", archResult.Err, "boom")
-	}
-	if archResult.Result != nil {
-		t.Errorf("Result should be nil after panic, got %v", archResult.Result)
-	}
-}
-
-func TestSafeArchitectCallNormalOperation(t *testing.T) {
-	t.Parallel()
-
-	m := newNebulaModelWithPhases("", []PhaseEntry{
-		{ID: "setup", Status: PhaseDone},
-	})
-	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
-	m.Architect.StartWorking()
-
-	expected := &nebula.ArchitectResult{
-		Filename: "plan.md",
-		PhaseSpec: nebula.PhaseSpec{
-			ID:    "deploy",
-			Title: "Deploy Phase",
-		},
-		Body: "deploy body",
-	}
-
-	m.ArchitectFunc = func(_ context.Context, msg MsgArchitectStart) (*nebula.ArchitectResult, error) {
-		if msg.Prompt != "do it" {
-			t.Errorf("Prompt = %q, want %q", msg.Prompt, "do it")
+	t.Run("returns false when no phases are working", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "a", Status: PhaseDone},
+			{ID: "b", Status: PhaseWaiting},
+			{ID: "c", Status: PhaseFailed},
+		})
+		if m.hasInProgressPhases() {
+			t.Error("expected hasInProgressPhases to return false")
 		}
-		return expected, nil
-	}
+	})
 
-	msg := MsgArchitectStart{Mode: "create", Prompt: "do it"}
-	_, cmd := m.Update(msg)
+	t.Run("returns false in loop mode", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeLoop)
+		if m.hasInProgressPhases() {
+			t.Error("expected hasInProgressPhases to return false in loop mode")
+		}
+	})
+}
 
-	if cmd == nil {
-		t.Fatal("expected a command to be returned")
-	}
+func TestQuitConfirmOtherKeysIgnored(t *testing.T) {
+	t.Parallel()
 
-	resultMsg := cmd()
-	archResult, ok := resultMsg.(MsgArchitectResult)
-	if !ok {
-		t.Fatalf("expected MsgArchitectResult, got %T", resultMsg)
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "phase-1", Title: "Phase 1", Status: PhaseWorking},
+	})
+	m.DisableSplash()
+	m.ShowQuitConfirm = true
+
+	// Pressing an unrelated key should not dismiss or quit.
+	xMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}
+	result, cmd := m.handleKey(xMsg)
+	updated := result.(AppModel)
+
+	if !updated.ShowQuitConfirm {
+		t.Error("expected ShowQuitConfirm to remain true for unrelated key")
 	}
-	if archResult.Err != nil {
-		t.Errorf("unexpected error: %v", archResult.Err)
-	}
-	if archResult.Result != expected {
-		t.Errorf("Result = %v, want %v", archResult.Result, expected)
+	if cmd != nil {
+		t.Error("expected no command for unrelated key in confirmation overlay")
 	}
 }

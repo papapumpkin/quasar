@@ -16,6 +16,7 @@ type StatusBar struct {
 	MaxCycles    int
 	Completed    int
 	Total        int
+	InProgress   int // phases currently being worked on
 	CostUSD      float64
 	BudgetUSD    float64
 	StartTime    time.Time
@@ -46,7 +47,9 @@ func (s StatusBar) View() string {
 	right := joinSegments(rightSegments)
 
 	// Build the fixed left prefix (logo + mode label).
-	logo := " " + Logo() + "  "
+	// All spaces are styled with the bar background to prevent gaps.
+	barBg := lipgloss.NewStyle().Background(colorSurface)
+	logo := barBg.Render(" ") + Logo() + barBg.Render("  ")
 	logoWidth := lipgloss.Width(logo)
 
 	// State indicator (STOPPING / PAUSED) — appended after the name.
@@ -75,11 +78,12 @@ func (s StatusBar) View() string {
 	}
 
 	// Pad the gap between left and right.
+	// The gap spaces are styled with the bar background to prevent visible breaks.
 	gap := innerWidth - leftWidth - rightWidth
 	if gap < 1 {
 		gap = 1
 	}
-	padding := strings.Repeat(" ", gap)
+	padding := barBg.Render(strings.Repeat(" ", gap))
 
 	line := left + padding + right
 
@@ -100,14 +104,19 @@ type statusSegment struct {
 
 // buildRightSegments assembles the right-side segments in display order.
 func (s StatusBar) buildRightSegments(compact bool) []statusSegment {
+	barBg := lipgloss.NewStyle().Background(colorSurface)
 	var segments []statusSegment
 
 	// Cost segment (priority 2).
+	// When a budget is set, color-code the cost based on consumption ratio.
 	if s.BudgetUSD > 0 && !compact {
+		ratio := s.CostUSD / s.BudgetUSD
+		costColor := budgetColor(ratio)
+		costStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(costColor)
 		budgetBar := renderBudgetBar(s.CostUSD, s.BudgetUSD, 10)
-		costText := styleStatusCost.Render(fmt.Sprintf("$%.2f", s.CostUSD)) + " " +
-			budgetBar + " " +
-			styleStatusCost.Render(fmt.Sprintf("$%.2f", s.BudgetUSD))
+		costText := costStyle.Render(fmt.Sprintf("$%.2f", s.CostUSD)) + barBg.Render(" ") +
+			budgetBar + barBg.Render(" ") +
+			costStyle.Render(fmt.Sprintf("$%.2f", s.BudgetUSD))
 		segments = append(segments, statusSegment{text: costText, priority: 2})
 	} else {
 		segments = append(segments, statusSegment{
@@ -119,7 +128,7 @@ func (s StatusBar) buildRightSegments(compact bool) []statusSegment {
 	// Resource indicator segment (priority 0 — dropped before elapsed).
 	resText := s.renderResourceSegment(compact)
 	if resText != "" {
-		segments = append(segments, statusSegment{text: "  " + resText, priority: 0})
+		segments = append(segments, statusSegment{text: barBg.Render("  ") + resText, priority: 0})
 	}
 
 	// Elapsed segment (priority 1 — dropped after resources).
@@ -147,6 +156,8 @@ func (s StatusBar) renderResourceSegment(compact bool) string {
 		return ""
 	}
 
+	barBg := lipgloss.NewStyle().Background(colorSurface)
+
 	// Choose style based on worst resource level.
 	style := resourceLevelStyle(s.Resources.WorstLevel(s.Thresholds))
 	result := style.Render(indicator)
@@ -155,7 +166,7 @@ func (s StatusBar) renderResourceSegment(compact bool) string {
 	if !compact {
 		qCount := FormatQuasarCount(s.Resources.QuasarCount)
 		if qCount != "" {
-			result += "  " + styleResourceWarning.Render(qCount)
+			result += barBg.Render("  ") + styleResourceWarning.Render(qCount)
 		}
 	}
 
@@ -168,9 +179,11 @@ func (s StatusBar) buildFixedLeftPrefix(compact bool) string {
 		// Nebula mode.
 		if compact {
 			pct := s.Completed * 100 / s.Total
-			progStyle := styleStatusProgress
-			if s.Completed > 0 {
-				progStyle = styleStatusProgressActive
+			ratio := float64(s.Completed) / float64(s.Total)
+			pColor := progressColor(ratio)
+			progStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(pColor)
+			if ratio >= 1 {
+				progStyle = progStyle.Bold(true)
 			}
 			return styleStatusMode.Render("nebula: ") + progStyle.Render(fmt.Sprintf("%d%% ", pct))
 		}
@@ -188,6 +201,7 @@ func (s StatusBar) buildFixedLeftPrefix(compact bool) string {
 
 // buildNameSegment returns the name/ID segment, truncated to fit maxWidth.
 func (s StatusBar) buildNameSegment(compact bool, maxWidth int) string {
+	barBg := lipgloss.NewStyle().Background(colorSurface)
 	if maxWidth < 0 {
 		maxWidth = 0
 	}
@@ -200,14 +214,24 @@ func (s StatusBar) buildNameSegment(compact bool, maxWidth int) string {
 			return styleStatusName.Render(name)
 		}
 
-		// Full mode: "name  ━━━━░░░░ 2/5"
-		progStyle := styleStatusProgress
-		if s.Completed > 0 {
-			progStyle = styleStatusProgressActive
+		// Full mode: "name  ━━━━░░░░ 2/5 · 2 active"
+		ratio := float64(s.Completed) / float64(s.Total)
+		pColor := progressColor(ratio)
+		progStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(pColor)
+		if ratio >= 1 {
+			progStyle = progStyle.Bold(true)
 		}
-		suffix := fmt.Sprintf(" %d/%d", s.Completed, s.Total)
-		bar := renderProgressBar(s.Completed, s.Total, 12)
-		fullSuffix := "  " + bar + progStyle.Render(suffix)
+		counterText := fmt.Sprintf(" %d/%d", s.Completed, s.Total)
+		bar := renderProgressBar(s.Completed, s.InProgress, s.Total, 12)
+
+		// Append in-progress count when phases are actively working.
+		var activeSuffix string
+		if s.InProgress > 0 {
+			activeStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorBlue)
+			activeSuffix = progStyle.Render(" · ") + activeStyle.Render(fmt.Sprintf("%d active", s.InProgress))
+		}
+
+		fullSuffix := barBg.Render("  ") + bar + progStyle.Render(counterText) + activeSuffix
 		suffixWidth := lipgloss.Width(fullSuffix)
 
 		availableForName := maxWidth - suffixWidth
@@ -245,22 +269,25 @@ func (s StatusBar) buildNameSegment(compact bool, maxWidth int) string {
 
 // renderStateIndicator returns the styled STOPPING/PAUSED indicator, or empty string.
 func (s StatusBar) renderStateIndicator() string {
+	barBg := lipgloss.NewStyle().Background(colorSurface)
 	if s.Stopping {
-		return "  " + styleStatusStopping.Render("STOPPING")
+		return barBg.Render("  ") + styleStatusStopping.Render("STOPPING")
 	}
 	if s.Paused {
-		return "  " + styleStatusPaused.Render("PAUSED")
+		return barBg.Render("  ") + styleStatusPaused.Render("PAUSED")
 	}
 	return ""
 }
 
-// joinSegments concatenates segment text with trailing space.
+// joinSegments concatenates segment text with a trailing styled space.
+// The trailing space carries the bar background to prevent gaps.
 func joinSegments(segments []statusSegment) string {
+	barBg := lipgloss.NewStyle().Background(colorSurface)
 	var b strings.Builder
 	for _, seg := range segments {
 		b.WriteString(seg.text)
 	}
-	b.WriteString(" ")
+	b.WriteString(barBg.Render(" "))
 	return b.String()
 }
 
@@ -293,27 +320,38 @@ func totalWidth(segments []statusSegment) int {
 }
 
 // renderProgressBar creates a filled/empty bar showing completed/total progress.
-// Uses a single muted foreground for uniform bar appearance.
-func renderProgressBar(completed, total, width int) string {
+// Completed segments render in green; in-progress segments in blue; empty in gray.
+func renderProgressBar(completed, inProgress, total, width int) string {
 	if total <= 0 || width <= 0 {
 		return ""
 	}
-	ratio := float64(completed) / float64(total)
-	if ratio > 1 {
-		ratio = 1
+	doneRatio := float64(completed) / float64(total)
+	if doneRatio > 1 {
+		doneRatio = 1
 	}
-	filled := int(ratio * float64(width))
-	empty := width - filled
+	activeRatio := float64(inProgress) / float64(total)
+	if doneRatio+activeRatio > 1 {
+		activeRatio = 1 - doneRatio
+	}
 
-	style := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMutedLight)
+	doneFilled := int(doneRatio * float64(width))
+	activeFilled := int(activeRatio * float64(width))
+	empty := width - doneFilled - activeFilled
+	if empty < 0 {
+		empty = 0
+	}
+
+	doneStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorSuccess)
+	activeStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorBlue)
 	emptyStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMuted)
 
-	return style.Render(strings.Repeat("━", filled)) +
+	return doneStyle.Render(strings.Repeat("━", doneFilled)) +
+		activeStyle.Render(strings.Repeat("━", activeFilled)) +
 		emptyStyle.Render(strings.Repeat("░", empty))
 }
 
 // renderBudgetBar creates an inline budget consumption indicator.
-// Uses a single muted foreground for uniform bar appearance.
+// The filled portion color shifts from amber to orange to red as spending increases.
 func renderBudgetBar(spent, budget float64, width int) string {
 	if budget <= 0 || width <= 0 {
 		return ""
@@ -325,7 +363,8 @@ func renderBudgetBar(spent, budget float64, width int) string {
 	filled := int(ratio * float64(width))
 	empty := width - filled
 
-	style := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMutedLight)
+	fillColor := budgetColor(ratio)
+	style := lipgloss.NewStyle().Background(colorSurface).Foreground(fillColor)
 	emptyStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMuted)
 
 	return style.Render(strings.Repeat("━", filled)) +
@@ -344,15 +383,27 @@ func renderCycleBar(cycle, maxCycles int) string {
 	}
 	empty := barWidth - filled
 
-	return "[" +
+	barBg := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMutedLight)
+	return barBg.Render("[") +
 		lipgloss.NewStyle().Background(colorSurface).Foreground(colorMutedLight).Render(strings.Repeat("█", filled)) +
 		lipgloss.NewStyle().Background(colorSurface).Foreground(colorMuted).Render(strings.Repeat("░", empty)) +
-		"]"
+		barBg.Render("]")
 }
 
-// progressColor returns the uniform bar foreground color regardless of progress ratio.
-func progressColor(_ float64) lipgloss.Color {
-	return colorMutedLight
+// progressColor returns a color that shifts from muted to blue to green as progress increases.
+// 0%: colorMuted (gray, hasn't started), 1-49%: colorBlue (in progress, early),
+// 50-99%: colorSuccess (making good progress), 100%: colorSuccess (all done).
+func progressColor(ratio float64) lipgloss.Color {
+	if ratio <= 0 {
+		return colorMuted
+	}
+	if ratio >= 1 {
+		return colorSuccess
+	}
+	if ratio < 0.5 {
+		return colorBlue
+	}
+	return colorSuccess
 }
 
 // resourceLevelStyle returns the appropriate style for the given resource level.
@@ -367,9 +418,19 @@ func resourceLevelStyle(level ResourceLevel) lipgloss.Style {
 	}
 }
 
-// budgetColor returns the uniform bar foreground color regardless of budget ratio.
-func budgetColor(_ float64) lipgloss.Color {
-	return colorMutedLight
+// budgetColor returns a color based on budget consumption ratio.
+// Under 30%: muted (calm), 30-50%: amber, 50-80%: orange warning, over 80%: red danger.
+func budgetColor(ratio float64) lipgloss.Color {
+	switch {
+	case ratio >= 0.8:
+		return colorDanger
+	case ratio >= 0.5:
+		return colorBudgetWarn
+	case ratio >= 0.3:
+		return colorAccent
+	default:
+		return colorMutedLight
+	}
 }
 
 // truncateToWidth hard-truncates a string (which may contain ANSI escape sequences)

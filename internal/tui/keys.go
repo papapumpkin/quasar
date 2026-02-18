@@ -25,10 +25,6 @@ type KeyMap struct {
 
 	// Diff file list keys.
 	OpenDiff key.Binding
-
-	// Architect overlay keys (nebula mode).
-	NewPhase  key.Binding
-	EditPhase key.Binding
 }
 
 // DefaultKeyMap returns the default keybinding configuration.
@@ -109,14 +105,6 @@ func DefaultKeyMap() KeyMap {
 		OpenDiff: key.NewBinding(
 			key.WithKeys("enter"),
 			key.WithHelp("⏎", "open diff"),
-		),
-		NewPhase: key.NewBinding(
-			key.WithKeys("n"),
-			key.WithHelp("n", "new phase"),
-		),
-		EditPhase: key.NewBinding(
-			key.WithKeys("e"),
-			key.WithHelp("e", "edit phase"),
 		),
 	}
 }

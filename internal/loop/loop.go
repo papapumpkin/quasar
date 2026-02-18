@@ -10,19 +10,21 @@ import (
 
 // Loop orchestrates the coder-reviewer cycle for a single task.
 type Loop struct {
-	Invoker       agent.Invoker
-	UI            ui.UI
-	Git           CycleCommitter // Optional; nil disables per-cycle commits.
-	Hooks         []Hook         // Lifecycle hooks (e.g., BeadHook for tracking).
-	MaxCycles     int
-	MaxBudgetUSD  float64
-	Model         string
-	CoderPrompt   string
-	ReviewPrompt  string
-	WorkDir       string
-	MCP           *agent.MCPConfig // Optional MCP server config passed to agents.
-	RefactorCh    <-chan string    // Optional channel carrying updated task descriptions from phase edits.
-	CommitSummary string           // Short label for cycle commit messages. If empty, derived from task title.
+	Invoker        agent.Invoker
+	UI             ui.UI
+	Git            CycleCommitter // Optional; nil disables per-cycle commits.
+	Hooks          []Hook         // Lifecycle hooks (e.g., BeadHook for tracking).
+	Linter         Linter         // Optional; nil disables lint checks between coder and reviewer.
+	MaxCycles      int
+	MaxLintRetries int // Max times coder is asked to fix lint issues per cycle. 0 uses DefaultMaxLintRetries.
+	MaxBudgetUSD   float64
+	Model          string
+	CoderPrompt    string
+	ReviewPrompt   string
+	WorkDir        string
+	MCP            *agent.MCPConfig // Optional MCP server config passed to agents.
+	RefactorCh     <-chan string    // Optional channel carrying updated task descriptions from phase edits.
+	CommitSummary  string           // Short label for cycle commit messages. If empty, derived from task title.
 }
 
 // TaskResult holds the outcome of a completed task loop.
@@ -106,6 +108,12 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 		if err := l.checkBudget(ctx, state); err != nil {
 			return nil, err
 		}
+
+		// Run lint checks and let the coder fix issues before reviewer handoff.
+		if err := l.runLintFixLoop(ctx, state, perAgentBudget); err != nil {
+			return nil, err
+		}
+
 		if err := l.runReviewerPhase(ctx, state, perAgentBudget); err != nil {
 			return nil, err
 		}
@@ -142,6 +150,85 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 		Message: fmt.Sprintf("Max cycles reached (%d). Manual review recommended.", l.MaxCycles),
 	})
 	return nil, ErrMaxCycles
+}
+
+// maxLintRetries returns the effective maximum lint retry count.
+func (l *Loop) maxLintRetries() int {
+	if l.MaxLintRetries > 0 {
+		return l.MaxLintRetries
+	}
+	return DefaultMaxLintRetries
+}
+
+// runLintFixLoop runs lint commands after the coder pass. If issues are found,
+// it feeds them back to the coder for fixing, up to maxLintRetries times.
+// After the retry limit, any remaining lint output is preserved in state so
+// the reviewer can flag it. A nil Linter makes this a no-op.
+func (l *Loop) runLintFixLoop(ctx context.Context, state *CycleState, perAgentBudget float64) error {
+	if l.Linter == nil {
+		return nil
+	}
+
+	maxRetries := l.maxLintRetries()
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		state.Phase = PhaseLinting
+		l.UI.Info("running lint checks…")
+
+		output, err := l.Linter.Run(ctx)
+		if err != nil {
+			// Lint execution error is non-fatal; log and continue to reviewer.
+			l.UI.Error(fmt.Sprintf("lint execution error: %v", err))
+			state.LintOutput = ""
+			return nil
+		}
+
+		if output == "" {
+			// Clean lint pass — proceed to reviewer.
+			state.LintOutput = ""
+			l.UI.Info("lint checks passed")
+			return nil
+		}
+
+		state.LintOutput = output
+
+		if attempt == maxRetries {
+			// Max retries reached — let the reviewer see what's left.
+			l.UI.Info(fmt.Sprintf("lint issues remain after %d retries, proceeding to reviewer", maxRetries))
+			return nil
+		}
+
+		// Feed lint issues back to the coder.
+		l.UI.Info(fmt.Sprintf("lint issues found (attempt %d/%d), sending back to coder", attempt+1, maxRetries))
+		lintPrompt := l.buildLintFixPrompt(state)
+		result, err := l.Invoker.Invoke(ctx, l.coderAgent(perAgentBudget), lintPrompt, l.WorkDir)
+		if err != nil {
+			return fmt.Errorf("coder lint-fix invocation failed: %w", err)
+		}
+
+		state.CoderOutput = result.ResultText
+		state.TotalCostUSD += result.CostUSD
+		l.UI.AgentDone("coder", result.CostUSD, result.DurationMs)
+
+		if err := l.checkBudget(ctx, state); err != nil {
+			return err
+		}
+
+		// Re-commit after lint fixes so the reviewer sees clean state.
+		if l.Git != nil {
+			summary := l.CommitSummary
+			if summary == "" {
+				summary = firstLine(state.TaskTitle, 72)
+			}
+			sha, commitErr := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle, summary+" (lint fix)")
+			if commitErr != nil {
+				l.UI.Error(fmt.Sprintf("failed to commit lint fix: %v", commitErr))
+			} else {
+				state.CycleCommits = append(state.CycleCommits, sha)
+			}
+		}
+	}
+
+	return nil
 }
 
 // drainRefactor checks the RefactorCh for a pending phase edit and applies it
@@ -388,7 +475,7 @@ func (l *Loop) emitBeadUpdate(state *CycleState, status string) {
 		severity := "major"
 		cycle := 0
 		if i < len(state.AllFindings) {
-			title = truncate(state.AllFindings[i].Description, 80)
+			title = firstLine(state.AllFindings[i].Description, 80)
 			severity = state.AllFindings[i].Severity
 			cycle = state.AllFindings[i].Cycle
 		}

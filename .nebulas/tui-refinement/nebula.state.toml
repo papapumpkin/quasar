@@ -1,0 +1,124 @@
+version = 1
+nebula_name = 'tui-refinement-visual-polish'
+total_cost_usd = 35.81535375
+
+[phases]
+[phases.beads-dag-fix]
+bead_id = 'quasar-tl2'
+status = 'done'
+created_at = 2026-02-18T11:27:26.317157-05:00
+updated_at = 2026-02-18T11:44:35.33172-05:00
+
+[phases.beads-dag-fix.report]
+satisfaction = 'medium'
+risk = 'low'
+needs_human_review = true
+summary = 'No bug fix was made — coder added pipeline tests confirming the existing bead view rendering code is correct, meaning the wall-of-text issue (if real) must originate from the data layer rather than the TUI rendering code, which warrants human review to verify the root cause assessment.'
+
+[phases.coder-lint-pass]
+bead_id = 'quasar-3t2'
+status = 'done'
+created_at = 2026-02-18T11:27:26.698925-05:00
+updated_at = 2026-02-18T13:25:55.43529-05:00
+
+[phases.coder-lint-pass.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Two targeted fixes to CommandLinter.Run — skip stdout from successful auto-fix commands and correct the doc comment — both clean and well-tested.'
+
+[phases.header-solid-bg]
+bead_id = 'quasar-3q5'
+status = 'done'
+created_at = 2026-02-18T11:27:27.045202-05:00
+updated_at = 2026-02-18T11:42:26.895317-05:00
+
+[phases.header-solid-bg.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Solid fix for status bar background gaps by styling all bare space characters between ANSI-styled segments with colorSurface background; all tests pass, minor style duplication could be cleaned up.'
+
+[phases.logo-no-bg]
+bead_id = 'quasar-axu'
+status = 'done'
+created_at = 2026-02-18T11:27:27.43406-05:00
+updated_at = 2026-02-18T13:45:39.874382-05:00
+
+[phases.logo-no-bg.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Minimal, well-tested refinement to budget color tiers (4-tier from 3-tier) with good boundary test coverage; logo background fix was already correctly applied in a prior iteration.'
+
+[phases.nebula-git-push]
+bead_id = 'quasar-d2m'
+status = 'done'
+created_at = 2026-02-18T11:27:27.802325-05:00
+updated_at = 2026-02-18T13:24:20.068027-05:00
+
+[phases.nebula-git-push.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Two targeted fixes (commit error capture and dynamic default branch detection) implemented cleanly with comprehensive tests across all display paths.'
+
+[phases.phase-progress-color]
+bead_id = 'quasar-cuh'
+status = 'done'
+created_at = 2026-02-18T11:27:28.193371-05:00
+updated_at = 2026-02-18T13:51:51.391802-05:00
+
+[phases.phase-progress-color.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented progress bar color-coding with proper edge case handling, clean integration via MsgNebulaProgress.OpenBeads, and comprehensive test coverage.'
+
+[phases.quit-confirmation]
+bead_id = 'quasar-jw2'
+status = 'done'
+created_at = 2026-02-18T11:27:28.564916-05:00
+updated_at = 2026-02-18T13:26:55.550774-05:00
+
+[phases.quit-confirmation.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Quit confirmation overlay for in-progress nebula phases is correctly implemented with proper key handling priority, force-quit escape hatch, and thorough test coverage across 14 test functions.'
+
+[phases.remove-architect-overlay]
+bead_id = 'quasar-e9u'
+status = 'done'
+created_at = 2026-02-18T11:27:28.934104-05:00
+updated_at = 2026-02-18T13:39:21.101451-05:00
+
+[phases.remove-architect-overlay.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, comprehensive removal of the architect overlay feature from the TUI layer — all code paths, bindings, messages, and tests properly updated with no dead references remaining.'
+
+[phases.selection-indicator-only]
+bead_id = 'quasar-pun'
+status = 'done'
+created_at = 2026-02-18T11:27:29.335242-05:00
+updated_at = 2026-02-18T13:36:46.541592-05:00
+
+[phases.selection-indicator-only.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean fix-up commit removing architect-related test references and updating binding counts after the architect overlay removal; all builds and tests pass.'
+
+[phases.status-bar-colors]
+bead_id = 'quasar-dui'
+status = 'done'
+created_at = 2026-02-18T11:27:29.741936-05:00
+updated_at = 2026-02-18T13:44:55.271096-05:00
+
+[phases.status-bar-colors.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean restoration of per-segment status bar coloring with dynamic budget and resource color-coding, comprehensive tests, all acceptance criteria met.'

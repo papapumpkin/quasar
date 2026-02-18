@@ -1,5 +1,5 @@
 [nebula]
-name = "TUI Refinement & Visual Polish"
+name = "tui-refinement-visual-polish"
 description = "Fix status bar color regression, solid header background, beads DAG bug, selection highlighting, quit confirmation, and remove architect overlay."
 
 [defaults]

@@ -168,14 +168,14 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				PlanBody:  p.Body,
 			})
 		}
-		architectFunc := buildArchitectFunc(claudeInv, wg.SnapshotNebula)
-		tuiProgram = tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir, noSplash, architectFunc)
+		tuiProgram = tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir, noSplash)
 		// Per-phase loops with PhaseUIBridge for hierarchical TUI tracking.
 		wg.Runner = &tuiLoopAdapter{
 			program:      tuiProgram,
 			invoker:      claudeInv,
 			beads:        client,
 			git:          git,
+			linter:       loop.NewLinter(cfg.LintCommands, workDir),
 			maxCycles:    cfg.MaxReviewCycles,
 			maxBudget:    cfg.MaxBudgetUSD,
 			model:        cfg.Model,
@@ -206,6 +206,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			UI:           printer,
 			Git:          git,
 			Hooks:        []loop.Hook{&loop.BeadHook{Beads: client, UI: printer}},
+			Linter:       loop.NewLinter(cfg.LintCommands, workDir),
 			MaxCycles:    cfg.MaxReviewCycles,
 			MaxBudgetUSD: cfg.MaxBudgetUSD,
 			Model:        cfg.Model,
@@ -249,9 +250,16 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			// always sends to the correct program instance, even if
 			// tuiProgram is reassigned for a subsequent nebula.
 			prog := tuiProgram
+			br := branchName
+			wd := workDir
 			go func() {
 				results, runErr := wg.Run(ctx)
 				prog.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
+				// Post-completion git workflow: push branch and checkout main.
+				if br != "" {
+					gitResult := nebula.PostCompletion(context.Background(), wd, br)
+					prog.Send(tui.MsgGitPostCompletion{Result: gitResult})
+				}
 			}()
 
 			finalModel, tuiErr := tuiProgram.Run()
@@ -328,8 +336,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 						PlanBody:  p.Body,
 					})
 				}
-				// Create WorkerGroup first so its SnapshotNebula method can be
-				// captured by the architect closure. The Runner is set after the
+				// Create WorkerGroup first. The Runner is set after the
 				// TUI program is created (it depends on the program).
 				nextPhaseCommitter := nebula.NewGitCommitterWithBranch(ctx, nextWorkDir, nextBranchName)
 				wg = nebula.NewWorkerGroup(nextN, nextState,
@@ -341,13 +348,13 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					nebula.WithLogger(io.Discard),
 					nebula.WithCommitter(nextPhaseCommitter),
 				)
-				nextArchitectFunc := buildArchitectFunc(claudeInv, wg.SnapshotNebula)
-				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, noSplash, nextArchitectFunc)
+				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, noSplash)
 				wg.Runner = &tuiLoopAdapter{
 					program:      tuiProgram,
 					invoker:      claudeInv,
 					beads:        client,
 					git:          loop.NewCycleCommitterWithBranch(ctx, nextWorkDir, nextBranchName),
+					linter:       loop.NewLinter(cfg.LintCommands, nextWorkDir),
 					maxCycles:    cfg.MaxReviewCycles,
 					maxBudget:    cfg.MaxBudgetUSD,
 					model:        cfg.Model,
@@ -379,6 +386,8 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				}
 
 				n = nextN
+				branchName = nextBranchName
+				workDir = nextWorkDir
 				continue
 			}
 
@@ -413,17 +422,25 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	printer.NebulaWorkerResults(results)
+
+	// Post-completion git workflow for stderr path.
+	if branchName != "" {
+		gitResult := nebula.PostCompletion(context.Background(), workDir, branchName)
+		if gitResult.CommitErr != nil {
+			printer.Error(fmt.Sprintf("git commit failed: %v", gitResult.CommitErr))
+		}
+		if gitResult.PushErr != nil {
+			printer.Error(fmt.Sprintf("git push failed: %v", gitResult.PushErr))
+		} else {
+			printer.Info(fmt.Sprintf("pushed to origin/%s", gitResult.PushBranch))
+		}
+		if gitResult.CheckoutErr != nil {
+			printer.Error(fmt.Sprintf("git checkout %s failed: %v", gitResult.CheckoutBranch, gitResult.CheckoutErr))
+		} else {
+			printer.Info(fmt.Sprintf("checked out %s", gitResult.CheckoutBranch))
+		}
+	}
+
 	return nil
 }
 
-// buildArchitectFunc creates a closure that invokes the nebula architect via the given invoker.
-func buildArchitectFunc(invoker agent.Invoker, snapshotFn func() *nebula.Nebula) func(ctx context.Context, msg tui.MsgArchitectStart) (*nebula.ArchitectResult, error) {
-	return func(ctx context.Context, msg tui.MsgArchitectStart) (*nebula.ArchitectResult, error) {
-		return nebula.RunArchitect(ctx, invoker, nebula.ArchitectRequest{
-			Mode:       nebula.ArchitectMode(msg.Mode),
-			UserPrompt: msg.Prompt,
-			Nebula:     snapshotFn(),
-			PhaseID:    msg.PhaseID,
-		})
-	}
-}

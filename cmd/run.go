@@ -196,6 +196,7 @@ func buildLoop(cfg *config.Config, uiHandler ui.UI, coderPrompt, reviewerPrompt 
 		UI:           uiHandler,
 		Git:          git,
 		Hooks:        []loop.Hook{beadHook},
+		Linter:       loop.NewLinter(cfg.LintCommands, workDir),
 		MaxCycles:    cfg.MaxReviewCycles,
 		MaxBudgetUSD: cfg.MaxBudgetUSD,
 		Model:        cfg.Model,

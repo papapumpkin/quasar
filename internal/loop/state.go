@@ -8,6 +8,7 @@ const (
 	PhaseBeadCreated                  // Task bead created, ready to begin.
 	PhaseCoding                       // Coder agent is running.
 	PhaseCodeComplete                 // Coder finished, awaiting review.
+	PhaseLinting                      // Running lint checks after coder pass.
 	PhaseReviewing                    // Reviewer agent is running.
 	PhaseReviewComplete               // Reviewer finished.
 	PhaseResolvingIssues              // Issues found, sending back to coder.
@@ -26,6 +27,8 @@ func (p Phase) String() string {
 		return "coding"
 	case PhaseCodeComplete:
 		return "code_complete"
+	case PhaseLinting:
+		return "linting"
 	case PhaseReviewing:
 		return "reviewing"
 	case PhaseReviewComplete:
@@ -58,6 +61,7 @@ type CycleState struct {
 	TotalCostUSD        float64
 	MaxBudgetUSD        float64
 	CoderOutput         string
+	LintOutput          string // lint command output from the most recent lint pass
 	ReviewOutput        string
 	Findings            []ReviewFinding // current cycle's findings (reset each cycle)
 	AllFindings         []ReviewFinding // accumulated findings across all cycles

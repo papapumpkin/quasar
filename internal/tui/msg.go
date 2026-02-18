@@ -257,6 +257,12 @@ type MsgNebulaDone struct {
 	Err     error
 }
 
+// MsgGitPostCompletion delivers the results of the post-nebula git workflow
+// (push branch to origin, checkout main).
+type MsgGitPostCompletion struct {
+	Result *nebula.PostCompletionResult
+}
+
 // MsgNebulaChoicesLoaded delivers available nebulae after discovery completes.
 type MsgNebulaChoicesLoaded struct {
 	Choices []NebulaChoice
@@ -296,27 +302,6 @@ type MsgPhaseBeadUpdate struct {
 	PhaseID    string
 	TaskBeadID string
 	Root       BeadInfo
-}
-
-// Architect overlay messages — drive the interactive phase creation/refactor flow.
-
-// MsgArchitectStart triggers the architect agent to generate or refactor a phase.
-type MsgArchitectStart struct {
-	Mode    string // "create" or "refactor"
-	PhaseID string // for refactor: which phase to modify
-	Prompt  string // user's description of what they want
-}
-
-// MsgArchitectResult carries the architect agent's output back to the TUI.
-type MsgArchitectResult struct {
-	Result *nebula.ArchitectResult
-	Err    error
-}
-
-// MsgArchitectConfirm signals the user confirmed the generated phase.
-type MsgArchitectConfirm struct {
-	Result    *nebula.ArchitectResult
-	DependsOn []string // user-modified dependency list
 }
 
 // MsgSplashDone signals that the splash screen timer has elapsed.

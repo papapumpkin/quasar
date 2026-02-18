@@ -85,9 +85,8 @@ type AppModel struct {
 	Resources  ResourceSnapshot   // latest resource usage snapshot
 	Thresholds ResourceThresholds // thresholds for color-coding
 
-	// Architect overlay state (nebula mode).
-	Architect     *ArchitectOverlay
-	ArchitectFunc func(ctx context.Context, msg MsgArchitectStart) (*nebula.ArchitectResult, error) // injected by caller
+	// Quit confirmation state.
+	ShowQuitConfirm bool // whether the quit confirmation overlay is visible
 
 	// Splash screen state — nil means splash is disabled (e.g. --no-splash).
 	Splash *SplashModel
@@ -186,11 +185,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			lv.Spinner, cmd = lv.Spinner.Update(msg)
 			cmds = append(cmds, cmd)
 		}
-		// Update architect overlay spinner.
-		if m.Architect != nil && m.Architect.Step == stepWorking {
-			m.Architect.Spinner, cmd = m.Architect.Spinner.Update(msg)
-			cmds = append(cmds, cmd)
-		}
 
 	case MsgTick:
 		if !m.Done {
@@ -255,6 +249,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgNebulaProgress:
 		m.StatusBar.Completed = msg.Completed
 		m.StatusBar.Total = msg.Total
+		m.StatusBar.InProgress = msg.OpenBeads
 		m.StatusBar.CostUSD = msg.TotalCostUSD
 
 	// --- Phase-contextualized messages (nebula mode) ---
@@ -384,13 +379,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.DoneErr = msg.Err
 		m.StatusBar.FinalElapsed = time.Since(m.StartTime).Truncate(time.Second)
 		m.Overlay = NewCompletionFromNebulaDone(msg, time.Since(m.StartTime), m.StatusBar.CostUSD, len(m.NebulaView.Phases))
-		// Cancel and clear any active architect overlay.
-		if m.Architect != nil {
-			if m.Architect.CancelFunc != nil {
-				m.Architect.CancelFunc()
-			}
-			m.Architect = nil
-		}
 		// Discover sibling nebulae in background.
 		if m.NebulaDir != "" {
 			nebulaDir := m.NebulaDir
@@ -403,71 +391,15 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 		}
 
+	case MsgGitPostCompletion:
+		if m.Overlay != nil {
+			m.Overlay.GitResult = msg.Result
+		}
+
 	case MsgNebulaChoicesLoaded:
 		m.AvailableNebulae = msg.Choices
 		if m.Overlay != nil {
 			m.Overlay.NebulaChoices = msg.Choices
-		}
-
-	// --- Architect overlay ---
-	case MsgArchitectConfirm:
-		if m.NebulaDir != "" && msg.Result != nil {
-			// Override the dependencies with the user's selection.
-			msg.Result.PhaseSpec.DependsOn = msg.DependsOn
-
-			// Reconstruct the full phase file (+++TOML+++ frontmatter + body).
-			fileData, err := nebula.MarshalPhaseFile(msg.Result.PhaseSpec)
-			if err != nil {
-				m.addMessage("failed to marshal phase file: %s", err)
-				toast, cmd := NewToast(fmt.Sprintf("marshal failed: %s", err), true)
-				m.Toasts = append(m.Toasts, toast)
-				cmds = append(cmds, cmd)
-			} else {
-				filePath := filepath.Join(m.NebulaDir, msg.Result.Filename)
-				if err := os.WriteFile(filePath, fileData, 0644); err != nil {
-					m.addMessage("failed to write phase file: %s", err)
-					toast, cmd := NewToast(fmt.Sprintf("write failed: %s", err), true)
-					m.Toasts = append(m.Toasts, toast)
-					cmds = append(cmds, cmd)
-				} else {
-					m.addMessage("wrote %s — watcher will pick it up", msg.Result.Filename)
-					toast, cmd := NewToast(fmt.Sprintf("wrote %s", msg.Result.Filename), false)
-					m.Toasts = append(m.Toasts, toast)
-					cmds = append(cmds, cmd)
-				}
-			}
-		}
-
-	case MsgArchitectStart:
-		if m.Architect != nil && m.ArchitectFunc != nil {
-			fn := m.ArchitectFunc
-			startMsg := msg
-			ctx, cancel := context.WithCancel(context.Background())
-			m.Architect.CancelFunc = cancel
-			cmds = append(cmds, func() tea.Msg {
-				result, err := safeArchitectCall(ctx, fn, startMsg)
-				return MsgArchitectResult{Result: result, Err: err}
-			})
-		} else if m.Architect != nil {
-			// No architect function wired up — report an error.
-			m.Architect = nil
-			m.addMessage("architect not available (no invoker configured)")
-			toast, cmd := NewToast("architect not available", true)
-			m.Toasts = append(m.Toasts, toast)
-			cmds = append(cmds, cmd)
-		}
-
-	case MsgArchitectResult:
-		if m.Architect != nil {
-			if msg.Err != nil {
-				m.Architect = nil
-				m.addMessage("architect error: %s", msg.Err)
-				toast, cmd := NewToast(fmt.Sprintf("architect: %s", msg.Err), true)
-				m.Toasts = append(m.Toasts, toast)
-				cmds = append(cmds, cmd)
-			} else {
-				m.Architect.SetResult(msg.Result, m.NebulaView.Phases)
-			}
 		}
 
 	// --- Toast auto-dismiss ---
@@ -538,17 +470,6 @@ func clampCursors(m *AppModel) {
 	}
 }
 
-// safeArchitectCall wraps an architect function call with panic recovery.
-// Any panic is converted to an error in the returned result.
-func safeArchitectCall(ctx context.Context, fn func(context.Context, MsgArchitectStart) (*nebula.ArchitectResult, error), msg MsgArchitectStart) (result *nebula.ArchitectResult, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("architect panic: %v", r)
-		}
-	}()
-	return fn(ctx, msg)
-}
-
 // handleKey processes keyboard input.
 func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Splash screen: q quits, any other key skips the animation.
@@ -561,9 +482,18 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Architect overlay takes priority — it intercepts all keys when active.
-	if m.Architect != nil {
-		return m.handleArchitectKey(msg)
+	// Quit confirmation overlay — y confirms, n/Esc dismisses.
+	if m.ShowQuitConfirm {
+		switch msg.String() {
+		case "y", "Y":
+			return m, tea.Quit
+		case "n", "N", "esc":
+			m.ShowQuitConfirm = false
+			return m, nil
+		case "ctrl+c":
+			return m, tea.Quit
+		}
+		return m, nil
 	}
 
 	// Completion overlay — q/Esc to exit, arrow keys for picker.
@@ -691,6 +621,15 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, m.Keys.Quit):
+		// Ctrl+C always force-quits.
+		if msg.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
+		// Show confirmation if there are in-progress phases.
+		if m.hasInProgressPhases() {
+			m.ShowQuitConfirm = true
+			return m, nil
+		}
 		return m, tea.Quit
 
 	case key.Matches(msg, m.Keys.Pause):
@@ -722,12 +661,6 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.Keys.Beads):
 		m.handleBeadsKey()
-
-	case key.Matches(msg, m.Keys.NewPhase):
-		m.handleNewPhaseKey()
-
-	case key.Matches(msg, m.Keys.EditPhase):
-		m.handleEditPhaseKey()
 	}
 
 	return m, nil
@@ -946,109 +879,6 @@ func (m *AppModel) handleBeadsKey() {
 		m.DiffFileOpen = false
 		m.updateBeadDetail()
 	}
-}
-
-// handleNewPhaseKey opens the architect overlay in create mode.
-// Only active in nebula mode at the phase table level.
-func (m *AppModel) handleNewPhaseKey() {
-	if m.Mode != ModeNebula || m.Depth != DepthPhases {
-		return
-	}
-	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
-}
-
-// handleEditPhaseKey opens the architect overlay in refactor mode for the selected phase.
-// Only active for in-progress or waiting phases.
-func (m *AppModel) handleEditPhaseKey() {
-	if m.Mode != ModeNebula || m.Depth != DepthPhases {
-		return
-	}
-	p := m.NebulaView.SelectedPhase()
-	if p == nil {
-		return
-	}
-	if p.Status != PhaseWorking && p.Status != PhaseWaiting {
-		return
-	}
-	m.Architect = NewArchitectOverlay("refactor", p.ID, m.NebulaView.Phases)
-}
-
-// handleArchitectKey processes keyboard input while the architect overlay is active.
-func (m AppModel) handleArchitectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	a := m.Architect
-
-	switch a.Step {
-	case stepInput:
-		switch {
-		case key.Matches(msg, m.Keys.Back):
-			m.Architect = nil
-			return m, nil
-		case key.Matches(msg, m.Keys.Enter):
-			prompt := a.InputValue()
-			if prompt == "" {
-				return m, nil
-			}
-			a.StartWorking()
-			// The actual architect invocation is done via a command that the
-			// caller wires up. We send MsgArchitectStart so the bridge can
-			// dispatch the agent call.
-			return m, func() tea.Msg {
-				return MsgArchitectStart{
-					Mode:    a.Mode,
-					PhaseID: a.PhaseID,
-					Prompt:  prompt,
-				}
-			}
-		default:
-			// Forward to textarea.
-			var cmd tea.Cmd
-			a.TextArea, cmd = a.TextArea.Update(msg)
-			return m, cmd
-		}
-
-	case stepWorking:
-		if key.Matches(msg, m.Keys.Back) {
-			if a.CancelFunc != nil {
-				a.CancelFunc()
-			}
-			m.Architect = nil
-			return m, nil
-		}
-		return m, nil
-
-	case stepPreview:
-		switch {
-		case key.Matches(msg, m.Keys.Back):
-			m.Architect = nil
-			return m, nil
-		case key.Matches(msg, m.Keys.Enter):
-			// Confirm: write the file.
-			result := a.Result
-			deps := a.SelectedDeps()
-			m.Architect = nil
-			return m, func() tea.Msg {
-				return MsgArchitectConfirm{
-					Result:    result,
-					DependsOn: deps,
-				}
-			}
-		case key.Matches(msg, m.Keys.Up):
-			a.MoveDepUp()
-		case key.Matches(msg, m.Keys.Down):
-			a.MoveDepDown()
-		case msg.String() == " ":
-			newPhaseID := ""
-			if a.Result != nil {
-				newPhaseID = a.Result.PhaseSpec.ID
-			}
-			a.ToggleDep(newPhaseID, func(deps []string) bool {
-				return WouldCreateCycle(m.NebulaView.Phases, newPhaseID, deps)
-			})
-		}
-		return m, nil
-	}
-
-	return m, nil
 }
 
 // updateBeadDetail populates the detail panel with the bead hierarchy.
@@ -1516,10 +1346,10 @@ func (m AppModel) View() string {
 
 	base := lipgloss.JoinVertical(lipgloss.Left, sections...)
 
-	// Architect overlay — rendered over a dimmed background.
-	if m.Architect != nil {
+	// Quit confirmation overlay — rendered over a dimmed background.
+	if m.ShowQuitConfirm {
 		dimmed := styleOverlayDimmed.Width(m.Width).Height(m.Height).Render(base)
-		overlayBox := m.Architect.View(m.Width, m.Height)
+		overlayBox := RenderQuitConfirm(m.Width, m.Height)
 		return compositeOverlay(dimmed, overlayBox, m.Width, m.Height)
 	}
 
@@ -1656,6 +1486,19 @@ func (m AppModel) buildFooter() Footer {
 		}
 	}
 	return f
+}
+
+// hasInProgressPhases reports whether any nebula phase is currently working.
+func (m AppModel) hasInProgressPhases() bool {
+	if m.Mode != ModeNebula {
+		return false
+	}
+	for i := range m.NebulaView.Phases {
+		if m.NebulaView.Phases[i].Status == PhaseWorking {
+			return true
+		}
+	}
+	return false
 }
 
 // selectedPhaseFailed reports whether the currently selected/focused phase is in PhaseFailed state.

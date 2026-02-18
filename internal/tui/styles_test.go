@@ -349,24 +349,28 @@ func TestSectionBorderHasTopOnly(t *testing.T) {
 func TestRenderProgressBar(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name      string
-		completed int
-		total     int
-		width     int
-		wantEmpty bool
-		wantFull  bool
+		name       string
+		completed  int
+		inProgress int
+		total      int
+		width      int
+		wantEmpty  bool
+		wantFull   bool
 	}{
-		{"zero total", 0, 0, 10, true, false},
-		{"zero width", 5, 10, 0, true, false},
-		{"no progress", 0, 10, 10, false, false},
-		{"half progress", 5, 10, 10, false, false},
-		{"full progress", 10, 10, 10, false, true},
-		{"over progress", 15, 10, 10, false, true},
+		{"zero total", 0, 0, 0, 10, true, false},
+		{"zero width", 5, 0, 10, 0, true, false},
+		{"no progress", 0, 0, 10, 10, false, false},
+		{"half progress", 5, 0, 10, 10, false, false},
+		{"full progress", 10, 0, 10, 10, false, true},
+		{"over progress", 15, 0, 10, 10, false, true},
+		{"with in-progress", 3, 2, 10, 10, false, false},
+		{"all in-progress", 0, 5, 10, 10, false, false},
+		{"done plus in-progress overflow", 8, 5, 10, 10, false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := renderProgressBar(tt.completed, tt.total, tt.width)
+			result := renderProgressBar(tt.completed, tt.inProgress, tt.total, tt.width)
 			if tt.wantEmpty && result != "" {
 				t.Errorf("expected empty bar, got %q", result)
 			}
@@ -445,9 +449,14 @@ func TestProgressColor(t *testing.T) {
 		ratio float64
 		want  lipgloss.Color
 	}{
-		{"low", 0.1, colorMutedLight},
-		{"mid", 0.5, colorMutedLight},
-		{"high", 0.9, colorMutedLight},
+		{"zero", 0.0, colorMuted},
+		{"low", 0.1, colorBlue},
+		{"below half", 0.4, colorBlue},
+		{"at half", 0.5, colorSuccess},
+		{"high", 0.9, colorSuccess},
+		{"full", 1.0, colorSuccess},
+		{"over", 1.5, colorSuccess},
+		{"negative", -0.1, colorMuted},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -467,10 +476,18 @@ func TestBudgetColor(t *testing.T) {
 		ratio float64
 		want  lipgloss.Color
 	}{
+		{"very low spend", 0.05, colorMutedLight},
 		{"low spend", 0.2, colorMutedLight},
-		{"mid spend", 0.6, colorMutedLight},
-		{"high spend", 0.75, colorMutedLight},
-		{"critical", 0.95, colorMutedLight},
+		{"just under moderate", 0.29, colorMutedLight},
+		{"at moderate", 0.3, colorAccent},
+		{"moderate spend", 0.4, colorAccent},
+		{"just under half", 0.49, colorAccent},
+		{"at half", 0.5, colorBudgetWarn},
+		{"mid spend", 0.6, colorBudgetWarn},
+		{"high spend", 0.79, colorBudgetWarn},
+		{"at danger", 0.8, colorDanger},
+		{"critical", 0.95, colorDanger},
+		{"over budget", 1.1, colorDanger},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -594,6 +611,82 @@ func TestStatusBarBudgetShowsBar(t *testing.T) {
 	}
 	if !strings.Contains(output, "$10.00") {
 		t.Error("budget bar should show budget limit")
+	}
+}
+
+func TestStatusBarSegmentStylesDistinct(t *testing.T) {
+	t.Parallel()
+	// Verify that status bar segment styles use distinct foreground colors
+	// so the bar is visually scannable (at least 4 distinct colors).
+	styles := map[string]lipgloss.Style{
+		"mode":     styleStatusMode,
+		"name":     styleStatusName,
+		"progress": styleStatusProgress,
+		"cost":     styleStatusCost,
+		"elapsed":  styleStatusElapsed,
+	}
+
+	colors := make(map[string]string)
+	for name, s := range styles {
+		fg := s.GetForeground()
+		if c, ok := fg.(lipgloss.Color); ok {
+			colors[name] = string(c)
+		}
+	}
+
+	// Count distinct colors — need at least 4 for visual scannability.
+	unique := make(map[string]bool)
+	for _, c := range colors {
+		unique[c] = true
+	}
+	if len(unique) < 4 {
+		t.Errorf("expected at least 4 distinct foreground colors in status bar, got %d: %v", len(unique), colors)
+	}
+}
+
+func TestResourceStylesDistinct(t *testing.T) {
+	t.Parallel()
+	// Verify that resource styles use different colors for each severity level.
+	normalFg := styleResourceNormal.GetForeground()
+	warningFg := styleResourceWarning.GetForeground()
+	dangerFg := styleResourceDanger.GetForeground()
+
+	normalColor, _ := normalFg.(lipgloss.Color)
+	warningColor, _ := warningFg.(lipgloss.Color)
+	dangerColor, _ := dangerFg.(lipgloss.Color)
+
+	if string(normalColor) == string(warningColor) {
+		t.Errorf("normal and warning resource styles should have different colors, both are %q", string(normalColor))
+	}
+	if string(normalColor) == string(dangerColor) {
+		t.Errorf("normal and danger resource styles should have different colors, both are %q", string(normalColor))
+	}
+	if string(warningColor) == string(dangerColor) {
+		t.Errorf("warning and danger resource styles should have different colors, both are %q", string(warningColor))
+	}
+}
+
+func TestResourceLevelStyleColors(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		level ResourceLevel
+		want  lipgloss.Style
+	}{
+		{"normal", ResourceNormal, styleResourceNormal},
+		{"warning", ResourceWarning, styleResourceWarning},
+		{"danger", ResourceDanger, styleResourceDanger},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := resourceLevelStyle(tt.level)
+			gotFg := got.GetForeground()
+			wantFg := tt.want.GetForeground()
+			if gotFg != wantFg {
+				t.Errorf("resourceLevelStyle(%v) foreground = %v, want %v", tt.level, gotFg, wantFg)
+			}
+		})
 	}
 }
 
