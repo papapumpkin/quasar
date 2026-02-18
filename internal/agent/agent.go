@@ -37,6 +37,14 @@ type InvocationResult struct {
 	SessionID  string
 }
 
+// ReviewReport captures structured metadata from the reviewer's REPORT: block.
+type ReviewReport struct {
+	Satisfaction     string `toml:"satisfaction"` // high, medium, low
+	Risk             string `toml:"risk"`         // high, medium, low
+	NeedsHumanReview bool   `toml:"needs_human_review"`
+	Summary          string `toml:"summary"`
+}
+
 // Invoker abstracts the execution of an agent, allowing different backends
 // (e.g. Claude CLI, mocks) to satisfy the interface.
 type Invoker interface {

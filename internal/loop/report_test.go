@@ -3,6 +3,8 @@ package loop
 import (
 	"strings"
 	"testing"
+
+	"github.com/papapumpkin/quasar/internal/agent"
 )
 
 func TestParseReviewReport(t *testing.T) {
@@ -97,7 +99,7 @@ SUMMARY: Acceptable implementation with minor style concerns.`,
 }
 
 func TestFormatReportComment(t *testing.T) {
-	r := &ReviewReport{
+	r := &agent.ReviewReport{
 		Satisfaction:     "high",
 		Risk:             "low",
 		NeedsHumanReview: false,

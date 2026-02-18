@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
 )
 
@@ -17,7 +18,7 @@ import (
 type PhaseRunnerResult struct {
 	TotalCostUSD float64
 	CyclesUsed   int
-	Report       *ReviewReport
+	Report       *agent.ReviewReport
 }
 
 // PhaseRunner is the interface for executing a phase (satisfied by loop.Loop).

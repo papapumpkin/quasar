@@ -5,6 +5,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/papapumpkin/quasar/internal/agent"
 )
 
 // mockGitCommitter implements GitCommitter for checkpoint tests.
@@ -144,7 +146,7 @@ func TestBuildCheckpoint(t *testing.T) {
 		result := PhaseRunnerResult{
 			TotalCostUSD: 0.12,
 			CyclesUsed:   2,
-			Report: &ReviewReport{
+			Report: &agent.ReviewReport{
 				Summary: "Clean implementation, follows POSIX conventions",
 			},
 		}

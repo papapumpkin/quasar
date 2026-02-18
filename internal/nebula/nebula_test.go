@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
 )
 
@@ -1548,7 +1549,7 @@ func TestWorkerGroup_WatchMode_RendersCheckpointWithoutBlocking(t *testing.T) {
 		result: &PhaseRunnerResult{
 			TotalCostUSD: 0.10,
 			CyclesUsed:   1,
-			Report:       &ReviewReport{Summary: "looks good"},
+			Report:       &agent.ReviewReport{Summary: "looks good"},
 		},
 	}
 	committer := &mockGitCommitter{

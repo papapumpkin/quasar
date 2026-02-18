@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/papapumpkin/quasar/internal/agent"
 )
 
 func TestSaveAndLoadMetrics(t *testing.T) {
@@ -17,7 +19,7 @@ func TestSaveAndLoadMetrics(t *testing.T) {
 	m.RecordPhaseComplete("p1", PhaseRunnerResult{
 		TotalCostUSD: 0.12,
 		CyclesUsed:   3,
-		Report:       &ReviewReport{Satisfaction: "satisfied"},
+		Report:       &agent.ReviewReport{Satisfaction: "satisfied"},
 	})
 	m.RecordConflict("p1")
 	m.RecordRestart("p1")

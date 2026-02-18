@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
@@ -986,7 +987,7 @@ func TestNebulaWorkerResults(t *testing.T) {
 		results := []nebula.WorkerResult{
 			{PhaseID: "p1", BeadID: "bead-001", Err: nil},
 			{PhaseID: "p2", Err: fmt.Errorf("build failed")},
-			{PhaseID: "p3", BeadID: "bead-003", Err: nil, Report: &nebula.ReviewReport{
+			{PhaseID: "p3", BeadID: "bead-003", Err: nil, Report: &agent.ReviewReport{
 				Satisfaction:     "high",
 				Risk:             "low",
 				NeedsHumanReview: false,
@@ -1019,7 +1020,7 @@ func TestReviewReport(t *testing.T) {
 	p := New()
 
 	t.Run("without human review", func(t *testing.T) {
-		report := &nebula.ReviewReport{
+		report := &agent.ReviewReport{
 			Satisfaction:     "medium",
 			Risk:             "high",
 			NeedsHumanReview: false,
@@ -1045,7 +1046,7 @@ func TestReviewReport(t *testing.T) {
 	})
 
 	t.Run("with human review", func(t *testing.T) {
-		report := &nebula.ReviewReport{
+		report := &agent.ReviewReport{
 			Satisfaction:     "low",
 			Risk:             "critical",
 			NeedsHumanReview: true,
@@ -1223,7 +1224,7 @@ func TestNebulaShow(t *testing.T) {
 				"p1": {
 					Status: nebula.PhaseStatusDone,
 					BeadID: "bead-r1",
-					Report: &nebula.ReviewReport{
+					Report: &agent.ReviewReport{
 						Satisfaction:     "high",
 						Risk:             "low",
 						NeedsHumanReview: false,

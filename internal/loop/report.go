@@ -3,19 +3,13 @@ package loop
 import (
 	"fmt"
 	"strings"
-)
 
-// ReviewReport captures structured metadata from the reviewer's REPORT: block.
-type ReviewReport struct {
-	Satisfaction     string `toml:"satisfaction"` // high, medium, low
-	Risk             string `toml:"risk"`         // high, medium, low
-	NeedsHumanReview bool   `toml:"needs_human_review"`
-	Summary          string `toml:"summary"`
-}
+	"github.com/papapumpkin/quasar/internal/agent"
+)
 
 // ParseReviewReport extracts a REPORT: block from reviewer output.
 // Returns nil if no report block is found.
-func ParseReviewReport(output string) *ReviewReport {
+func ParseReviewReport(output string) *agent.ReviewReport {
 	lines := strings.Split(output, "\n")
 	for i := 0; i < len(lines); i++ {
 		if strings.TrimSpace(lines[i]) != "REPORT:" {
@@ -31,8 +25,8 @@ func ParseReviewReport(output string) *ReviewReport {
 
 // parseReportBlock parses structured fields from lines following a REPORT: header.
 // Returns the report and true if at least one field was found.
-func parseReportBlock(lines []string) (*ReviewReport, bool) {
-	report := &ReviewReport{}
+func parseReportBlock(lines []string) (*agent.ReviewReport, bool) {
+	report := &agent.ReviewReport{}
 	found := false
 	for _, raw := range lines {
 		line := strings.TrimSpace(raw)
@@ -67,7 +61,7 @@ func parseField(line, prefix string) string {
 }
 
 // FormatReportComment formats a ReviewReport as a beads comment string.
-func FormatReportComment(r *ReviewReport) string {
+func FormatReportComment(r *agent.ReviewReport) string {
 	humanReview := "no"
 	if r.NeedsHumanReview {
 		humanReview = "yes"

@@ -603,19 +603,11 @@ func (a *tuiLoopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDe
 
 // toPhaseRunnerResult converts a loop.TaskResult to nebula.PhaseRunnerResult.
 func toPhaseRunnerResult(result *loop.TaskResult) *nebula.PhaseRunnerResult {
-	tr := &nebula.PhaseRunnerResult{
+	return &nebula.PhaseRunnerResult{
 		TotalCostUSD: result.TotalCostUSD,
 		CyclesUsed:   result.CyclesUsed,
+		Report:       result.Report,
 	}
-	if result.Report != nil {
-		tr.Report = &nebula.ReviewReport{
-			Satisfaction:     result.Report.Satisfaction,
-			Risk:             result.Report.Risk,
-			NeedsHumanReview: result.Report.NeedsHumanReview,
-			Summary:          result.Report.Summary,
-		}
-	}
-	return tr
 }
 
 func runNebulaShow(cmd *cobra.Command, args []string) error {

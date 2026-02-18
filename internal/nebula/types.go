@@ -1,6 +1,10 @@
 package nebula
 
-import "time"
+import (
+	"time"
+
+	"github.com/papapumpkin/quasar/internal/agent"
+)
 
 // Manifest is parsed from nebula.toml in the nebula directory root.
 type Manifest struct {
@@ -157,19 +161,11 @@ type State struct {
 
 // PhaseState tracks the current status and bead association for a single phase.
 type PhaseState struct {
-	BeadID    string        `toml:"bead_id"`
-	Status    PhaseStatus   `toml:"status"`
-	CreatedAt time.Time     `toml:"created_at"`
-	UpdatedAt time.Time     `toml:"updated_at"`
-	Report    *ReviewReport `toml:"report,omitempty"`
-}
-
-// ReviewReport captures structured metadata from the reviewer's REPORT: block.
-type ReviewReport struct {
-	Satisfaction     string `toml:"satisfaction"`
-	Risk             string `toml:"risk"`
-	NeedsHumanReview bool   `toml:"needs_human_review"`
-	Summary          string `toml:"summary"`
+	BeadID    string              `toml:"bead_id"`
+	Status    PhaseStatus         `toml:"status"`
+	CreatedAt time.Time           `toml:"created_at"`
+	UpdatedAt time.Time           `toml:"updated_at"`
+	Report    *agent.ReviewReport `toml:"report,omitempty"`
 }
 
 // ActionType describes what apply will do for a phase.
@@ -201,5 +197,5 @@ type WorkerResult struct {
 	PhaseID string
 	BeadID  string
 	Err     error
-	Report  *ReviewReport
+	Report  *agent.ReviewReport
 }

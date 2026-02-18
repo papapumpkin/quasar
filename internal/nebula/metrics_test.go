@@ -4,6 +4,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/papapumpkin/quasar/internal/agent"
 )
 
 func TestNewMetrics(t *testing.T) {
@@ -62,7 +64,7 @@ func TestRecordPhaseStartAndComplete(t *testing.T) {
 	// Small delay so duration is nonzero.
 	time.Sleep(time.Millisecond)
 
-	report := &ReviewReport{Satisfaction: "satisfied"}
+	report := &agent.ReviewReport{Satisfaction: "satisfied"}
 	m.RecordPhaseComplete("p1", PhaseRunnerResult{
 		TotalCostUSD: 0.10,
 		CyclesUsed:   3,

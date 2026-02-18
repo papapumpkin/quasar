@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
@@ -87,7 +88,7 @@ func (p *Printer) NebulaWorkerResults(results []nebula.WorkerResult) {
 }
 
 // ReviewReport prints structured review metadata for a phase.
-func (p *Printer) ReviewReport(phaseID string, report *nebula.ReviewReport) {
+func (p *Printer) ReviewReport(phaseID string, report *agent.ReviewReport) {
 	fmt.Fprintf(os.Stderr, dim+"  report for %s:"+reset+"\n", phaseID)
 	fmt.Fprintf(os.Stderr, "    satisfaction:  %s\n", report.Satisfaction)
 	fmt.Fprintf(os.Stderr, "    risk:          %s\n", report.Risk)
