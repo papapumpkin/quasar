@@ -1,0 +1,27 @@
+version = 1
+nebula_name = 'statusbar-regression'
+
+[phases]
+[phases.diff-jk-scroll]
+bead_id = 'quasar-jef'
+status = 'in_progress'
+created_at = 2026-02-18T10:23:41.549914-05:00
+updated_at = 2026-02-18T10:23:42.860802-05:00
+
+[phases.fix-wrapping]
+bead_id = 'quasar-pwo'
+status = 'created'
+created_at = 2026-02-18T10:23:41.922551-05:00
+updated_at = 2026-02-18T10:23:41.922551-05:00
+
+[phases.selected-row-highlight]
+bead_id = 'quasar-a6n'
+status = 'created'
+created_at = 2026-02-18T10:23:42.266618-05:00
+updated_at = 2026-02-18T10:23:42.266618-05:00
+
+[phases.unify-bar-color]
+bead_id = 'quasar-asm'
+status = 'created'
+created_at = 2026-02-18T10:23:42.65324-05:00
+updated_at = 2026-02-18T10:23:42.65324-05:00

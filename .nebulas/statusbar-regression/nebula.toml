@@ -1,0 +1,34 @@
+[nebula]
+name = "statusbar-regression"
+description = "Fix status bar regressions: patchy colors, wrapping metrics, and purple logo highlight"
+
+[defaults]
+type = "bug"
+priority = 1
+labels = ["quasar", "tui"]
+assignee = ""
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 10.0
+model = ""
+gate = ""
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+  "Uniform single-color status bar with no patchy multi-color segments",
+  "Metrics (cost, resources, elapsed) never wrap to a second line",
+  "Logo text matches the bar color instead of standing out in purple/blue",
+]
+constraints = [
+  "Only touch status bar rendering — do not change content below the bar",
+  "Preserve all existing information (cost, progress, elapsed, resources)",
+  "Keep segment-drop logic for narrow terminals",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

@@ -64,6 +64,7 @@ type AppModel struct {
 	ShowPlan     bool          // whether the plan viewer is toggled on
 	ShowDiff     bool          // whether the diff viewer is toggled on (vs raw output)
 	DiffFileList *FileListView // navigable file list when diff view is active
+	DiffFileOpen bool          // whether user has opened a single file's diff (Enter on file list)
 	ShowBeads    bool          // whether the bead tracker is toggled on
 
 	// Bead hierarchy state.
@@ -594,9 +595,39 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleGateKey(msg)
 	}
 
-	// When the diff file list is active, ↑/↓ navigate the file list
-	// instead of scrolling the detail panel or moving the main cursor.
-	if m.ShowDiff && m.DiffFileList != nil {
+	// When viewing a single file's diff, route scroll keys to the detail panel.
+	// Esc returns to the file list.
+	if m.ShowDiff && m.DiffFileList != nil && m.DiffFileOpen {
+		switch {
+		case key.Matches(msg, m.Keys.Up):
+			m.Detail.Update(msg)
+			return m, nil
+		case key.Matches(msg, m.Keys.Down):
+			m.Detail.Update(msg)
+			return m, nil
+		case key.Matches(msg, m.Keys.PageUp):
+			m.Detail.Update(msg)
+			return m, nil
+		case key.Matches(msg, m.Keys.PageDown):
+			m.Detail.Update(msg)
+			return m, nil
+		case key.Matches(msg, m.Keys.Home):
+			m.Detail.Update(msg)
+			return m, nil
+		case key.Matches(msg, m.Keys.End):
+			m.Detail.Update(msg)
+			return m, nil
+		case key.Matches(msg, m.Keys.Back):
+			// Return to the file list without leaving diff mode.
+			m.DiffFileOpen = false
+			m.updateDetailFromSelection()
+			return m, nil
+		}
+	}
+
+	// When the diff file list is active (but not viewing a single file),
+	// ↑/↓ navigate the file list instead of scrolling the detail panel.
+	if m.ShowDiff && m.DiffFileList != nil && !m.DiffFileOpen {
 		switch {
 		case key.Matches(msg, m.Keys.Up):
 			m.DiffFileList.MoveUp()
@@ -810,6 +841,7 @@ func (m *AppModel) handleInfoKey() {
 		m.ShowBeads = false
 		m.ShowDiff = false
 		m.DiffFileList = nil
+		m.DiffFileOpen = false
 		m.updatePlanDetail()
 	}
 }
@@ -832,6 +864,7 @@ func (m *AppModel) handleDiffKey() {
 		}
 	} else {
 		m.DiffFileList = nil
+		m.DiffFileOpen = false
 	}
 	m.updateDetailFromSelection()
 }
@@ -896,6 +929,7 @@ func (m AppModel) showFileDiff() (tea.Model, tea.Cmd) {
 
 	body := RenderSingleFileDiff(rawDiff, file.Path, m.contentWidth()-4)
 	m.Detail.SetContent(file.Path, body)
+	m.DiffFileOpen = true
 	return m, nil
 }
 
@@ -909,6 +943,7 @@ func (m *AppModel) handleBeadsKey() {
 		m.ShowPlan = false
 		m.ShowDiff = false
 		m.DiffFileList = nil
+		m.DiffFileOpen = false
 		m.updateBeadDetail()
 	}
 }
@@ -1096,6 +1131,7 @@ func (m *AppModel) drillDown() {
 			m.ShowPlan = false
 			m.ShowDiff = false
 			m.DiffFileList = nil
+			m.DiffFileOpen = false
 			m.ShowBeads = false
 			// Drill into the selected phase's loop view.
 			if p := m.NebulaView.SelectedPhase(); p != nil {
@@ -1108,6 +1144,7 @@ func (m *AppModel) drillDown() {
 			m.ShowPlan = false
 			m.ShowDiff = false
 			m.DiffFileList = nil
+			m.DiffFileOpen = false
 			m.ShowBeads = false
 			m.Depth = DepthAgentOutput
 			m.updateDetailFromSelection()
@@ -1118,7 +1155,13 @@ func (m *AppModel) drillDown() {
 // drillUp navigates back up the hierarchy.
 func (m *AppModel) drillUp() {
 	// Pressing esc dismisses overlay viewers first (without changing depth).
+	// If viewing a single file diff, return to the file list first.
 	if m.ShowDiff {
+		if m.DiffFileOpen {
+			m.DiffFileOpen = false
+			m.updateDetailFromSelection()
+			return
+		}
 		m.ShowDiff = false
 		m.DiffFileList = nil
 		return
