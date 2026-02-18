@@ -301,7 +301,12 @@ func (lv LoopView) View() string {
 				icon := styleRowWorking.Render(iconWorking)
 				elapsed := formatElapsed(a.StartedAt)
 				spinnerStr := roleColoredSpinner(a.Role, lv.Spinner)
-				styledRole := stylePhaseID.Render(a.Role)
+				var styledRole string
+				if selected {
+					styledRole = styleRowSelected.Render(a.Role)
+				} else {
+					styledRole = stylePhaseID.Render(a.Role)
+				}
 				styledDetail := stylePhaseDetail.Render(fmt.Sprintf("working… %s", elapsed))
 				line := fmt.Sprintf("%s%s%s %s  %s  %s", indicator, styledConnector, icon, styledRole, styledDetail, spinnerStr)
 				b.WriteString(line)
