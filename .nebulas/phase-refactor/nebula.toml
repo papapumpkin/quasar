@@ -1,0 +1,30 @@
+[nebula]
+name = "Phase Refactor from TUI"
+description = "Add the ability to trigger a refactor pass on a completed phase directly from the TUI, further enhancing code quality after a nebula finishes."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "tui", "refactor", "post-nebula"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 30.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Allow triggering a refactor pass on a completed phase from the TUI",
+    "Refactor should be available only after a nebula finishes (all phases done)",
+    "Re-invoke the coder-reviewer loop with a refactor-focused prompt",
+    "Track refactor cycles as a distinct state in the phase lifecycle",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "All TUI code lives in internal/tui/",
+    "Refactor uses the existing coder-reviewer loop — no new agent infrastructure",
+    "Do not modify completed phase outputs until the user explicitly triggers refactor",
+    "Refactor prompt should focus on code quality, idioms, and cleanup — not new features",
+]

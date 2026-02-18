@@ -1,0 +1,33 @@
+[nebula]
+name = "TUI Fix-up & Polish"
+description = "Fix diff navigation bugs (multi-file nav, state corruption after d-press on cycle/phase) and polish the header/phase layout for visual consistency."
+
+[defaults]
+type = "bug"
+priority = 1
+labels = ["quasar", "tui", "bugfix", "polish"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 25.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Fix pressing d on a cycle or phase corrupting TUI state",
+    "Fix multi-file diff navigation (unable to move between files in large diffs)",
+    "Fix inability to navigate after exiting a diff opened from the file list",
+    "Unify purple color across the header bar for visual consistency",
+    "Add spacing between header and content area",
+    "Better visual distinction between phase rows and their status bars",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "All TUI code lives in internal/tui/",
+    "Do not break the stderr Printer fallback path",
+    "Use only charmbracelet ecosystem (bubbletea, lipgloss, bubbles)",
+    "Do not redesign the layout — only fix bugs and make targeted polish adjustments",
+    "Preserve the existing phase/cycle tree structure users like",
+]

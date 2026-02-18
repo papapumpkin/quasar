@@ -1,0 +1,31 @@
+[nebula]
+name = "Agent Concurrency & File Locking"
+description = "Research and implement a concurrency system that enables multiple agents to work on the same codebase simultaneously with proper file locking and synchronization."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "concurrency", "research", "infrastructure"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 40.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Research existing solutions for multi-agent codebase coordination",
+    "Design a file-level locking mechanism for concurrent agent work",
+    "Implement a sync protocol so agents can work in concert without conflicts",
+    "Build the foundation for multi-agent parallel execution in quasar",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "Must work with git as the source of truth",
+    "File locks must be advisory, not mandatory — agents should respect them cooperatively",
+    "Solution should work locally first, with a path to distributed later",
+    "Do not introduce heavy external dependencies (etcd, Redis) for the local case",
+    "Must handle the case where an agent crashes while holding a lock",
+]

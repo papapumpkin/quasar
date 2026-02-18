@@ -1,0 +1,33 @@
+[nebula]
+name = "DAG Task Engine"
+description = "Build a powerful DAG-based task dependency engine using design patterns: Facade over a DAG core, topological sort for execution ordering, PageRank + Betweenness for impact scoring, and Union-Find for independent parallel tracks."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "dag", "engine", "architecture"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 50.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Build a DAG engine with topological sort for execution ordering",
+    "Implement PageRank + Betweenness Centrality for composite impact scoring",
+    "Use Union-Find to partition the graph into independent parallel tracks",
+    "Expose the engine through a Facade that the nebula orchestrator uses",
+    "Each output mode is a Strategy against the shared graph state",
+    "Agents can claim independent tracks without conflict",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "Pure Go implementation — no external graph libraries",
+    "The existing nebula graph code in internal/nebula/graph.go should be replaced or wrapped",
+    "All algorithms must be well-tested with known graph fixtures",
+    "Design for the quasar use case but keep the engine general enough to be reusable",
+    "Prefer stdlib over third-party libraries",
+]

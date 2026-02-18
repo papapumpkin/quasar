@@ -1,0 +1,31 @@
+[nebula]
+name = "Quasar Splash Animation"
+description = "Integrate the binary-star Doppler-shift ASCII animation as a startup splash screen when quasar begins execution."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "tui", "splash"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 20.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Integrate the binary-star splash animation from ~/Downloads/files(2)/ into the quasar TUI",
+    "Show splash on startup before the main TUI view loads",
+    "Support a compact spinner variant for loading states",
+    "Allow skipping with any keypress",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "All TUI code lives in internal/tui/",
+    "Animation source is in ~/Downloads/files(2)/splash.go — adapt it, do not copy blindly",
+    "Use only charmbracelet ecosystem (bubbletea, lipgloss)",
+    "Keep the splash self-contained in its own file within internal/tui/",
+    "Splash must not block the TUI — it runs as a Bubble Tea model phase before the main model",
+]
