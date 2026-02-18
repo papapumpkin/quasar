@@ -19,6 +19,29 @@ type BranchManager struct {
 // NewBranchManager creates a BranchManager with branch name nebula/<nebulaName>.
 // Returns an error if the directory is not in a git repo or git is unavailable.
 // Does NOT create or checkout the branch yet — call CreateOrCheckout for that.
+// slugifyBranch converts a human-readable name into a valid git branch segment.
+// Spaces become hyphens, disallowed characters are stripped, and runs of hyphens
+// are collapsed. The result is lowercased and trimmed of leading/trailing hyphens.
+func slugifyBranch(name string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(name) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '.', r == '-':
+			b.WriteRune(r)
+		case r == ' ' || r == '_' || r == '/':
+			b.WriteRune('-')
+		default:
+			// drop disallowed characters (&, ~, ^, :, ?, *, [, etc.)
+		}
+	}
+	// Collapse runs of hyphens and trim edges.
+	s := b.String()
+	for strings.Contains(s, "--") {
+		s = strings.ReplaceAll(s, "--", "-")
+	}
+	return strings.Trim(s, "-.")
+}
+
 func NewBranchManager(ctx context.Context, dir, nebulaName string) (*BranchManager, error) {
 	if _, err := exec.LookPath("git"); err != nil {
 		return nil, fmt.Errorf("git not available: %w", err)
@@ -29,7 +52,7 @@ func NewBranchManager(ctx context.Context, dir, nebulaName string) (*BranchManag
 	}
 	return &BranchManager{
 		dir:    dir,
-		branch: "nebula/" + nebulaName,
+		branch: "nebula/" + slugifyBranch(nebulaName),
 	}, nil
 }
 

@@ -133,6 +133,45 @@ func TestBranchManager_NilSafe(t *testing.T) {
 	}
 }
 
+func TestSlugifyBranch(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"already clean", "my-nebula", "my-nebula"},
+		{"spaces to hyphens", "TUI Refinement & Visual Polish", "tui-refinement-visual-polish"},
+		{"underscores to hyphens", "foo_bar_baz", "foo-bar-baz"},
+		{"special chars stripped", "hello~world^2", "helloworld2"},
+		{"colons stripped", "fix:bug", "fixbug"},
+		{"dots preserved", "v1.2.3", "v1.2.3"},
+		{"leading trailing hyphens trimmed", "--edge--case--", "edge-case"},
+		{"slashes become hyphens", "a/b/c", "a-b-c"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := slugifyBranch(tc.in)
+			if got != tc.want {
+				t.Errorf("slugifyBranch(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNewBranchManager_slugifies_name(t *testing.T) {
+	dir := initTestRepo(t)
+	bm, err := NewBranchManager(context.Background(), dir, "TUI Refinement & Visual Polish")
+	if err != nil {
+		t.Fatalf("NewBranchManager: %v", err)
+	}
+	want := "nebula/tui-refinement-visual-polish"
+	if bm.Branch() != want {
+		t.Errorf("Branch() = %q, want %q", bm.Branch(), want)
+	}
+}
+
 // currentBranchHelper returns the current branch name in the given repo.
 func currentBranchHelper(ctx context.Context, t *testing.T, dir string) string {
 	t.Helper()
