@@ -290,8 +290,8 @@ func renderProgressBar(completed, total, width int) string {
 	empty := width - filled
 
 	barColor := progressColor(ratio)
-	style := lipgloss.NewStyle().Foreground(barColor)
-	emptyStyle := lipgloss.NewStyle().Foreground(colorMuted)
+	style := lipgloss.NewStyle().Background(colorSurface).Foreground(barColor)
+	emptyStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMuted)
 
 	return style.Render(strings.Repeat("━", filled)) +
 		emptyStyle.Render(strings.Repeat("░", empty))
@@ -311,8 +311,8 @@ func renderBudgetBar(spent, budget float64, width int) string {
 	empty := width - filled
 
 	barColor := budgetColor(ratio)
-	style := lipgloss.NewStyle().Foreground(barColor)
-	emptyStyle := lipgloss.NewStyle().Foreground(colorMuted)
+	style := lipgloss.NewStyle().Background(colorSurface).Foreground(barColor)
+	emptyStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMuted)
 
 	return style.Render(strings.Repeat("━", filled)) +
 		emptyStyle.Render(strings.Repeat("░", empty))
@@ -331,8 +331,8 @@ func renderCycleBar(cycle, maxCycles int) string {
 	empty := barWidth - filled
 
 	return "[" +
-		lipgloss.NewStyle().Foreground(colorPrimary).Render(strings.Repeat("█", filled)) +
-		lipgloss.NewStyle().Foreground(colorMuted).Render(strings.Repeat("░", empty)) +
+		lipgloss.NewStyle().Background(colorSurface).Foreground(colorPrimary).Render(strings.Repeat("█", filled)) +
+		lipgloss.NewStyle().Background(colorSurface).Foreground(colorMuted).Render(strings.Repeat("░", empty)) +
 		"]"
 }
 

@@ -4,8 +4,8 @@ import "github.com/charmbracelet/lipgloss"
 
 // Logo style definitions for the TUI status bar logo.
 var (
-	styleLogoJet  = lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
-	styleLogoCore = lipgloss.NewStyle().Foreground(colorPrimary).Bold(true)
+	styleLogoJet  = lipgloss.NewStyle().Background(colorSurface).Foreground(colorAccent).Bold(true)
+	styleLogoCore = lipgloss.NewStyle().Background(colorSurface).Foreground(colorPrimary).Bold(true)
 )
 
 // Logo returns a styled single-line quasar logo for the TUI status bar.

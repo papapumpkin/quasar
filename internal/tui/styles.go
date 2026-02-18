@@ -48,33 +48,41 @@ var (
 
 	// styleStatusMode renders mode labels ("nebula:", "task") in a dimmer secondary color.
 	styleStatusMode = lipgloss.NewStyle().
+			Background(colorSurface).
 			Foreground(colorMutedLight)
 
 	// styleStatusName renders the task/nebula name in bright white for maximum readability.
 	styleStatusName = lipgloss.NewStyle().
+			Background(colorSurface).
 			Foreground(colorBrightWhite).
 			Bold(true)
 
 	// styleStatusProgress renders progress text; switches to green when completed > 0.
 	styleStatusProgress = lipgloss.NewStyle().
+				Background(colorSurface).
 				Foreground(colorMuted)
 
 	// styleStatusProgressActive renders progress text when some items are completed.
 	styleStatusProgressActive = lipgloss.NewStyle().
+					Background(colorSurface).
 					Foreground(colorSuccess)
 
 	styleStatusCost = lipgloss.NewStyle().
+			Background(colorSurface).
 			Foreground(colorAccent)
 
 	// styleStatusElapsed renders the elapsed time in muted gray.
 	styleStatusElapsed = lipgloss.NewStyle().
+				Background(colorSurface).
 				Foreground(colorMuted)
 
 	styleStatusPaused = lipgloss.NewStyle().
+				Background(colorSurface).
 				Foreground(colorAccent).
 				Bold(true)
 
 	styleStatusStopping = lipgloss.NewStyle().
+				Background(colorSurface).
 				Foreground(colorDanger).
 				Bold(true)
 )
@@ -320,14 +328,17 @@ var (
 var (
 	// styleResourceNormal styles resource metrics when within safe bounds (green).
 	styleResourceNormal = lipgloss.NewStyle().
+				Background(colorSurface).
 				Foreground(colorSuccess)
 
 	// styleResourceWarning styles resource metrics at elevated levels (orange).
 	styleResourceWarning = lipgloss.NewStyle().
+				Background(colorSurface).
 				Foreground(colorAccent)
 
 	// styleResourceDanger styles resource metrics at dangerously high levels (red).
 	styleResourceDanger = lipgloss.NewStyle().
+				Background(colorSurface).
 				Foreground(colorDanger).
 				Bold(true)
 )

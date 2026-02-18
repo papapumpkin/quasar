@@ -1397,6 +1397,7 @@ func (m AppModel) View() string {
 	m.StatusBar.Paused = m.Paused
 	m.StatusBar.Stopping = m.Stopping
 	sections = append(sections, m.StatusBar.View())
+	sections = append(sections, "") // Spacing between header and content.
 
 	// Top banner (S-A or XS-A modes) — between status bar and content.
 	if bannerView := m.Banner.View(); bannerView != "" {
