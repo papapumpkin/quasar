@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 )
 
 // GateAction represents the human's decision at a phase boundary.
@@ -23,12 +24,195 @@ const (
 	GateActionSkip GateAction = "skip"
 )
 
-// Gater handles human interaction at phase boundaries.
+// Gater decides how to handle phase boundaries and plan approval.
+// Implementations encapsulate the gate mode strategy (trust, watch, review, approve).
 type Gater interface {
+	// PhaseGate is called after a phase completes successfully.
+	// Returns the action to take (accept, reject, retry, skip).
+	PhaseGate(ctx context.Context, phase *PhaseSpec, cp *Checkpoint) (GateAction, error)
+	// PlanGate is called before execution begins to optionally gate the plan.
+	// Returns nil to proceed, ErrPlanRejected to stop.
+	PlanGate(ctx context.Context, cp *Checkpoint) error
+}
+
+// GatePrompter handles human interaction at phase boundaries.
+// Implementations display information and collect decisions from the user.
+type GatePrompter interface {
 	// Prompt displays the checkpoint and waits for a human decision.
 	// Returns the chosen action.
 	Prompt(ctx context.Context, cp *Checkpoint) (GateAction, error)
 }
+
+// GaterDeps carries dependencies needed by gate strategies that interact
+// with the output system (e.g. watch mode checkpoint rendering).
+type GaterDeps struct {
+	Logger    io.Writer
+	OutputMu  *sync.Mutex // serializes checkpoint output in watch mode
+	Mu        *sync.Mutex // protects dashboard resume from concurrent state mutations
+	Dashboard *Dashboard
+}
+
+// trustGater always proceeds without any user interaction.
+type trustGater struct{}
+
+// PhaseGate always accepts.
+func (trustGater) PhaseGate(_ context.Context, _ *PhaseSpec, _ *Checkpoint) (GateAction, error) {
+	return GateActionAccept, nil
+}
+
+// PlanGate always proceeds.
+func (trustGater) PlanGate(_ context.Context, _ *Checkpoint) error {
+	return nil
+}
+
+// watchGater renders checkpoint output but never blocks execution.
+type watchGater struct {
+	deps GaterDeps
+}
+
+// PhaseGate renders the checkpoint (with output serialization) and accepts.
+func (g *watchGater) PhaseGate(_ context.Context, _ *PhaseSpec, cp *Checkpoint) (GateAction, error) {
+	if cp != nil {
+		g.deps.OutputMu.Lock()
+		if g.deps.Dashboard != nil {
+			g.deps.Dashboard.Pause()
+		}
+		RenderCheckpoint(g.deps.Logger, cp)
+		if g.deps.Dashboard != nil {
+			g.deps.Mu.Lock()
+			g.deps.Dashboard.Resume()
+			g.deps.Mu.Unlock()
+		}
+		g.deps.OutputMu.Unlock()
+	}
+	return GateActionAccept, nil
+}
+
+// PlanGate always proceeds (watch mode does not gate plans).
+func (g *watchGater) PlanGate(_ context.Context, _ *Checkpoint) error {
+	return nil
+}
+
+// reviewGater renders checkpoints and prompts the user for each phase,
+// but does not gate the execution plan.
+type reviewGater struct {
+	prompter GatePrompter
+	logger   io.Writer
+}
+
+// PhaseGate renders the checkpoint and prompts for a decision.
+func (g *reviewGater) PhaseGate(ctx context.Context, _ *PhaseSpec, cp *Checkpoint) (GateAction, error) {
+	if cp != nil {
+		RenderCheckpoint(g.logger, cp)
+	}
+	action, err := g.prompter.Prompt(ctx, cp)
+	if err != nil {
+		fmt.Fprintf(g.logger, "warning: gate prompt failed: %v (defaulting to accept)\n", err)
+		return GateActionAccept, nil
+	}
+	return action, nil
+}
+
+// PlanGate always proceeds (review mode does not gate plans).
+func (g *reviewGater) PlanGate(_ context.Context, _ *Checkpoint) error {
+	return nil
+}
+
+// approveGater renders checkpoints and prompts the user for each phase
+// and also gates the execution plan for approval.
+type approveGater struct {
+	prompter GatePrompter
+	logger   io.Writer
+}
+
+// PhaseGate renders the checkpoint and prompts for a decision.
+func (g *approveGater) PhaseGate(ctx context.Context, _ *PhaseSpec, cp *Checkpoint) (GateAction, error) {
+	if cp != nil {
+		RenderCheckpoint(g.logger, cp)
+	}
+	action, err := g.prompter.Prompt(ctx, cp)
+	if err != nil {
+		fmt.Fprintf(g.logger, "warning: gate prompt failed: %v (defaulting to accept)\n", err)
+		return GateActionAccept, nil
+	}
+	return action, nil
+}
+
+// PlanGate prompts for plan approval. Returns nil on accept, ErrPlanRejected otherwise.
+func (g *approveGater) PlanGate(ctx context.Context, cp *Checkpoint) error {
+	action, err := g.prompter.Prompt(ctx, cp)
+	if err != nil {
+		return fmt.Errorf("plan gate prompt failed: %w", err)
+	}
+	switch action {
+	case GateActionAccept:
+		return nil
+	default:
+		return ErrPlanRejected
+	}
+}
+
+// compositeGater resolves the effective gate mode per-phase using manifest and
+// phase-level overrides, then delegates to the appropriate strategy.
+type compositeGater struct {
+	execution  Execution          // manifest-level execution config
+	strategies map[GateMode]Gater // mode → strategy
+	fallback   Gater              // used when mode is unknown or empty
+}
+
+// PhaseGate resolves the per-phase gate mode and delegates to the corresponding strategy.
+func (c *compositeGater) PhaseGate(ctx context.Context, phase *PhaseSpec, cp *Checkpoint) (GateAction, error) {
+	mode := ResolveGate(c.execution, *phase)
+	if g, ok := c.strategies[mode]; ok {
+		return g.PhaseGate(ctx, phase, cp)
+	}
+	return c.fallback.PhaseGate(ctx, phase, cp)
+}
+
+// PlanGate delegates to the strategy for the manifest-level gate mode.
+func (c *compositeGater) PlanGate(ctx context.Context, cp *Checkpoint) error {
+	mode := c.execution.Gate
+	if mode == "" {
+		mode = GateModeTrust
+	}
+	if g, ok := c.strategies[mode]; ok {
+		return g.PlanGate(ctx, cp)
+	}
+	return c.fallback.PlanGate(ctx, cp)
+}
+
+// NewGater returns a Gater that handles all four gate modes, resolving per-phase
+// overrides via the manifest execution config. If prompter is nil, all modes that
+// require user interaction fall back to trust behavior.
+func NewGater(exec Execution, prompter GatePrompter, deps GaterDeps) Gater {
+	logger := deps.Logger
+	if logger == nil {
+		logger = os.Stderr
+	}
+
+	trust := trustGater{}
+	strategies := map[GateMode]Gater{
+		GateModeTrust: trust,
+		GateModeWatch: &watchGater{deps: deps},
+	}
+
+	if prompter != nil {
+		strategies[GateModeReview] = &reviewGater{prompter: prompter, logger: logger}
+		strategies[GateModeApprove] = &approveGater{prompter: prompter, logger: logger}
+	} else {
+		// No prompter: review/approve fall back to trust.
+		strategies[GateModeReview] = trust
+		strategies[GateModeApprove] = trust
+	}
+
+	return &compositeGater{
+		execution:  exec,
+		strategies: strategies,
+		fallback:   trust,
+	}
+}
+
+// --- Terminal GatePrompter implementation ---
 
 // terminalGater reads gate decisions from stdin and writes prompts to stderr.
 type terminalGater struct {
@@ -37,13 +221,13 @@ type terminalGater struct {
 	forceTTY *bool // override isTTY check for testing; nil = auto-detect
 }
 
-// NewTerminalGater creates a Gater that reads from stdin and writes to stderr.
-func NewTerminalGater() Gater {
+// NewTerminalGater creates a GatePrompter that reads from stdin and writes to stderr.
+func NewTerminalGater() GatePrompter {
 	return &terminalGater{in: os.Stdin, out: os.Stderr}
 }
 
-// newTerminalGaterWithIO creates a Gater with injectable I/O for testing.
-func newTerminalGaterWithIO(in io.Reader, out io.Writer) Gater {
+// newTerminalGaterWithIO creates a GatePrompter with injectable I/O for testing.
+func newTerminalGaterWithIO(in io.Reader, out io.Writer) GatePrompter {
 	return &terminalGater{in: in, out: out}
 }
 

@@ -70,9 +70,16 @@ func WithCommitter(c GitCommitter) Option {
 	return func(wg *WorkerGroup) { wg.Committer = c }
 }
 
-// WithGater sets the gate prompt handler. Nil means trust mode.
+// WithGater sets the gate strategy directly. Takes precedence over WithPrompter.
 func WithGater(g Gater) Option {
 	return func(wg *WorkerGroup) { wg.Gater = g }
+}
+
+// WithPrompter sets the gate prompter used for interactive modes (review, approve).
+// The WorkerGroup builds the appropriate Gater strategy from this prompter and
+// the manifest gate mode at run time.
+func WithPrompter(p GatePrompter) Option {
+	return func(wg *WorkerGroup) { wg.Prompter = p }
 }
 
 // WithDashboard enables dashboard output coordination in watch mode.
@@ -148,7 +155,8 @@ type WorkerGroup struct {
 	MaxWorkers   int
 	Watcher      *Watcher     // nil = no in-flight editing
 	Committer    GitCommitter // nil = no phase-boundary commits
-	Gater        Gater        // nil = trust mode (no prompts)
+	Gater        Gater        // nil = built from Prompter + manifest at Run time
+	Prompter     GatePrompter // used to build Gater if Gater is nil
 	Dashboard    *Dashboard   // nil = no dashboard; used to coordinate watch-mode output
 	BeadsClient  beads.Client // nil = hot-added phases cannot create beads
 	GlobalCycles int
@@ -302,65 +310,22 @@ func hasFailedDep(phaseID string, failed map[string]bool, graph *Graph) bool {
 	return false
 }
 
-// resolveGateMode determines the effective gate mode for a phase.
-// Returns GateModeTrust if no Gater is configured (nil-safe).
-func (wg *WorkerGroup) resolveGateMode(phase *PhaseSpec) GateMode {
-	if wg.Gater == nil {
-		return GateModeTrust
+// ensureGater builds the Gater from the Prompter and manifest if not already set.
+// Must be called before dispatch begins.
+func (wg *WorkerGroup) ensureGater() {
+	if wg.Gater != nil {
+		return
 	}
-	return ResolveGate(wg.Nebula.Manifest.Execution, *phase)
-}
-
-// applyGate handles the gate check after a phase completes successfully.
-// It resolves the gate mode, optionally renders the checkpoint, and prompts the
-// human if required. Returns the GateAction taken.
-//
-// In watch mode, the output mutex serializes checkpoint rendering across concurrent
-// goroutines so that checkpoint blocks from parallel phases never interleave.
-// The dashboard is paused during checkpoint rendering and resumed afterward.
-func (wg *WorkerGroup) applyGate(ctx context.Context, phase *PhaseSpec, cp *Checkpoint) GateAction {
-	mode := wg.resolveGateMode(phase)
-
-	switch mode {
-	case GateModeTrust:
-		return GateActionAccept
-
-	case GateModeWatch:
-		// Render checkpoint but don't block.
-		// Serialize output so concurrent phase completions don't interleave.
-		if cp != nil {
-			wg.outputMu.Lock()
-			if wg.Dashboard != nil {
-				wg.Dashboard.Pause()
-			}
-			RenderCheckpoint(wg.logger(), cp)
-			if wg.Dashboard != nil {
-				// Hold wg.mu so the Dashboard.Render triggered by Resume
-				// doesn't race with concurrent State mutations in recordResult.
-				wg.mu.Lock()
-				wg.Dashboard.Resume()
-				wg.mu.Unlock()
-			}
-			wg.outputMu.Unlock()
-		}
-		return GateActionAccept
-
-	case GateModeReview, GateModeApprove:
-		// Render checkpoint and prompt for decision.
-		if cp != nil {
-			RenderCheckpoint(wg.logger(), cp)
-		}
-		action, err := wg.Gater.Prompt(ctx, cp)
-		if err != nil {
-			fmt.Fprintf(wg.logger(), "warning: gate prompt failed: %v (defaulting to accept)\n", err)
-			return GateActionAccept
-		}
-		return action
-
-	default:
-		// Unknown gate mode — treat as trust.
-		return GateActionAccept
+	if wg.Prompter == nil {
+		wg.Gater = trustGater{}
+		return
 	}
+	wg.Gater = NewGater(wg.Nebula.Manifest.Execution, wg.Prompter, GaterDeps{
+		Logger:    wg.logger(),
+		OutputMu:  &wg.outputMu,
+		Mu:        &wg.mu,
+		Dashboard: wg.Dashboard,
+	})
 }
 
 // executePhase runs a single phase and records the result.
@@ -418,7 +383,10 @@ func (wg *WorkerGroup) executePhase(
 
 	// Apply gate logic after successful phase completion.
 	if err == nil {
-		action := wg.applyGate(ctx, phase, cp)
+		action, gateErr := wg.Gater.PhaseGate(ctx, phase, cp)
+		if gateErr != nil {
+			fmt.Fprintf(wg.logger(), "warning: gate failed for phase %q: %v\n", phaseID, gateErr)
+		}
 		switch action {
 		case GateActionAccept:
 			// Continue normally — fall through to recordResult.
@@ -674,32 +642,20 @@ func (wg *WorkerGroup) handleRetry(done, failed, inFlight map[string]bool) {
 	fmt.Fprintf(wg.logger(), "\n── Retrying phase %q ──────────────────────────────\n\n", phaseID)
 }
 
-// globalGateMode returns the effective gate mode from the manifest execution config.
-// If no Gater is configured, returns GateModeTrust.
-func (wg *WorkerGroup) globalGateMode() GateMode {
-	if wg.Gater == nil {
-		return GateModeTrust
-	}
-	if wg.Nebula.Manifest.Execution.Gate != "" {
-		return wg.Nebula.Manifest.Execution.Gate
-	}
-	return GateModeTrust
-}
-
-// gatePlan displays the execution plan and prompts for approval when in approve mode.
+// gatePlan displays the execution plan and gates it for approval via the Gater.
 // Returns nil if the plan is approved or the mode doesn't require plan gating.
 // Returns ErrPlanRejected if the user rejects the plan.
 func (wg *WorkerGroup) gatePlan(ctx context.Context, graph *Graph) error {
-	mode := wg.globalGateMode()
-	if mode != GateModeApprove {
-		return nil
-	}
-
+	// Compute waves and render the plan so the user sees what will execute.
 	waves, err := graph.ComputeWaves()
 	if err != nil {
 		return fmt.Errorf("failed to compute execution waves: %w", err)
 	}
 
+	mode := wg.Nebula.Manifest.Execution.Gate
+	if mode == "" {
+		mode = GateModeTrust
+	}
 	RenderPlan(wg.logger(), wg.Nebula.Manifest.Nebula.Name, waves, len(wg.Nebula.Phases), wg.GlobalBudget, mode)
 
 	// Build a plan-level checkpoint (no diff, just plan metadata).
@@ -709,17 +665,7 @@ func (wg *WorkerGroup) gatePlan(ctx context.Context, graph *Graph) error {
 		NebulaName: wg.Nebula.Manifest.Nebula.Name,
 	}
 
-	action, err := wg.Gater.Prompt(ctx, cp)
-	if err != nil {
-		return fmt.Errorf("plan gate prompt failed: %w", err)
-	}
-
-	switch action {
-	case GateActionAccept:
-		return nil
-	default:
-		return ErrPlanRejected
-	}
+	return wg.Gater.PlanGate(ctx, cp)
 }
 
 // Run dispatches phases respecting dependency order with per-wave semaphore sizing.
@@ -734,6 +680,9 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	if wg.MaxWorkers <= 0 {
 		wg.MaxWorkers = 1
 	}
+
+	// Build the gate strategy from prompter + manifest if not explicitly set.
+	wg.ensureGater()
 
 	// Initialize phase-loop tracking maps.
 	wg.mu.Lock()

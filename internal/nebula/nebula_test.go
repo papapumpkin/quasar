@@ -1302,13 +1302,14 @@ func TestRenderPlan_NoBudget(t *testing.T) {
 
 // --- Plan gate tests ---
 
-// mockGater is a Gater that returns a predetermined action.
+// mockGater is a GatePrompter that returns a predetermined action.
+// It counts how many times Prompt is called.
 type mockGater struct {
 	action GateAction
 	calls  int
 }
 
-func (g *mockGater) Prompt(ctx context.Context, cp *Checkpoint) (GateAction, error) {
+func (g *mockGater) Prompt(_ context.Context, _ *Checkpoint) (GateAction, error) {
 	g.calls++
 	return g.action, nil
 }
@@ -1338,7 +1339,7 @@ func TestWorkerGroup_ApproveMode_PlanAccepted(t *testing.T) {
 	wg := NewWorkerGroup(n, state,
 		WithRunner(runner),
 		WithMaxWorkers(1),
-		WithGater(gater),
+		WithPrompter(gater),
 	)
 
 	_, err := wg.Run(context.Background())
@@ -1382,7 +1383,7 @@ func TestWorkerGroup_ApproveMode_PlanRejected(t *testing.T) {
 	wg := NewWorkerGroup(n, state,
 		WithRunner(runner),
 		WithMaxWorkers(1),
-		WithGater(gater),
+		WithPrompter(gater),
 	)
 
 	_, err := wg.Run(context.Background())
@@ -1422,7 +1423,7 @@ func TestWorkerGroup_ReviewMode_NoPlanGate(t *testing.T) {
 	wg := NewWorkerGroup(n, state,
 		WithRunner(runner),
 		WithMaxWorkers(1),
-		WithGater(gater),
+		WithPrompter(gater),
 	)
 
 	_, err := wg.Run(context.Background())
@@ -1467,7 +1468,7 @@ func TestWorkerGroup_TrustMode_NoPlanGate(t *testing.T) {
 	wg := NewWorkerGroup(n, state,
 		WithRunner(runner),
 		WithMaxWorkers(1),
-		WithGater(gater),
+		WithPrompter(gater),
 	)
 
 	_, err := wg.Run(context.Background())
@@ -1506,7 +1507,7 @@ func TestWorkerGroup_WatchMode_NoPlanGate(t *testing.T) {
 	wg := NewWorkerGroup(n, state,
 		WithRunner(runner),
 		WithMaxWorkers(1),
-		WithGater(gater),
+		WithPrompter(gater),
 	)
 
 	_, err := wg.Run(context.Background())
@@ -1563,7 +1564,7 @@ func TestWorkerGroup_WatchMode_RendersCheckpointWithoutBlocking(t *testing.T) {
 	wg := NewWorkerGroup(n, state,
 		WithRunner(runner),
 		WithMaxWorkers(2),
-		WithGater(gater),
+		WithPrompter(gater),
 		WithDashboard(dashboard),
 		WithCommitter(committer),
 		WithOnProgress(dashboard.ProgressCallback()),
@@ -1630,7 +1631,7 @@ func TestWorkerGroup_WatchMode_DashboardPausedDuringCheckpoint(t *testing.T) {
 	wg := NewWorkerGroup(n, state,
 		WithRunner(runner),
 		WithMaxWorkers(1),
-		WithGater(&mockGater{action: GateActionAccept}),
+		WithPrompter(&mockGater{action: GateActionAccept}),
 		WithDashboard(dashboard),
 		WithCommitter(committer),
 		WithOnProgress(dashboard.ProgressCallback()),
@@ -1672,7 +1673,7 @@ func TestWorkerGroup_ApproveMode_PlanRejectedWithReject(t *testing.T) {
 	wg := NewWorkerGroup(n, state,
 		WithRunner(runner),
 		WithMaxWorkers(1),
-		WithGater(gater),
+		WithPrompter(gater),
 	)
 
 	_, err := wg.Run(context.Background())

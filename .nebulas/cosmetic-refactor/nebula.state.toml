@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'cosmetic-refactor'
-total_cost_usd = 19.26548975
+total_cost_usd = 22.11394525
 
 [phases]
 [phases.claude-eliminate-pkg-vars]
@@ -59,9 +59,15 @@ updated_at = 2026-02-17T19:25:28.509724-05:00
 
 [phases.loop-extract-bead-error-helper]
 bead_id = 'quasar-5fr'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-17T17:21:12.814596-05:00
-updated_at = 2026-02-17T19:25:28.820544-05:00
+updated_at = 2026-02-17T19:29:43.750868-05:00
+
+[phases.loop-extract-bead-error-helper.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Straightforward extraction of three bead helper methods replacing 10 inline error-check-and-log patterns in loop.go — clean, correct, and well-documented.'
 
 [phases.loop-extract-findings-parser]
 bead_id = 'quasar-6bf'
@@ -119,9 +125,15 @@ updated_at = 2026-02-17T19:25:28.127897-05:00
 
 [phases.ui-split-nebula-methods]
 bead_id = 'quasar-fn6'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-17T17:21:12.471366-05:00
-updated_at = 2026-02-17T19:25:28.819241-05:00
+updated_at = 2026-02-17T19:29:55.933778-05:00
+
+[phases.ui-split-nebula-methods.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Straightforward, well-executed file split of `internal/ui/ui.go` into `ui.go` (loop/general) and `nebula.go` (nebula-specific methods) with no behavior or API changes.'
 
 [phases.unify-review-report]
 bead_id = 'quasar-4er'

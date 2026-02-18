@@ -8,16 +8,16 @@ import (
 	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
-// Gater implements nebula.Gater by sending a gate prompt message
+// Gater implements nebula.GatePrompter by sending a gate prompt message
 // to the BubbleTea program and blocking until the user responds.
 type Gater struct {
 	program *tea.Program
 }
 
-// Verify Gater satisfies nebula.Gater at compile time.
-var _ nebula.Gater = (*Gater)(nil)
+// Verify Gater satisfies nebula.GatePrompter at compile time.
+var _ nebula.GatePrompter = (*Gater)(nil)
 
-// NewGater creates a Gater that routes gate decisions through the TUI.
+// NewGater creates a GatePrompter that routes gate decisions through the TUI.
 func NewGater(p *tea.Program) *Gater {
 	return &Gater{program: p}
 }
