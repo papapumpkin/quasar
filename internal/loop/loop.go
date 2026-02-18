@@ -118,15 +118,11 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 		state.AllFindings = append(state.AllFindings, state.Findings...)
 		l.emitBeadUpdate(state, "in_progress")
 
-		if err := l.Beads.Update(ctx, beadID, beads.UpdateOpts{Assignee: "quasar-coder"}); err != nil {
-			l.UI.Error(fmt.Sprintf("failed to update bead: %v", err))
-		}
+		l.beadUpdate(ctx, beadID, beads.UpdateOpts{Assignee: "quasar-coder"})
 	}
 
 	l.UI.MaxCyclesReached(l.MaxCycles)
-	if err := l.Beads.AddComment(ctx, beadID, fmt.Sprintf("Max cycles reached (%d). Manual review recommended.", l.MaxCycles)); err != nil {
-		l.UI.Error(fmt.Sprintf("failed to add bead comment: %v", err))
-	}
+	l.beadComment(ctx, beadID, fmt.Sprintf("Max cycles reached (%d). Manual review recommended.", l.MaxCycles))
 	return nil, ErrMaxCycles
 }
 
@@ -166,9 +162,7 @@ func (l *Loop) perAgentBudget() float64 {
 // initCycleState creates the initial cycle state and marks the bead as in-progress.
 func (l *Loop) initCycleState(ctx context.Context, beadID, taskDescription string) *CycleState {
 	l.UI.TaskStarted(beadID, taskDescription)
-	if err := l.Beads.Update(ctx, beadID, beads.UpdateOpts{Status: "in_progress", Assignee: "quasar-coder"}); err != nil {
-		l.UI.Error(fmt.Sprintf("failed to update bead: %v", err))
-	}
+	l.beadUpdate(ctx, beadID, beads.UpdateOpts{Status: "in_progress", Assignee: "quasar-coder"})
 
 	// Capture HEAD before the first cycle for later diffing.
 	var baseSHA string
@@ -259,15 +253,11 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	if wasRefactored {
 		comment := fmt.Sprintf("[refactor cycle %d] User updated task description mid-execution.\nOriginal: %s\nUpdated: %s",
 			state.Cycle, truncate(origDesc, 500), truncate(refactorDesc, 500))
-		if err := l.Beads.AddComment(ctx, state.TaskBeadID, comment); err != nil {
-			l.UI.Error(fmt.Sprintf("failed to add refactor bead comment: %v", err))
-		}
+		l.beadComment(ctx, state.TaskBeadID, comment)
 		l.UI.RefactorApplied(state.TaskBeadID)
 	}
-	if err := l.Beads.AddComment(ctx, state.TaskBeadID,
-		fmt.Sprintf("[coder cycle %d]\n%s", state.Cycle, truncate(result.ResultText, 2000))); err != nil {
-		l.UI.Error(fmt.Sprintf("failed to add bead comment: %v", err))
-	}
+	l.beadComment(ctx, state.TaskBeadID,
+		fmt.Sprintf("[coder cycle %d]\n%s", state.Cycle, truncate(result.ResultText, 2000)))
 	return nil
 }
 
@@ -277,9 +267,7 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	state.Phase = PhaseReviewing
 	l.UI.AgentStart("reviewer")
 
-	if err := l.Beads.Update(ctx, state.TaskBeadID, beads.UpdateOpts{Assignee: "quasar-reviewer"}); err != nil {
-		l.UI.Error(fmt.Sprintf("failed to update bead: %v", err))
-	}
+	l.beadUpdate(ctx, state.TaskBeadID, beads.UpdateOpts{Assignee: "quasar-reviewer"})
 
 	result, err := l.Invoker.Invoke(ctx, l.reviewerAgent(perAgentBudget), l.buildReviewerPrompt(state), l.WorkDir)
 	if err != nil {
@@ -292,10 +280,8 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	state.Phase = PhaseReviewComplete
 	l.UI.AgentOutput("reviewer", state.Cycle, result.ResultText)
 	l.UI.AgentDone("reviewer", result.CostUSD, result.DurationMs)
-	if err := l.Beads.AddComment(ctx, state.TaskBeadID,
-		fmt.Sprintf("[reviewer cycle %d]\n%s", state.Cycle, truncate(result.ResultText, 2000))); err != nil {
-		l.UI.Error(fmt.Sprintf("failed to add bead comment: %v", err))
-	}
+	l.beadComment(ctx, state.TaskBeadID,
+		fmt.Sprintf("[reviewer cycle %d]\n%s", state.Cycle, truncate(result.ResultText, 2000)))
 	state.Findings = ParseReviewFindings(result.ResultText)
 	l.emitCycleSummary(state, PhaseReviewComplete, result)
 	return nil
@@ -322,10 +308,8 @@ func (l *Loop) checkBudget(ctx context.Context, state *CycleState) error {
 		return nil
 	}
 	l.UI.BudgetExceeded(state.TotalCostUSD, l.MaxBudgetUSD)
-	if err := l.Beads.AddComment(ctx, state.TaskBeadID,
-		fmt.Sprintf("Budget exceeded: $%.4f / $%.2f", state.TotalCostUSD, l.MaxBudgetUSD)); err != nil {
-		l.UI.Error(fmt.Sprintf("failed to add bead comment: %v", err))
-	}
+	l.beadComment(ctx, state.TaskBeadID,
+		fmt.Sprintf("Budget exceeded: $%.4f / $%.2f", state.TotalCostUSD, l.MaxBudgetUSD))
 	return ErrBudgetExceeded
 }
 
@@ -335,14 +319,10 @@ func (l *Loop) handleApproval(ctx context.Context, state *CycleState) (*TaskResu
 	l.UI.Approved()
 
 	report := ParseReviewReport(state.ReviewOutput)
-	if err := l.Beads.Close(ctx, state.TaskBeadID, "Approved by reviewer"); err != nil {
-		l.UI.Error(fmt.Sprintf("failed to close bead: %v", err))
-	}
+	l.beadClose(ctx, state.TaskBeadID, "Approved by reviewer")
 	l.emitBeadUpdate(state, "closed")
 	if report != nil {
-		if err := l.Beads.AddComment(ctx, state.TaskBeadID, FormatReportComment(report)); err != nil {
-			l.UI.Error(fmt.Sprintf("failed to add bead comment: %v", err))
-		}
+		l.beadComment(ctx, state.TaskBeadID, FormatReportComment(report))
 	}
 
 	l.UI.TaskComplete(state.TaskBeadID, state.TotalCostUSD)
@@ -383,6 +363,27 @@ func (l *Loop) emitBeadUpdate(state *CycleState, status string) {
 		})
 	}
 	l.UI.BeadUpdate(state.TaskBeadID, state.TaskTitle, status, children)
+}
+
+// beadComment logs a comment on the task bead, logging any error.
+func (l *Loop) beadComment(ctx context.Context, beadID, body string) {
+	if err := l.Beads.AddComment(ctx, beadID, body); err != nil {
+		l.UI.Error(fmt.Sprintf("failed to add bead comment: %v", err))
+	}
+}
+
+// beadUpdate updates the task bead, logging any error.
+func (l *Loop) beadUpdate(ctx context.Context, beadID string, opts beads.UpdateOpts) {
+	if err := l.Beads.Update(ctx, beadID, opts); err != nil {
+		l.UI.Error(fmt.Sprintf("failed to update bead: %v", err))
+	}
+}
+
+// beadClose closes the task bead with a reason, logging any error.
+func (l *Loop) beadClose(ctx context.Context, beadID, reason string) {
+	if err := l.Beads.Close(ctx, beadID, reason); err != nil {
+		l.UI.Error(fmt.Sprintf("failed to close bead: %v", err))
+	}
 }
 
 // createFindingBeads creates a child bead for each review finding and returns
