@@ -42,6 +42,10 @@ func (v *BeadView) SetRoot(root BeadInfo) {
 // treePrefixLen is the visual width of "  ├─ ✓ " (2 indent + 2 connector + 1 space + 1 icon + 1 space = 7).
 const treePrefixLen = 7
 
+// maxBeadChildren is the maximum number of children rendered in the tree.
+// Larger sets are truncated with an overflow indicator.
+const maxBeadChildren = 30
+
 // View renders the bead hierarchy as a tree with progress bar and inline titles.
 func (v BeadView) View() string {
 	if !v.HasData {
@@ -89,10 +93,18 @@ func (v BeadView) View() string {
 	// Sort children by (Cycle, original index) for topological ordering.
 	sorted := sortChildrenByCycle(v.Root.Children)
 
+	// Truncate large child lists to keep the tree readable.
+	overflow := 0
+	if len(sorted) > maxBeadChildren {
+		overflow = len(sorted) - maxBeadChildren
+		sorted = sorted[:maxBeadChildren]
+	}
+
 	// Render tree lines.
 	for i, c := range sorted {
+		isLast := i == len(sorted)-1 && overflow == 0
 		connector := treeConnectorMid
-		if i == len(sorted)-1 {
+		if isLast {
 			connector = treeConnectorLast
 		}
 		icon, iconStyle := beadStatusIcon(c.Status)
@@ -110,6 +122,16 @@ func (v BeadView) View() string {
 		b.WriteString(iconStyle.Render(icon))
 		b.WriteString(" ")
 		b.WriteString(title)
+		b.WriteString("\n")
+	}
+
+	// Overflow indicator for truncated child lists.
+	if overflow > 0 {
+		indicator := fmt.Sprintf("(and %d more...)", overflow)
+		b.WriteString("  ")
+		b.WriteString(treeConnectorLast)
+		b.WriteString(" ")
+		b.WriteString(styleDetailDim.Render(indicator))
 		b.WriteString("\n")
 	}
 

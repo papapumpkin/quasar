@@ -7,68 +7,41 @@ priority = 1
 
 ## Problem
 
-When pressing 'b' to open the beads view, the user sees a **wall of text** — some blue, some white — instead of the structured DAG tree with progress bar that the code is designed to render. The code in `beadview.go` creates a proper tree structure with `├─` / `└─` connectors, status icons (`●` open, `◎` in-progress, `✓` closed), and a progress bar, but this is not what actually displays.
+When pressing 'b' to open the beads view, the user sees a **wall of text filling the entire screen** instead of the structured DAG tree with progress bar that the code is designed to render.
 
-## Current State
+## Investigation Findings
 
-`internal/tui/beadview.go`:
-- `BeadView` struct with `View()` method that renders a tree
-- Parent task title at top with progress bar (`█` filled, `░` empty, `[N/M resolved]`)
-- Tree connectors: `├─` and `└─` for child beads
-- Status icons: `●` (white, open), `◎` (blue, in-progress), `✓` (green, closed)
-- Styles: `styleBeadOpen`, `styleBeadInProgress`, `styleBeadClosed`, `styleBeadTitle`
+Thorough code tracing of the full pipeline (`handleBeadsKey` → `updateBeadDetail` → `BeadView.View()` → `DetailPanel.SetContent` → viewport) shows the rendering logic is correct in isolation — all unit tests pass with proper tree output at every depth level (DepthPhases, DepthPhaseLoop, DepthAgentOutput).
 
-`internal/tui/model.go`:
-- 'b' key toggles bead view in the detail panel
-- Bead data comes from `beads.Client` interface
+Two defensive fixes were already applied:
+1. **`internal/loop/loop.go`**: Changed `truncate()` to `firstLine()` for bead child titles — `truncate()` didn't strip newlines, so multi-line finding descriptions could break the tree layout
+2. **`internal/tui/beadview.go`**: Added `strings.ReplaceAll(c.Title, "\n", " ")` before truncation as a belt-and-suspenders defense
 
-Possible causes of the wall-of-text bug:
-1. The bead data being passed to `BeadView` may be raw/unstructured instead of the expected tree format
-2. The `View()` method may be receiving a flat list and rendering each item as a full line without tree structure
-3. The bead data may include full descriptions/comments rather than just titles, causing verbose output
-4. There may be an error in how the model populates the `BeadView` — it might be showing raw CLI output instead of parsed beads
+The root cause is likely a race condition or timing issue in the live TUI where:
+- Agent output messages (`MsgPhaseAgentOutput`) arrive and call `updateDetailFromSelection()` concurrently with the 'b' key press
+- Or bead data hasn't been populated yet when 'b' is pressed, so the detail panel shows stale content from the previous view
 
-## Solution
+## Remaining Work
 
-### 1. Investigate the Data Pipeline
+If the issue persists after the defensive fixes above, investigate:
 
-Trace the flow from the 'b' key press through to rendering:
-- How does `model.go` populate `BeadView` with bead data?
-- What does `beads.Client` return — structured data or raw text?
-- Is the `BeadView.View()` method actually being called, or is some fallback raw-text rendering happening instead?
+1. **Bubbletea message ordering** — verify that `handleBeadsKey` mutations are not being overwritten by concurrent `MsgPhaseAgentOutput` processing
+2. **Viewport initialization** — the detail panel viewport might have zero dimensions if `WindowSizeMsg` hasn't fired yet
+3. **Content overflow** — if there are many findings (50+ children), the tree could visually overwhelm the viewport; consider adding a max-children limit with a "(and N more...)" indicator
 
-### 2. Fix the Rendering
+## Files Modified
 
-Depending on root cause:
-- If raw CLI output is shown instead of parsed data: fix the parser to extract structured bead info
-- If flat list is rendered without tree structure: fix the tree-building logic
-- If descriptions/comments are included: filter to show only title, status, and ID per bead
-- If `View()` is not being called: fix the model routing to use `BeadView.View()` for the 'b' key
+- `internal/loop/loop.go` — Changed `truncate()` to `firstLine()` for bead child titles
+- `internal/tui/beadview.go` — Strip newlines from child titles before truncation
 
-### 3. Verify Tree Output
+## Files to Investigate if Issue Persists
 
-The expected output should look like:
-```
-  Fix authentication bug  [2/5 resolved]
-  ████░░░░░░░
-
-  ├─ ✓ Missing session validation
-  ├─ ✓ Token expiry edge case
-  ├─ ● Race condition in refresh flow
-  ├─ ● Login redirect breaks on subdomain
-  └─ ● Session cleanup doesn't fire
-```
-
-## Files to Modify
-
-- `internal/tui/beadview.go` — Fix rendering to produce structured DAG tree output
-- `internal/tui/model.go` — Fix the data pipeline that feeds bead data to `BeadView`
-- Possibly `internal/beads/` — If the bead client returns unstructured data that needs parsing
+- `internal/tui/model.go` — Message ordering around `MsgPhaseAgentOutput` + `handleBeadsKey`
+- `internal/tui/detailpanel.go` — Viewport initialization when transitioning from hidden to visible
 
 ## Acceptance Criteria
 
-- [ ] Pressing 'b' shows a structured tree with connectors (`├─` / `└─`), not a wall of text
-- [ ] Each bead shows: status icon + title (not full description or raw output)
-- [ ] Progress bar at the top shows `[N/M resolved]` count
+- [ ] Pressing 'b' shows a structured tree with connectors, not a wall of text
+- [ ] Finding descriptions with newlines don't break the tree layout
 - [ ] Status icons are color-coded: green for closed, blue for in-progress, white for open
-- [ ] `go build` and `go test ./internal/tui/...` pass
+- [ ] `go build` and `go test ./internal/tui/... ./internal/loop/...` pass

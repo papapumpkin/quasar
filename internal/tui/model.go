@@ -877,6 +877,10 @@ func (m *AppModel) handleBeadsKey() {
 		m.ShowDiff = false
 		m.DiffFileList = nil
 		m.DiffFileOpen = false
+		// Force-clear any stale content before populating with bead data.
+		// This prevents residual viewport buffer from showing through when
+		// bead data hasn't arrived yet or during the toggle transition.
+		m.Detail.SetEmpty("Loading beads...")
 		m.updateBeadDetail()
 	}
 }

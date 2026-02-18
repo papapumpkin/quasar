@@ -1,0 +1,29 @@
+[nebula]
+name = "beads-dag-fix"
+description = "Fix the beads view ('b' key) to render a structured DAG tree instead of a wall of text filling the entire screen."
+
+[defaults]
+type = "bug"
+priority = 1
+labels = ["quasar", "tui", "beads"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 20.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Pressing 'b' in the TUI must show a structured bead DAG tree, not a wall of text",
+    "The bead view must work at all depths: DepthPhases, DepthPhaseLoop, DepthAgentOutput",
+    "The bead view must work in both loop mode and nebula mode",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "All TUI code lives in internal/tui/",
+    "Use only charmbracelet ecosystem (bubbletea, lipgloss, bubbles) — no other TUI deps",
+    "All new code must have tests",
+    "Do not break the stderr Printer fallback path",
+]
