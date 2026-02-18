@@ -1,9 +1,16 @@
 version = 1
 nebula_name = 'beads-dag-fix'
+total_cost_usd = 2.15356975
 
 [phases]
 [phases.fix-bead-wall-of-text]
 bead_id = 'quasar-ijp'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T14:40:51.667428-05:00
-updated_at = 2026-02-18T14:40:52.032173-05:00
+updated_at = 2026-02-18T14:47:05.77079-05:00
+
+[phases.fix-bead-wall-of-text.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, well-targeted fix for stale viewport content bleeding through on bead toggle, plus overflow truncation for large child lists, backed by thorough integration tests.'
