@@ -1,0 +1,15 @@
+version = 1
+nebula_name = 'Quasar Splash Animation'
+
+[phases]
+[phases.import-splash]
+bead_id = 'quasar-rti'
+status = 'in_progress'
+created_at = 2026-02-18T09:05:31.457948-05:00
+updated_at = 2026-02-18T09:08:21.542152-05:00
+
+[phases.wire-startup]
+bead_id = 'quasar-699'
+status = 'created'
+created_at = 2026-02-18T09:05:31.848405-05:00
+updated_at = 2026-02-18T09:08:21.472706-05:00
