@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'statusbar-regression'
-total_cost_usd = 4.3708775
+total_cost_usd = 5.579919499999999
 
 [phases]
 [phases.diff-jk-scroll]
@@ -17,9 +17,15 @@ summary = 'Added DiffFileOpen state tracking to fix j/k scrolling within single-
 
 [phases.fix-wrapping]
 bead_id = 'quasar-pwo'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T10:23:41.922551-05:00
-updated_at = 2026-02-18T10:48:04.437671-05:00
+updated_at = 2026-02-18T10:52:06.58464-05:00
+
+[phases.fix-wrapping.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Fixed status bar line-wrapping by consistently accounting for 2-char padding in all width calculations, with safety truncation fallback and thorough tests across multiple configurations and widths.'
 
 [phases.selected-row-highlight]
 bead_id = 'quasar-23g'
