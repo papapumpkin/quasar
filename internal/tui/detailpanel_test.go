@@ -462,7 +462,7 @@ func TestUpdateDetailFromSelectionNebulaAgentOutput(t *testing.T) {
 func TestDetailPanelScrollsAtDepthAgentOutput(t *testing.T) {
 	t.Parallel()
 	m := NewAppModel(ModeLoop)
-	m.Splash = false
+	m.Splash = nil
 	m.Detail = NewDetailPanel(80, 5) // small viewport
 	m.Width = 80
 	m.Height = 40
@@ -520,7 +520,7 @@ func TestDetailPanelUpDownDoNotMoveCursorAtDepthAgentOutput(t *testing.T) {
 func TestDetailPanelScrollPreservesNavigationAtOtherDepths(t *testing.T) {
 	t.Parallel()
 	m := NewAppModel(ModeLoop)
-	m.Splash = false
+	m.Splash = nil
 	m.Detail = NewDetailPanel(80, 5)
 	m.Width = 80
 	m.Height = 40

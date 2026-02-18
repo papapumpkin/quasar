@@ -215,7 +215,7 @@ func TestDetailAutoCollapseOnShortTerminal(t *testing.T) {
 func TestDetailShownOnTallTerminal(t *testing.T) {
 	t.Parallel()
 	m := NewAppModel(ModeNebula)
-	m.Splash = false
+	m.Splash = nil
 	m.Width = 80
 	m.Height = DetailCollapseHeight + 5 // above threshold
 	m.Depth = DepthPhaseLoop
@@ -371,7 +371,7 @@ func TestBreadcrumbHiddenOnNarrowTerminal(t *testing.T) {
 func TestBreadcrumbShownOnWideTerminal(t *testing.T) {
 	t.Parallel()
 	m := NewAppModel(ModeNebula)
-	m.Splash = false
+	m.Splash = nil
 	m.Width = CompactWidth + 20
 	m.Height = 30
 	m.Depth = DepthPhaseLoop

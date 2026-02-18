@@ -374,7 +374,7 @@ func TestOverlayPickerKeyHandling(t *testing.T) {
 	t.Run("down key moves cursor in picker", func(t *testing.T) {
 		t.Parallel()
 		m := NewAppModel(ModeNebula)
-		m.Splash = false
+		m.Splash = nil
 		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, NebulaChoices: choices}
 		m.AvailableNebulae = choices
 		m.PickerCursor = 0
@@ -392,7 +392,7 @@ func TestOverlayPickerKeyHandling(t *testing.T) {
 	t.Run("up key moves cursor up in picker", func(t *testing.T) {
 		t.Parallel()
 		m := NewAppModel(ModeNebula)
-		m.Splash = false
+		m.Splash = nil
 		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, NebulaChoices: choices}
 		m.AvailableNebulae = choices
 		m.PickerCursor = 1
@@ -410,7 +410,7 @@ func TestOverlayPickerKeyHandling(t *testing.T) {
 	t.Run("cursor does not go below list", func(t *testing.T) {
 		t.Parallel()
 		m := NewAppModel(ModeNebula)
-		m.Splash = false
+		m.Splash = nil
 		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, NebulaChoices: choices}
 		m.AvailableNebulae = choices
 		m.PickerCursor = 1
@@ -428,7 +428,7 @@ func TestOverlayPickerKeyHandling(t *testing.T) {
 	t.Run("cursor does not go above 0", func(t *testing.T) {
 		t.Parallel()
 		m := NewAppModel(ModeNebula)
-		m.Splash = false
+		m.Splash = nil
 		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, NebulaChoices: choices}
 		m.AvailableNebulae = choices
 		m.PickerCursor = 0
@@ -446,7 +446,7 @@ func TestOverlayPickerKeyHandling(t *testing.T) {
 	t.Run("enter selects nebula and quits", func(t *testing.T) {
 		t.Parallel()
 		m := NewAppModel(ModeNebula)
-		m.Splash = false
+		m.Splash = nil
 		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, NebulaChoices: choices}
 		m.AvailableNebulae = choices
 		m.PickerCursor = 1
@@ -654,7 +654,7 @@ func TestOverlayRendersInView(t *testing.T) {
 	t.Parallel()
 
 	m := NewAppModel(ModeLoop)
-	m.Splash = false
+	m.Splash = nil
 	m.Width = 80
 	m.Height = 24
 	m.Overlay = &CompletionOverlay{Kind: CompletionSuccess}
@@ -675,7 +675,7 @@ func TestOverlayBlocksKeys(t *testing.T) {
 	t.Run("only q exits when overlay is active", func(t *testing.T) {
 		t.Parallel()
 		m := NewAppModel(ModeLoop)
-		m.Splash = false
+		m.Splash = nil
 		m.Width = 80
 		m.Height = 24
 		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess}
@@ -779,7 +779,7 @@ func TestToastsRenderedInView(t *testing.T) {
 	t.Parallel()
 
 	m := NewAppModel(ModeLoop)
-	m.Splash = false
+	m.Splash = nil
 	m.Width = 80
 	m.Height = 24
 	m.Toasts = []Toast{{ID: 1, Message: "watch out!", IsError: true}}
@@ -797,7 +797,7 @@ func TestOverlayTakesPrecedenceOverGate(t *testing.T) {
 	m := NewAppModel(ModeNebula)
 	m.Width = 80
 	m.Height = 24
-	m.Splash = false
+	m.Splash = nil
 	m.Overlay = &CompletionOverlay{Kind: CompletionSuccess}
 
 	// With overlay active, pressing 'a' (accept gate key) should do nothing.

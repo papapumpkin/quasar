@@ -313,7 +313,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					nebula.WithLogger(io.Discard),
 				)
 				nextArchitectFunc := buildArchitectFunc(claudeInv, wg.SnapshotNebula)
-				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, nextArchitectFunc)
+				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, noSplash, nextArchitectFunc)
 				wg.Runner = &tuiLoopAdapter{
 					program:      tuiProgram,
 					invoker:      claudeInv,

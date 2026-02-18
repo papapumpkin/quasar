@@ -862,7 +862,7 @@ func TestArchitectOverlayTakesPriorityOverCompletion(t *testing.T) {
 	m := newNebulaModelWithPhases("", []PhaseEntry{
 		{ID: "setup", Status: PhaseDone},
 	})
-	m.Splash = false
+	m.Splash = nil
 	m.Architect = NewArchitectOverlay("create", "", m.NebulaView.Phases)
 	m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, Message: "done"}
 
