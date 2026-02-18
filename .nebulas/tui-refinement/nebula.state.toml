@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'tui-refinement-visual-polish'
-total_cost_usd = 28.7653955
+total_cost_usd = 31.10003025
 
 [phases]
 [phases.beads-dag-fix]
@@ -101,6 +101,12 @@ summary = 'Clean fix-up commit removing architect-related test references and up
 
 [phases.status-bar-colors]
 bead_id = 'quasar-dui'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T11:27:29.741936-05:00
-updated_at = 2026-02-18T13:39:21.10184-05:00
+updated_at = 2026-02-18T13:44:55.271096-05:00
+
+[phases.status-bar-colors.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean restoration of per-segment status bar coloring with dynamic budget and resource color-coding, comprehensive tests, all acceptance criteria met.'
