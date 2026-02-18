@@ -89,6 +89,9 @@ type AppModel struct {
 	Architect     *ArchitectOverlay
 	ArchitectFunc func(ctx context.Context, msg MsgArchitectStart) (*nebula.ArchitectResult, error) // injected by caller
 
+	// Quit confirmation state.
+	ShowQuitConfirm bool // whether the quit confirmation overlay is visible
+
 	// Splash screen state — nil means splash is disabled (e.g. --no-splash).
 	Splash *SplashModel
 }
@@ -403,6 +406,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 		}
 
+	case MsgGitPostCompletion:
+		if m.Overlay != nil {
+			m.Overlay.GitResult = msg.Result
+		}
+
 	case MsgNebulaChoicesLoaded:
 		m.AvailableNebulae = msg.Choices
 		if m.Overlay != nil {
@@ -561,6 +569,20 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Quit confirmation overlay — y confirms, n/Esc dismisses.
+	if m.ShowQuitConfirm {
+		switch msg.String() {
+		case "y", "Y":
+			return m, tea.Quit
+		case "n", "N", "esc":
+			m.ShowQuitConfirm = false
+			return m, nil
+		case "ctrl+c":
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	// Architect overlay takes priority — it intercepts all keys when active.
 	if m.Architect != nil {
 		return m.handleArchitectKey(msg)
@@ -691,6 +713,15 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, m.Keys.Quit):
+		// Ctrl+C always force-quits.
+		if msg.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
+		// Show confirmation if there are in-progress phases.
+		if m.hasInProgressPhases() {
+			m.ShowQuitConfirm = true
+			return m, nil
+		}
 		return m, tea.Quit
 
 	case key.Matches(msg, m.Keys.Pause):
@@ -1516,6 +1547,13 @@ func (m AppModel) View() string {
 
 	base := lipgloss.JoinVertical(lipgloss.Left, sections...)
 
+	// Quit confirmation overlay — rendered over a dimmed background.
+	if m.ShowQuitConfirm {
+		dimmed := styleOverlayDimmed.Width(m.Width).Height(m.Height).Render(base)
+		overlayBox := RenderQuitConfirm(m.Width, m.Height)
+		return compositeOverlay(dimmed, overlayBox, m.Width, m.Height)
+	}
+
 	// Architect overlay — rendered over a dimmed background.
 	if m.Architect != nil {
 		dimmed := styleOverlayDimmed.Width(m.Width).Height(m.Height).Render(base)
@@ -1656,6 +1694,19 @@ func (m AppModel) buildFooter() Footer {
 		}
 	}
 	return f
+}
+
+// hasInProgressPhases reports whether any nebula phase is currently working.
+func (m AppModel) hasInProgressPhases() bool {
+	if m.Mode != ModeNebula {
+		return false
+	}
+	for i := range m.NebulaView.Phases {
+		if m.NebulaView.Phases[i].Status == PhaseWorking {
+			return true
+		}
+	}
+	return false
 }
 
 // selectedPhaseFailed reports whether the currently selected/focused phase is in PhaseFailed state.

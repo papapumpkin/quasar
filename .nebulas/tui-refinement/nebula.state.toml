@@ -1,13 +1,19 @@
 version = 1
 nebula_name = 'tui-refinement-visual-polish'
-total_cost_usd = 2.1678187500000003
+total_cost_usd = 6.386719250000001
 
 [phases]
 [phases.beads-dag-fix]
 bead_id = 'quasar-tl2'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T11:27:26.317157-05:00
-updated_at = 2026-02-18T11:35:14.371221-05:00
+updated_at = 2026-02-18T11:44:35.33172-05:00
+
+[phases.beads-dag-fix.report]
+satisfaction = 'medium'
+risk = 'low'
+needs_human_review = true
+summary = 'No bug fix was made — coder added pipeline tests confirming the existing bead view rendering code is correct, meaning the wall-of-text issue (if real) must originate from the data layer rather than the TUI rendering code, which warrants human review to verify the root cause assessment.'
 
 [phases.coder-lint-pass]
 bead_id = 'quasar-avf'
@@ -47,9 +53,9 @@ updated_at = 2026-02-18T11:35:14.008849-05:00
 
 [phases.quit-confirmation]
 bead_id = 'quasar-aec'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-18T11:27:28.564916-05:00
-updated_at = 2026-02-18T11:35:14.009049-05:00
+updated_at = 2026-02-18T11:44:35.332186-05:00
 
 [phases.remove-architect-overlay]
 bead_id = 'quasar-2ka'

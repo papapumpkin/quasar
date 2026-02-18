@@ -172,3 +172,86 @@ func GitExcludePatterns() []string {
 	copy(patterns, names)
 	return patterns
 }
+
+// PostCompletionResult holds the outcomes of the post-completion git workflow
+// (commit remaining changes, push to origin, checkout main).
+type PostCompletionResult struct {
+	// PushBranch is the branch that was pushed (e.g., "nebula/my-nebula").
+	PushBranch string
+	// PushErr is non-nil if the push failed.
+	PushErr error
+	// CheckoutErr is non-nil if the checkout to main failed.
+	CheckoutErr error
+}
+
+// Summary returns a human-readable summary of the git workflow results.
+func (r *PostCompletionResult) Summary() string {
+	var b strings.Builder
+	if r.PushErr != nil {
+		b.WriteString(fmt.Sprintf("Push failed: %v", r.PushErr))
+	} else {
+		b.WriteString(fmt.Sprintf("Pushed to origin/%s", r.PushBranch))
+	}
+	b.WriteString("\n")
+	if r.CheckoutErr != nil {
+		b.WriteString(fmt.Sprintf("Checkout main failed: %v", r.CheckoutErr))
+	} else {
+		b.WriteString("Checked out main")
+	}
+	return b.String()
+}
+
+// PostCompletion runs the post-nebula git workflow: commit any remaining
+// changes, push the branch to origin with --set-upstream, and checkout main.
+// Errors are captured in the result, not returned, so the caller can display
+// them without aborting.
+func PostCompletion(ctx context.Context, dir, branch string) *PostCompletionResult {
+	result := &PostCompletionResult{PushBranch: branch}
+
+	// Stage and commit any remaining uncommitted changes.
+	// Non-fatal: we still try to push whatever commits exist.
+	_ = commitRemaining(ctx, dir, branch)
+
+	// Push with --set-upstream to handle branches with no upstream.
+	pushCmd := exec.CommandContext(ctx, "git", "-C", dir, "push", "--set-upstream", "origin", branch)
+	var pushStderr bytes.Buffer
+	pushCmd.Stderr = &pushStderr
+	if err := pushCmd.Run(); err != nil {
+		result.PushErr = fmt.Errorf("%w: %s", err, strings.TrimSpace(pushStderr.String()))
+	}
+
+	// Checkout main.
+	checkoutCmd := exec.CommandContext(ctx, "git", "-C", dir, "checkout", "main")
+	var checkoutStderr bytes.Buffer
+	checkoutCmd.Stderr = &checkoutStderr
+	if err := checkoutCmd.Run(); err != nil {
+		result.CheckoutErr = fmt.Errorf("%w: %s", err, strings.TrimSpace(checkoutStderr.String()))
+	}
+
+	return result
+}
+
+// commitRemaining stages and commits any uncommitted changes. If the working
+// tree is clean, this is a no-op. Returns nil on success or clean tree.
+func commitRemaining(ctx context.Context, dir, branch string) error {
+	statusCmd := exec.CommandContext(ctx, "git", "-C", dir, "status", "--porcelain")
+	out, err := statusCmd.Output()
+	if err != nil {
+		return fmt.Errorf("git status: %w", err)
+	}
+	if len(bytes.TrimSpace(out)) == 0 {
+		return nil // clean working tree
+	}
+
+	addCmd := exec.CommandContext(ctx, "git", "-C", dir, "add", "-A")
+	if err := addCmd.Run(); err != nil {
+		return fmt.Errorf("git add: %w", err)
+	}
+
+	msg := fmt.Sprintf("nebula: final changes on %s", branch)
+	commitCmd := exec.CommandContext(ctx, "git", "-C", dir, "commit", "-m", msg)
+	if err := commitCmd.Run(); err != nil {
+		return fmt.Errorf("git commit: %w", err)
+	}
+	return nil
+}

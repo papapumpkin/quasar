@@ -1239,3 +1239,205 @@ func TestSafeArchitectCallNormalOperation(t *testing.T) {
 		t.Errorf("Result = %v, want %v", archResult.Result, expected)
 	}
 }
+
+// --- Quit confirmation tests ---
+
+func TestQuitShowsConfirmWhenPhasesInProgress(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "phase-1", Title: "Phase 1", Status: PhaseWorking},
+		{ID: "phase-2", Title: "Phase 2", Status: PhaseWaiting},
+	})
+	m.DisableSplash()
+
+	qMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
+	result, cmd := m.handleKey(qMsg)
+	updated := result.(AppModel)
+
+	if !updated.ShowQuitConfirm {
+		t.Error("expected ShowQuitConfirm to be true when phases are in-progress")
+	}
+	if cmd != nil {
+		t.Error("expected no command (should not quit yet)")
+	}
+}
+
+func TestQuitExitsImmediatelyWhenNoPhasesInProgress(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "phase-1", Title: "Phase 1", Status: PhaseDone},
+		{ID: "phase-2", Title: "Phase 2", Status: PhaseWaiting},
+	})
+	m.DisableSplash()
+
+	qMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
+	_, cmd := m.handleKey(qMsg)
+
+	if cmd == nil {
+		t.Fatal("expected a quit command when no phases are in-progress")
+	}
+}
+
+func TestQuitConfirmYesExits(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "phase-1", Title: "Phase 1", Status: PhaseWorking},
+	})
+	m.DisableSplash()
+	m.ShowQuitConfirm = true
+
+	yMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}}
+	_, cmd := m.handleKey(yMsg)
+
+	if cmd == nil {
+		t.Fatal("expected a quit command on 'y' in confirmation overlay")
+	}
+}
+
+func TestQuitConfirmNDismisses(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "phase-1", Title: "Phase 1", Status: PhaseWorking},
+	})
+	m.DisableSplash()
+	m.ShowQuitConfirm = true
+
+	nMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}
+	result, cmd := m.handleKey(nMsg)
+	updated := result.(AppModel)
+
+	if updated.ShowQuitConfirm {
+		t.Error("expected ShowQuitConfirm to be false after pressing 'n'")
+	}
+	if cmd != nil {
+		t.Error("expected no command (should continue running)")
+	}
+}
+
+func TestQuitConfirmEscDismisses(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "phase-1", Title: "Phase 1", Status: PhaseWorking},
+	})
+	m.DisableSplash()
+	m.ShowQuitConfirm = true
+
+	escMsg := tea.KeyMsg{Type: tea.KeyEscape}
+	result, cmd := m.handleKey(escMsg)
+	updated := result.(AppModel)
+
+	if updated.ShowQuitConfirm {
+		t.Error("expected ShowQuitConfirm to be false after pressing Esc")
+	}
+	if cmd != nil {
+		t.Error("expected no command (should continue running)")
+	}
+}
+
+func TestCtrlCAlwaysQuits(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "phase-1", Title: "Phase 1", Status: PhaseWorking},
+	})
+	m.DisableSplash()
+
+	// Ctrl+C should force-quit even with in-progress phases.
+	ctrlCMsg := tea.KeyMsg{Type: tea.KeyCtrlC}
+	_, cmd := m.handleKey(ctrlCMsg)
+
+	if cmd == nil {
+		t.Fatal("expected Ctrl+C to always produce a quit command")
+	}
+}
+
+func TestCtrlCQuitsFromConfirmOverlay(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "phase-1", Title: "Phase 1", Status: PhaseWorking},
+	})
+	m.DisableSplash()
+	m.ShowQuitConfirm = true
+
+	ctrlCMsg := tea.KeyMsg{Type: tea.KeyCtrlC}
+	_, cmd := m.handleKey(ctrlCMsg)
+
+	if cmd == nil {
+		t.Fatal("expected Ctrl+C to quit from confirmation overlay")
+	}
+}
+
+func TestQuitExitsImmediatelyInLoopMode(t *testing.T) {
+	t.Parallel()
+
+	m := NewAppModel(ModeLoop)
+	qMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
+	_, cmd := m.handleKey(qMsg)
+
+	if cmd == nil {
+		t.Fatal("expected quit command in loop mode (no confirmation needed)")
+	}
+}
+
+func TestHasInProgressPhases(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns true when a phase is working", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "a", Status: PhaseDone},
+			{ID: "b", Status: PhaseWorking},
+		})
+		if !m.hasInProgressPhases() {
+			t.Error("expected hasInProgressPhases to return true")
+		}
+	})
+
+	t.Run("returns false when no phases are working", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "a", Status: PhaseDone},
+			{ID: "b", Status: PhaseWaiting},
+			{ID: "c", Status: PhaseFailed},
+		})
+		if m.hasInProgressPhases() {
+			t.Error("expected hasInProgressPhases to return false")
+		}
+	})
+
+	t.Run("returns false in loop mode", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeLoop)
+		if m.hasInProgressPhases() {
+			t.Error("expected hasInProgressPhases to return false in loop mode")
+		}
+	})
+}
+
+func TestQuitConfirmOtherKeysIgnored(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{
+		{ID: "phase-1", Title: "Phase 1", Status: PhaseWorking},
+	})
+	m.DisableSplash()
+	m.ShowQuitConfirm = true
+
+	// Pressing an unrelated key should not dismiss or quit.
+	xMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}
+	result, cmd := m.handleKey(xMsg)
+	updated := result.(AppModel)
+
+	if !updated.ShowQuitConfirm {
+		t.Error("expected ShowQuitConfirm to remain true for unrelated key")
+	}
+	if cmd != nil {
+		t.Error("expected no command for unrelated key in confirmation overlay")
+	}
+}

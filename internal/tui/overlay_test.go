@@ -932,6 +932,170 @@ func TestBuildNebulaResultCounts(t *testing.T) {
 	})
 }
 
+// --- Git post-completion status tests ---
+
+func TestCompletionOverlayGitStatus(t *testing.T) {
+	t.Parallel()
+
+	t.Run("shows push success and checkout success", func(t *testing.T) {
+		t.Parallel()
+		o := &CompletionOverlay{
+			Kind:      CompletionSuccess,
+			DoneCount: 2,
+			GitResult: &nebula.PostCompletionResult{
+				PushBranch: "nebula/my-feature",
+			},
+		}
+
+		view := o.View(80, 30)
+
+		if !strings.Contains(view, "Pushed to origin/nebula/my-feature") {
+			t.Error("expected push success message in overlay")
+		}
+		if !strings.Contains(view, "Checked out main") {
+			t.Error("expected checkout success message in overlay")
+		}
+	})
+
+	t.Run("shows push error", func(t *testing.T) {
+		t.Parallel()
+		o := &CompletionOverlay{
+			Kind:      CompletionSuccess,
+			DoneCount: 1,
+			GitResult: &nebula.PostCompletionResult{
+				PushBranch: "nebula/fail",
+				PushErr:    fmt.Errorf("no remote configured"),
+			},
+		}
+
+		view := o.View(80, 30)
+
+		if !strings.Contains(view, "Push failed") {
+			t.Error("expected push failure message in overlay")
+		}
+		if !strings.Contains(view, "no remote configured") {
+			t.Error("expected push error detail in overlay")
+		}
+	})
+
+	t.Run("shows checkout error", func(t *testing.T) {
+		t.Parallel()
+		o := &CompletionOverlay{
+			Kind:      CompletionSuccess,
+			DoneCount: 1,
+			GitResult: &nebula.PostCompletionResult{
+				PushBranch:  "nebula/ok",
+				CheckoutErr: fmt.Errorf("dirty working tree"),
+			},
+		}
+
+		view := o.View(80, 30)
+
+		if !strings.Contains(view, "Checkout main failed") {
+			t.Error("expected checkout failure message in overlay")
+		}
+		if !strings.Contains(view, "dirty working tree") {
+			t.Error("expected checkout error detail in overlay")
+		}
+	})
+
+	t.Run("no git status when result is nil", func(t *testing.T) {
+		t.Parallel()
+		o := &CompletionOverlay{
+			Kind:      CompletionSuccess,
+			DoneCount: 1,
+		}
+
+		view := o.View(80, 30)
+
+		if strings.Contains(view, "Pushed to") {
+			t.Error("should not show push status when GitResult is nil")
+		}
+		if strings.Contains(view, "Checked out main") {
+			t.Error("should not show checkout status when GitResult is nil")
+		}
+	})
+}
+
+func TestModelHandlesMsgGitPostCompletion(t *testing.T) {
+	t.Parallel()
+
+	t.Run("updates overlay with git result", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeNebula)
+		m.Width = 80
+		m.Height = 24
+		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, DoneCount: 1}
+
+		gitResult := &nebula.PostCompletionResult{PushBranch: "nebula/test"}
+		updated, _ := m.Update(MsgGitPostCompletion{Result: gitResult})
+		model := updated.(AppModel)
+
+		if model.Overlay == nil {
+			t.Fatal("expected overlay to still be present")
+		}
+		if model.Overlay.GitResult == nil {
+			t.Fatal("expected GitResult to be set on overlay")
+		}
+		if model.Overlay.GitResult.PushBranch != "nebula/test" {
+			t.Errorf("expected PushBranch='nebula/test', got %q", model.Overlay.GitResult.PushBranch)
+		}
+	})
+
+	t.Run("no-op when overlay is nil", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeNebula)
+		m.Width = 80
+		m.Height = 24
+
+		gitResult := &nebula.PostCompletionResult{PushBranch: "nebula/test"}
+		updated, _ := m.Update(MsgGitPostCompletion{Result: gitResult})
+		model := updated.(AppModel)
+
+		// Should not panic and overlay should remain nil.
+		if model.Overlay != nil {
+			t.Error("expected overlay to remain nil")
+		}
+	})
+}
+
+// Quit confirmation overlay renders the expected content.
+func TestRenderQuitConfirm(t *testing.T) {
+	t.Parallel()
+
+	output := RenderQuitConfirm(80, 24)
+
+	if !strings.Contains(output, "Are you sure you want to exit?") {
+		t.Error("expected quit confirmation to contain 'Are you sure you want to exit?'")
+	}
+	if !strings.Contains(output, "in-progress phases") {
+		t.Error("expected quit confirmation to mention in-progress phases")
+	}
+	if !strings.Contains(output, "[y]") {
+		t.Error("expected quit confirmation to show [y] hint")
+	}
+	if !strings.Contains(output, "[n]") {
+		t.Error("expected quit confirmation to show [n] hint")
+	}
+}
+
+// Quit confirmation overlay is rendered in View when ShowQuitConfirm is true.
+func TestQuitConfirmOverlayRenderedInView(t *testing.T) {
+	t.Parallel()
+
+	m := NewAppModel(ModeNebula)
+	m.Width = 80
+	m.Height = 24
+	m.DisableSplash()
+	m.ShowQuitConfirm = true
+
+	view := m.View()
+
+	if !strings.Contains(view, "Are you sure") {
+		t.Error("expected View to contain quit confirmation overlay")
+	}
+}
+
 // Ensure the q key binding matches.
 func TestOverlayQuitKeyMatchesKeyMap(t *testing.T) {
 	t.Parallel()

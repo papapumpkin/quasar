@@ -249,9 +249,16 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			// always sends to the correct program instance, even if
 			// tuiProgram is reassigned for a subsequent nebula.
 			prog := tuiProgram
+			br := branchName
+			wd := workDir
 			go func() {
 				results, runErr := wg.Run(ctx)
 				prog.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
+				// Post-completion git workflow: push branch and checkout main.
+				if br != "" {
+					gitResult := nebula.PostCompletion(context.Background(), wd, br)
+					prog.Send(tui.MsgGitPostCompletion{Result: gitResult})
+				}
 			}()
 
 			finalModel, tuiErr := tuiProgram.Run()
@@ -379,6 +386,8 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				}
 
 				n = nextN
+				branchName = nextBranchName
+				workDir = nextWorkDir
 				continue
 			}
 
@@ -413,6 +422,22 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	printer.NebulaWorkerResults(results)
+
+	// Post-completion git workflow for stderr path.
+	if branchName != "" {
+		gitResult := nebula.PostCompletion(context.Background(), workDir, branchName)
+		if gitResult.PushErr != nil {
+			printer.Error(fmt.Sprintf("git push failed: %v", gitResult.PushErr))
+		} else {
+			printer.Info(fmt.Sprintf("pushed to origin/%s", gitResult.PushBranch))
+		}
+		if gitResult.CheckoutErr != nil {
+			printer.Error(fmt.Sprintf("git checkout main failed: %v", gitResult.CheckoutErr))
+		} else {
+			printer.Info("checked out main")
+		}
+	}
+
 	return nil
 }
 

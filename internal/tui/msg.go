@@ -257,6 +257,12 @@ type MsgNebulaDone struct {
 	Err     error
 }
 
+// MsgGitPostCompletion delivers the results of the post-nebula git workflow
+// (push branch to origin, checkout main).
+type MsgGitPostCompletion struct {
+	Result *nebula.PostCompletionResult
+}
+
 // MsgNebulaChoicesLoaded delivers available nebulae after discovery completes.
 type MsgNebulaChoicesLoaded struct {
 	Choices []NebulaChoice
