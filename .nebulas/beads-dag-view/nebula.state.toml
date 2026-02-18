@@ -1,0 +1,9 @@
+version = 1
+nebula_name = 'Beads DAG View'
+
+[phases]
+[phases.dag-tree-renderer]
+bead_id = 'quasar-kf8'
+status = 'in_progress'
+created_at = 2026-02-18T10:04:09.065028-05:00
+updated_at = 2026-02-18T10:04:09.138015-05:00
