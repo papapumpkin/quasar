@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'Quasar Splash Animation'
-total_cost_usd = 1.00506325
+total_cost_usd = 4.444623
 
 [phases]
 [phases.import-splash]
@@ -17,6 +17,12 @@ summary = 'Well-adapted binary-star ASCII splash animation as a self-contained B
 
 [phases.wire-startup]
 bead_id = 'quasar-699'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T09:05:31.848405-05:00
-updated_at = 2026-02-18T09:10:56.704624-05:00
+updated_at = 2026-02-18T09:19:38.484104-05:00
+
+[phases.wire-startup.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Straightforward type-correctness fix (pointer nil vs bool false) in tests and a missing function argument in nebula restart path — both correct and verified by build/test.'
