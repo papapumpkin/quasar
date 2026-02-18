@@ -86,7 +86,7 @@ func (g *gitCommitter) CommitPhase(ctx context.Context, nebulaName, phaseID, pha
 	prefix := fmt.Sprintf("%s/%s: ", nebulaName, phaseID)
 	maxTitle := 80 - len(prefix)
 	title := phaseTitle
-	if maxTitle > 0 && len(title) > maxTitle {
+	if maxTitle > 3 && len(title) > maxTitle {
 		title = title[:maxTitle-3] + "..."
 	}
 	msg := prefix + title

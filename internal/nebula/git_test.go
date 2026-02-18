@@ -132,6 +132,61 @@ func TestGitCommitter_CommitPhase(t *testing.T) {
 		}
 	})
 
+	t.Run("truncates long phase title", func(t *testing.T) {
+		dir := initTestRepo(t)
+		ctx := context.Background()
+		gc := NewGitCommitter(ctx, dir)
+		if gc == nil {
+			t.Fatal("expected non-nil committer")
+		}
+
+		if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("x\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		longTitle := strings.Repeat("a", 200)
+		if err := gc.CommitPhase(ctx, "neb", "ph", longTitle); err != nil {
+			t.Fatalf("CommitPhase: %v", err)
+		}
+
+		msg := lastCommitMessage(ctx, t, dir)
+		// prefix = "neb/ph: " (8 chars), so title budget = 72, truncated = 69 + "..."
+		if len(msg) > 80 {
+			t.Errorf("commit message too long: %d chars: %q", len(msg), msg)
+		}
+		if !strings.HasSuffix(msg, "...") {
+			t.Errorf("expected truncated message to end with '...', got %q", msg)
+		}
+	})
+
+	t.Run("no panic when prefix nearly fills 80 chars", func(t *testing.T) {
+		dir := initTestRepo(t)
+		ctx := context.Background()
+		gc := NewGitCommitter(ctx, dir)
+		if gc == nil {
+			t.Fatal("expected non-nil committer")
+		}
+
+		if err := os.WriteFile(filepath.Join(dir, "g.txt"), []byte("y\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Use a very long nebulaName+phaseID so the prefix is ~78 chars.
+		// "aaaa...a/bbbb...b: " leaves maxTitle <= 3.
+		longNebula := strings.Repeat("a", 40)
+		longPhase := strings.Repeat("b", 36)
+		// prefix = 40 + "/" + 36 + ": " = 79 chars, maxTitle = 1
+		if err := gc.CommitPhase(ctx, longNebula, longPhase, "Some title"); err != nil {
+			t.Fatalf("CommitPhase: %v", err)
+		}
+
+		// Should not panic; title is kept as-is (no truncation when maxTitle <= 3).
+		msg := lastCommitMessage(ctx, t, dir)
+		if !strings.Contains(msg, "Some title") {
+			t.Errorf("expected full title in message when prefix is long, got %q", msg)
+		}
+	})
+
 	t.Run("stages and commits all changes", func(t *testing.T) {
 		dir := initTestRepo(t)
 		ctx := context.Background()
