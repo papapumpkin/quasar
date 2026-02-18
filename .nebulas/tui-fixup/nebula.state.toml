@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'TUI Fix-up & Polish'
-total_cost_usd = 7.1235385
+total_cost_usd = 9.422486750000001
 
 [phases]
 [phases.diff-nav-bugs]
@@ -17,9 +17,15 @@ summary = 'Test fix (splash nil-out) and debug artifact cleanup for the TUI diff
 
 [phases.esc-escape-hatch]
 bead_id = 'quasar-80r'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T09:32:44.998444-05:00
-updated_at = 2026-02-18T09:51:33.390949-05:00
+updated_at = 2026-02-18T09:56:39.519923-05:00
+
+[phases.esc-escape-hatch.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Correctly wires Esc as a universal escape hatch for gate prompts (skip action) and completion overlay (quit), with discoverable footer hint and two well-structured tests.'
 
 [phases.header-consistency]
 bead_id = 'quasar-jw6'
@@ -35,6 +41,6 @@ summary = 'Correctly unifies the status bar background color across all nested s
 
 [phases.phase-status-distinction]
 bead_id = 'quasar-2ba'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-18T09:32:45.798334-05:00
-updated_at = 2026-02-18T09:32:45.798334-05:00
+updated_at = 2026-02-18T09:56:39.520435-05:00

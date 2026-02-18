@@ -123,6 +123,15 @@ var (
 	styleRowWaiting = lipgloss.NewStyle().
 			Foreground(colorMuted)
 
+	// stylePhaseID styles the phase name/ID — brighter and bold so it stands out from status detail.
+	stylePhaseID = lipgloss.NewStyle().
+			Foreground(colorWhite).
+			Bold(true)
+
+	// stylePhaseDetail styles status metadata (cycle count, elapsed, cost) — muted to stay subordinate.
+	stylePhaseDetail = lipgloss.NewStyle().
+				Foreground(colorMutedLight)
+
 	// styleSelectionIndicator styles the left-edge indicator for the selected row.
 	styleSelectionIndicator = lipgloss.NewStyle().
 				Foreground(colorPrimary).

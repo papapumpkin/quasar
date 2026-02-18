@@ -1,0 +1,33 @@
+[nebula]
+name = "Beads DAG View"
+description = "Replace the beads detail panel with a compact DAG/tree showing issue titles, statuses, and topological order instead of a wall-of-text cycle dump."
+
+[defaults]
+type = "feature"
+priority = 1
+labels = ["quasar", "tui", "beads"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 25.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Replace the cycle-grouped icon-only beads view with a compact DAG/tree showing issue titles and status",
+    "Each child bead should display its title inline — not just an icon",
+    "Preserve topological ordering: parent task at root, children ordered by cycle then position",
+    "Keep the progress summary (N/M resolved) and progress bar at the top",
+    "Maintain the b-key toggle and detail panel integration",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "All TUI code lives in internal/tui/",
+    "Do not break the stderr Printer fallback path (internal/ui/)",
+    "Use only charmbracelet ecosystem (bubbletea, lipgloss, bubbles)",
+    "Do not change the data flow — BeadInfo struct and bridge conversion stay the same",
+    "Do not change the beads.Client interface or loop/emitBeadUpdate",
+    "Keep the b-key binding and handleBeadsKey/updateBeadDetail model logic intact",
+]

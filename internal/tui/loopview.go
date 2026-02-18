@@ -281,25 +281,30 @@ func (lv LoopView) View() string {
 			}
 			styledConnector := styleTreeConnector.Render(connector)
 
-			var line string
 			if a.Done {
 				secs := float64(a.DurationMs) / 1000.0
 				icon := styleRowDone.Render(iconDone)
-				line = fmt.Sprintf("%s%s%s %s  %.1fs  $%.4f", indicator, styledConnector, icon, a.Role, secs, a.CostUSD)
-				if a.Role == "reviewer" && a.IssueCount > 0 {
-					line += fmt.Sprintf("  → %d issue(s)", a.IssueCount)
-				}
+				var styledRole string
 				if selected {
-					b.WriteString(styleRowSelected.Render(line))
+					styledRole = styleRowSelected.Render(a.Role)
 				} else {
-					b.WriteString(styleRowDone.Render(line))
+					styledRole = stylePhaseID.Render(a.Role)
 				}
+				stats := fmt.Sprintf("%.1fs  $%.4f", secs, a.CostUSD)
+				if a.Role == "reviewer" && a.IssueCount > 0 {
+					stats += fmt.Sprintf("  → %d issue(s)", a.IssueCount)
+				}
+				styledStats := stylePhaseDetail.Render(stats)
+				line := fmt.Sprintf("%s%s%s %s  %s", indicator, styledConnector, icon, styledRole, styledStats)
+				b.WriteString(line)
 			} else {
 				icon := styleRowWorking.Render(iconWorking)
 				elapsed := formatElapsed(a.StartedAt)
 				spinnerStr := roleColoredSpinner(a.Role, lv.Spinner)
-				line = fmt.Sprintf("%s%s%s %s  working… %s  %s", indicator, styledConnector, icon, a.Role, elapsed, spinnerStr)
-				b.WriteString(styleRowWorking.Render(line))
+				styledRole := stylePhaseID.Render(a.Role)
+				styledDetail := stylePhaseDetail.Render(fmt.Sprintf("working… %s", elapsed))
+				line := fmt.Sprintf("%s%s%s %s  %s  %s", indicator, styledConnector, icon, styledRole, styledDetail, spinnerStr)
+				b.WriteString(line)
 			}
 			b.WriteString("\n")
 			idx++
