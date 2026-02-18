@@ -156,6 +156,11 @@ func (o *CompletionOverlay) renderGitStatus() string {
 	r := o.GitResult
 	var parts []string
 
+	if r.CommitErr != nil {
+		parts = append(parts, lipgloss.NewStyle().Foreground(colorDanger).
+			Render(fmt.Sprintf("⚠ Commit failed: %v", r.CommitErr)))
+	}
+
 	if r.PushErr != nil {
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorDanger).
 			Render(fmt.Sprintf("⚠ Push failed: %v", r.PushErr)))
@@ -164,12 +169,16 @@ func (o *CompletionOverlay) renderGitStatus() string {
 			Render(fmt.Sprintf("✓ Pushed to origin/%s", r.PushBranch)))
 	}
 
+	branch := r.CheckoutBranch
+	if branch == "" {
+		branch = "default branch"
+	}
 	if r.CheckoutErr != nil {
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorDanger).
-			Render(fmt.Sprintf("⚠ Checkout main failed: %v", r.CheckoutErr)))
+			Render(fmt.Sprintf("⚠ Checkout %s failed: %v", branch, r.CheckoutErr)))
 	} else {
 		parts = append(parts, lipgloss.NewStyle().Foreground(colorSuccess).
-			Render("✓ Checked out main"))
+			Render(fmt.Sprintf("✓ Checked out %s", branch)))
 	}
 
 	return strings.Join(parts, "\n")

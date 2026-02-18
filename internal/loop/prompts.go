@@ -74,6 +74,20 @@ func (l *Loop) buildRefactorPrompt(state *CycleState) string {
 	return b.String()
 }
 
+// buildLintFixPrompt constructs the prompt sent to the coder when lint
+// commands report issues that need fixing.
+func (l *Loop) buildLintFixPrompt(state *CycleState) string {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "Task (bead %s): %s\n\n", state.TaskBeadID, state.TaskTitle)
+	b.WriteString("Your code has lint issues that need to be fixed before reviewer handoff.\n\n")
+	b.WriteString("LINT OUTPUT:\n")
+	b.WriteString(truncate(state.LintOutput, 3000))
+	b.WriteString("\n\nFix all reported lint issues. Read the relevant files, apply fixes, and ensure the code is clean.")
+
+	return b.String()
+}
+
 // buildReviewerPrompt constructs the prompt sent to the reviewer agent,
 // including the coder's output for evaluation.
 func (l *Loop) buildReviewerPrompt(state *CycleState) string {
@@ -82,10 +96,17 @@ func (l *Loop) buildReviewerPrompt(state *CycleState) string {
 	fmt.Fprintf(&b, "Task (bead %s): %s\n\n", state.TaskBeadID, state.TaskTitle)
 	b.WriteString("The coder has completed their work. Here is their summary:\n\n")
 	b.WriteString(truncate(state.CoderOutput, 3000))
+
+	if state.LintOutput != "" {
+		b.WriteString("\n\nNOTE: The following lint issues were not fully resolved by the coder:\n")
+		b.WriteString(truncate(state.LintOutput, 2000))
+	}
+
 	b.WriteString("\n\nREVIEW INSTRUCTIONS:\n")
 	b.WriteString("1. READ THE ACTUAL SOURCE FILES to verify the changes — do not rely solely on the summary above.\n")
 	b.WriteString("2. Check for correctness, security, error handling, code quality, and edge cases.\n")
-	b.WriteString("3. End your review with either APPROVED: or one or more ISSUE: blocks.\n")
+	b.WriteString("3. Check for any linting issues (`go vet`, `go fmt`). If linting problems exist, flag them as issues for the coder to fix.\n")
+	b.WriteString("4. End your review with either APPROVED: or one or more ISSUE: blocks.\n")
 
 	return b.String()
 }

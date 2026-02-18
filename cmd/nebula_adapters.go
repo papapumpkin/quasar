@@ -53,6 +53,7 @@ type tuiLoopAdapter struct {
 	invoker      agent.Invoker
 	beads        beads.Client
 	git          loop.CycleCommitter
+	linter       loop.Linter
 	maxCycles    int
 	maxBudget    float64
 	model        string
@@ -70,6 +71,7 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 		UI:            phaseUI,
 		Git:           a.git,
 		Hooks:         []loop.Hook{&loop.BeadHook{Beads: a.beads, UI: phaseUI}},
+		Linter:        a.linter,
 		MaxCycles:     a.maxCycles,
 		MaxBudgetUSD:  a.maxBudget,
 		Model:         a.model,
@@ -104,6 +106,7 @@ func (a *tuiLoopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDe
 		UI:           phaseUI,
 		Git:          a.git,
 		Hooks:        []loop.Hook{&loop.BeadHook{Beads: a.beads, UI: phaseUI}},
+		Linter:       a.linter,
 		MaxCycles:    a.maxCycles,
 		MaxBudgetUSD: a.maxBudget,
 		Model:        a.model,

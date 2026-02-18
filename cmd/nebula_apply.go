@@ -176,6 +176,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			invoker:      claudeInv,
 			beads:        client,
 			git:          git,
+			linter:       loop.NewLinter(cfg.LintCommands, workDir),
 			maxCycles:    cfg.MaxReviewCycles,
 			maxBudget:    cfg.MaxBudgetUSD,
 			model:        cfg.Model,
@@ -206,6 +207,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			UI:           printer,
 			Git:          git,
 			Hooks:        []loop.Hook{&loop.BeadHook{Beads: client, UI: printer}},
+			Linter:       loop.NewLinter(cfg.LintCommands, workDir),
 			MaxCycles:    cfg.MaxReviewCycles,
 			MaxBudgetUSD: cfg.MaxBudgetUSD,
 			Model:        cfg.Model,
@@ -355,6 +357,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					invoker:      claudeInv,
 					beads:        client,
 					git:          loop.NewCycleCommitterWithBranch(ctx, nextWorkDir, nextBranchName),
+					linter:       loop.NewLinter(cfg.LintCommands, nextWorkDir),
 					maxCycles:    cfg.MaxReviewCycles,
 					maxBudget:    cfg.MaxBudgetUSD,
 					model:        cfg.Model,
@@ -426,15 +429,18 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	// Post-completion git workflow for stderr path.
 	if branchName != "" {
 		gitResult := nebula.PostCompletion(context.Background(), workDir, branchName)
+		if gitResult.CommitErr != nil {
+			printer.Error(fmt.Sprintf("git commit failed: %v", gitResult.CommitErr))
+		}
 		if gitResult.PushErr != nil {
 			printer.Error(fmt.Sprintf("git push failed: %v", gitResult.PushErr))
 		} else {
 			printer.Info(fmt.Sprintf("pushed to origin/%s", gitResult.PushBranch))
 		}
 		if gitResult.CheckoutErr != nil {
-			printer.Error(fmt.Sprintf("git checkout main failed: %v", gitResult.CheckoutErr))
+			printer.Error(fmt.Sprintf("git checkout %s failed: %v", gitResult.CheckoutBranch, gitResult.CheckoutErr))
 		} else {
-			printer.Info("checked out main")
+			printer.Info(fmt.Sprintf("checked out %s", gitResult.CheckoutBranch))
 		}
 	}
 
