@@ -10,11 +10,13 @@ var (
 
 // Logo returns a styled single-line quasar logo for the TUI status bar.
 // The design evokes a quasar's bright core with radiating jets.
+// All spaces carry colorSurface background to prevent gaps in the status bar.
 func Logo() string {
+	sp := styleLogoJet.Render(" ")
 	return styleLogoJet.Render("━━╋━━") +
-		" " +
+		sp +
 		styleLogoCore.Render("QUASAR") +
-		" " +
+		sp +
 		styleLogoJet.Render("━━╋━━")
 }
 

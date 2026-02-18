@@ -46,7 +46,9 @@ func (s StatusBar) View() string {
 	right := joinSegments(rightSegments)
 
 	// Build the fixed left prefix (logo + mode label).
-	logo := " " + Logo() + "  "
+	// All spaces are styled with the bar background to prevent gaps.
+	barBg := lipgloss.NewStyle().Background(colorSurface)
+	logo := barBg.Render(" ") + Logo() + barBg.Render("  ")
 	logoWidth := lipgloss.Width(logo)
 
 	// State indicator (STOPPING / PAUSED) — appended after the name.
@@ -75,11 +77,12 @@ func (s StatusBar) View() string {
 	}
 
 	// Pad the gap between left and right.
+	// The gap spaces are styled with the bar background to prevent visible breaks.
 	gap := innerWidth - leftWidth - rightWidth
 	if gap < 1 {
 		gap = 1
 	}
-	padding := strings.Repeat(" ", gap)
+	padding := barBg.Render(strings.Repeat(" ", gap))
 
 	line := left + padding + right
 
@@ -100,13 +103,14 @@ type statusSegment struct {
 
 // buildRightSegments assembles the right-side segments in display order.
 func (s StatusBar) buildRightSegments(compact bool) []statusSegment {
+	barBg := lipgloss.NewStyle().Background(colorSurface)
 	var segments []statusSegment
 
 	// Cost segment (priority 2).
 	if s.BudgetUSD > 0 && !compact {
 		budgetBar := renderBudgetBar(s.CostUSD, s.BudgetUSD, 10)
-		costText := styleStatusCost.Render(fmt.Sprintf("$%.2f", s.CostUSD)) + " " +
-			budgetBar + " " +
+		costText := styleStatusCost.Render(fmt.Sprintf("$%.2f", s.CostUSD)) + barBg.Render(" ") +
+			budgetBar + barBg.Render(" ") +
 			styleStatusCost.Render(fmt.Sprintf("$%.2f", s.BudgetUSD))
 		segments = append(segments, statusSegment{text: costText, priority: 2})
 	} else {
@@ -119,7 +123,7 @@ func (s StatusBar) buildRightSegments(compact bool) []statusSegment {
 	// Resource indicator segment (priority 0 — dropped before elapsed).
 	resText := s.renderResourceSegment(compact)
 	if resText != "" {
-		segments = append(segments, statusSegment{text: "  " + resText, priority: 0})
+		segments = append(segments, statusSegment{text: barBg.Render("  ") + resText, priority: 0})
 	}
 
 	// Elapsed segment (priority 1 — dropped after resources).
@@ -147,6 +151,8 @@ func (s StatusBar) renderResourceSegment(compact bool) string {
 		return ""
 	}
 
+	barBg := lipgloss.NewStyle().Background(colorSurface)
+
 	// Choose style based on worst resource level.
 	style := resourceLevelStyle(s.Resources.WorstLevel(s.Thresholds))
 	result := style.Render(indicator)
@@ -155,7 +161,7 @@ func (s StatusBar) renderResourceSegment(compact bool) string {
 	if !compact {
 		qCount := FormatQuasarCount(s.Resources.QuasarCount)
 		if qCount != "" {
-			result += "  " + styleResourceWarning.Render(qCount)
+			result += barBg.Render("  ") + styleResourceWarning.Render(qCount)
 		}
 	}
 
@@ -188,6 +194,7 @@ func (s StatusBar) buildFixedLeftPrefix(compact bool) string {
 
 // buildNameSegment returns the name/ID segment, truncated to fit maxWidth.
 func (s StatusBar) buildNameSegment(compact bool, maxWidth int) string {
+	barBg := lipgloss.NewStyle().Background(colorSurface)
 	if maxWidth < 0 {
 		maxWidth = 0
 	}
@@ -207,7 +214,7 @@ func (s StatusBar) buildNameSegment(compact bool, maxWidth int) string {
 		}
 		suffix := fmt.Sprintf(" %d/%d", s.Completed, s.Total)
 		bar := renderProgressBar(s.Completed, s.Total, 12)
-		fullSuffix := "  " + bar + progStyle.Render(suffix)
+		fullSuffix := barBg.Render("  ") + bar + progStyle.Render(suffix)
 		suffixWidth := lipgloss.Width(fullSuffix)
 
 		availableForName := maxWidth - suffixWidth
@@ -245,22 +252,25 @@ func (s StatusBar) buildNameSegment(compact bool, maxWidth int) string {
 
 // renderStateIndicator returns the styled STOPPING/PAUSED indicator, or empty string.
 func (s StatusBar) renderStateIndicator() string {
+	barBg := lipgloss.NewStyle().Background(colorSurface)
 	if s.Stopping {
-		return "  " + styleStatusStopping.Render("STOPPING")
+		return barBg.Render("  ") + styleStatusStopping.Render("STOPPING")
 	}
 	if s.Paused {
-		return "  " + styleStatusPaused.Render("PAUSED")
+		return barBg.Render("  ") + styleStatusPaused.Render("PAUSED")
 	}
 	return ""
 }
 
-// joinSegments concatenates segment text with trailing space.
+// joinSegments concatenates segment text with a trailing styled space.
+// The trailing space carries the bar background to prevent gaps.
 func joinSegments(segments []statusSegment) string {
+	barBg := lipgloss.NewStyle().Background(colorSurface)
 	var b strings.Builder
 	for _, seg := range segments {
 		b.WriteString(seg.text)
 	}
-	b.WriteString(" ")
+	b.WriteString(barBg.Render(" "))
 	return b.String()
 }
 
@@ -344,10 +354,11 @@ func renderCycleBar(cycle, maxCycles int) string {
 	}
 	empty := barWidth - filled
 
-	return "[" +
+	barBg := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMutedLight)
+	return barBg.Render("[") +
 		lipgloss.NewStyle().Background(colorSurface).Foreground(colorMutedLight).Render(strings.Repeat("█", filled)) +
 		lipgloss.NewStyle().Background(colorSurface).Foreground(colorMuted).Render(strings.Repeat("░", empty)) +
-		"]"
+		barBg.Render("]")
 }
 
 // progressColor returns the uniform bar foreground color regardless of progress ratio.
