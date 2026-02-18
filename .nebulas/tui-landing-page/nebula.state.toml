@@ -7,37 +7,37 @@ total_cost_usd = 0.7588957500000001
 bead_id = 'quasar-34c'
 status = 'created'
 created_at = 2026-02-18T15:39:42.122217-05:00
-updated_at = 2026-02-18T15:39:42.122217-05:00
+updated_at = 2026-02-18T15:48:10.577911-05:00
 
 [phases.home-key-handling]
 bead_id = 'quasar-2nm'
 status = 'created'
 created_at = 2026-02-18T15:39:41.752389-05:00
-updated_at = 2026-02-18T15:39:41.752389-05:00
+updated_at = 2026-02-18T15:48:10.577131-05:00
 
 [phases.home-mode-model]
 bead_id = 'quasar-5az'
 status = 'in_progress'
 created_at = 2026-02-18T15:39:41.03891-05:00
-updated_at = 2026-02-18T15:42:44.237946-05:00
+updated_at = 2026-02-18T15:48:10.736848-05:00
 
 [phases.home-view-render]
 bead_id = 'quasar-z2b'
 status = 'created'
 created_at = 2026-02-18T15:39:41.408696-05:00
-updated_at = 2026-02-18T15:39:41.408696-05:00
+updated_at = 2026-02-18T15:48:10.576264-05:00
 
 [phases.integration-test]
 bead_id = 'quasar-go4'
 status = 'created'
 created_at = 2026-02-18T15:39:42.891837-05:00
-updated_at = 2026-02-18T15:39:42.891837-05:00
+updated_at = 2026-02-18T15:48:10.578406-05:00
 
 [phases.return-to-home]
 bead_id = 'quasar-r9y'
 status = 'created'
 created_at = 2026-02-18T15:39:42.509792-05:00
-updated_at = 2026-02-18T15:39:42.509792-05:00
+updated_at = 2026-02-18T15:48:10.578172-05:00
 
 [phases.speed-up-splash]
 bead_id = 'quasar-d77'
