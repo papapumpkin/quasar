@@ -50,7 +50,7 @@ func TestBeadViewWithChildren(t *testing.T) {
 
 	view := bv.View()
 
-	// Check compact graph elements.
+	// Check header elements.
 	if !strings.Contains(view, "Add JWT auth") {
 		t.Error("Expected root title in view")
 	}
@@ -66,13 +66,24 @@ func TestBeadViewWithChildren(t *testing.T) {
 		t.Error("Expected empty progress bar characters")
 	}
 
-	// Check cycle labels and status icons.
-	if !strings.Contains(view, "Cycle 1") {
-		t.Error("Expected 'Cycle 1' label")
+	// Check tree connectors and inline titles.
+	if !strings.Contains(view, "├─") {
+		t.Error("Expected mid-tree connector '├─'")
 	}
-	if !strings.Contains(view, "Cycle 2") {
-		t.Error("Expected 'Cycle 2' label")
+	if !strings.Contains(view, "└─") {
+		t.Error("Expected last-tree connector '└─'")
 	}
+	if !strings.Contains(view, "SQL injection") {
+		t.Error("Expected child title 'SQL injection' inline")
+	}
+	if !strings.Contains(view, "Missing tests") {
+		t.Error("Expected child title 'Missing tests' inline")
+	}
+	if !strings.Contains(view, "Error handling") {
+		t.Error("Expected child title 'Error handling' inline")
+	}
+
+	// Check status icons are present.
 	if !strings.Contains(view, beadIconClosed) {
 		t.Error("Expected closed icon (✓) in view")
 	}
@@ -92,90 +103,136 @@ func TestBeadViewAllResolved(t *testing.T) {
 		Title:  "All done",
 		Status: "closed",
 		Children: []BeadInfo{
-			{ID: "c1", Status: "closed", Cycle: 1},
-			{ID: "c2", Status: "closed", Cycle: 1},
+			{ID: "c1", Title: "First task", Status: "closed", Cycle: 1},
+			{ID: "c2", Title: "Second task", Status: "closed", Cycle: 1},
 		},
 	})
 	view := bv.View()
 	if !strings.Contains(view, "[2/2 resolved]") {
 		t.Error("Expected '[2/2 resolved]' for fully resolved task")
 	}
+	// Last child should use └─ connector.
+	if !strings.Contains(view, "└─") {
+		t.Error("Expected last-tree connector for final child")
+	}
 }
 
-func TestGroupByCycle(t *testing.T) {
+func TestBeadViewCycleOrdering(t *testing.T) {
+	bv := NewBeadView()
+	bv.Width = 80
+	bv.SetRoot(BeadInfo{
+		ID:     "root",
+		Title:  "Ordered task",
+		Status: "open",
+		Children: []BeadInfo{
+			{ID: "c3", Title: "Cycle2 first", Status: "open", Cycle: 2},
+			{ID: "c1", Title: "Cycle1 first", Status: "closed", Cycle: 1},
+			{ID: "c4", Title: "Cycle2 second", Status: "open", Cycle: 2},
+			{ID: "c2", Title: "Cycle1 second", Status: "closed", Cycle: 1},
+		},
+	})
+
+	view := bv.View()
+
+	// Cycle 1 children should appear before cycle 2 children.
+	c1First := strings.Index(view, "Cycle1 first")
+	c1Second := strings.Index(view, "Cycle1 second")
+	c2First := strings.Index(view, "Cycle2 first")
+	c2Second := strings.Index(view, "Cycle2 second")
+
+	if c1First == -1 || c1Second == -1 || c2First == -1 || c2Second == -1 {
+		t.Fatal("Expected all child titles to appear in view")
+	}
+	if c1First > c2First {
+		t.Error("Expected cycle 1 children before cycle 2 children")
+	}
+	if c1First > c1Second {
+		t.Error("Expected cycle 1 first child before cycle 1 second child (stable order)")
+	}
+	if c2First > c2Second {
+		t.Error("Expected cycle 2 first child before cycle 2 second child (stable order)")
+	}
+}
+
+func TestBeadViewTitleTruncation(t *testing.T) {
+	bv := NewBeadView()
+	bv.Width = 25 // Very narrow — prefix is 9 chars, leaving 16 for title.
+	bv.SetRoot(BeadInfo{
+		ID:     "root",
+		Title:  "Narrow task",
+		Status: "open",
+		Children: []BeadInfo{
+			{ID: "c1", Title: "This is a very long title that should be truncated", Status: "open", Cycle: 1},
+		},
+	})
+
+	view := bv.View()
+
+	// The full title should NOT appear.
+	if strings.Contains(view, "This is a very long title that should be truncated") {
+		t.Error("Expected title to be truncated at narrow width")
+	}
+	// But ellipsis should appear.
+	if !strings.Contains(view, "...") {
+		t.Error("Expected ellipsis in truncated title")
+	}
+}
+
+func TestSortChildrenByCycle(t *testing.T) {
 	children := []BeadInfo{
-		{ID: "a", Cycle: 1},
-		{ID: "b", Cycle: 1},
-		{ID: "c", Cycle: 2},
-		{ID: "d", Cycle: 0}, // 0 maps to cycle 1
+		{ID: "a", Title: "A", Cycle: 2},
+		{ID: "b", Title: "B", Cycle: 1},
+		{ID: "c", Title: "C", Cycle: 2},
+		{ID: "d", Title: "D", Cycle: 0}, // 0 maps to cycle 1
 	}
 
-	groups := groupByCycle(children)
-	if len(groups) != 2 {
-		t.Fatalf("Expected 2 cycle groups, got %d", len(groups))
+	sorted := sortChildrenByCycle(children)
+	if len(sorted) != 4 {
+		t.Fatalf("Expected 4 children, got %d", len(sorted))
 	}
 
-	// Cycle 1 should have 3 children (a, b, d).
-	if groups[0].Cycle != 1 {
-		t.Errorf("First group cycle = %d, want 1", groups[0].Cycle)
+	// Cycle 1 (and 0→1) should come first, then cycle 2.
+	if sorted[0].ID != "b" {
+		t.Errorf("sorted[0] = %q, want b (cycle 1)", sorted[0].ID)
 	}
-	if len(groups[0].Children) != 3 {
-		t.Errorf("Cycle 1 children = %d, want 3", len(groups[0].Children))
+	if sorted[1].ID != "d" {
+		t.Errorf("sorted[1] = %q, want d (cycle 0→1)", sorted[1].ID)
 	}
-
-	// Cycle 2 should have 1 child (c).
-	if groups[1].Cycle != 2 {
-		t.Errorf("Second group cycle = %d, want 2", groups[1].Cycle)
+	if sorted[2].ID != "a" {
+		t.Errorf("sorted[2] = %q, want a (cycle 2)", sorted[2].ID)
 	}
-	if len(groups[1].Children) != 1 {
-		t.Errorf("Cycle 2 children = %d, want 1", len(groups[1].Children))
+	if sorted[3].ID != "c" {
+		t.Errorf("sorted[3] = %q, want c (cycle 2)", sorted[3].ID)
 	}
 }
 
-func TestGroupByCycleEmpty(t *testing.T) {
-	groups := groupByCycle(nil)
-	if len(groups) != 0 {
-		t.Errorf("Expected 0 groups for nil children, got %d", len(groups))
+func TestSortChildrenByCycleEmpty(t *testing.T) {
+	sorted := sortChildrenByCycle(nil)
+	if len(sorted) != 0 {
+		t.Errorf("Expected 0 children for nil input, got %d", len(sorted))
 	}
 }
 
-func TestGroupByCyclePreservesOrder(t *testing.T) {
+func TestSortChildrenByCyclePreservesOrder(t *testing.T) {
 	children := []BeadInfo{
 		{ID: "a", Cycle: 3},
 		{ID: "b", Cycle: 1},
 		{ID: "c", Cycle: 3},
 	}
 
-	groups := groupByCycle(children)
-	if len(groups) != 2 {
-		t.Fatalf("Expected 2 groups, got %d", len(groups))
+	sorted := sortChildrenByCycle(children)
+	if len(sorted) != 3 {
+		t.Fatalf("Expected 3 children, got %d", len(sorted))
 	}
-	if groups[0].Cycle != 3 {
-		t.Errorf("First group cycle = %d, want 3 (order of first appearance)", groups[0].Cycle)
+	// Cycle 1 first, then cycle 3 in original order.
+	if sorted[0].ID != "b" {
+		t.Errorf("sorted[0] = %q, want b (cycle 1)", sorted[0].ID)
 	}
-	if groups[1].Cycle != 1 {
-		t.Errorf("Second group cycle = %d, want 1", groups[1].Cycle)
+	if sorted[1].ID != "a" {
+		t.Errorf("sorted[1] = %q, want a (cycle 3)", sorted[1].ID)
 	}
-}
-
-func TestRenderCompactCycle(t *testing.T) {
-	g := cycleGroup{
-		Cycle: 1,
-		Children: []BeadInfo{
-			{ID: "a", Title: "First issue", Status: "closed"},
-			{ID: "b", Title: "Second issue", Status: "open"},
-		},
-	}
-
-	out := renderCompactCycle(g)
-	if !strings.Contains(out, "Cycle 1") {
-		t.Error("Expected 'Cycle 1' label")
-	}
-	if !strings.Contains(out, beadIconClosed) {
-		t.Error("Expected closed icon")
-	}
-	if !strings.Contains(out, beadIconOpen) {
-		t.Error("Expected open icon")
+	if sorted[2].ID != "c" {
+		t.Errorf("sorted[2] = %q, want c (cycle 3)", sorted[2].ID)
 	}
 }
 

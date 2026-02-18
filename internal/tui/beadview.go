@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -14,7 +15,13 @@ const (
 	beadIconClosed     = "✓"
 )
 
-// BeadView renders a tree of beads (parent task + child issues) grouped by cycle.
+// Tree connector characters.
+const (
+	treeConnectorMid  = "├─"
+	treeConnectorLast = "└─"
+)
+
+// BeadView renders a tree of beads (parent task + child issues) as a DAG with inline titles.
 type BeadView struct {
 	Root    BeadInfo
 	HasData bool
@@ -32,7 +39,10 @@ func (v *BeadView) SetRoot(root BeadInfo) {
 	v.HasData = true
 }
 
-// View renders the bead hierarchy as a compact graph with progress bar and status icons.
+// treePrefixLen is the visual width of "  ├─ ✓ " (2 indent + connector + spaces + icon + space).
+const treePrefixLen = 9
+
+// View renders the bead hierarchy as a tree with progress bar and inline titles.
 func (v BeadView) View() string {
 	if !v.HasData {
 		return styleDetailDim.Render("  (no bead data yet)")
@@ -76,54 +86,67 @@ func (v BeadView) View() string {
 	b.WriteString(styleDetailDim.Render(strings.Repeat("░", barWidth-filled)))
 	b.WriteString("\n\n")
 
-	// Per-cycle compact rows.
-	groups := groupByCycle(v.Root.Children)
-	for _, g := range groups {
-		b.WriteString(renderCompactCycle(g))
-	}
+	// Sort children by (Cycle, original index) for topological ordering.
+	sorted := sortChildrenByCycle(v.Root.Children)
 
-	return b.String()
-}
-
-// cycleGroup holds children for a single cycle.
-type cycleGroup struct {
-	Cycle    int
-	Children []BeadInfo
-}
-
-// groupByCycle organizes children by their Cycle field.
-// Children with Cycle == 0 are grouped under cycle 1.
-func groupByCycle(children []BeadInfo) []cycleGroup {
-	m := make(map[int][]BeadInfo)
-	var order []int
-	for _, c := range children {
-		cy := c.Cycle
-		if cy <= 0 {
-			cy = 1
+	// Render tree lines.
+	for i, c := range sorted {
+		connector := treeConnectorMid
+		if i == len(sorted)-1 {
+			connector = treeConnectorLast
 		}
-		if _, seen := m[cy]; !seen {
-			order = append(order, cy)
-		}
-		m[cy] = append(m[cy], c)
-	}
-	groups := make([]cycleGroup, 0, len(order))
-	for _, cy := range order {
-		groups = append(groups, cycleGroup{Cycle: cy, Children: m[cy]})
-	}
-	return groups
-}
-
-// renderCompactCycle renders a single cycle as a compact label + status icons.
-func renderCompactCycle(g cycleGroup) string {
-	var b strings.Builder
-	label := fmt.Sprintf("  Cycle %d  ", g.Cycle)
-	b.WriteString(styleBeadCycleHeader.Render(label))
-	for _, c := range g.Children {
 		icon, iconStyle := beadStatusIcon(c.Status)
+
+		// Truncate title to fit available width.
+		maxTitle := v.Width - treePrefixLen
+		title := c.Title
+		if maxTitle > 0 {
+			title = TruncateWithEllipsis(title, maxTitle)
+		}
+
+		b.WriteString("  ")
+		b.WriteString(connector)
+		b.WriteString(" ")
 		b.WriteString(iconStyle.Render(icon))
+		b.WriteString(" ")
+		b.WriteString(title)
+		b.WriteString("\n")
 	}
-	b.WriteString("\n")
+
 	return b.String()
+}
+
+// sortChildrenByCycle returns a copy of children sorted by ascending Cycle number,
+// preserving original order within the same cycle. Children with Cycle <= 0 are
+// treated as cycle 1.
+func sortChildrenByCycle(children []BeadInfo) []BeadInfo {
+	type indexed struct {
+		bead  BeadInfo
+		index int
+	}
+	items := make([]indexed, len(children))
+	for i, c := range children {
+		items[i] = indexed{bead: c, index: i}
+	}
+	sort.SliceStable(items, func(a, b int) bool {
+		ca := items[a].bead.Cycle
+		if ca <= 0 {
+			ca = 1
+		}
+		cb := items[b].bead.Cycle
+		if cb <= 0 {
+			cb = 1
+		}
+		if ca != cb {
+			return ca < cb
+		}
+		return items[a].index < items[b].index
+	})
+	result := make([]BeadInfo, len(items))
+	for i, it := range items {
+		result[i] = it.bead
+	}
+	return result
 }
 
 // beadStatusIcon returns the icon and style for a bead status.
