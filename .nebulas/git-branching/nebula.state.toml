@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'git-branching'
-total_cost_usd = 4.072074
+total_cost_usd = 5.730630999999999
 
 [phases]
 [phases.branch-manager]
@@ -41,6 +41,12 @@ summary = 'Clean implementation of human-readable cycle commit messages (`<beadI
 
 [phases.readable-phase-commits]
 bead_id = 'quasar-61p'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T10:54:53.971285-05:00
-updated_at = 2026-02-18T11:09:41.657108-05:00
+updated_at = 2026-02-18T11:15:41.875348-05:00
+
+[phases.readable-phase-commits.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean phase commit message format update with proper truncation, panic fix for edge-case prefix lengths, and good test coverage — all callers and mocks correctly updated.'
