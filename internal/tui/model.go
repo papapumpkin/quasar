@@ -249,6 +249,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgNebulaProgress:
 		m.StatusBar.Completed = msg.Completed
 		m.StatusBar.Total = msg.Total
+		m.StatusBar.InProgress = msg.OpenBeads
 		m.StatusBar.CostUSD = msg.TotalCostUSD
 
 	// --- Phase-contextualized messages (nebula mode) ---

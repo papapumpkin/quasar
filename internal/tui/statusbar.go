@@ -16,6 +16,7 @@ type StatusBar struct {
 	MaxCycles    int
 	Completed    int
 	Total        int
+	InProgress   int // phases currently being worked on
 	CostUSD      float64
 	BudgetUSD    float64
 	StartTime    time.Time
@@ -178,9 +179,11 @@ func (s StatusBar) buildFixedLeftPrefix(compact bool) string {
 		// Nebula mode.
 		if compact {
 			pct := s.Completed * 100 / s.Total
-			progStyle := styleStatusProgress
-			if s.Completed > 0 {
-				progStyle = styleStatusProgressActive
+			ratio := float64(s.Completed) / float64(s.Total)
+			pColor := progressColor(ratio)
+			progStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(pColor)
+			if ratio >= 1 {
+				progStyle = progStyle.Bold(true)
 			}
 			return styleStatusMode.Render("nebula: ") + progStyle.Render(fmt.Sprintf("%d%% ", pct))
 		}
@@ -211,14 +214,24 @@ func (s StatusBar) buildNameSegment(compact bool, maxWidth int) string {
 			return styleStatusName.Render(name)
 		}
 
-		// Full mode: "name  ━━━━░░░░ 2/5"
-		progStyle := styleStatusProgress
-		if s.Completed > 0 {
-			progStyle = styleStatusProgressActive
+		// Full mode: "name  ━━━━░░░░ 2/5 · 2 active"
+		ratio := float64(s.Completed) / float64(s.Total)
+		pColor := progressColor(ratio)
+		progStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(pColor)
+		if ratio >= 1 {
+			progStyle = progStyle.Bold(true)
 		}
-		suffix := fmt.Sprintf(" %d/%d", s.Completed, s.Total)
-		bar := renderProgressBar(s.Completed, s.Total, 12)
-		fullSuffix := barBg.Render("  ") + bar + progStyle.Render(suffix)
+		counterText := fmt.Sprintf(" %d/%d", s.Completed, s.Total)
+		bar := renderProgressBar(s.Completed, s.InProgress, s.Total, 12)
+
+		// Append in-progress count when phases are actively working.
+		var activeSuffix string
+		if s.InProgress > 0 {
+			activeStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorBlue)
+			activeSuffix = progStyle.Render(" · ") + activeStyle.Render(fmt.Sprintf("%d active", s.InProgress))
+		}
+
+		fullSuffix := barBg.Render("  ") + bar + progStyle.Render(counterText) + activeSuffix
 		suffixWidth := lipgloss.Width(fullSuffix)
 
 		availableForName := maxWidth - suffixWidth
@@ -307,23 +320,33 @@ func totalWidth(segments []statusSegment) int {
 }
 
 // renderProgressBar creates a filled/empty bar showing completed/total progress.
-// The filled portion color shifts from muted to green as progress increases.
-func renderProgressBar(completed, total, width int) string {
+// Completed segments render in green; in-progress segments in blue; empty in gray.
+func renderProgressBar(completed, inProgress, total, width int) string {
 	if total <= 0 || width <= 0 {
 		return ""
 	}
-	ratio := float64(completed) / float64(total)
-	if ratio > 1 {
-		ratio = 1
+	doneRatio := float64(completed) / float64(total)
+	if doneRatio > 1 {
+		doneRatio = 1
 	}
-	filled := int(ratio * float64(width))
-	empty := width - filled
+	activeRatio := float64(inProgress) / float64(total)
+	if doneRatio+activeRatio > 1 {
+		activeRatio = 1 - doneRatio
+	}
 
-	fillColor := progressColor(ratio)
-	style := lipgloss.NewStyle().Background(colorSurface).Foreground(fillColor)
+	doneFilled := int(doneRatio * float64(width))
+	activeFilled := int(activeRatio * float64(width))
+	empty := width - doneFilled - activeFilled
+	if empty < 0 {
+		empty = 0
+	}
+
+	doneStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorSuccess)
+	activeStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorBlue)
 	emptyStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMuted)
 
-	return style.Render(strings.Repeat("━", filled)) +
+	return doneStyle.Render(strings.Repeat("━", doneFilled)) +
+		activeStyle.Render(strings.Repeat("━", activeFilled)) +
 		emptyStyle.Render(strings.Repeat("░", empty))
 }
 
@@ -367,18 +390,18 @@ func renderCycleBar(cycle, maxCycles int) string {
 		barBg.Render("]")
 }
 
-// progressColor returns a color that blends from muted to green as progress increases.
-// At 0% progress it returns colorMutedLight; at 100% it returns colorSuccess.
+// progressColor returns a color that shifts from muted to blue to green as progress increases.
+// 0%: colorMuted (gray, hasn't started), 1-49%: colorBlue (in progress, early),
+// 50-99%: colorSuccess (making good progress), 100%: colorSuccess (all done).
 func progressColor(ratio float64) lipgloss.Color {
 	if ratio <= 0 {
-		return colorMutedLight
+		return colorMuted
 	}
 	if ratio >= 1 {
 		return colorSuccess
 	}
-	// At low progress stay muted; once past 50% shift to success green.
 	if ratio < 0.5 {
-		return colorMutedLight
+		return colorBlue
 	}
 	return colorSuccess
 }

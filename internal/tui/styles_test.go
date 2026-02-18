@@ -349,24 +349,28 @@ func TestSectionBorderHasTopOnly(t *testing.T) {
 func TestRenderProgressBar(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name      string
-		completed int
-		total     int
-		width     int
-		wantEmpty bool
-		wantFull  bool
+		name       string
+		completed  int
+		inProgress int
+		total      int
+		width      int
+		wantEmpty  bool
+		wantFull   bool
 	}{
-		{"zero total", 0, 0, 10, true, false},
-		{"zero width", 5, 10, 0, true, false},
-		{"no progress", 0, 10, 10, false, false},
-		{"half progress", 5, 10, 10, false, false},
-		{"full progress", 10, 10, 10, false, true},
-		{"over progress", 15, 10, 10, false, true},
+		{"zero total", 0, 0, 0, 10, true, false},
+		{"zero width", 5, 0, 10, 0, true, false},
+		{"no progress", 0, 0, 10, 10, false, false},
+		{"half progress", 5, 0, 10, 10, false, false},
+		{"full progress", 10, 0, 10, 10, false, true},
+		{"over progress", 15, 0, 10, 10, false, true},
+		{"with in-progress", 3, 2, 10, 10, false, false},
+		{"all in-progress", 0, 5, 10, 10, false, false},
+		{"done plus in-progress overflow", 8, 5, 10, 10, false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := renderProgressBar(tt.completed, tt.total, tt.width)
+			result := renderProgressBar(tt.completed, tt.inProgress, tt.total, tt.width)
 			if tt.wantEmpty && result != "" {
 				t.Errorf("expected empty bar, got %q", result)
 			}
@@ -445,14 +449,14 @@ func TestProgressColor(t *testing.T) {
 		ratio float64
 		want  lipgloss.Color
 	}{
-		{"zero", 0.0, colorMutedLight},
-		{"low", 0.1, colorMutedLight},
-		{"below half", 0.4, colorMutedLight},
+		{"zero", 0.0, colorMuted},
+		{"low", 0.1, colorBlue},
+		{"below half", 0.4, colorBlue},
 		{"at half", 0.5, colorSuccess},
 		{"high", 0.9, colorSuccess},
 		{"full", 1.0, colorSuccess},
 		{"over", 1.5, colorSuccess},
-		{"negative", -0.1, colorMutedLight},
+		{"negative", -0.1, colorMuted},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
