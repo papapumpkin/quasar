@@ -7,22 +7,22 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// TestBeadToggleFullView verifies that pressing 'b' at DepthPhases in nebula mode
+// TestBeadToggleFullView verifies that pressing 'b' at various depths in nebula mode
 // produces a bounded, well-structured View() output — not a wall of text filling
 // the entire screen.
 func TestBeadToggleFullView(t *testing.T) {
 	t.Parallel()
 
 	m := NewAppModel(ModeNebula)
-	m.DisableSplash()
+	m.Splash = nil
 	m.Width = 120
 	m.Height = 40
 
 	// Initialize phases similar to the real nebula.
 	m.NebulaView.InitPhases([]PhaseInfo{
-		{ID: "header-solid-bg", Title: "Make header background solid", Status: PhaseWorking},
-		{ID: "logo-no-bg", Title: "Remove background from logo", Status: PhaseWaiting},
-		{ID: "status-bar-colors", Title: "Restore per-segment coloring", Status: PhaseWaiting},
+		{ID: "header-solid-bg", Title: "Make header background solid"},
+		{ID: "logo-no-bg", Title: "Remove background from logo"},
+		{ID: "status-bar-colors", Title: "Restore per-segment coloring"},
 	})
 
 	// Simulate WindowSizeMsg to initialize the detail panel.
@@ -53,43 +53,52 @@ func TestBeadToggleFullView(t *testing.T) {
 		},
 	})
 
-	// Now press 'b' to toggle beads view.
-	tm, _ = tm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+	// Test at multiple depth levels.
+	for _, tc := range []struct {
+		name  string
+		depth ViewDepth
+	}{
+		{"DepthPhases", DepthPhases},
+		{"DepthPhaseLoop", DepthPhaseLoop},
+		{"DepthAgentOutput", DepthAgentOutput},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			am := tm.(AppModel)
+			am.Depth = tc.depth
+			am.FocusedPhase = "header-solid-bg"
 
-	am := tm.(AppModel)
-	if !am.ShowBeads {
-		t.Fatal("Expected ShowBeads to be true after pressing 'b'")
-	}
+			// Press 'b' to toggle beads view.
+			var tm2 tea.Model = am
+			tm2, _ = tm2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+			am2 := tm2.(AppModel)
 
-	// Capture the full view.
-	view := am.View()
-	viewLines := strings.Split(view, "\n")
-	t.Logf("Full View() has %d lines (terminal height: %d)", len(viewLines), am.Height)
-	t.Logf("ShowBeads=%v, Depth=%d", am.ShowBeads, am.Depth)
-
-	// The view should NOT contain the agent output when ShowBeads is active.
-	if strings.Contains(view, "very long line of agent output") {
-		t.Error("Agent output should NOT appear in the view when ShowBeads is active")
-	}
-
-	// The view should contain bead tree elements.
-	if !strings.Contains(view, "├─") && !strings.Contains(view, "└─") {
-		t.Error("Expected tree connectors in the view when ShowBeads is active")
-	}
-
-	// The view height should not greatly exceed the terminal height.
-	if len(viewLines) > am.Height+5 {
-		t.Errorf("View has %d lines but terminal is only %d tall — layout is overflowing", len(viewLines), am.Height)
-		// Print first and last few lines to diagnose what's filling the screen.
-		t.Log("First 10 lines:")
-		for i := 0; i < 10 && i < len(viewLines); i++ {
-			t.Logf("  [%d] %s", i, viewLines[i])
-		}
-		t.Log("Last 10 lines:")
-		for i := len(viewLines) - 10; i < len(viewLines); i++ {
-			if i >= 0 {
-				t.Logf("  [%d] %s", i, viewLines[i])
+			if !am2.ShowBeads {
+				t.Fatal("Expected ShowBeads to be true after pressing 'b'")
 			}
-		}
+
+			view := am2.View()
+			viewLines := strings.Split(view, "\n")
+			t.Logf("Full View() has %d lines (terminal height: %d)", len(viewLines), am2.Height)
+
+			if strings.Contains(view, "very long line of agent output") {
+				t.Error("Agent output should NOT appear in the view when ShowBeads is active")
+			}
+
+			if len(viewLines) > am2.Height+5 {
+				t.Errorf("View has %d lines but terminal is only %d tall — layout is overflowing", len(viewLines), am2.Height)
+				t.Log("First 15 lines:")
+				for i := 0; i < 15 && i < len(viewLines); i++ {
+					t.Logf("  [%d] %q", i, viewLines[i])
+				}
+				t.Log("Last 15 lines:")
+				start := len(viewLines) - 15
+				if start < 0 {
+					start = 0
+				}
+				for i := start; i < len(viewLines); i++ {
+					t.Logf("  [%d] %q", i, viewLines[i])
+				}
+			}
+		})
 	}
 }

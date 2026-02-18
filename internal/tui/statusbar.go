@@ -107,11 +107,15 @@ func (s StatusBar) buildRightSegments(compact bool) []statusSegment {
 	var segments []statusSegment
 
 	// Cost segment (priority 2).
+	// When a budget is set, color-code the cost based on consumption ratio.
 	if s.BudgetUSD > 0 && !compact {
+		ratio := s.CostUSD / s.BudgetUSD
+		costColor := budgetColor(ratio)
+		costStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(costColor)
 		budgetBar := renderBudgetBar(s.CostUSD, s.BudgetUSD, 10)
-		costText := styleStatusCost.Render(fmt.Sprintf("$%.2f", s.CostUSD)) + barBg.Render(" ") +
+		costText := costStyle.Render(fmt.Sprintf("$%.2f", s.CostUSD)) + barBg.Render(" ") +
 			budgetBar + barBg.Render(" ") +
-			styleStatusCost.Render(fmt.Sprintf("$%.2f", s.BudgetUSD))
+			costStyle.Render(fmt.Sprintf("$%.2f", s.BudgetUSD))
 		segments = append(segments, statusSegment{text: costText, priority: 2})
 	} else {
 		segments = append(segments, statusSegment{
@@ -303,7 +307,7 @@ func totalWidth(segments []statusSegment) int {
 }
 
 // renderProgressBar creates a filled/empty bar showing completed/total progress.
-// Uses a single muted foreground for uniform bar appearance.
+// The filled portion color shifts from muted to green as progress increases.
 func renderProgressBar(completed, total, width int) string {
 	if total <= 0 || width <= 0 {
 		return ""
@@ -315,7 +319,8 @@ func renderProgressBar(completed, total, width int) string {
 	filled := int(ratio * float64(width))
 	empty := width - filled
 
-	style := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMutedLight)
+	fillColor := progressColor(ratio)
+	style := lipgloss.NewStyle().Background(colorSurface).Foreground(fillColor)
 	emptyStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMuted)
 
 	return style.Render(strings.Repeat("━", filled)) +
@@ -323,7 +328,7 @@ func renderProgressBar(completed, total, width int) string {
 }
 
 // renderBudgetBar creates an inline budget consumption indicator.
-// Uses a single muted foreground for uniform bar appearance.
+// The filled portion color shifts from amber to orange to red as spending increases.
 func renderBudgetBar(spent, budget float64, width int) string {
 	if budget <= 0 || width <= 0 {
 		return ""
@@ -335,7 +340,8 @@ func renderBudgetBar(spent, budget float64, width int) string {
 	filled := int(ratio * float64(width))
 	empty := width - filled
 
-	style := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMutedLight)
+	fillColor := budgetColor(ratio)
+	style := lipgloss.NewStyle().Background(colorSurface).Foreground(fillColor)
 	emptyStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorMuted)
 
 	return style.Render(strings.Repeat("━", filled)) +
@@ -361,9 +367,20 @@ func renderCycleBar(cycle, maxCycles int) string {
 		barBg.Render("]")
 }
 
-// progressColor returns the uniform bar foreground color regardless of progress ratio.
-func progressColor(_ float64) lipgloss.Color {
-	return colorMutedLight
+// progressColor returns a color that blends from muted to green as progress increases.
+// At 0% progress it returns colorMutedLight; at 100% it returns colorSuccess.
+func progressColor(ratio float64) lipgloss.Color {
+	if ratio <= 0 {
+		return colorMutedLight
+	}
+	if ratio >= 1 {
+		return colorSuccess
+	}
+	// At low progress stay muted; once past 50% shift to success green.
+	if ratio < 0.5 {
+		return colorMutedLight
+	}
+	return colorSuccess
 }
 
 // resourceLevelStyle returns the appropriate style for the given resource level.
@@ -378,9 +395,17 @@ func resourceLevelStyle(level ResourceLevel) lipgloss.Style {
 	}
 }
 
-// budgetColor returns the uniform bar foreground color regardless of budget ratio.
-func budgetColor(_ float64) lipgloss.Color {
-	return colorMutedLight
+// budgetColor returns a color based on budget consumption ratio.
+// Under 50%: amber (colorAccent), 50-80%: orange warning, over 80%: red danger.
+func budgetColor(ratio float64) lipgloss.Color {
+	switch {
+	case ratio >= 0.8:
+		return colorDanger
+	case ratio >= 0.5:
+		return colorBudgetWarn
+	default:
+		return colorAccent
+	}
 }
 
 // truncateToWidth hard-truncates a string (which may contain ANSI escape sequences)

@@ -3,6 +3,8 @@ package tui
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestParsePSOutput(t *testing.T) {
@@ -258,11 +260,16 @@ func TestResourceLevelStyle(t *testing.T) {
 		}
 	})
 
-	t.Run("danger uses uniform style", func(t *testing.T) {
+	t.Run("danger style differs from normal", func(t *testing.T) {
 		t.Parallel()
-		style := resourceLevelStyle(ResourceDanger)
-		if style.GetBold() {
-			t.Error("danger level should not be bold in uniform bar")
+		normalStyle := resourceLevelStyle(ResourceNormal)
+		dangerStyle := resourceLevelStyle(ResourceDanger)
+		normalFg := normalStyle.GetForeground()
+		dangerFg := dangerStyle.GetForeground()
+		normalC, _ := normalFg.(lipgloss.Color)
+		dangerC, _ := dangerFg.(lipgloss.Color)
+		if string(normalC) == string(dangerC) {
+			t.Errorf("danger and normal should have different foreground colors, both are %q", string(normalC))
 		}
 	})
 }
