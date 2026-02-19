@@ -1,13 +1,13 @@
 version = 1
 nebula_name = 'commit-tracking'
-total_cost_usd = 7.208939249999999
+total_cost_usd = 10.974855999999999
 
 [phases]
 [phases.checkpoint-range-diff]
 bead_id = 'quasar-k2e'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-18T22:25:34.081744-05:00
-updated_at = 2026-02-18T22:25:34.081744-05:00
+updated_at = 2026-02-18T22:54:20.000578-05:00
 
 [phases.cycle-final-sha]
 bead_id = 'quasar-l90'
@@ -47,6 +47,12 @@ summary = 'Well-implemented `ResetTo` method added to both `CycleCommitter` and 
 
 [phases.task-result-shas]
 bead_id = 'quasar-2ov'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T22:25:35.598428-05:00
-updated_at = 2026-02-18T22:44:00.431349-05:00
+updated_at = 2026-02-18T22:54:19.999837-05:00
+
+[phases.task-result-shas.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, well-tested addition of BaseCommitSHA/FinalCommitSHA to TaskResult and PhaseRunnerResult, with a correct adapter fix to preserve results alongside ErrMaxCycles errors.'
