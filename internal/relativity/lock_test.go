@@ -450,6 +450,23 @@ func TestComputeMetrics(t *testing.T) {
 	})
 }
 
+func TestDownstreamCountsIgnoreUnknownEnables(t *testing.T) {
+	t.Parallel()
+
+	entries := []Entry{
+		{Name: "a", Enables: []string{"b", "nonexistent"}},
+		{Name: "b", Enables: []string{"also-unknown"}},
+	}
+	counts := computeDownstreamCounts(entries)
+
+	if counts["a"] != 1 {
+		t.Errorf("a downstream = %d, want 1 (should ignore unknown enables)", counts["a"])
+	}
+	if counts["b"] != 0 {
+		t.Errorf("b downstream = %d, want 0 (should ignore unknown enables)", counts["b"])
+	}
+}
+
 func TestComputeMetricsEmpty(t *testing.T) {
 	t.Parallel()
 

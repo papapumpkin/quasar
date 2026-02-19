@@ -269,10 +269,22 @@ func computeCentrality(e Entry, maxEnables int) float64 {
 // computeDownstreamCounts calculates the transitive count of nebulas enabled
 // by each nebula.
 func computeDownstreamCounts(entries []Entry) map[string]int {
-	// Build enables adjacency.
+	// Build set of known nebula names.
+	names := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		names[e.Name] = true
+	}
+
+	// Build enables adjacency, filtering to known names only.
 	enables := make(map[string][]string, len(entries))
 	for _, e := range entries {
-		enables[e.Name] = e.Enables
+		var valid []string
+		for _, n := range e.Enables {
+			if names[n] {
+				valid = append(valid, n)
+			}
+		}
+		enables[e.Name] = valid
 	}
 
 	counts := make(map[string]int, len(entries))
