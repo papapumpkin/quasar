@@ -36,6 +36,9 @@ func (a *loopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, pha
 
 	result, err := a.loop.RunExistingTask(ctx, beadID, phaseDescription)
 	if err != nil {
+		if result != nil {
+			return toPhaseRunnerResult(result), err
+		}
 		return nil, err
 	}
 	return toPhaseRunnerResult(result), nil
@@ -94,6 +97,9 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 
 	result, err := l.RunExistingTask(ctx, beadID, phaseDescription)
 	if err != nil {
+		if result != nil {
+			return toPhaseRunnerResult(result), err
+		}
 		return nil, err
 	}
 	return toPhaseRunnerResult(result), nil
