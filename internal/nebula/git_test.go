@@ -475,6 +475,150 @@ func TestPostCompletion(t *testing.T) {
 	})
 }
 
+func TestGitCommitter_DiffRange(t *testing.T) {
+	t.Run("returns diff between two commits", func(t *testing.T) {
+		dir := initTestRepo(t)
+		ctx := context.Background()
+		gc := NewGitCommitter(ctx, dir)
+		if gc == nil {
+			t.Fatal("expected non-nil committer")
+		}
+
+		// Record the initial commit SHA.
+		baseSHA := headSHA(ctx, t, dir)
+
+		// Create a file and commit.
+		if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("hello\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		run(ctx, t, dir, "git", "add", "-A")
+		run(ctx, t, dir, "git", "commit", "-m", "add new.txt")
+		headSHA1 := headSHA(ctx, t, dir)
+
+		diff, err := gc.DiffRange(ctx, baseSHA, headSHA1)
+		if err != nil {
+			t.Fatalf("DiffRange: %v", err)
+		}
+		if !strings.Contains(diff, "new.txt") {
+			t.Errorf("DiffRange output should contain 'new.txt', got %q", diff)
+		}
+		if !strings.Contains(diff, "hello") {
+			t.Errorf("DiffRange output should contain 'hello', got %q", diff)
+		}
+	})
+
+	t.Run("returns empty for identical SHAs", func(t *testing.T) {
+		dir := initTestRepo(t)
+		ctx := context.Background()
+		gc := NewGitCommitter(ctx, dir)
+		if gc == nil {
+			t.Fatal("expected non-nil committer")
+		}
+
+		sha := headSHA(ctx, t, dir)
+		diff, err := gc.DiffRange(ctx, sha, sha)
+		if err != nil {
+			t.Fatalf("DiffRange: %v", err)
+		}
+		if diff != "" {
+			t.Errorf("expected empty diff for same SHA, got %q", diff)
+		}
+	})
+
+	t.Run("returns error for invalid SHA", func(t *testing.T) {
+		dir := initTestRepo(t)
+		ctx := context.Background()
+		gc := NewGitCommitter(ctx, dir)
+		if gc == nil {
+			t.Fatal("expected non-nil committer")
+		}
+
+		_, err := gc.DiffRange(ctx, "0000000000000000000000000000000000000000", "HEAD")
+		if err == nil {
+			t.Fatal("expected error for invalid base SHA")
+		}
+	})
+
+	t.Run("nil receiver returns empty string", func(t *testing.T) {
+		var gc *gitCommitter
+		diff, err := gc.DiffRange(context.Background(), "abc", "def")
+		if err != nil {
+			t.Fatalf("nil DiffRange: %v", err)
+		}
+		if diff != "" {
+			t.Errorf("nil DiffRange returned %q, want empty", diff)
+		}
+	})
+}
+
+func TestGitCommitter_DiffStatRange(t *testing.T) {
+	t.Run("returns stat between two commits", func(t *testing.T) {
+		dir := initTestRepo(t)
+		ctx := context.Background()
+		gc := NewGitCommitter(ctx, dir)
+		if gc == nil {
+			t.Fatal("expected non-nil committer")
+		}
+
+		baseSHA := headSHA(ctx, t, dir)
+
+		// Create a file and commit.
+		if err := os.WriteFile(filepath.Join(dir, "stats.txt"), []byte("data\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		run(ctx, t, dir, "git", "add", "-A")
+		run(ctx, t, dir, "git", "commit", "-m", "add stats.txt")
+		headSHA1 := headSHA(ctx, t, dir)
+
+		stat, err := gc.DiffStatRange(ctx, baseSHA, headSHA1)
+		if err != nil {
+			t.Fatalf("DiffStatRange: %v", err)
+		}
+		if !strings.Contains(stat, "stats.txt") {
+			t.Errorf("DiffStatRange output should contain 'stats.txt', got %q", stat)
+		}
+		if !strings.Contains(stat, "1 file changed") {
+			t.Errorf("DiffStatRange output should contain '1 file changed', got %q", stat)
+		}
+	})
+
+	t.Run("returns error for invalid SHA", func(t *testing.T) {
+		dir := initTestRepo(t)
+		ctx := context.Background()
+		gc := NewGitCommitter(ctx, dir)
+		if gc == nil {
+			t.Fatal("expected non-nil committer")
+		}
+
+		_, err := gc.DiffStatRange(ctx, "0000000000000000000000000000000000000000", "HEAD")
+		if err == nil {
+			t.Fatal("expected error for invalid base SHA")
+		}
+	})
+
+	t.Run("nil receiver returns empty string", func(t *testing.T) {
+		var gc *gitCommitter
+		stat, err := gc.DiffStatRange(context.Background(), "abc", "def")
+		if err != nil {
+			t.Fatalf("nil DiffStatRange: %v", err)
+		}
+		if stat != "" {
+			t.Errorf("nil DiffStatRange returned %q, want empty", stat)
+		}
+	})
+}
+
+// headSHA returns the current HEAD SHA in the given repo.
+func headSHA(ctx context.Context, t *testing.T, dir string) string {
+	t.Helper()
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git rev-parse HEAD: %v", err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
 func TestDetectDefaultBranch(t *testing.T) {
 	t.Run("detects main branch", func(t *testing.T) {
 		dir := initTestRepo(t)

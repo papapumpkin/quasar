@@ -121,6 +121,74 @@ func TestHeadSHA(t *testing.T) {
 	}
 }
 
+func TestDiffRange(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns diff between two commits", func(t *testing.T) {
+		t.Parallel()
+		dir := initGitRepo(t)
+		c := NewCycleCommitter(context.Background(), dir)
+		ctx := context.Background()
+
+		// Record the initial commit SHA.
+		baseSHA, err := c.HeadSHA(ctx)
+		if err != nil {
+			t.Fatalf("HeadSHA: %v", err)
+		}
+
+		// Create a file and commit.
+		if err := os.WriteFile(filepath.Join(dir, "diff.txt"), []byte("content\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		sha, err := c.CommitCycle(ctx, "test", 1, "add diff.txt")
+		if err != nil {
+			t.Fatalf("CommitCycle: %v", err)
+		}
+
+		diff, err := c.DiffRange(ctx, baseSHA, sha)
+		if err != nil {
+			t.Fatalf("DiffRange: %v", err)
+		}
+		if !strings.Contains(diff, "diff.txt") {
+			t.Errorf("DiffRange output should contain 'diff.txt', got %q", diff)
+		}
+		if !strings.Contains(diff, "content") {
+			t.Errorf("DiffRange output should contain 'content', got %q", diff)
+		}
+	})
+
+	t.Run("returns empty for identical SHAs", func(t *testing.T) {
+		t.Parallel()
+		dir := initGitRepo(t)
+		c := NewCycleCommitter(context.Background(), dir)
+		ctx := context.Background()
+
+		sha, err := c.HeadSHA(ctx)
+		if err != nil {
+			t.Fatalf("HeadSHA: %v", err)
+		}
+
+		diff, err := c.DiffRange(ctx, sha, sha)
+		if err != nil {
+			t.Fatalf("DiffRange: %v", err)
+		}
+		if diff != "" {
+			t.Errorf("expected empty diff for same SHA, got %q", diff)
+		}
+	})
+
+	t.Run("returns error for invalid SHA", func(t *testing.T) {
+		t.Parallel()
+		dir := initGitRepo(t)
+		c := NewCycleCommitter(context.Background(), dir)
+
+		_, err := c.DiffRange(context.Background(), "0000000000000000000000000000000000000000", "HEAD")
+		if err == nil {
+			t.Fatal("expected error for invalid base SHA")
+		}
+	})
+}
+
 func TestNilCycleCommitter(t *testing.T) {
 	t.Parallel()
 
@@ -147,6 +215,17 @@ func TestNilCycleCommitter(t *testing.T) {
 		}
 		if sha != "" {
 			t.Errorf("nil HeadSHA returned sha %q, want empty", sha)
+		}
+	})
+
+	t.Run("DiffRange is no-op", func(t *testing.T) {
+		t.Parallel()
+		diff, err := c.DiffRange(ctx, "abc", "def")
+		if err != nil {
+			t.Fatalf("nil DiffRange: %v", err)
+		}
+		if diff != "" {
+			t.Errorf("nil DiffRange returned %q, want empty", diff)
 		}
 	})
 }

@@ -19,6 +19,10 @@ type GitCommitter interface {
 	DiffLastCommit(ctx context.Context) (string, error)
 	// DiffStatLastCommit returns the --stat output for the most recent commit.
 	DiffStatLastCommit(ctx context.Context) (string, error)
+	// DiffRange returns the full diff between two commits (base..head).
+	DiffRange(ctx context.Context, base, head string) (string, error)
+	// DiffStatRange returns the --stat summary between two commits (base..head).
+	DiffStatRange(ctx context.Context, base, head string) (string, error)
 }
 
 // gitCommitter implements GitCommitter using the git CLI.
@@ -129,6 +133,40 @@ func (g *gitCommitter) DiffStatLastCommit(ctx context.Context) (string, error) {
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("git diff --stat HEAD~1..HEAD: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return stdout.String(), nil
+}
+
+// DiffRange returns the full diff between two commits (base..head).
+// If g is nil, it returns an empty string.
+func (g *gitCommitter) DiffRange(ctx context.Context, base, head string) (string, error) {
+	if g == nil {
+		return "", nil
+	}
+	ref := base + ".." + head
+	cmd := exec.CommandContext(ctx, "git", "-C", g.dir, "diff", ref)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("git diff %s: %w: %s", ref, err, strings.TrimSpace(stderr.String()))
+	}
+	return stdout.String(), nil
+}
+
+// DiffStatRange returns the --stat summary between two commits (base..head).
+// If g is nil, it returns an empty string.
+func (g *gitCommitter) DiffStatRange(ctx context.Context, base, head string) (string, error) {
+	if g == nil {
+		return "", nil
+	}
+	ref := base + ".." + head
+	cmd := exec.CommandContext(ctx, "git", "-C", g.dir, "diff", "--stat", ref)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("git diff --stat %s: %w: %s", ref, err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.String(), nil
 }

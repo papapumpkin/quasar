@@ -33,6 +33,14 @@ func (m *mockGitCommitter) DiffStatLastCommit(_ context.Context) (string, error)
 	return m.diffStatLastCommit, m.diffStatErr
 }
 
+func (m *mockGitCommitter) DiffRange(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+
+func (m *mockGitCommitter) DiffStatRange(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+
 func TestParseDiffStat(t *testing.T) {
 	t.Parallel()
 

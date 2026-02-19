@@ -17,6 +17,8 @@ type CycleCommitter interface {
 	CommitCycle(ctx context.Context, label string, cycle int, summary string) (sha string, err error)
 	// HeadSHA returns the current HEAD commit SHA.
 	HeadSHA(ctx context.Context) (string, error)
+	// DiffRange returns the full diff between two commits (base..head).
+	DiffRange(ctx context.Context, base, head string) (string, error)
 }
 
 // gitCycleCommitter implements CycleCommitter using the git CLI.
@@ -102,6 +104,23 @@ func (g *gitCycleCommitter) HeadSHA(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("git rev-parse HEAD: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	return strings.TrimSpace(stdout.String()), nil
+}
+
+// DiffRange returns the full diff between two commits (base..head).
+// If g is nil, it returns an empty string.
+func (g *gitCycleCommitter) DiffRange(ctx context.Context, base, head string) (string, error) {
+	if g == nil {
+		return "", nil
+	}
+	ref := base + ".." + head
+	cmd := exec.CommandContext(ctx, "git", "-C", g.dir, "diff", ref)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("git diff %s: %w: %s", ref, err, strings.TrimSpace(stderr.String()))
+	}
+	return stdout.String(), nil
 }
 
 // ensureBranch verifies the working directory is on the expected branch.

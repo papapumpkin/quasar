@@ -261,6 +261,10 @@ func (g *fakeGit) CommitCycle(_ context.Context, _ string, _ int, _ string) (str
 	return fmt.Sprintf("sha-%d", idx), nil
 }
 
+func (g *fakeGit) DiffRange(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+
 // ---------------------------------------------------------------------------
 // Existing tests (kept as-is)
 // ---------------------------------------------------------------------------
