@@ -1,0 +1,36 @@
+[nebula]
+name = "commit-tracking"
+description = "Track per-cycle and per-phase commit SHAs so diffs reflect actual work done, and expose range-based diffing for accurate cycle-level and phase-level views."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "git"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 30.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+  "Each cycle records a single 'final SHA' — the last commit made during that cycle (coder pass or lint fix)",
+  "TaskResult carries BaseCommitSHA and FinalCommitSHA so nebula can compute full-phase diffs",
+  "GitCommitter gains a range-diff method (base..head) to replace the broken HEAD~1..HEAD approach",
+  "BuildCheckpoint uses the phase's base→final SHA range for accurate diffs",
+  "Restore/revert capability: given a cycle's final SHA, the user can reset to that point",
+]
+constraints = [
+  "Follow existing Go conventions from CLAUDE.md",
+  "Preserve nil-safety patterns on CycleCommitter and GitCommitter",
+  "Do not break standalone `quasar run` behavior — only enriches data flow",
+  "No external dependencies — git CLI via os/exec only",
+  "CycleCommits semantics change: store one final SHA per cycle (index = cycle-1), not every intermediate commit",
+  "Existing tests must continue to pass; add new tests for all new behavior",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []
