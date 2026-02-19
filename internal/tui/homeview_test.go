@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -284,6 +285,162 @@ func TestHomeStatusIconAndStyle(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHomeView_ScrollingCursorVisible(t *testing.T) {
+	t.Parallel()
+
+	// Create 10 nebulae with descriptions (2 lines each = 20 total lines).
+	// Height of 6 means only ~2-3 rows visible at a time.
+	nebulae := make([]NebulaChoice, 10)
+	for i := range nebulae {
+		nebulae[i] = NebulaChoice{
+			Name:        fmt.Sprintf("nebula-%d", i),
+			Description: fmt.Sprintf("Description for nebula %d", i),
+			Status:      "ready",
+			Phases:      1,
+		}
+	}
+
+	t.Run("cursor at bottom scrolls viewport", func(t *testing.T) {
+		t.Parallel()
+		hv := HomeView{
+			Nebulae: nebulae,
+			Cursor:  8, // near the bottom
+			Offset:  0, // viewport starts at top
+			Width:   80,
+			Height:  6,
+		}
+		out := hv.View()
+
+		// The cursor's nebula must be visible.
+		if !strings.Contains(out, "nebula-8") {
+			t.Errorf("expected cursor nebula 'nebula-8' to be visible, got:\n%s", out)
+		}
+		// First nebula should NOT be visible (scrolled past).
+		if strings.Contains(out, "nebula-0") {
+			t.Errorf("expected nebula-0 to be scrolled out of view, got:\n%s", out)
+		}
+		// Should show an up indicator.
+		if !strings.Contains(out, "more") {
+			t.Errorf("expected scroll indicator, got:\n%s", out)
+		}
+	})
+
+	t.Run("cursor at top with high offset snaps back", func(t *testing.T) {
+		t.Parallel()
+		hv := HomeView{
+			Nebulae: nebulae,
+			Cursor:  0,
+			Offset:  5, // offset past cursor
+			Width:   80,
+			Height:  6,
+		}
+		out := hv.View()
+
+		// Cursor nebula must be visible.
+		if !strings.Contains(out, "nebula-0") {
+			t.Errorf("expected cursor nebula 'nebula-0' to be visible, got:\n%s", out)
+		}
+	})
+
+	t.Run("all items fit no scrolling", func(t *testing.T) {
+		t.Parallel()
+		small := nebulae[:2] // 2 items × 2 lines = 4 lines, fits in height 10
+		hv := HomeView{
+			Nebulae: small,
+			Cursor:  0,
+			Width:   80,
+			Height:  10,
+		}
+		out := hv.View()
+
+		// Both should be visible, no scroll indicators.
+		if !strings.Contains(out, "nebula-0") {
+			t.Errorf("expected 'nebula-0', got:\n%s", out)
+		}
+		if !strings.Contains(out, "nebula-1") {
+			t.Errorf("expected 'nebula-1', got:\n%s", out)
+		}
+		if strings.Contains(out, "more") {
+			t.Errorf("expected no scroll indicators when all items fit, got:\n%s", out)
+		}
+	})
+
+	t.Run("zero height renders all", func(t *testing.T) {
+		t.Parallel()
+		hv := HomeView{
+			Nebulae: nebulae,
+			Cursor:  0,
+			Width:   80,
+			Height:  0, // no constraint
+		}
+		out := hv.View()
+
+		// All items should be rendered.
+		if !strings.Contains(out, "nebula-0") {
+			t.Errorf("expected 'nebula-0', got:\n%s", out)
+		}
+		if !strings.Contains(out, "nebula-9") {
+			t.Errorf("expected 'nebula-9', got:\n%s", out)
+		}
+	})
+}
+
+func TestHomeView_EnsureCursorVisible(t *testing.T) {
+	t.Parallel()
+
+	nebulae := make([]NebulaChoice, 8)
+	for i := range nebulae {
+		nebulae[i] = NebulaChoice{
+			Name:        fmt.Sprintf("n%d", i),
+			Description: fmt.Sprintf("desc %d", i),
+			Status:      "ready",
+			Phases:      1,
+		}
+	}
+
+	t.Run("offset stays when cursor is visible", func(t *testing.T) {
+		t.Parallel()
+		hv := HomeView{
+			Nebulae: nebulae,
+			Cursor:  1,
+			Offset:  0,
+			Height:  8, // enough for ~3 rows with descriptions
+		}
+		got := hv.ensureCursorVisible()
+		if got != 0 {
+			t.Errorf("expected offset 0 (cursor visible), got %d", got)
+		}
+	})
+
+	t.Run("offset snaps to cursor when cursor above", func(t *testing.T) {
+		t.Parallel()
+		hv := HomeView{
+			Nebulae: nebulae,
+			Cursor:  1,
+			Offset:  5,
+			Height:  6,
+		}
+		got := hv.ensureCursorVisible()
+		if got != 1 {
+			t.Errorf("expected offset to snap to cursor 1, got %d", got)
+		}
+	})
+
+	t.Run("offset increases when cursor below visible window", func(t *testing.T) {
+		t.Parallel()
+		hv := HomeView{
+			Nebulae: nebulae,
+			Cursor:  7,
+			Offset:  0,
+			Height:  6,
+		}
+		got := hv.ensureCursorVisible()
+		if got <= 0 {
+			t.Errorf("expected offset > 0 to bring cursor 7 into view, got %d", got)
+		}
+	})
 }
 
 func TestHomeStatusLabel(t *testing.T) {
