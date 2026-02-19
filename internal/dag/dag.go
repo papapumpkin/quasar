@@ -4,6 +4,7 @@
 package dag
 
 import (
+	"container/heap"
 	"errors"
 	"fmt"
 	"sort"
@@ -139,36 +140,32 @@ func (d *DAG) Len() int {
 }
 
 // TopologicalSort returns node IDs in a valid topological order
-// (dependencies come before dependents). Among nodes at the same
-// depth, higher-priority nodes appear first. Returns ErrCycle if
-// the graph contains a cycle.
+// (dependencies come before dependents). Among nodes with all
+// dependencies satisfied, higher-priority nodes are emitted first.
+// Returns ErrCycle if the graph contains a cycle.
 func (d *DAG) TopologicalSort() ([]string, error) {
 	inDegree := make(map[string]int, len(d.nodes))
 	for id := range d.nodes {
 		inDegree[id] = len(d.adjacency[id])
 	}
 
-	// Seed queue with zero-dependency nodes, sorted by priority desc.
-	queue := d.prioritySorted(d.zeroDegreeNodes(inDegree))
+	// Seed priority queue with zero-dependency nodes.
+	pq := &nodeHeap{nodes: d.nodes}
+	for _, id := range d.zeroDegreeNodes(inDegree) {
+		heap.Push(pq, id)
+	}
 
 	sorted := make([]string, 0, len(d.nodes))
-	for len(queue) > 0 {
-		id := queue[0]
-		queue = queue[1:]
+	for pq.Len() > 0 {
+		id := heap.Pop(pq).(string)
 		sorted = append(sorted, id)
 
-		// Collect newly freed dependents.
-		var freed []string
+		// Push newly freed dependents into the priority queue.
 		for dependent := range d.reverse[id] {
 			inDegree[dependent]--
 			if inDegree[dependent] == 0 {
-				freed = append(freed, dependent)
+				heap.Push(pq, dependent)
 			}
-		}
-		// Insert freed nodes in priority order.
-		if len(freed) > 0 {
-			freed = d.prioritySorted(freed)
-			queue = append(queue, freed...)
 		}
 	}
 
@@ -262,24 +259,34 @@ func (d *DAG) hasPath(src, dst string) bool {
 	return false
 }
 
-// collectAncestors performs a BFS over forward edges from id, collecting
-// all reachable nodes (transitive dependencies).
+// collectAncestors performs an iterative BFS over forward edges from id,
+// collecting all reachable nodes (transitive dependencies).
 func (d *DAG) collectAncestors(id string, visited map[string]bool) {
-	for dep := range d.adjacency[id] {
-		if !visited[dep] {
-			visited[dep] = true
-			d.collectAncestors(dep, visited)
+	queue := []string{id}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for dep := range d.adjacency[cur] {
+			if !visited[dep] {
+				visited[dep] = true
+				queue = append(queue, dep)
+			}
 		}
 	}
 }
 
-// collectDescendants performs a BFS over reverse edges from id, collecting
-// all reachable nodes (transitive dependents).
+// collectDescendants performs an iterative BFS over reverse edges from id,
+// collecting all reachable nodes (transitive dependents).
 func (d *DAG) collectDescendants(id string, visited map[string]bool) {
-	for dep := range d.reverse[id] {
-		if !visited[dep] {
-			visited[dep] = true
-			d.collectDescendants(dep, visited)
+	queue := []string{id}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for dep := range d.reverse[cur] {
+			if !visited[dep] {
+				visited[dep] = true
+				queue = append(queue, dep)
+			}
 		}
 	}
 }
@@ -312,4 +319,34 @@ func (d *DAG) prioritySorted(ids []string) []string {
 		return sorted[i] < sorted[j] // alphabetical tiebreaker
 	})
 	return sorted
+}
+
+// nodeHeap implements container/heap.Interface for priority-ordered node IDs.
+// Nodes with higher priority are popped first; alphabetical ID breaks ties.
+type nodeHeap struct {
+	ids   []string
+	nodes map[string]*Node
+}
+
+func (h *nodeHeap) Len() int { return len(h.ids) }
+
+func (h *nodeHeap) Less(i, j int) bool {
+	pi := h.nodes[h.ids[i]].Priority
+	pj := h.nodes[h.ids[j]].Priority
+	if pi != pj {
+		return pi > pj // higher priority first (max-heap)
+	}
+	return h.ids[i] < h.ids[j] // alphabetical tiebreaker
+}
+
+func (h *nodeHeap) Swap(i, j int) { h.ids[i], h.ids[j] = h.ids[j], h.ids[i] }
+
+func (h *nodeHeap) Push(x any) { h.ids = append(h.ids, x.(string)) }
+
+func (h *nodeHeap) Pop() any {
+	old := h.ids
+	n := len(old)
+	id := old[n-1]
+	h.ids = old[:n-1]
+	return id
 }

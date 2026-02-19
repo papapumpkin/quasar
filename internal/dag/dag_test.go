@@ -787,12 +787,6 @@ func TestLargeDAG(t *testing.T) {
 	t.Parallel()
 	// Build a 100-node linear chain: n99 → n98 → ... → n0
 	d := New()
-	for i := 0; i < 100; i++ {
-		id := strings.Repeat("0", 2-len(string(rune('0'+i/10)))) // won't work, use fmt
-		_ = id
-	}
-	// Reset and build properly.
-	d = New()
 	ids := make([]string, 100)
 	for i := 0; i < 100; i++ {
 		ids[i] = fmt.Sprintf("n%03d", i)
