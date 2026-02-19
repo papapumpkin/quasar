@@ -11,9 +11,9 @@ updated_at = 2026-02-19T09:48:46.218759-05:00
 
 [phases.catalog-reports]
 bead_id = 'quasar-9uq'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-02-19T09:45:57.68051-05:00
-updated_at = 2026-02-19T10:15:15.047617-05:00
+updated_at = 2026-02-19T10:21:53.75745-05:00
 
 [phases.cli-relativity]
 bead_id = 'quasar-wrd'
