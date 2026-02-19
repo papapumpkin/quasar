@@ -52,7 +52,8 @@ func Save(path string, st *Spacetime) error {
 // Merge combines auto-derived scan data with an existing catalog, preserving
 // manual annotations. For each entry in scanned, if a matching entry (by name)
 // exists in existing, the manual fields (Summary, Lessons) are carried forward.
-// Auto-derived fields from scanned always take precedence.
+// Auto-derived fields from scanned always take precedence. Entries present in
+// existing but absent from scanned are marked as abandoned rather than deleted.
 func Merge(existing, scanned *Spacetime) *Spacetime {
 	manual := make(map[string]*Entry, len(existing.Nebulas))
 	for i := range existing.Nebulas {
@@ -61,10 +62,12 @@ func Merge(existing, scanned *Spacetime) *Spacetime {
 
 	merged := &Spacetime{
 		Relativity: scanned.Relativity,
-		Nebulas:    make([]Entry, len(scanned.Nebulas)),
+		Nebulas:    make([]Entry, 0, len(scanned.Nebulas)+len(existing.Nebulas)),
 	}
 
-	for i, entry := range scanned.Nebulas {
+	seen := make(map[string]bool, len(scanned.Nebulas))
+	for _, entry := range scanned.Nebulas {
+		seen[entry.Name] = true
 		if prev, ok := manual[entry.Name]; ok {
 			// Preserve manual enrichment fields.
 			if entry.Summary == "" {
@@ -81,7 +84,15 @@ func Merge(existing, scanned *Spacetime) *Spacetime {
 				entry.BuildsOn = prev.BuildsOn
 			}
 		}
-		merged.Nebulas[i] = entry
+		merged.Nebulas = append(merged.Nebulas, entry)
+	}
+
+	// Mark entries not in the scan as abandoned.
+	for _, entry := range existing.Nebulas {
+		if !seen[entry.Name] {
+			entry.Status = StatusAbandoned
+			merged.Nebulas = append(merged.Nebulas, entry)
+		}
 	}
 
 	return merged

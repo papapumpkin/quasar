@@ -301,19 +301,29 @@ func TestMergePreservesManualAnnotations(t *testing.T) {
 	})
 
 	t.Run("new entries pass through", func(t *testing.T) {
-		if len(merged.Nebulas) != 2 {
-			t.Fatalf("nebulas count = %d, want 2", len(merged.Nebulas))
+		if len(merged.Nebulas) != 3 {
+			t.Fatalf("nebulas count = %d, want 3", len(merged.Nebulas))
 		}
 		if merged.Nebulas[1].Name != "alpha-v2" {
 			t.Errorf("name = %q, want %q", merged.Nebulas[1].Name, "alpha-v2")
 		}
 	})
 
-	t.Run("entries not in scan are dropped", func(t *testing.T) {
+	t.Run("entries not in scan become abandoned", func(t *testing.T) {
+		found := false
 		for _, e := range merged.Nebulas {
 			if e.Name == "beta" {
-				t.Errorf("beta should not be in merged result (not in scan)")
+				found = true
+				if e.Status != StatusAbandoned {
+					t.Errorf("beta status = %q, want %q", e.Status, StatusAbandoned)
+				}
+				if e.Summary != "Beta summary." {
+					t.Errorf("beta summary = %q, want preserved", e.Summary)
+				}
 			}
+		}
+		if !found {
+			t.Error("beta should be in merged result as abandoned")
 		}
 	})
 }
