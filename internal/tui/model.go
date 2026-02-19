@@ -16,12 +16,13 @@ import (
 	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
-// Mode indicates whether the TUI is in loop or nebula mode.
+// Mode indicates which top-level view the TUI is displaying.
 type Mode int
 
 const (
 	ModeLoop Mode = iota
 	ModeNebula
+	ModeHome // landing page for browsing and selecting nebulas
 )
 
 // ViewDepth tracks the navigation level in nebula mode.
@@ -76,10 +77,17 @@ type AppModel struct {
 	Stopping  bool   // whether a stop has been requested
 	NebulaDir string // path to nebula directory for intervention files
 
+	// Home mode state (landing page).
+	HomeCursor     int            // cursor position in the home nebula list
+	HomeNebulae    []NebulaChoice // discovered nebulas for the home view
+	HomeDir        string         // the .nebulas/ parent directory
+	SelectedNebula string         // set when user selects a nebula from home; read after Run() returns
+
 	// Nebula picker state (post-completion).
 	AvailableNebulae []NebulaChoice // populated on MsgNebulaDone via discovery
 	NextNebula       string         // set when user selects one; read after Run() returns
 	PickerCursor     int            // cursor position in the nebula picker list
+	ReturnToHome     bool           // set when user presses Esc on completion overlay to return to home
 
 	// Resource monitoring.
 	Resources  ResourceSnapshot   // latest resource usage snapshot
@@ -110,6 +118,10 @@ func NewAppModel(mode Mode) AppModel {
 	}
 	m.StatusBar.StartTime = m.StartTime
 	m.StatusBar.Thresholds = m.Thresholds
+	// In home mode, show the detail panel by default.
+	if mode == ModeHome {
+		m.ShowPlan = true
+	}
 	return m
 }
 
@@ -440,6 +452,15 @@ func (m *AppModel) ensurePhaseLoop(phaseID string) *LoopView {
 // clampCursors ensures all cursors remain within valid bounds.
 // This prevents panics after a resize or data change that shrinks a list.
 func clampCursors(m *AppModel) {
+	// Clamp HomeCursor.
+	if max := len(m.HomeNebulae) - 1; max >= 0 {
+		if m.HomeCursor > max {
+			m.HomeCursor = max
+		}
+	} else {
+		m.HomeCursor = 0
+	}
+
 	// Clamp NebulaView cursor.
 	if max := len(m.NebulaView.Phases) - 1; max >= 0 {
 		if m.NebulaView.Cursor > max {
@@ -496,10 +517,14 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Completion overlay — q/Esc to exit, arrow keys for picker.
+	// Completion overlay — q quits, Esc returns to home, arrow keys for picker.
 	if m.Overlay != nil {
 		switch {
-		case key.Matches(msg, m.Keys.Quit), key.Matches(msg, m.Keys.Back):
+		case key.Matches(msg, m.Keys.Quit):
+			return m, tea.Quit
+		case key.Matches(msg, m.Keys.Back):
+			// Esc: return to the home screen instead of quitting.
+			m.ReturnToHome = true
 			return m, tea.Quit
 		case key.Matches(msg, m.Keys.Up):
 			if len(m.AvailableNebulae) > 0 && m.PickerCursor > 0 {
@@ -617,6 +642,17 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// diff inline instead of drilling down into the loop view.
 	if m.ShowDiff && m.DiffFileList != nil && key.Matches(msg, m.Keys.OpenDiff) {
 		return m.showFileDiff()
+	}
+
+	// Home mode: Enter selects a nebula and exits the TUI.
+	if m.Mode == ModeHome && key.Matches(msg, m.Keys.Enter) {
+		if m.HomeCursor >= 0 && m.HomeCursor < len(m.HomeNebulae) {
+			selected := m.HomeNebulae[m.HomeCursor].Path
+			m.SelectedNebula = selected
+			m.NextNebula = selected
+			return m, tea.Quit
+		}
+		return m, nil
 	}
 
 	switch {
@@ -758,9 +794,17 @@ func (m *AppModel) handleRetryKey() {
 	m.addMessage("retrying phase %s", phaseID)
 }
 
-// handleInfoKey toggles the phase plan viewer in the detail panel.
-// Active in nebula mode at DepthPhases or DepthPhaseLoop.
+// handleInfoKey toggles the detail/plan viewer in the detail panel.
+// Active in home mode and nebula mode at DepthPhases or DepthPhaseLoop.
 func (m *AppModel) handleInfoKey() {
+	if m.Mode == ModeHome {
+		m.ShowPlan = !m.ShowPlan
+		if m.ShowPlan {
+			m.updateHomeDetail()
+		}
+		return
+	}
+
 	if m.Mode != ModeNebula {
 		return
 	}
@@ -1061,6 +1105,10 @@ func (m *AppModel) moveUp() {
 		return
 	}
 	switch m.Mode {
+	case ModeHome:
+		if m.HomeCursor > 0 {
+			m.HomeCursor--
+		}
 	case ModeLoop:
 		m.LoopView.MoveUp()
 	case ModeNebula:
@@ -1084,6 +1132,14 @@ func (m *AppModel) moveDown() {
 		return
 	}
 	switch m.Mode {
+	case ModeHome:
+		max := len(m.HomeNebulae) - 1
+		if max < 0 {
+			max = 0
+		}
+		if m.HomeCursor < max {
+			m.HomeCursor++
+		}
 	case ModeLoop:
 		m.LoopView.MoveDown()
 	case ModeNebula:
@@ -1101,6 +1157,11 @@ func (m *AppModel) moveDown() {
 // updateDetailFromSelection updates the detail panel content
 // based on the current view depth and selected item.
 func (m *AppModel) updateDetailFromSelection() {
+	// Home mode always uses its own detail renderer.
+	if m.Mode == ModeHome {
+		m.updateHomeDetail()
+		return
+	}
 	// Bead tracker takes precedence when toggled on.
 	if m.ShowBeads {
 		m.updateBeadDetail()
@@ -1112,6 +1173,7 @@ func (m *AppModel) updateDetailFromSelection() {
 		return
 	}
 	switch m.Mode {
+
 	case ModeLoop:
 		agent := m.LoopView.SelectedAgent()
 		if agent == nil {
@@ -1149,6 +1211,32 @@ func (m *AppModel) updateDetailFromSelection() {
 	case ModeNebula:
 		m.updateNebulaDetail()
 	}
+}
+
+// updateHomeDetail populates the detail panel with the selected nebula's
+// description, phase count, and status breakdown.
+func (m *AppModel) updateHomeDetail() {
+	if m.HomeCursor < 0 || m.HomeCursor >= len(m.HomeNebulae) {
+		m.Detail.SetEmpty("No nebulas found")
+		return
+	}
+	nc := m.HomeNebulae[m.HomeCursor]
+
+	var b strings.Builder
+	if nc.Description != "" {
+		b.WriteString(nc.Description)
+		b.WriteString("\n\n")
+	}
+	PhasesMsg := fmt.Sprintf("Phases: %d", nc.Phases)
+	b.WriteString(PhasesMsg)
+	if nc.Done > 0 {
+		DoneMsg := fmt.Sprintf("  (%d done)", nc.Done)
+		b.WriteString(DoneMsg)
+	}
+	b.WriteString("\nStatus: ")
+	b.WriteString(nc.Status)
+
+	m.Detail.SetContent(nc.Name, b.String())
 }
 
 // updateNebulaDetail updates the detail panel for nebula mode based on depth.
@@ -1258,6 +1346,11 @@ func (m AppModel) detailHeight() int {
 
 // showDetailPanel returns whether the detail panel should be visible.
 func (m AppModel) showDetailPanel() bool {
+	if m.Mode == ModeHome {
+		// Show the detail panel in home mode when there are nebulas to describe.
+		// When ShowPlan is toggled off, hide the detail panel.
+		return len(m.HomeNebulae) > 0 && m.ShowPlan
+	}
 	if m.Mode == ModeLoop {
 		return m.Depth == DepthAgentOutput || m.ShowBeads
 	}
@@ -1292,6 +1385,10 @@ func (m AppModel) View() string {
 	// Status bar — always full terminal width; sync execution control state.
 	m.StatusBar.Paused = m.Paused
 	m.StatusBar.Stopping = m.Stopping
+	if m.Mode == ModeHome {
+		m.StatusBar.HomeMode = true
+		m.StatusBar.HomeNebulaCount = len(m.HomeNebulae)
+	}
 	sections = append(sections, m.StatusBar.View())
 	sections = append(sections, "") // Spacing between header and content.
 
@@ -1419,6 +1516,14 @@ func (m AppModel) renderBreadcrumb() string {
 func (m AppModel) renderMainView() string {
 	w := m.contentWidth()
 	switch m.Mode {
+	case ModeHome:
+		hv := HomeView{
+			Nebulae: m.HomeNebulae,
+			Cursor:  m.HomeCursor,
+			Width:   w,
+		}
+		return hv.View()
+
 	case ModeLoop:
 		m.LoopView.Width = w
 		return m.LoopView.View()
@@ -1452,6 +1557,8 @@ func (m AppModel) buildFooter() Footer {
 
 	if m.Gate != nil {
 		f.Bindings = GateFooterBindings(m.Keys)
+	} else if m.Mode == ModeHome {
+		f.Bindings = HomeFooterBindings(m.Keys)
 	} else if m.Mode == ModeNebula {
 		if m.Depth > DepthPhases {
 			f.Bindings = NebulaDetailFooterBindings(m.Keys)

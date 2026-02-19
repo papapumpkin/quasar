@@ -35,8 +35,8 @@ func TestCompletionOverlayView(t *testing.T) {
 		if !strings.Contains(view, "Task complete") {
 			t.Error("expected success overlay to contain 'Task complete'")
 		}
-		if !strings.Contains(view, "q to exit") {
-			t.Error("expected overlay to contain exit hint")
+		if !strings.Contains(view, "q:quit") {
+			t.Error("expected overlay to contain quit hint")
 		}
 	})
 
@@ -329,6 +329,9 @@ func TestCompletionOverlayNebulaPicker(t *testing.T) {
 		if !strings.Contains(view, "enter:launch") {
 			t.Error("expected launch hint")
 		}
+		if !strings.Contains(view, "esc:home") {
+			t.Error("expected home hint")
+		}
 	})
 
 	t.Run("shows cursor indicator on selected item", func(t *testing.T) {
@@ -357,8 +360,11 @@ func TestCompletionOverlayNebulaPicker(t *testing.T) {
 		if strings.Contains(view, "Run another nebula?") {
 			t.Error("should not show picker header without choices")
 		}
-		if !strings.Contains(view, "q to exit") {
+		if !strings.Contains(view, "q:quit") {
 			t.Error("expected standard exit hint")
+		}
+		if !strings.Contains(view, "esc:home") {
+			t.Error("expected home hint without choices")
 		}
 	})
 }
@@ -664,8 +670,8 @@ func TestOverlayRendersInView(t *testing.T) {
 	if !strings.Contains(view, "Task complete") {
 		t.Error("expected View to render completion overlay")
 	}
-	if !strings.Contains(view, "q to exit") {
-		t.Error("expected View to render exit hint in overlay")
+	if !strings.Contains(view, "q:quit") {
+		t.Error("expected View to render quit hint in overlay")
 	}
 }
 

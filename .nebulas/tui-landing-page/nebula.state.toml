@@ -1,0 +1,88 @@
+version = 1
+nebula_name = 'tui-landing-page'
+total_cost_usd = 19.7920026
+
+[phases]
+[phases.cmd-entry-point]
+bead_id = 'quasar-0kj'
+status = 'done'
+created_at = 2026-02-18T15:39:42.122217-05:00
+updated_at = 2026-02-18T21:56:27.09955-05:00
+
+[phases.cmd-entry-point.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented TUI home screen with discovery, selection, and execution loop — clean architecture, comprehensive tests, and no disruption to existing paths.'
+
+[phases.home-key-handling]
+bead_id = 'quasar-2nm'
+status = 'done'
+created_at = 2026-02-18T15:39:41.752389-05:00
+updated_at = 2026-02-18T16:07:41.989678-05:00
+
+[phases.home-key-handling.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Added home-mode keyboard navigation (up/down/j/k, Enter to select, q to quit, ?/i to toggle info panel) with comprehensive tests — well-integrated into the existing key dispatch architecture.'
+
+[phases.home-mode-model]
+bead_id = 'quasar-5az'
+status = 'done'
+created_at = 2026-02-18T15:39:41.03891-05:00
+updated_at = 2026-02-18T15:51:22.392802-05:00
+
+[phases.home-mode-model.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean addition of ModeHome constant, DiscoverAllNebulae function, NebulaChoice.Description field, and NewHomeProgram constructor with comprehensive tests — all foundational pieces for the TUI landing page, with no impact on existing functionality.'
+
+[phases.home-view-render]
+bead_id = 'quasar-z2b'
+status = 'done'
+created_at = 2026-02-18T15:39:41.408696-05:00
+updated_at = 2026-02-18T15:59:43.326802-05:00
+
+[phases.home-view-render.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented home view landing page with correct rendering, navigation, status bar integration, and comprehensive tests following existing codebase patterns.'
+
+[phases.integration-test]
+bead_id = 'quasar-go4'
+status = 'done'
+created_at = 2026-02-18T15:39:42.891837-05:00
+updated_at = 2026-02-18T22:05:30.795165-05:00
+
+[phases.integration-test.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Comprehensive, well-structured test suite for TUI home screen (discover, render, key handling) with all acceptance criteria met and clean CI signals.'
+
+[phases.return-to-home]
+bead_id = 'quasar-r9y'
+status = 'done'
+created_at = 2026-02-18T15:39:42.509792-05:00
+updated_at = 2026-02-18T22:02:52.366044-05:00
+
+[phases.return-to-home.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented return-to-home flow from completion overlay with clean state management, updated keybinding hints, and thorough test coverage for all three exit paths (Esc→home, Enter→next, q→quit).'
+
+[phases.speed-up-splash]
+bead_id = 'quasar-d77'
+status = 'done'
+created_at = 2026-02-18T15:39:40.693521-05:00
+updated_at = 2026-02-18T15:42:44.23749-05:00
+
+[phases.speed-up-splash.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Trivial config constant change (2.0 → 1.0 spins) correctly halves splash animation duration with no side effects; tests dynamically compute expected values so no updates needed.'

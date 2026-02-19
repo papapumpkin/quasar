@@ -75,8 +75,8 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("k", "skip"),
 		),
 		Info: key.NewBinding(
-			key.WithKeys("i"),
-			key.WithHelp("i", "plan"),
+			key.WithKeys("i", "?"),
+			key.WithHelp("?/i", "info"),
 		),
 		Diff: key.NewBinding(
 			key.WithKeys("d"),

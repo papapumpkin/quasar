@@ -1,0 +1,35 @@
+[nebula]
+name = "tui-landing-page"
+description = "Add a landing page to the TUI that discovers nebulas in the current directory and lets you select and run them, turning Quasar into an IDE-like experience."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "tui"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 50.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Add a TUI landing page that auto-discovers .nebulas/ in the current directory",
+    "Display nebulas with name, description, status, and phase counts",
+    "Allow selecting and running a single nebula from the landing page",
+    "After nebula completion, show the status report overlay, then return to landing page",
+    "Speed up the splash loading animation (reduce from 2.0 spins to 1.0)",
+    "Keep existing 'quasar nebula apply' CLI path fully functional",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "All TUI code lives in internal/tui/",
+    "Do not break the stderr Printer fallback path",
+    "Use only charmbracelet ecosystem (bubbletea, lipgloss, bubbles) — no other TUI deps",
+    "All new code must have tests",
+    "The loop and nebula packages must not import internal/tui",
+    "Only one nebula runs at a time",
+    "Keep the existing galactic color palette",
+]

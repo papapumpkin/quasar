@@ -832,24 +832,46 @@ func TestHandleGateKeyEscDismissesGate(t *testing.T) {
 
 // --- Completion overlay Esc tests ---
 
-func TestCompletionOverlayEscQuits(t *testing.T) {
+func TestCompletionOverlayEscReturnsToHome(t *testing.T) {
 	t.Parallel()
 
-	t.Run("Esc on completion overlay triggers quit", func(t *testing.T) {
+	t.Run("Esc on completion overlay sets ReturnToHome and quits", func(t *testing.T) {
 		t.Parallel()
 		m := NewAppModel(ModeNebula)
 		m.Splash = nil
 		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, Message: "done"}
 
 		escMsg := tea.KeyMsg{Type: tea.KeyEscape}
-		_, cmd := m.handleKey(escMsg)
+		result, cmd := m.handleKey(escMsg)
+		rm := result.(AppModel)
 
+		if !rm.ReturnToHome {
+			t.Error("expected ReturnToHome to be true after Esc on completion overlay")
+		}
 		if cmd == nil {
 			t.Fatal("expected a command to be returned for Esc on completion overlay")
 		}
 		resultMsg := cmd()
 		if _, ok := resultMsg.(tea.QuitMsg); !ok {
 			t.Errorf("expected tea.QuitMsg, got %T", resultMsg)
+		}
+	})
+
+	t.Run("q on completion overlay does not set ReturnToHome", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeNebula)
+		m.Splash = nil
+		m.Overlay = &CompletionOverlay{Kind: CompletionSuccess, Message: "done"}
+
+		qMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
+		result, cmd := m.handleKey(qMsg)
+		rm := result.(AppModel)
+
+		if rm.ReturnToHome {
+			t.Error("expected ReturnToHome to be false after q on completion overlay")
+		}
+		if cmd == nil {
+			t.Fatal("expected a quit command to be returned for q on completion overlay")
 		}
 	})
 }

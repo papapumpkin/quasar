@@ -8,13 +8,14 @@ import (
 	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
-// NebulaChoice describes an available nebula for the post-completion picker.
+// NebulaChoice describes an available nebula for the post-completion picker or home screen.
 type NebulaChoice struct {
-	Name   string // from nebula.toml [nebula] name
-	Path   string // directory path
-	Status string // "ready", "in_progress", "done", "partial"
-	Phases int    // total phase count
-	Done   int    // completed phases
+	Name        string // from nebula.toml [nebula] name
+	Description string // from nebula.toml [nebula] description
+	Path        string // directory path
+	Status      string // "ready", "in_progress", "done", "partial"
+	Phases      int    // total phase count
+	Done        int    // completed phases
 }
 
 // DiscoverNebulae scans the parent of currentDir for sibling nebula directories.
@@ -55,9 +56,10 @@ func DiscoverNebulae(currentDir string) ([]NebulaChoice, error) {
 		}
 
 		choice := NebulaChoice{
-			Name:   n.Manifest.Nebula.Name,
-			Path:   dirPath,
-			Phases: len(n.Phases),
+			Name:        n.Manifest.Nebula.Name,
+			Description: n.Manifest.Nebula.Description,
+			Path:        dirPath,
+			Phases:      len(n.Phases),
 		}
 
 		// If name is empty, fall back to directory name.
@@ -66,6 +68,52 @@ func DiscoverNebulae(currentDir string) ([]NebulaChoice, error) {
 		}
 
 		// Determine status from state file.
+		state, err := nebula.LoadState(dirPath)
+		if err != nil {
+			choice.Status = "ready"
+		} else {
+			choice.Status, choice.Done = classifyNebulaStatus(n, state)
+		}
+
+		choices = append(choices, choice)
+	}
+
+	return choices, nil
+}
+
+// DiscoverAllNebulae scans the given directory for valid nebula subdirectories.
+// Unlike DiscoverNebulae, it does not exclude any directory and is intended for
+// the home screen where no nebula is currently running.
+func DiscoverAllNebulae(nebulaeDir string) ([]NebulaChoice, error) {
+	entries, err := os.ReadDir(nebulaeDir)
+	if err != nil {
+		return nil, fmt.Errorf("reading nebulae directory: %w", err)
+	}
+
+	var choices []NebulaChoice
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		dirPath := filepath.Join(nebulaeDir, entry.Name())
+
+		n, err := nebula.Load(dirPath)
+		if err != nil {
+			continue
+		}
+
+		choice := NebulaChoice{
+			Name:        n.Manifest.Nebula.Name,
+			Description: n.Manifest.Nebula.Description,
+			Path:        dirPath,
+			Phases:      len(n.Phases),
+		}
+
+		if choice.Name == "" {
+			choice.Name = entry.Name()
+		}
+
 		state, err := nebula.LoadState(dirPath)
 		if err != nil {
 			choice.Status = "ready"

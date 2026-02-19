@@ -24,7 +24,7 @@ type SplashConfig struct {
 	Loop      bool // if true, loops forever (spinner mode)
 }
 
-// DefaultSplashConfig returns a full-screen splash config: 62×19, 2 spins,
+// DefaultSplashConfig returns a full-screen splash config: 62×19, 1 spin,
 // settles to rest with an ease-out deceleration curve.
 func DefaultSplashConfig() SplashConfig {
 	return SplashConfig{
@@ -34,7 +34,7 @@ func DefaultSplashConfig() SplashConfig {
 		OrbitRadY: 3.5,
 		SpikeLen:  6,
 		FPS:       30,
-		Spins:     2.0,
+		Spins:     1.0,
 		ShowTitle: true,
 		Loop:      false,
 	}

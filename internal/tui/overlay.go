@@ -93,9 +93,9 @@ func (o *CompletionOverlay) View(width, height int) string {
 	// Exit hint.
 	b.WriteString("\n")
 	if len(o.NebulaChoices) > 0 {
-		b.WriteString(styleOverlayHint.Render("enter:launch  q:quit"))
+		b.WriteString(styleOverlayHint.Render("esc:home  enter:launch  q:quit"))
 	} else {
-		b.WriteString(styleOverlayHint.Render("Press q to exit"))
+		b.WriteString(styleOverlayHint.Render("esc:home  q:quit"))
 	}
 
 	// Render the box.
