@@ -120,8 +120,10 @@ func (a *tuiLoopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDe
 // toPhaseRunnerResult converts a loop.TaskResult to nebula.PhaseRunnerResult.
 func toPhaseRunnerResult(result *loop.TaskResult) *nebula.PhaseRunnerResult {
 	return &nebula.PhaseRunnerResult{
-		TotalCostUSD: result.TotalCostUSD,
-		CyclesUsed:   result.CyclesUsed,
-		Report:       result.Report,
+		TotalCostUSD:   result.TotalCostUSD,
+		CyclesUsed:     result.CyclesUsed,
+		Report:         result.Report,
+		BaseCommitSHA:  result.BaseCommitSHA,
+		FinalCommitSHA: result.FinalCommitSHA,
 	}
 }

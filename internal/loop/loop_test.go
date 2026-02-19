@@ -1240,11 +1240,102 @@ func TestRunLoop(t *testing.T) {
 		if !errors.Is(err, ErrMaxCycles) {
 			t.Errorf("expected ErrMaxCycles, got %v", err)
 		}
-		if result != nil {
-			t.Errorf("expected nil result on max cycles, got %v", result)
+		if result == nil {
+			t.Fatal("expected non-nil result on max cycles")
+		}
+		if result.CyclesUsed != 2 {
+			t.Errorf("CyclesUsed = %d, want 2", result.CyclesUsed)
 		}
 		if rUI.maxCyclesCalls != 1 {
 			t.Errorf("MaxCyclesReached calls = %d, want 1", rUI.maxCyclesCalls)
+		}
+	})
+
+	t.Run("ApprovedPopulatesSHAs", func(t *testing.T) {
+		t.Parallel()
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "implemented", CostUSD: 0.50},
+				{ResultText: "APPROVED: LGTM.", CostUSD: 0.25},
+			},
+		}
+		git := &fakeGit{
+			headSHA:    "base-sha-abc",
+			commitSHAs: []string{"cycle1-sha-def"},
+		}
+		l := &Loop{
+			Invoker:      inv,
+			UI:           &recordingUI{},
+			Git:          git,
+			MaxCycles:    3,
+			MaxBudgetUSD: 10.0,
+		}
+		result, err := l.runLoop(context.Background(), "bead-1", "task")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.BaseCommitSHA != "base-sha-abc" {
+			t.Errorf("BaseCommitSHA = %q, want %q", result.BaseCommitSHA, "base-sha-abc")
+		}
+		if result.FinalCommitSHA != "cycle1-sha-def" {
+			t.Errorf("FinalCommitSHA = %q, want %q", result.FinalCommitSHA, "cycle1-sha-def")
+		}
+	})
+
+	t.Run("MaxCyclesPopulatesSHAs", func(t *testing.T) {
+		t.Parallel()
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "attempt 1", CostUSD: 0.20},
+				{ResultText: "ISSUE:\nSEVERITY: major\nDESCRIPTION: broken.", CostUSD: 0.15},
+			},
+		}
+		git := &fakeGit{
+			headSHA:    "base-sha-111",
+			commitSHAs: []string{"cycle1-sha-222"},
+		}
+		l := &Loop{
+			Invoker:      inv,
+			UI:           &recordingUI{},
+			Git:          git,
+			MaxCycles:    1,
+			MaxBudgetUSD: 10.0,
+		}
+		result, err := l.runLoop(context.Background(), "bead-1", "task")
+		if !errors.Is(err, ErrMaxCycles) {
+			t.Fatalf("expected ErrMaxCycles, got %v", err)
+		}
+		if result.BaseCommitSHA != "base-sha-111" {
+			t.Errorf("BaseCommitSHA = %q, want %q", result.BaseCommitSHA, "base-sha-111")
+		}
+		if result.FinalCommitSHA != "cycle1-sha-222" {
+			t.Errorf("FinalCommitSHA = %q, want %q", result.FinalCommitSHA, "cycle1-sha-222")
+		}
+	})
+
+	t.Run("SHAsEmptyWhenNoGit", func(t *testing.T) {
+		t.Parallel()
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "implemented", CostUSD: 0.50},
+				{ResultText: "APPROVED: LGTM.", CostUSD: 0.25},
+			},
+		}
+		l := &Loop{
+			Invoker:      inv,
+			UI:           &recordingUI{},
+			MaxCycles:    3,
+			MaxBudgetUSD: 10.0,
+		}
+		result, err := l.runLoop(context.Background(), "bead-1", "task")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.BaseCommitSHA != "" {
+			t.Errorf("BaseCommitSHA = %q, want empty", result.BaseCommitSHA)
+		}
+		if result.FinalCommitSHA != "" {
+			t.Errorf("FinalCommitSHA = %q, want empty", result.FinalCommitSHA)
 		}
 	})
 
