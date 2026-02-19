@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'tui-landing-page'
-total_cost_usd = 14.0063286
+total_cost_usd = 18.5386071
 
 [phases]
 [phases.cmd-entry-point]
@@ -53,15 +53,21 @@ summary = 'Well-implemented home view landing page with correct rendering, navig
 
 [phases.integration-test]
 bead_id = 'quasar-go4'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-18T15:39:42.891837-05:00
-updated_at = 2026-02-18T21:48:21.810949-05:00
+updated_at = 2026-02-18T22:02:52.366533-05:00
 
 [phases.return-to-home]
 bead_id = 'quasar-r9y'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T15:39:42.509792-05:00
-updated_at = 2026-02-18T21:56:27.100165-05:00
+updated_at = 2026-02-18T22:02:52.366044-05:00
+
+[phases.return-to-home.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented return-to-home flow from completion overlay with clean state management, updated keybinding hints, and thorough test coverage for all three exit paths (Esc→home, Enter→next, q→quit).'
 
 [phases.speed-up-splash]
 bead_id = 'quasar-d77'
