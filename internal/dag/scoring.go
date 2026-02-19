@@ -1,9 +1,9 @@
 package dag
 
-import "fmt"
+import "errors"
 
 // ErrAlphaOutOfRange is returned when ScoringOptions.Alpha is outside [0, 1].
-var ErrAlphaOutOfRange = fmt.Errorf("alpha must be in [0, 1]")
+var ErrAlphaOutOfRange = errors.New("alpha must be in [0, 1]")
 
 // ScoringOptions configures composite impact scoring.
 type ScoringOptions struct {
