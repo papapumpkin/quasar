@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'commit-tracking'
-total_cost_usd = 2.6868612499999998
+total_cost_usd = 4.78527175
 
 [phases]
 [phases.checkpoint-range-diff]
@@ -23,15 +23,21 @@ summary = 'Well-implemented seal pattern for cycle commit tracking — correctly
 
 [phases.range-diff]
 bead_id = 'quasar-85a'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T22:25:34.843089-05:00
-updated_at = 2026-02-18T22:33:15.355805-05:00
+updated_at = 2026-02-18T22:38:07.223867-05:00
+
+[phases.range-diff.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Added DiffRange/DiffStatRange methods to GitCommitter and CycleCommitter with clean implementation, full nil-safety, and thorough test coverage — straightforward, well-executed interface extension.'
 
 [phases.revert-to-cycle]
 bead_id = 'quasar-5gy'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-18T22:25:35.207046-05:00
-updated_at = 2026-02-18T22:25:35.207046-05:00
+updated_at = 2026-02-18T22:38:07.224337-05:00
 
 [phases.task-result-shas]
 bead_id = 'quasar-2ov'

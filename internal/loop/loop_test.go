@@ -265,6 +265,10 @@ func (g *fakeGit) DiffRange(_ context.Context, _, _ string) (string, error) {
 	return "", nil
 }
 
+func (g *fakeGit) ResetTo(_ context.Context, _ string) error {
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Existing tests (kept as-is)
 // ---------------------------------------------------------------------------

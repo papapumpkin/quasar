@@ -608,6 +608,84 @@ func TestGitCommitter_DiffStatRange(t *testing.T) {
 	})
 }
 
+func TestGitCommitter_ResetTo(t *testing.T) {
+	t.Run("resets working tree to target SHA", func(t *testing.T) {
+		dir := initTestRepo(t)
+		ctx := context.Background()
+		gc := NewGitCommitter(ctx, dir)
+		if gc == nil {
+			t.Fatal("expected non-nil committer")
+		}
+
+		// Record initial SHA.
+		baseSHA := headSHA(ctx, t, dir)
+
+		// Create a file and commit.
+		if err := os.WriteFile(filepath.Join(dir, "reset.txt"), []byte("content\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		run(ctx, t, dir, "git", "add", "-A")
+		run(ctx, t, dir, "git", "commit", "-m", "add reset.txt")
+
+		// Verify file exists.
+		if _, err := os.Stat(filepath.Join(dir, "reset.txt")); err != nil {
+			t.Fatalf("reset.txt should exist before reset: %v", err)
+		}
+
+		// Reset to base.
+		if err := gc.ResetTo(ctx, baseSHA); err != nil {
+			t.Fatalf("ResetTo: %v", err)
+		}
+
+		// Verify file is gone and HEAD matches base.
+		if _, err := os.Stat(filepath.Join(dir, "reset.txt")); !os.IsNotExist(err) {
+			t.Error("reset.txt should not exist after reset to initial commit")
+		}
+		if headSHA(ctx, t, dir) != baseSHA {
+			t.Errorf("HEAD after reset = %q, want %q", headSHA(ctx, t, dir), baseSHA)
+		}
+	})
+
+	t.Run("returns error for invalid SHA", func(t *testing.T) {
+		dir := initTestRepo(t)
+		ctx := context.Background()
+		gc := NewGitCommitter(ctx, dir)
+		if gc == nil {
+			t.Fatal("expected non-nil committer")
+		}
+
+		err := gc.ResetTo(ctx, "0000000000000000000000000000000000000000")
+		if err == nil {
+			t.Fatal("expected error for invalid SHA")
+		}
+	})
+
+	t.Run("verifies branch before reset", func(t *testing.T) {
+		dir := initTestRepo(t)
+		ctx := context.Background()
+
+		sha := headSHA(ctx, t, dir)
+
+		// Create a committer expecting branch "feature" but repo is on default branch.
+		gc := NewGitCommitterWithBranch(ctx, dir, "feature")
+		err := gc.ResetTo(ctx, sha)
+		if err == nil {
+			t.Fatal("expected branch mismatch error")
+		}
+		if !strings.Contains(err.Error(), "branch mismatch") {
+			t.Errorf("expected 'branch mismatch' in error, got %q", err)
+		}
+	})
+
+	t.Run("nil receiver is no-op", func(t *testing.T) {
+		var gc *gitCommitter
+		err := gc.ResetTo(context.Background(), "abc123")
+		if err != nil {
+			t.Fatalf("nil ResetTo: %v", err)
+		}
+	})
+}
+
 // headSHA returns the current HEAD SHA in the given repo.
 func headSHA(ctx context.Context, t *testing.T, dir string) string {
 	t.Helper()

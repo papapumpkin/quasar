@@ -23,6 +23,10 @@ type GitCommitter interface {
 	DiffRange(ctx context.Context, base, head string) (string, error)
 	// DiffStatRange returns the --stat summary between two commits (base..head).
 	DiffStatRange(ctx context.Context, base, head string) (string, error)
+	// ResetTo performs a hard reset to the given SHA, restoring the working
+	// tree to that commit's state. The SHA must be a valid, reachable commit.
+	// If branch enforcement is active, the current branch is verified first.
+	ResetTo(ctx context.Context, sha string) error
 }
 
 // gitCommitter implements GitCommitter using the git CLI.
@@ -169,6 +173,37 @@ func (g *gitCommitter) DiffStatRange(ctx context.Context, base, head string) (st
 		return "", fmt.Errorf("git diff --stat %s: %w: %s", ref, err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.String(), nil
+}
+
+// ResetTo performs a hard reset to the given SHA, restoring the working tree
+// to that commit's state. It verifies the SHA is a valid, reachable commit
+// and checks the current branch if branch enforcement is active.
+// If g is nil, this is a no-op.
+func (g *gitCommitter) ResetTo(ctx context.Context, sha string) error {
+	if g == nil {
+		return nil
+	}
+
+	if err := g.ensureBranch(ctx); err != nil {
+		return err
+	}
+
+	// Verify the SHA exists and is a reachable commit.
+	verifyCmd := exec.CommandContext(ctx, "git", "-C", g.dir, "merge-base", "--is-ancestor", sha, "HEAD")
+	var verifyStderr bytes.Buffer
+	verifyCmd.Stderr = &verifyStderr
+	if err := verifyCmd.Run(); err != nil {
+		return fmt.Errorf("sha %s is not a valid ancestor of HEAD: %w: %s", sha, err, strings.TrimSpace(verifyStderr.String()))
+	}
+
+	// Perform the hard reset.
+	resetCmd := exec.CommandContext(ctx, "git", "-C", g.dir, "reset", "--hard", sha)
+	var resetStderr bytes.Buffer
+	resetCmd.Stderr = &resetStderr
+	if err := resetCmd.Run(); err != nil {
+		return fmt.Errorf("git reset --hard %s: %w: %s", sha, err, strings.TrimSpace(resetStderr.String()))
+	}
+	return nil
 }
 
 // ensureBranch verifies the working directory is on the expected branch.
