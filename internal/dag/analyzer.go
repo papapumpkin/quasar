@@ -126,48 +126,7 @@ func (ta *TaskAnalyzer) CriticalPath() ([]string, error) {
 	if len(order) == 0 {
 		return nil, nil
 	}
-
-	// Compute longest path using dynamic programming on the
-	// topological order. dist[v] = length of longest path ending at v.
-	dist := make(map[string]int, len(order))
-	prev := make(map[string]string, len(order))
-	for _, id := range order {
-		dist[id] = 1 // every node has at least itself
-	}
-
-	for _, v := range order {
-		// For each dependent of v, check if extending through v is longer.
-		for dep := range ta.dag.reverse[v] {
-			candidate := dist[v] + 1
-			if candidate > dist[dep] {
-				dist[dep] = candidate
-				prev[dep] = v
-			}
-		}
-	}
-
-	// Find the node with the maximum distance.
-	maxDist := 0
-	endNode := ""
-	for _, id := range order {
-		if dist[id] > maxDist {
-			maxDist = dist[id]
-			endNode = id
-		}
-	}
-
-	// Trace back the path.
-	path := make([]string, 0, maxDist)
-	for cur := endNode; cur != ""; cur = prev[cur] {
-		path = append(path, cur)
-	}
-
-	// Reverse to get dependency-first order.
-	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
-		path[i], path[j] = path[j], path[i]
-	}
-
-	return path, nil
+	return computeCriticalPath(ta.dag, order), nil
 }
 
 // DAG returns the underlying DAG for advanced queries or direct access
