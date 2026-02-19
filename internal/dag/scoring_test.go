@@ -1,6 +1,7 @@
 package dag
 
 import (
+	"errors"
 	"math"
 	"testing"
 )
@@ -248,9 +249,15 @@ func TestBetweenness_Empty(t *testing.T) {
 func TestBetweenness_TwoNodes(t *testing.T) {
 	t.Parallel()
 	d := New()
-	_ = d.AddNode("A", 0)
-	_ = d.AddNode("B", 0)
-	_ = d.AddEdge("A", "B")
+	if err := d.AddNode("A", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.AddNode("B", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.AddEdge("A", "B"); err != nil {
+		t.Fatal(err)
+	}
 	bc := d.BetweennessCentrality()
 	if bc["A"] != 0 || bc["B"] != 0 {
 		t.Errorf("expected zero betweenness for 2-node graph, got A=%f B=%f",
@@ -349,15 +356,21 @@ func TestBetweenness_Normalized(t *testing.T) {
 func TestComputeImpact_Empty(t *testing.T) {
 	t.Parallel()
 	d := New()
-	d.ComputeImpact(DefaultScoringOptions()) // should not panic
+	if err := d.ComputeImpact(DefaultScoringOptions()); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestComputeImpact_SingleNode(t *testing.T) {
 	t.Parallel()
 	d := New()
-	_ = d.AddNode("X", 0)
+	if err := d.AddNode("X", 0); err != nil {
+		t.Fatal(err)
+	}
 	opts := DefaultScoringOptions()
-	d.ComputeImpact(opts)
+	if err := d.ComputeImpact(opts); err != nil {
+		t.Fatal(err)
+	}
 
 	// Single node: normalized PR = 1.0, betweenness = 0.
 	// Impact = 0.6 * 1.0 + 0.4 * 0.0 = 0.6.
@@ -370,7 +383,9 @@ func TestComputeImpact_SingleNode(t *testing.T) {
 func TestComputeImpact_PopulatesAllNodes(t *testing.T) {
 	t.Parallel()
 	d := buildComplex(t)
-	d.ComputeImpact(DefaultScoringOptions())
+	if err := d.ComputeImpact(DefaultScoringOptions()); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, id := range d.Nodes() {
 		node := d.Node(id)
@@ -383,7 +398,9 @@ func TestComputeImpact_PopulatesAllNodes(t *testing.T) {
 func TestComputeImpact_Diamond_Ordering(t *testing.T) {
 	t.Parallel()
 	d := buildDiamond(t)
-	d.ComputeImpact(DefaultScoringOptions())
+	if err := d.ComputeImpact(DefaultScoringOptions()); err != nil {
+		t.Fatal(err)
+	}
 
 	impactD := d.Node("D").Impact
 	impactB := d.Node("B").Impact
@@ -422,7 +439,9 @@ func TestComputeImpact_AlphaWeighting(t *testing.T) {
 			d := buildBottleneck(t)
 			opts := DefaultScoringOptions()
 			opts.Alpha = tc.alpha
-			d.ComputeImpact(opts)
+			if err := d.ComputeImpact(opts); err != nil {
+				t.Fatal(err)
+			}
 
 			// Every node should have a non-negative impact.
 			for _, id := range d.Nodes() {
@@ -430,6 +449,32 @@ func TestComputeImpact_AlphaWeighting(t *testing.T) {
 					t.Errorf("alpha=%f: Impact[%s] = %f, expected non-negative",
 						tc.alpha, id, d.Node(id).Impact)
 				}
+			}
+		})
+	}
+}
+
+func TestComputeImpact_AlphaOutOfRange(t *testing.T) {
+	t.Parallel()
+	d := buildChain(t)
+
+	tests := []struct {
+		name  string
+		alpha float64
+	}{
+		{"negative", -0.1},
+		{"above one", 1.1},
+		{"large negative", -5.0},
+		{"large positive", 10.0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			opts := DefaultScoringOptions()
+			opts.Alpha = tc.alpha
+			err := d.ComputeImpact(opts)
+			if !errors.Is(err, ErrAlphaOutOfRange) {
+				t.Errorf("alpha=%f: got err=%v, want ErrAlphaOutOfRange", tc.alpha, err)
 			}
 		})
 	}
@@ -443,7 +488,9 @@ func TestComputeImpact_Bottleneck_HighScore(t *testing.T) {
 	// or near-highest because it has both high PageRank and high betweenness.
 	opts := DefaultScoringOptions()
 	opts.Alpha = 0.5 // equal weight to both signals
-	d.ComputeImpact(opts)
+	if err := d.ComputeImpact(opts); err != nil {
+		t.Fatal(err)
+	}
 
 	impactC := d.Node("C").Impact
 	for _, id := range []string{"A", "B"} {
@@ -457,7 +504,9 @@ func TestComputeImpact_Bottleneck_HighScore(t *testing.T) {
 func TestComputeImpact_Complex_RelativeOrdering(t *testing.T) {
 	t.Parallel()
 	d := buildComplex(t)
-	d.ComputeImpact(DefaultScoringOptions())
+	if err := d.ComputeImpact(DefaultScoringOptions()); err != nil {
+		t.Fatal(err)
+	}
 
 	// E is the root dependency → should have highest impact.
 	impactE := d.Node("E").Impact

@@ -1,5 +1,10 @@
 package dag
 
+import "fmt"
+
+// ErrAlphaOutOfRange is returned when ScoringOptions.Alpha is outside [0, 1].
+var ErrAlphaOutOfRange = fmt.Errorf("alpha must be in [0, 1]")
+
 // ScoringOptions configures composite impact scoring.
 type ScoringOptions struct {
 	// Alpha is the weight for PageRank in the composite score.
@@ -27,9 +32,14 @@ func DefaultScoringOptions() ScoringOptions {
 //
 // PageRank is normalized to [0, 1] by dividing by the maximum observed
 // value. Betweenness is already normalized by BetweennessCentrality.
-func (d *DAG) ComputeImpact(opts ScoringOptions) {
+// Returns ErrAlphaOutOfRange if opts.Alpha is outside [0, 1].
+func (d *DAG) ComputeImpact(opts ScoringOptions) error {
+	if opts.Alpha < 0 || opts.Alpha > 1 {
+		return ErrAlphaOutOfRange
+	}
+
 	if len(d.nodes) == 0 {
-		return
+		return nil
 	}
 
 	pr := d.PageRank(opts.PageRank)
@@ -51,4 +61,6 @@ func (d *DAG) ComputeImpact(opts ScoringOptions) {
 	for id, node := range d.nodes {
 		node.Impact = opts.Alpha*pr[id] + (1-opts.Alpha)*bc[id]
 	}
+
+	return nil
 }

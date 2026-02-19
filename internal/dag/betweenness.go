@@ -19,8 +19,8 @@ func (d *DAG) BetweennessCentrality() map[string]float64 {
 	}
 
 	for s := range d.nodes {
-		stack, sigma, delta := d.brandesBFS(s)
-		d.brandesAccumulate(s, stack, sigma, delta, cb)
+		stack, sigma, pred := d.brandesBFS(s)
+		d.brandesAccumulate(s, stack, sigma, pred, cb)
 	}
 
 	// Normalize to [0, 1] using directed-graph factor.
@@ -34,8 +34,7 @@ func (d *DAG) BetweennessCentrality() map[string]float64 {
 
 // brandesBFS performs the BFS phase of Brandes' algorithm from source s.
 // It returns the visit stack (reverse BFS order for back-propagation),
-// shortest-path counts (sigma), and initialized delta map.
-// Predecessors are embedded in the returned delta/sigma via the stack order.
+// shortest-path counts (sigma), and predecessor lists (pred).
 func (d *DAG) brandesBFS(s string) ([]string, map[string]float64, map[string][]string) {
 	n := len(d.nodes)
 	stack := make([]string, 0, n)
