@@ -1,13 +1,19 @@
 version = 1
 nebula_name = 'tui-landing-page'
-total_cost_usd = 10.26113575
+total_cost_usd = 14.0063286
 
 [phases]
 [phases.cmd-entry-point]
 bead_id = 'quasar-0kj'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-18T15:39:42.122217-05:00
-updated_at = 2026-02-18T21:48:22.226488-05:00
+updated_at = 2026-02-18T21:56:27.09955-05:00
+
+[phases.cmd-entry-point.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented TUI home screen with discovery, selection, and execution loop — clean architecture, comprehensive tests, and no disruption to existing paths.'
 
 [phases.home-key-handling]
 bead_id = 'quasar-2nm'
@@ -53,9 +59,9 @@ updated_at = 2026-02-18T21:48:21.810949-05:00
 
 [phases.return-to-home]
 bead_id = 'quasar-r9y'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-18T15:39:42.509792-05:00
-updated_at = 2026-02-18T21:48:21.810643-05:00
+updated_at = 2026-02-18T21:56:27.100165-05:00
 
 [phases.speed-up-splash]
 bead_id = 'quasar-d77'

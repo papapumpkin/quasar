@@ -103,35 +103,61 @@ func runTUI(cmd *cobra.Command, _ []string) error {
 		}
 
 		// Run the selected nebula.
-		runErr := runSelectedNebula(cfg, printer, selectedDir, noSplash, maxWorkers, maxWorkersExplicit)
-		if runErr != nil {
-			printer.Error(fmt.Sprintf("nebula execution error: %v", runErr))
+		result := runSelectedNebula(cfg, printer, selectedDir, noSplash, maxWorkers, maxWorkersExplicit)
+		if result.Err != nil {
+			printer.Error(fmt.Sprintf("nebula execution error: %v", result.Err))
 			// Don't exit — return to the home screen.
 		}
 
 		// After splash is shown once, skip it on subsequent iterations.
 		noSplash = true
+
+		// Determine what to do after nebula completion.
+		switch {
+		case result.ReturnToHome:
+			// User pressed Esc on completion overlay — loop back to re-discover.
+			continue
+		case result.NextNebula != "":
+			// User selected a nebula from the picker — run it directly, then
+			// loop back so the home screen refreshes afterward.
+			nextResult := runSelectedNebula(cfg, printer, result.NextNebula, true, maxWorkers, maxWorkersExplicit)
+			if nextResult.Err != nil {
+				printer.Error(fmt.Sprintf("nebula execution error: %v", nextResult.Err))
+			}
+			// After running the next nebula, always return to home.
+			continue
+		default:
+			// User pressed q or exited without selecting — quit entirely.
+			return result.Err
+		}
 	}
+}
+
+// nebulaResult carries the user's intent after a nebula execution completes.
+type nebulaResult struct {
+	Err          error  // execution error (if any)
+	ReturnToHome bool   // user pressed Esc on overlay to return to home
+	NextNebula   string // user selected a nebula from the picker
 }
 
 // runSelectedNebula loads, validates, and executes a single nebula in TUI mode.
 // It reuses the same setup logic as runNebulaApply's TUI path.
 // maxWorkersExplicit indicates whether the user explicitly set --max-workers;
 // when false, the nebula manifest's MaxWorkers value takes precedence.
-func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSplash bool, maxWorkers int, maxWorkersExplicit bool) error {
+func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSplash bool, maxWorkers int, maxWorkersExplicit bool) nebulaResult {
 	n, err := nebula.Load(dir)
 	if err != nil {
-		return fmt.Errorf("failed to load nebula: %w", err)
+		return nebulaResult{Err: fmt.Errorf("failed to load nebula: %w", err)}
 	}
 
 	if errs := nebula.Validate(n); len(errs) > 0 {
 		printer.NebulaValidateResult(n.Manifest.Nebula.Name, len(n.Phases), errs)
-		return fmt.Errorf("validation failed")
+		return nebulaResult{Err: fmt.Errorf("validation failed")}
 	}
 
 	state, err := nebula.LoadState(dir)
 	if err != nil {
-		return fmt.Errorf("failed to load state: %w", err)
+		return nebulaResult{Err: fmt.Errorf("failed to load state: %w", err)}
 	}
 
 	client := &beads.CLI{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
@@ -141,16 +167,16 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 
 	plan, err := nebula.BuildPlan(ctx, n, state, client)
 	if err != nil {
-		return fmt.Errorf("failed to build plan: %w", err)
+		return nebulaResult{Err: fmt.Errorf("failed to build plan: %w", err)}
 	}
 
 	if !plan.HasChanges() {
 		printer.Info("nothing to do — all phases already applied")
-		return nil
+		return nebulaResult{}
 	}
 
 	if err := nebula.Apply(ctx, plan, n, state, client); err != nil {
-		return fmt.Errorf("failed to apply plan: %w", err)
+		return nebulaResult{Err: fmt.Errorf("failed to apply plan: %w", err)}
 	}
 
 	// If --max-workers was not explicitly set, use nebula execution config.
@@ -173,7 +199,7 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 
 	claudeInv := claude.NewInvoker(cfg.ClaudePath, cfg.Verbose)
 	if err := claudeInv.Validate(); err != nil {
-		return fmt.Errorf("claude not available: %w", err)
+		return nebulaResult{Err: fmt.Errorf("claude not available: %w", err)}
 	}
 
 	workDir := cfg.WorkDir
@@ -183,7 +209,7 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 	if workDir == "." || workDir == "" {
 		wd, wdErr := os.Getwd()
 		if wdErr != nil {
-			return fmt.Errorf("failed to get working directory: %w", wdErr)
+			return nebulaResult{Err: fmt.Errorf("failed to get working directory: %w", wdErr)}
 		}
 		workDir = wd
 	}
@@ -195,7 +221,7 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 	}
 	if branchMgr != nil {
 		if err := branchMgr.CreateOrCheckout(ctx); err != nil {
-			return fmt.Errorf("failed to create nebula branch: %w", err)
+			return nebulaResult{Err: fmt.Errorf("failed to create nebula branch: %w", err)}
 		}
 	}
 	branchName := branchMgr.Branch()
@@ -284,17 +310,22 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 	finalModel, tuiErr := tuiProgram.Run()
 	cancel()
 	if tuiErr != nil {
-		return fmt.Errorf("TUI error: %w", tuiErr)
+		return nebulaResult{Err: fmt.Errorf("TUI error: %w", tuiErr)}
 	}
 
 	appModel, ok := finalModel.(tui.AppModel)
 	if !ok {
-		return nil
+		return nebulaResult{}
+	}
+
+	res := nebulaResult{
+		ReturnToHome: appModel.ReturnToHome,
+		NextNebula:   appModel.NextNebula,
 	}
 
 	if appModel.DoneErr != nil && !errors.Is(appModel.DoneErr, nebula.ErrManualStop) {
-		return appModel.DoneErr
+		res.Err = appModel.DoneErr
 	}
 
-	return nil
+	return res
 }

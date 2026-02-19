@@ -87,6 +87,7 @@ type AppModel struct {
 	AvailableNebulae []NebulaChoice // populated on MsgNebulaDone via discovery
 	NextNebula       string         // set when user selects one; read after Run() returns
 	PickerCursor     int            // cursor position in the nebula picker list
+	ReturnToHome     bool           // set when user presses Esc on completion overlay to return to home
 
 	// Resource monitoring.
 	Resources  ResourceSnapshot   // latest resource usage snapshot
@@ -516,10 +517,14 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Completion overlay — q/Esc to exit, arrow keys for picker.
+	// Completion overlay — q quits, Esc returns to home, arrow keys for picker.
 	if m.Overlay != nil {
 		switch {
-		case key.Matches(msg, m.Keys.Quit), key.Matches(msg, m.Keys.Back):
+		case key.Matches(msg, m.Keys.Quit):
+			return m, tea.Quit
+		case key.Matches(msg, m.Keys.Back):
+			// Esc: return to the home screen instead of quitting.
+			m.ReturnToHome = true
 			return m, tea.Quit
 		case key.Matches(msg, m.Keys.Up):
 			if len(m.AvailableNebulae) > 0 && m.PickerCursor > 0 {
