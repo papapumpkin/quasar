@@ -15,15 +15,17 @@ const PlanPhaseID = "_plan"
 
 // Checkpoint captures the outcome of a completed phase for human review.
 type Checkpoint struct {
-	PhaseID       string
-	PhaseTitle    string
-	NebulaName    string
-	Status        PhaseStatus
-	ReviewCycles  int
-	CostUSD       float64
-	ReviewSummary string       // From ReviewReport.Summary
-	Diff          string       // Output of git diff (the phase's commit vs prior)
-	FilesChanged  []FileChange // Parsed summary of changed files
+	PhaseID        string
+	PhaseTitle     string
+	NebulaName     string
+	Status         PhaseStatus
+	ReviewCycles   int
+	CostUSD        float64
+	ReviewSummary  string       // From ReviewReport.Summary
+	Diff           string       // Output of git diff (the phase's commit vs prior)
+	FilesChanged   []FileChange // Parsed summary of changed files
+	BaseCommitSHA  string       // HEAD at start of the phase (empty if unavailable)
+	FinalCommitSHA string       // Last cycle's sealed SHA (empty if unavailable)
 }
 
 // FileChange summarizes a single file's changes within a phase commit.
@@ -35,14 +37,18 @@ type FileChange struct {
 }
 
 // BuildCheckpoint constructs a Checkpoint from the result of a completed phase.
-// It uses the GitCommitter to retrieve the diff of the most recent commit.
+// When both BaseCommitSHA and FinalCommitSHA are available in the result, it
+// uses DiffRange to capture the full phase diff across all cycles. Otherwise it
+// falls back to DiffLastCommit for the most recent commit only.
 func BuildCheckpoint(ctx context.Context, git GitCommitter, phaseID string, result PhaseRunnerResult, nebula *Nebula) (*Checkpoint, error) {
 	cp := &Checkpoint{
-		PhaseID:      phaseID,
-		NebulaName:   nebula.Manifest.Nebula.Name,
-		Status:       PhaseStatusDone,
-		ReviewCycles: result.CyclesUsed,
-		CostUSD:      result.TotalCostUSD,
+		PhaseID:        phaseID,
+		NebulaName:     nebula.Manifest.Nebula.Name,
+		Status:         PhaseStatusDone,
+		ReviewCycles:   result.CyclesUsed,
+		CostUSD:        result.TotalCostUSD,
+		BaseCommitSHA:  result.BaseCommitSHA,
+		FinalCommitSHA: result.FinalCommitSHA,
 	}
 
 	// Look up the phase title from the nebula spec.
@@ -55,22 +61,47 @@ func BuildCheckpoint(ctx context.Context, git GitCommitter, phaseID string, resu
 		cp.ReviewSummary = result.Report.Summary
 	}
 
-	// Retrieve the diff and stat for the last commit.
+	// Retrieve the diff and stat for the phase.
+	// Prefer the full range (base..final) when both SHAs are available;
+	// fall back to the last-commit diff otherwise.
 	if git != nil {
-		diff, err := git.DiffLastCommit(ctx)
+		diff, stat, err := buildCheckpointDiffs(ctx, git, result.BaseCommitSHA, result.FinalCommitSHA)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get phase diff: %w", err)
+			return nil, err
 		}
 		cp.Diff = diff
-
-		stat, err := git.DiffStatLastCommit(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get phase diff stat: %w", err)
-		}
 		cp.FilesChanged = ParseDiffStat(stat)
 	}
 
 	return cp, nil
+}
+
+// buildCheckpointDiffs returns the diff and stat output for a phase.
+// When both base and final SHAs are provided, DiffRange/DiffStatRange are used
+// to capture the full phase diff. Otherwise DiffLastCommit/DiffStatLastCommit
+// provide the single-commit fallback.
+func buildCheckpointDiffs(ctx context.Context, git GitCommitter, base, final string) (diff, stat string, err error) {
+	if base != "" && final != "" {
+		diff, err = git.DiffRange(ctx, base, final)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to get phase diff range: %w", err)
+		}
+		stat, err = git.DiffStatRange(ctx, base, final)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to get phase diff stat range: %w", err)
+		}
+		return diff, stat, nil
+	}
+
+	diff, err = git.DiffLastCommit(ctx)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get phase diff: %w", err)
+	}
+	stat, err = git.DiffStatLastCommit(ctx)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get phase diff stat: %w", err)
+	}
+	return diff, stat, nil
 }
 
 // ParseDiffStat parses git diff --stat output into FileChange entries.

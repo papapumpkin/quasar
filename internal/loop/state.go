@@ -71,4 +71,5 @@ type CycleState struct {
 	RefactorDescription string          // the new description from the user edit
 	BaseCommitSHA       string          // HEAD before first cycle (captured at task start)
 	CycleCommits        []string        // commit SHA per cycle (index = cycle-1)
+	lastCycleSHA        string          // transient: last commit SHA for the current cycle (sealed into CycleCommits at cycle end)
 }

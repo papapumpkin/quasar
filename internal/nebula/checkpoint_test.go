@@ -15,6 +15,10 @@ type mockGitCommitter struct {
 	diffStatLastCommit string
 	diffLastCommitErr  error
 	diffStatErr        error
+	diffRange          string
+	diffStatRange      string
+	diffRangeErr       error
+	diffStatRangeErr   error
 }
 
 func (m *mockGitCommitter) CommitPhase(_ context.Context, _, _, _ string) error {
@@ -31,6 +35,18 @@ func (m *mockGitCommitter) DiffLastCommit(_ context.Context) (string, error) {
 
 func (m *mockGitCommitter) DiffStatLastCommit(_ context.Context) (string, error) {
 	return m.diffStatLastCommit, m.diffStatErr
+}
+
+func (m *mockGitCommitter) DiffRange(_ context.Context, _, _ string) (string, error) {
+	return m.diffRange, m.diffRangeErr
+}
+
+func (m *mockGitCommitter) DiffStatRange(_ context.Context, _, _ string) (string, error) {
+	return m.diffStatRange, m.diffStatRangeErr
+}
+
+func (m *mockGitCommitter) ResetTo(_ context.Context, _ string) error {
+	return nil
 }
 
 func TestParseDiffStat(t *testing.T) {
@@ -224,6 +240,112 @@ func TestBuildCheckpoint(t *testing.T) {
 		}
 		if cp.ReviewSummary != "" {
 			t.Errorf("expected empty ReviewSummary with nil report, got %q", cp.ReviewSummary)
+		}
+	})
+
+	t.Run("uses DiffRange when both SHAs are provided", func(t *testing.T) {
+		t.Parallel()
+		mock := &mockGitCommitter{
+			diffRange: "diff --git a/main.go b/main.go\n--- a/main.go\n+++ b/main.go\n@@ full range @@\n",
+			diffStatRange: " main.go  | 10 +++++++---\n" +
+				" util.go  |  5 +++++\n" +
+				" 2 files changed, 12 insertions(+), 3 deletions(-)\n",
+			// These should NOT be used when SHAs are present.
+			diffLastCommit:     "should not appear",
+			diffStatLastCommit: "should not appear",
+		}
+		result := PhaseRunnerResult{
+			TotalCostUSD:   0.25,
+			CyclesUsed:     3,
+			BaseCommitSHA:  "abc123",
+			FinalCommitSHA: "def456",
+		}
+
+		cp, err := BuildCheckpoint(context.Background(), mock, "test-script-action", result, nebula)
+		if err != nil {
+			t.Fatalf("BuildCheckpoint: %v", err)
+		}
+		if !strings.Contains(cp.Diff, "full range") {
+			t.Errorf("expected range diff, got %q", cp.Diff)
+		}
+		if strings.Contains(cp.Diff, "should not appear") {
+			t.Error("DiffLastCommit was used instead of DiffRange")
+		}
+		if len(cp.FilesChanged) != 2 {
+			t.Fatalf("FilesChanged count = %d, want 2", len(cp.FilesChanged))
+		}
+		if cp.FilesChanged[0].Path != "main.go" {
+			t.Errorf("FilesChanged[0].Path = %q, want %q", cp.FilesChanged[0].Path, "main.go")
+		}
+		if cp.FilesChanged[1].Path != "util.go" {
+			t.Errorf("FilesChanged[1].Path = %q, want %q", cp.FilesChanged[1].Path, "util.go")
+		}
+		if cp.BaseCommitSHA != "abc123" {
+			t.Errorf("BaseCommitSHA = %q, want %q", cp.BaseCommitSHA, "abc123")
+		}
+		if cp.FinalCommitSHA != "def456" {
+			t.Errorf("FinalCommitSHA = %q, want %q", cp.FinalCommitSHA, "def456")
+		}
+	})
+
+	t.Run("falls back to DiffLastCommit when SHAs are empty", func(t *testing.T) {
+		t.Parallel()
+		mock := &mockGitCommitter{
+			diffLastCommit: "diff --git a/fallback.go b/fallback.go\nnew file\n",
+			diffStatLastCommit: " fallback.go | 8 ++++++++\n" +
+				" 1 file changed, 8 insertions(+)\n",
+			diffRange:     "should not appear",
+			diffStatRange: "should not appear",
+		}
+		result := PhaseRunnerResult{
+			TotalCostUSD: 0.04,
+			CyclesUsed:   1,
+			// No SHAs — triggers fallback.
+		}
+
+		cp, err := BuildCheckpoint(context.Background(), mock, "test-script-action", result, nebula)
+		if err != nil {
+			t.Fatalf("BuildCheckpoint: %v", err)
+		}
+		if !strings.Contains(cp.Diff, "fallback.go") {
+			t.Errorf("expected fallback diff, got %q", cp.Diff)
+		}
+		if strings.Contains(cp.Diff, "should not appear") {
+			t.Error("DiffRange was used instead of DiffLastCommit")
+		}
+		if len(cp.FilesChanged) != 1 {
+			t.Fatalf("FilesChanged count = %d, want 1", len(cp.FilesChanged))
+		}
+		if cp.FilesChanged[0].Path != "fallback.go" {
+			t.Errorf("FilesChanged[0].Path = %q, want %q", cp.FilesChanged[0].Path, "fallback.go")
+		}
+		if cp.BaseCommitSHA != "" {
+			t.Errorf("BaseCommitSHA = %q, want empty", cp.BaseCommitSHA)
+		}
+		if cp.FinalCommitSHA != "" {
+			t.Errorf("FinalCommitSHA = %q, want empty", cp.FinalCommitSHA)
+		}
+	})
+
+	t.Run("falls back when only base SHA is set", func(t *testing.T) {
+		t.Parallel()
+		mock := &mockGitCommitter{
+			diffLastCommit:     "diff partial",
+			diffStatLastCommit: " partial.go | 3 +++\n 1 file changed, 3 insertions(+)\n",
+		}
+		result := PhaseRunnerResult{
+			TotalCostUSD:  0.02,
+			CyclesUsed:    1,
+			BaseCommitSHA: "abc123",
+			// FinalCommitSHA is empty — triggers fallback.
+		}
+
+		cp, err := BuildCheckpoint(context.Background(), mock, "test-script-action", result, nebula)
+		if err != nil {
+			t.Fatalf("BuildCheckpoint: %v", err)
+		}
+		if cp.Diff != "diff partial" {
+			t.Errorf("expected fallback diff, got %q", cp.Diff)
 		}
 	})
 }

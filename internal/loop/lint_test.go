@@ -268,8 +268,12 @@ func TestRunLintFixLoop(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(state.CycleCommits) != 1 || state.CycleCommits[0] != "lint-fix-sha" {
-			t.Errorf("CycleCommits = %v, want [lint-fix-sha]", state.CycleCommits)
+		// Lint fix overwrites lastCycleSHA; CycleCommits is sealed at cycle end.
+		if state.lastCycleSHA != "lint-fix-sha" {
+			t.Errorf("lastCycleSHA = %q, want %q", state.lastCycleSHA, "lint-fix-sha")
+		}
+		if len(state.CycleCommits) != 0 {
+			t.Errorf("CycleCommits should be empty before seal, got %v", state.CycleCommits)
 		}
 	})
 

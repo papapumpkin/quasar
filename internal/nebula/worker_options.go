@@ -10,9 +10,11 @@ import (
 
 // PhaseRunnerResult holds the outcome of a single phase execution.
 type PhaseRunnerResult struct {
-	TotalCostUSD float64
-	CyclesUsed   int
-	Report       *agent.ReviewReport
+	TotalCostUSD   float64
+	CyclesUsed     int
+	Report         *agent.ReviewReport
+	BaseCommitSHA  string // HEAD at start of the phase
+	FinalCommitSHA string // last cycle's sealed SHA (or current HEAD as fallback)
 }
 
 // PhaseRunner is the interface for executing a phase (satisfied by loop.Loop).

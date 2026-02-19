@@ -29,9 +29,11 @@ type Loop struct {
 
 // TaskResult holds the outcome of a completed task loop.
 type TaskResult struct {
-	TotalCostUSD float64
-	CyclesUsed   int
-	Report       *agent.ReviewReport // From final reviewer cycle (may be nil)
+	TotalCostUSD   float64
+	CyclesUsed     int
+	Report         *agent.ReviewReport // From final reviewer cycle (may be nil)
+	BaseCommitSHA  string              // HEAD captured at task start
+	FinalCommitSHA string              // last cycle's sealed SHA (or current HEAD as fallback)
 }
 
 // RunTask creates a new bead for the given task and runs the coder-reviewer loop.
@@ -125,6 +127,9 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 			return l.handleApproval(ctx, state)
 		}
 
+		// Seal the cycle's final SHA into CycleCommits before moving on.
+		l.sealCycleSHA(state)
+
 		// Check for a mid-run refactor signal before starting the next cycle.
 		l.drainRefactor(state)
 
@@ -149,7 +154,12 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 		BeadID:  beadID,
 		Message: fmt.Sprintf("Max cycles reached (%d). Manual review recommended.", l.MaxCycles),
 	})
-	return nil, ErrMaxCycles
+	return &TaskResult{
+		TotalCostUSD:   state.TotalCostUSD,
+		CyclesUsed:     state.Cycle,
+		BaseCommitSHA:  state.BaseCommitSHA,
+		FinalCommitSHA: l.finalCommitSHA(ctx, state),
+	}, ErrMaxCycles
 }
 
 // maxLintRetries returns the effective maximum lint retry count.
@@ -214,6 +224,7 @@ func (l *Loop) runLintFixLoop(ctx context.Context, state *CycleState, perAgentBu
 		}
 
 		// Re-commit after lint fixes so the reviewer sees clean state.
+		// Overwrites lastCycleSHA so only the final commit is sealed.
 		if l.Git != nil {
 			summary := l.CommitSummary
 			if summary == "" {
@@ -223,7 +234,7 @@ func (l *Loop) runLintFixLoop(ctx context.Context, state *CycleState, perAgentBu
 			if commitErr != nil {
 				l.UI.Error(fmt.Sprintf("failed to commit lint fix: %v", commitErr))
 			} else {
-				state.CycleCommits = append(state.CycleCommits, sha)
+				state.lastCycleSHA = sha
 			}
 		}
 	}
@@ -346,6 +357,7 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	l.emitCycleSummary(state, PhaseCodeComplete, result)
 
 	// Commit the coder's changes for this cycle.
+	// The SHA is stored in lastCycleSHA and sealed into CycleCommits at cycle end.
 	if l.Git != nil {
 		summary := l.CommitSummary
 		if summary == "" {
@@ -355,7 +367,7 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 		if err != nil {
 			l.UI.Error(fmt.Sprintf("failed to commit cycle %d: %v", state.Cycle, err))
 		} else {
-			state.CycleCommits = append(state.CycleCommits, sha)
+			state.lastCycleSHA = sha
 		}
 	}
 
@@ -435,8 +447,10 @@ func (l *Loop) checkBudget(ctx context.Context, state *CycleState) error {
 	return ErrBudgetExceeded
 }
 
-// handleApproval emits success events, records the review report, and returns the final result.
+// handleApproval seals the final cycle's commit SHA, emits success events,
+// records the review report, and returns the final result.
 func (l *Loop) handleApproval(ctx context.Context, state *CycleState) (*TaskResult, error) {
+	l.sealCycleSHA(state)
 	state.Phase = PhaseApproved
 	l.UI.Approved()
 
@@ -452,10 +466,39 @@ func (l *Loop) handleApproval(ctx context.Context, state *CycleState) (*TaskResu
 
 	l.UI.TaskComplete(state.TaskBeadID, state.TotalCostUSD)
 	return &TaskResult{
-		TotalCostUSD: state.TotalCostUSD,
-		CyclesUsed:   state.Cycle,
-		Report:       report,
+		TotalCostUSD:   state.TotalCostUSD,
+		CyclesUsed:     state.Cycle,
+		Report:         report,
+		BaseCommitSHA:  state.BaseCommitSHA,
+		FinalCommitSHA: l.finalCommitSHA(ctx, state),
 	}, nil
+}
+
+// sealCycleSHA appends the current cycle's last commit SHA to CycleCommits
+// and resets the transient field. This guarantees CycleCommits[i] is the
+// final SHA for cycle i+1. A no-op when no commit was recorded.
+func (l *Loop) sealCycleSHA(state *CycleState) {
+	if state.lastCycleSHA != "" {
+		state.CycleCommits = append(state.CycleCommits, state.lastCycleSHA)
+		state.lastCycleSHA = ""
+	}
+}
+
+// finalCommitSHA returns the last sealed cycle SHA, falling back to a fresh
+// HeadSHA call if CycleCommits is empty (e.g. no commits were made).
+func (l *Loop) finalCommitSHA(ctx context.Context, state *CycleState) string {
+	if n := len(state.CycleCommits); n > 0 {
+		return state.CycleCommits[n-1]
+	}
+	if l.Git != nil {
+		sha, err := l.Git.HeadSHA(ctx)
+		if err != nil {
+			l.UI.Error(fmt.Sprintf("failed to capture final commit SHA: %v", err))
+			return ""
+		}
+		return sha
+	}
+	return ""
 }
 
 // emitBeadUpdate sends the current bead hierarchy to the UI.

@@ -1,0 +1,64 @@
+version = 1
+nebula_name = 'commit-tracking'
+total_cost_usd = 12.098930999999999
+
+[phases]
+[phases.checkpoint-range-diff]
+bead_id = 'quasar-k2e'
+status = 'done'
+created_at = 2026-02-18T22:25:34.081744-05:00
+updated_at = 2026-02-18T22:58:26.430323-05:00
+
+[phases.checkpoint-range-diff.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'BuildCheckpoint now uses full commit-range diffs when SHAs are available with proper fallback, well-tested with clean code quality.'
+
+[phases.cycle-final-sha]
+bead_id = 'quasar-l90'
+status = 'done'
+created_at = 2026-02-18T22:25:34.480033-05:00
+updated_at = 2026-02-18T22:33:15.355226-05:00
+
+[phases.cycle-final-sha.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented seal pattern for cycle commit tracking — correctly stores only the final SHA per cycle in CycleCommits, with thorough tests covering all edge cases.'
+
+[phases.range-diff]
+bead_id = 'quasar-85a'
+status = 'done'
+created_at = 2026-02-18T22:25:34.843089-05:00
+updated_at = 2026-02-18T22:38:07.223867-05:00
+
+[phases.range-diff.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Added DiffRange/DiffStatRange methods to GitCommitter and CycleCommitter with clean implementation, full nil-safety, and thorough test coverage — straightforward, well-executed interface extension.'
+
+[phases.revert-to-cycle]
+bead_id = 'quasar-5gy'
+status = 'done'
+created_at = 2026-02-18T22:25:35.207046-05:00
+updated_at = 2026-02-18T22:44:00.430899-05:00
+
+[phases.revert-to-cycle.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented `ResetTo` method added to both `CycleCommitter` and `GitCommitter` interfaces with proper validation (ancestor check, branch enforcement, nil-safety) and thorough test coverage — follows existing patterns perfectly.'
+
+[phases.task-result-shas]
+bead_id = 'quasar-2ov'
+status = 'done'
+created_at = 2026-02-18T22:25:35.598428-05:00
+updated_at = 2026-02-18T22:54:19.999837-05:00
+
+[phases.task-result-shas.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, well-tested addition of BaseCommitSHA/FinalCommitSHA to TaskResult and PhaseRunnerResult, with a correct adapter fix to preserve results alongside ErrMaxCycles errors.'

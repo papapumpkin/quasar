@@ -261,6 +261,14 @@ func (g *fakeGit) CommitCycle(_ context.Context, _ string, _ int, _ string) (str
 	return fmt.Sprintf("sha-%d", idx), nil
 }
 
+func (g *fakeGit) DiffRange(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+
+func (g *fakeGit) ResetTo(_ context.Context, _ string) error {
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Existing tests (kept as-is)
 // ---------------------------------------------------------------------------
@@ -566,8 +574,12 @@ func TestRunCoderPhase(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(state.CycleCommits) != 1 || state.CycleCommits[0] != "commit-abc" {
-			t.Errorf("CycleCommits = %v, want [commit-abc]", state.CycleCommits)
+		// runCoderPhase stores SHA in lastCycleSHA (sealed at cycle end).
+		if state.lastCycleSHA != "commit-abc" {
+			t.Errorf("lastCycleSHA = %q, want %q", state.lastCycleSHA, "commit-abc")
+		}
+		if len(state.CycleCommits) != 0 {
+			t.Errorf("CycleCommits should be empty before sealing, got %v", state.CycleCommits)
 		}
 	})
 
@@ -591,6 +603,9 @@ func TestRunCoderPhase(t *testing.T) {
 		err := l.runCoderPhase(context.Background(), state, 1.0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
+		}
+		if state.lastCycleSHA != "" {
+			t.Errorf("expected empty lastCycleSHA on commit error, got %q", state.lastCycleSHA)
 		}
 		if len(state.CycleCommits) != 0 {
 			t.Errorf("expected no commits on error, got %v", state.CycleCommits)
@@ -1225,11 +1240,102 @@ func TestRunLoop(t *testing.T) {
 		if !errors.Is(err, ErrMaxCycles) {
 			t.Errorf("expected ErrMaxCycles, got %v", err)
 		}
-		if result != nil {
-			t.Errorf("expected nil result on max cycles, got %v", result)
+		if result == nil {
+			t.Fatal("expected non-nil result on max cycles")
+		}
+		if result.CyclesUsed != 2 {
+			t.Errorf("CyclesUsed = %d, want 2", result.CyclesUsed)
 		}
 		if rUI.maxCyclesCalls != 1 {
 			t.Errorf("MaxCyclesReached calls = %d, want 1", rUI.maxCyclesCalls)
+		}
+	})
+
+	t.Run("ApprovedPopulatesSHAs", func(t *testing.T) {
+		t.Parallel()
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "implemented", CostUSD: 0.50},
+				{ResultText: "APPROVED: LGTM.", CostUSD: 0.25},
+			},
+		}
+		git := &fakeGit{
+			headSHA:    "base-sha-abc",
+			commitSHAs: []string{"cycle1-sha-def"},
+		}
+		l := &Loop{
+			Invoker:      inv,
+			UI:           &recordingUI{},
+			Git:          git,
+			MaxCycles:    3,
+			MaxBudgetUSD: 10.0,
+		}
+		result, err := l.runLoop(context.Background(), "bead-1", "task")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.BaseCommitSHA != "base-sha-abc" {
+			t.Errorf("BaseCommitSHA = %q, want %q", result.BaseCommitSHA, "base-sha-abc")
+		}
+		if result.FinalCommitSHA != "cycle1-sha-def" {
+			t.Errorf("FinalCommitSHA = %q, want %q", result.FinalCommitSHA, "cycle1-sha-def")
+		}
+	})
+
+	t.Run("MaxCyclesPopulatesSHAs", func(t *testing.T) {
+		t.Parallel()
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "attempt 1", CostUSD: 0.20},
+				{ResultText: "ISSUE:\nSEVERITY: major\nDESCRIPTION: broken.", CostUSD: 0.15},
+			},
+		}
+		git := &fakeGit{
+			headSHA:    "base-sha-111",
+			commitSHAs: []string{"cycle1-sha-222"},
+		}
+		l := &Loop{
+			Invoker:      inv,
+			UI:           &recordingUI{},
+			Git:          git,
+			MaxCycles:    1,
+			MaxBudgetUSD: 10.0,
+		}
+		result, err := l.runLoop(context.Background(), "bead-1", "task")
+		if !errors.Is(err, ErrMaxCycles) {
+			t.Fatalf("expected ErrMaxCycles, got %v", err)
+		}
+		if result.BaseCommitSHA != "base-sha-111" {
+			t.Errorf("BaseCommitSHA = %q, want %q", result.BaseCommitSHA, "base-sha-111")
+		}
+		if result.FinalCommitSHA != "cycle1-sha-222" {
+			t.Errorf("FinalCommitSHA = %q, want %q", result.FinalCommitSHA, "cycle1-sha-222")
+		}
+	})
+
+	t.Run("SHAsEmptyWhenNoGit", func(t *testing.T) {
+		t.Parallel()
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "implemented", CostUSD: 0.50},
+				{ResultText: "APPROVED: LGTM.", CostUSD: 0.25},
+			},
+		}
+		l := &Loop{
+			Invoker:      inv,
+			UI:           &recordingUI{},
+			MaxCycles:    3,
+			MaxBudgetUSD: 10.0,
+		}
+		result, err := l.runLoop(context.Background(), "bead-1", "task")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.BaseCommitSHA != "" {
+			t.Errorf("BaseCommitSHA = %q, want empty", result.BaseCommitSHA)
+		}
+		if result.FinalCommitSHA != "" {
+			t.Errorf("FinalCommitSHA = %q, want empty", result.FinalCommitSHA)
 		}
 	})
 
@@ -1341,6 +1447,124 @@ func TestRunLoop(t *testing.T) {
 		}
 		if result.CyclesUsed != 1 {
 			t.Errorf("CyclesUsed = %d, want 1", result.CyclesUsed)
+		}
+	})
+
+	t.Run("OneSHAPerCycleApprovedFirstCycle", func(t *testing.T) {
+		t.Parallel()
+		git := &fakeGit{headSHA: "base-sha", commitSHAs: []string{"sha-c1"}}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "coded", CostUSD: 0.30},
+				{ResultText: "APPROVED: Good.", CostUSD: 0.20},
+			},
+		}
+		l := &Loop{
+			Invoker:      inv,
+			UI:           &noopUI{},
+			Git:          git,
+			MaxCycles:    3,
+			MaxBudgetUSD: 10.0,
+		}
+		_, err := l.runLoop(context.Background(), "bead-1", "task")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// Exactly 1 CommitCycle call for one approved cycle.
+		git.mu.Lock()
+		commits := git.commits
+		git.mu.Unlock()
+		if commits != 1 {
+			t.Errorf("CommitCycle calls = %d, want 1", commits)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// TestCycleCommitsSealing
+// ---------------------------------------------------------------------------
+
+func TestCycleCommitsSealing(t *testing.T) {
+	t.Parallel()
+
+	t.Run("CoderThenSeal", func(t *testing.T) {
+		t.Parallel()
+		git := &fakeGit{commitSHAs: []string{"sha-coder"}}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "done", CostUSD: 0.10},
+			},
+		}
+		l := &Loop{Invoker: inv, UI: &noopUI{}, Git: git, MaxCycles: 1}
+		state := &CycleState{TaskBeadID: "b1", TaskTitle: "task", Cycle: 1}
+
+		if err := l.runCoderPhase(context.Background(), state, 1.0); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// Before sealing: lastCycleSHA set, CycleCommits empty.
+		if state.lastCycleSHA != "sha-coder" {
+			t.Errorf("lastCycleSHA = %q, want %q", state.lastCycleSHA, "sha-coder")
+		}
+		if len(state.CycleCommits) != 0 {
+			t.Errorf("CycleCommits should be empty before seal, got %v", state.CycleCommits)
+		}
+
+		// Seal and verify.
+		l.sealCycleSHA(state)
+		if len(state.CycleCommits) != 1 || state.CycleCommits[0] != "sha-coder" {
+			t.Errorf("CycleCommits = %v, want [sha-coder]", state.CycleCommits)
+		}
+		if state.lastCycleSHA != "" {
+			t.Errorf("lastCycleSHA should be cleared after seal, got %q", state.lastCycleSHA)
+		}
+	})
+
+	t.Run("LintFixOverwritesSHA", func(t *testing.T) {
+		t.Parallel()
+		// Coder commit then one lint-fix commit — only the lint-fix SHA should survive.
+		git := &fakeGit{commitSHAs: []string{"sha-coder", "sha-lint"}}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "done", CostUSD: 0.10},       // coder
+				{ResultText: "lint fixed", CostUSD: 0.05}, // lint-fix coder pass
+			},
+		}
+		linter := &fakeLinter{outputs: []string{"error: unused var", ""}} // first run issues, second clean
+		l := &Loop{Invoker: inv, UI: &noopUI{}, Git: git, Linter: linter, MaxCycles: 1, MaxLintRetries: 3}
+		state := &CycleState{TaskBeadID: "b1", TaskTitle: "task", Cycle: 1}
+
+		if err := l.runCoderPhase(context.Background(), state, 1.0); err != nil {
+			t.Fatalf("runCoderPhase error: %v", err)
+		}
+		if state.lastCycleSHA != "sha-coder" {
+			t.Errorf("after coder: lastCycleSHA = %q, want %q", state.lastCycleSHA, "sha-coder")
+		}
+
+		if err := l.runLintFixLoop(context.Background(), state, 1.0); err != nil {
+			t.Fatalf("runLintFixLoop error: %v", err)
+		}
+		// Lint fix overwrites the coder SHA.
+		if state.lastCycleSHA != "sha-lint" {
+			t.Errorf("after lint fix: lastCycleSHA = %q, want %q", state.lastCycleSHA, "sha-lint")
+		}
+		// CycleCommits still empty — not sealed yet.
+		if len(state.CycleCommits) != 0 {
+			t.Errorf("CycleCommits should be empty before seal, got %v", state.CycleCommits)
+		}
+
+		l.sealCycleSHA(state)
+		if len(state.CycleCommits) != 1 || state.CycleCommits[0] != "sha-lint" {
+			t.Errorf("CycleCommits = %v, want [sha-lint]", state.CycleCommits)
+		}
+	})
+
+	t.Run("SealNoOpWhenNoCommit", func(t *testing.T) {
+		t.Parallel()
+		l := &Loop{UI: &noopUI{}, MaxCycles: 1}
+		state := &CycleState{}
+		l.sealCycleSHA(state)
+		if len(state.CycleCommits) != 0 {
+			t.Errorf("expected empty CycleCommits, got %v", state.CycleCommits)
 		}
 	})
 }
