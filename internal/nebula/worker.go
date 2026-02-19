@@ -174,6 +174,24 @@ func (wg *WorkerGroup) collectResults() []WorkerResult {
 	return wg.results
 }
 
+// awaitCompletion blocks until one goroutine sends on completionCh and
+// decrements activeCount. This is the core mechanism that replaces the
+// old batch-barrier wgSync.Wait(): instead of waiting for ALL goroutines
+// to finish, we wake up as soon as ANY one completes.
+func (wg *WorkerGroup) awaitCompletion(completionCh <-chan string, activeCount *int64) {
+	<-completionCh
+	atomic.AddInt64(activeCount, -1)
+}
+
+// drainActive waits for all remaining in-flight goroutines to complete
+// by reading from completionCh until activeCount reaches zero.
+func (wg *WorkerGroup) drainActive(completionCh <-chan string, activeCount *int64) {
+	for atomic.LoadInt64(activeCount) > 0 {
+		<-completionCh
+		atomic.AddInt64(activeCount, -1)
+	}
+}
+
 // Run dispatches phases using impact-aware scheduling with track-based
 // parallelism. The DAG engine's TaskAnalyzer computes composite impact
 // scores (PageRank + Betweenness Centrality) and partitions the graph
@@ -181,6 +199,10 @@ func (wg *WorkerGroup) collectResults() []WorkerResult {
 // dependencies become satisfied, sorted by impact score so that
 // bottleneck phases run first. Independent tracks execute in parallel
 // when max_workers > 1.
+//
+// Dispatch is truly continuous: when any single goroutine completes, the
+// loop immediately re-evaluates for newly-ready phases. There are no
+// wave or batch barriers.
 func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	if wg.MaxWorkers <= 0 {
 		wg.MaxWorkers = 1
@@ -243,30 +265,36 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 
 	done := wg.tracker.Done()
 	inFlight := wg.tracker.InFlight()
-	var wgSync sync.WaitGroup
 
 	sem := make(chan struct{}, workerCount)
-	var actualConcurrent, peakConcurrent int64
+	// completionCh receives a phase ID each time a goroutine finishes,
+	// allowing the dispatch loop to re-evaluate immediately instead of
+	// waiting for an entire batch.
+	completionCh := make(chan string, workerCount)
+	var activeCount int64
+	var peakConcurrent int64
 
-	// Continuous dispatch loop: phases become eligible as their
-	// dependencies complete, regardless of wave boundaries. Impact
-	// scoring ensures high-impact bottleneck phases are dispatched first.
+	// Continuous dispatch loop: phases are dispatched as soon as their
+	// dependencies complete. When any goroutine finishes, the loop
+	// immediately re-evaluates for newly-ready tasks — no wave barriers.
 	for ctx.Err() == nil {
 		switch wg.checkInterventions() {
 		case InterventionStop:
 			wg.handleStop()
+			wg.drainActive(completionCh, &activeCount)
 			return wg.collectResults(), ErrManualStop
 		case InterventionPause:
 			wg.handlePause()
 			if wg.checkInterventions() == InterventionStop {
 				wg.handleStop()
+				wg.drainActive(completionCh, &activeCount)
 				return wg.collectResults(), ErrManualStop
 			}
 		}
 
 		wg.mu.Lock()
 		// Use scheduler for impact-sorted ready tasks, then filter
-		// through tracker for failed-dep and in-flight exclusion.
+		// through tracker for failed-dep, in-flight, and scope-conflict exclusion.
 		ready := scheduler.ReadyTasks(done)
 		eligible := wg.tracker.FilterEligible(ready, graph)
 		anyInFlight := len(inFlight) > 0
@@ -274,16 +302,19 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 
 		if len(eligible) == 0 {
 			if !anyInFlight {
-				break
+				break // nothing running, nothing to dispatch — done
 			}
-			wgSync.Wait()
+			// Wait for any one in-flight phase to complete, then re-evaluate.
+			wg.awaitCompletion(completionCh, &activeCount)
 			stop, retErr := wg.processGateSignals()
 			if stop {
+				wg.drainActive(completionCh, &activeCount)
 				return wg.collectResults(), retErr
 			}
 			continue
 		}
 
+		// Dispatch all currently eligible phases.
 		for _, id := range eligible {
 			if ctx.Err() != nil {
 				break
@@ -292,17 +323,17 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 			inFlight[id] = true
 			wg.mu.Unlock()
 
-			sem <- struct{}{}
-			wgSync.Add(1)
+			sem <- struct{}{} // block if at worker capacity
+			atomic.AddInt64(&activeCount, 1)
 			go func(phaseID string) {
 				defer func() {
-					atomic.AddInt64(&actualConcurrent, -1)
 					<-sem
-					wgSync.Done()
+					completionCh <- phaseID
 				}()
-				cur := atomic.AddInt64(&actualConcurrent, 1)
+				// Track peak concurrency.
 				for {
 					peak := atomic.LoadInt64(&peakConcurrent)
+					cur := atomic.LoadInt64(&activeCount)
 					if cur <= peak || atomic.CompareAndSwapInt64(&peakConcurrent, peak, cur) {
 						break
 					}
@@ -311,19 +342,27 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 				wg.executePhase(ctx, phaseID, trackID)
 			}(id)
 		}
-		wgSync.Wait()
+
+		// After dispatching, wait for any one goroutine to finish before
+		// re-evaluating. This avoids busy-spinning and ensures newly-ready
+		// phases are picked up as soon as any dependency completes.
+		wg.awaitCompletion(completionCh, &activeCount)
 		stop, retErr := wg.processGateSignals()
 		if stop {
+			wg.drainActive(completionCh, &activeCount)
 			return wg.collectResults(), retErr
 		}
 	}
-	wgSync.Wait()
+
+	// Drain remaining in-flight goroutines on context cancellation.
+	wg.drainActive(completionCh, &activeCount)
 
 	// Record track completion as a single aggregate wave for metrics
 	// compatibility. The wave number is 0, effective parallelism is the
 	// track-based worker count, and peak is the observed peak concurrency.
 	wg.progress.RecordWaveComplete(0, workerCount, int(atomic.LoadInt64(&peakConcurrent)))
 
+	var wgSync sync.WaitGroup
 	wg.hotReload.DrainHotAdded(ctx, &wgSync, func(c context.Context, phaseID string, waveNumber int) {
 		wg.executePhase(c, phaseID, waveNumber)
 	})

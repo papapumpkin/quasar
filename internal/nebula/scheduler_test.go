@@ -2,6 +2,7 @@ package nebula
 
 import (
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -276,5 +277,69 @@ func TestNewScheduler_Analyzer(t *testing.T) {
 	}
 	if s.Analyzer().Len() != 2 {
 		t.Errorf("Analyzer().Len() = %d, want 2", s.Analyzer().Len())
+	}
+}
+
+func TestNewScheduler_MissingDependency(t *testing.T) {
+	t.Parallel()
+
+	// Phase b depends on a non-existent phase "missing".
+	phases := []PhaseSpec{
+		{ID: "a"},
+		{ID: "b", DependsOn: []string{"missing"}},
+	}
+
+	_, err := NewScheduler(phases)
+	if err == nil {
+		t.Fatal("expected error for missing dependency, got nil")
+	}
+	if !strings.Contains(err.Error(), "adding dependency") {
+		t.Errorf("error should mention 'adding dependency', got: %v", err)
+	}
+	if !strings.Contains(err.Error(), `"b"`) {
+		t.Errorf("error should mention phase ID %q, got: %v", "b", err)
+	}
+	if !strings.Contains(err.Error(), `"missing"`) {
+		t.Errorf("error should mention missing dep %q, got: %v", "missing", err)
+	}
+}
+
+func TestNewScheduler_CyclicDependency(t *testing.T) {
+	t.Parallel()
+
+	// a -> b -> a (cycle)
+	phases := []PhaseSpec{
+		{ID: "a", DependsOn: []string{"b"}},
+		{ID: "b", DependsOn: []string{"a"}},
+	}
+
+	_, err := NewScheduler(phases)
+	if err == nil {
+		t.Fatal("expected error for cyclic dependency, got nil")
+	}
+	// The error should come from the AddDependency step which detects cycles.
+	if !strings.Contains(err.Error(), "adding dependency") && !strings.Contains(err.Error(), "cycle") {
+		t.Errorf("error should mention cycle or adding dependency, got: %v", err)
+	}
+}
+
+func TestNewScheduler_DuplicatePhaseID(t *testing.T) {
+	t.Parallel()
+
+	// Two phases with the same ID.
+	phases := []PhaseSpec{
+		{ID: "a"},
+		{ID: "a"},
+	}
+
+	_, err := NewScheduler(phases)
+	if err == nil {
+		t.Fatal("expected error for duplicate phase ID, got nil")
+	}
+	if !strings.Contains(err.Error(), "adding task") {
+		t.Errorf("error should mention 'adding task', got: %v", err)
+	}
+	if !strings.Contains(err.Error(), `"a"`) {
+		t.Errorf("error should mention phase ID %q, got: %v", "a", err)
 	}
 }
