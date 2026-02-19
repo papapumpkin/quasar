@@ -33,7 +33,7 @@ type jsonEntry struct {
 	Enables          []string `json:"enables"`
 	BuildsOn         []string `json:"builds_on"`
 	Summary          string   `json:"summary,omitempty"`
-	Lessons          []string `json:"lessons,omitempty"`
+	Lessons          []string `json:"lessons"`
 }
 
 // Render produces a JSON string of the full catalog.
@@ -63,7 +63,7 @@ func (r *JSONReport) Render(catalog *Spacetime) (string, error) {
 			Enables:          emptyIfNil(e.Enables),
 			BuildsOn:         emptyIfNil(e.BuildsOn),
 			Summary:          e.Summary,
-			Lessons:          e.Lessons,
+			Lessons:          emptyIfNil(e.Lessons),
 		}
 		if !e.Created.IsZero() {
 			je.Created = e.Created.Format("2006-01-02")

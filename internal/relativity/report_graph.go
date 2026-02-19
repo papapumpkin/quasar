@@ -32,15 +32,6 @@ func (r *GraphReport) Render(catalog *Spacetime) (string, error) {
 		return sorted[i].Sequence < sorted[j].Sequence
 	})
 
-	// Build the set of nebulas that are depended on (have incoming edges).
-	hasUpstream := make(map[string]bool)
-	for _, e := range sorted {
-		for _, dep := range e.BuildsOn {
-			hasUpstream[e.Name] = true
-			_ = dep // dep is the upstream, we track downstream having edges
-		}
-	}
-
 	b.WriteString("\n")
 
 	for _, e := range sorted {
