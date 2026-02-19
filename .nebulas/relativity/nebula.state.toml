@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'relativity'
-total_cost_usd = 4.41278975
+total_cost_usd = 6.86717425
 
 [phases]
 [phases.agent-synthesis]
@@ -11,9 +11,9 @@ updated_at = 2026-02-19T09:48:46.218759-05:00
 
 [phases.catalog-reports]
 bead_id = 'quasar-9uq'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-19T09:45:57.68051-05:00
-updated_at = 2026-02-19T09:48:46.219483-05:00
+updated_at = 2026-02-19T10:15:15.047617-05:00
 
 [phases.cli-relativity]
 bead_id = 'quasar-wrd'
@@ -35,9 +35,15 @@ summary = 'Well-implemented auto-scanning pipeline for nebula catalog with clean
 
 [phases.spacetime-lock]
 bead_id = 'quasar-1j8'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-19T09:45:58.84651-05:00
-updated_at = 2026-02-19T10:06:16.311805-05:00
+updated_at = 2026-02-19T10:15:15.047198-05:00
+
+[phases.spacetime-lock.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Targeted bugfix to filter unknown enables references from downstream count computation, with a focused regression test, consistent with existing patterns in sibling functions.'
 
 [phases.spacetime-model]
 bead_id = 'quasar-vwe'
