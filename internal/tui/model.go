@@ -1227,9 +1227,11 @@ func (m *AppModel) updateHomeDetail() {
 		b.WriteString(nc.Description)
 		b.WriteString("\n\n")
 	}
-	b.WriteString(fmt.Sprintf("Phases: %d", nc.Phases))
+	PhasesMsg := fmt.Sprintf("Phases: %d", nc.Phases)
+	b.WriteString(PhasesMsg)
 	if nc.Done > 0 {
-		b.WriteString(fmt.Sprintf("  (%d done)", nc.Done))
+		DoneMsg := fmt.Sprintf("  (%d done)", nc.Done)
+		b.WriteString(DoneMsg)
 	}
 	b.WriteString("\nStatus: ")
 	b.WriteString(nc.Status)
