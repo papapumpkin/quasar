@@ -79,6 +79,7 @@ type AppModel struct {
 
 	// Home mode state (landing page).
 	HomeCursor     int            // cursor position in the home nebula list
+	HomeOffset     int            // viewport scroll offset in the home nebula list
 	HomeNebulae    []NebulaChoice // discovered nebulas for the home view
 	HomeDir        string         // the .nebulas/ parent directory
 	SelectedNebula string         // set when user selects a nebula from home; read after Run() returns
@@ -452,13 +453,17 @@ func (m *AppModel) ensurePhaseLoop(phaseID string) *LoopView {
 // clampCursors ensures all cursors remain within valid bounds.
 // This prevents panics after a resize or data change that shrinks a list.
 func clampCursors(m *AppModel) {
-	// Clamp HomeCursor.
+	// Clamp HomeCursor and HomeOffset.
 	if max := len(m.HomeNebulae) - 1; max >= 0 {
 		if m.HomeCursor > max {
 			m.HomeCursor = max
 		}
+		if m.HomeOffset > max {
+			m.HomeOffset = max
+		}
 	} else {
 		m.HomeCursor = 0
+		m.HomeOffset = 0
 	}
 
 	// Clamp NebulaView cursor.
@@ -1109,6 +1114,7 @@ func (m *AppModel) moveUp() {
 		if m.HomeCursor > 0 {
 			m.HomeCursor--
 		}
+		m.adjustHomeOffset()
 	case ModeLoop:
 		m.LoopView.MoveUp()
 	case ModeNebula:
@@ -1140,6 +1146,7 @@ func (m *AppModel) moveDown() {
 		if m.HomeCursor < max {
 			m.HomeCursor++
 		}
+		m.adjustHomeOffset()
 	case ModeLoop:
 		m.LoopView.MoveDown()
 	case ModeNebula:
@@ -1344,6 +1351,42 @@ func (m AppModel) detailHeight() int {
 	return mainH * 2 / 5
 }
 
+// homeMainHeight computes the available lines for the home nebula list.
+func (m AppModel) homeMainHeight() int {
+	// Fixed chrome: status bar (1) + spacing (1) + footer (1).
+	chrome := 3
+	// Banner: estimate height based on size tier.
+	if bv := m.Banner.View(); bv != "" {
+		chrome += lipgloss.Height(bv)
+	}
+	// Detail panel.
+	if m.showDetailPanel() && m.Height >= DetailCollapseHeight {
+		chrome++ // separator line
+		chrome += m.detailHeight()
+	}
+	h := m.Height - chrome
+	if h < 3 {
+		h = 3
+	}
+	return h
+}
+
+// adjustHomeOffset updates HomeOffset so the cursor is visible within the
+// approximate viewport height. Called after cursor changes in moveUp/moveDown.
+func (m *AppModel) adjustHomeOffset() {
+	if len(m.HomeNebulae) == 0 {
+		m.HomeOffset = 0
+		return
+	}
+	hv := HomeView{
+		Nebulae: m.HomeNebulae,
+		Cursor:  m.HomeCursor,
+		Offset:  m.HomeOffset,
+		Height:  m.homeMainHeight(),
+	}
+	m.HomeOffset = hv.ensureCursorVisible()
+}
+
 // showDetailPanel returns whether the detail panel should be visible.
 func (m AppModel) showDetailPanel() bool {
 	if m.Mode == ModeHome {
@@ -1520,7 +1563,9 @@ func (m AppModel) renderMainView() string {
 		hv := HomeView{
 			Nebulae: m.HomeNebulae,
 			Cursor:  m.HomeCursor,
+			Offset:  m.HomeOffset,
 			Width:   w,
+			Height:  m.homeMainHeight(),
 		}
 		return hv.View()
 

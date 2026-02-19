@@ -1,0 +1,32 @@
+[nebula]
+name = "relativity"
+description = "A catalog system that tracks nebulas across time — their order, categories, what they touch, and how the codebase evolved. Produces reports and agent-consumable docs for onboarding, memory updates, and codebase maintenance at scale."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "relativity", "documentation", "onboarding"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 50.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Auto-derive a catalog of all nebulas from .nebulas/ and git history",
+    "Store enriched metadata in .relativity/spacetime.toml",
+    "Track sequence, category, areas touched, status, and relationships between nebulas",
+    "Generate rich reports for human readers and AI agents",
+    "Produce agent-consumable artifacts (memory files, CLAUDE.md sections) for onboarding",
+    "Make the nebula history a first-class tool for codebase maintenance at agent scale",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "Auto-derivation should work with zero manual config — scanning + git is the baseline",
+    "Manual annotations in spacetime.toml override auto-derived values",
+    "Reports must be useful to both humans and AI agents",
+    "Prefer stdlib over third-party libraries",
+]

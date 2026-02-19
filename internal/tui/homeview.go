@@ -11,22 +11,145 @@ import (
 type HomeView struct {
 	Nebulae []NebulaChoice
 	Cursor  int
+	Offset  int // first visible item index for viewport scrolling
 	Width   int
+	Height  int // available lines for the list (0 = no constraint)
 }
 
 // View renders the home landing page with a scrollable list of nebulas.
 // Each row shows an indicator, the nebula name, phase count, and status.
 // An empty state is shown when no nebulas are found.
+// When Height is set and items overflow, a viewport window follows the cursor.
 func (hv HomeView) View() string {
 	if len(hv.Nebulae) == 0 {
 		return hv.renderEmpty()
 	}
 
+	// Check if all items fit without scrolling.
+	if hv.Height <= 0 || hv.totalLines() <= hv.Height {
+		var b strings.Builder
+		for i, nc := range hv.Nebulae {
+			b.WriteString(hv.renderNebulaRow(i, nc))
+			b.WriteString("\n")
+		}
+		return b.String()
+	}
+
+	// Items overflow — render a windowed view with scroll indicators.
+	offset := hv.ensureCursorVisible()
+	return hv.renderWindow(offset)
+}
+
+// totalLines returns the total number of visible lines for all nebula rows.
+func (hv HomeView) totalLines() int {
+	n := 0
+	for i := range hv.Nebulae {
+		n += hv.rowHeight(i)
+	}
+	return n
+}
+
+// rowHeight returns the number of visible lines for the given nebula row.
+func (hv HomeView) rowHeight(i int) int {
+	if hv.Nebulae[i].Description != "" {
+		return 2
+	}
+	return 1
+}
+
+// ensureCursorVisible returns an adjusted offset that guarantees the cursor
+// row is visible within the available Height.
+func (hv HomeView) ensureCursorVisible() int {
+	offset := hv.Offset
+	n := len(hv.Nebulae)
+	if n == 0 {
+		return 0
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= n {
+		offset = n - 1
+	}
+
+	// Cursor above offset: snap to cursor.
+	if hv.Cursor < offset {
+		return hv.Cursor
+	}
+
+	// Cursor below visible window: increase offset until it fits.
+	for offset < hv.Cursor {
+		contentLines := hv.Height
+		if offset > 0 {
+			contentLines-- // reserve for "↑ more"
+		}
+		contentLines-- // reserve for "↓ more"
+
+		lines := 0
+		for i := offset; i <= hv.Cursor && i < n; i++ {
+			lines += hv.rowHeight(i)
+		}
+		if lines <= contentLines {
+			break
+		}
+		offset++
+	}
+
+	return offset
+}
+
+// renderWindow renders the visible subset of rows with scroll indicators.
+func (hv HomeView) renderWindow(offset int) string {
 	var b strings.Builder
-	for i, nc := range hv.Nebulae {
-		b.WriteString(hv.renderNebulaRow(i, nc))
+	n := len(hv.Nebulae)
+
+	showUp := offset > 0
+	if showUp {
+		b.WriteString("  " + styleDetailDim.Render(fmt.Sprintf("↑ %d more", offset)) + "\n")
+	}
+
+	// Compute available content lines, reserving for indicators.
+	contentLines := hv.Height
+	if showUp {
+		contentLines--
+	}
+	// Tentatively reserve 1 line for the down indicator.
+	contentLines--
+
+	usedLines := 0
+	endIdx := offset
+	for i := offset; i < n; i++ {
+		rh := hv.rowHeight(i)
+		if usedLines+rh > contentLines {
+			break
+		}
+		usedLines += rh
+		endIdx = i + 1
+	}
+
+	// If no down indicator is needed, reclaim the reserved line.
+	if endIdx >= n {
+		contentLines++
+		// Re-check if we can fit one more row.
+		for endIdx < n {
+			rh := hv.rowHeight(endIdx)
+			if usedLines+rh > contentLines {
+				break
+			}
+			usedLines += rh
+			endIdx++
+		}
+	}
+
+	for i := offset; i < endIdx; i++ {
+		b.WriteString(hv.renderNebulaRow(i, hv.Nebulae[i]))
 		b.WriteString("\n")
 	}
+
+	if remaining := n - endIdx; remaining > 0 {
+		b.WriteString("  " + styleDetailDim.Render(fmt.Sprintf("↓ %d more", remaining)) + "\n")
+	}
+
 	return b.String()
 }
 

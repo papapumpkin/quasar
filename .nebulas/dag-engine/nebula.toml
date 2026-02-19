@@ -25,9 +25,9 @@ goals = [
 ]
 constraints = [
     "Follow existing Go conventions from CLAUDE.md",
-    "Please utilize external graph libraries if they are simple, popular, performant, and prod ready. Otherwise use native Go",
+    "Utilize external graph libraries if they are simple, perrformant, and prod ready.",
     "The existing nebula graph code in internal/nebula/graph.go should be replaced or wrapped",
-    "Removing the existing graph implementation is a big change, we need to be sure we don't regress"
+    "Removing the existing graph implementation is a big change, we need to be sure we don't regress",
     "All algorithms must be well-tested with known graph fixtures",
     "Design for the quasar use case but keep the engine general enough to be reusable",
     "Prefer stdlib over third-party libraries",

@@ -52,8 +52,12 @@ func (pt *PhaseTracker) InFlight() map[string]bool {
 	return pt.inFlight
 }
 
-// FilterEligible returns phase IDs from ready that are not in-flight, not failed,
-// and not blocked by a failed dependency.
+// FilterEligible returns phase IDs from ready that are not in-flight, not
+// failed, not blocked by a failed dependency, and not in scope-conflict with
+// any currently in-flight phase. When two eligible phases would conflict on
+// scope, the first one (highest impact, since ready is impact-sorted) is
+// admitted and subsequent conflicting phases are deferred until the next
+// dispatch cycle.
 func (pt *PhaseTracker) FilterEligible(ready []string, graph *Graph) []string {
 	var eligible []string
 	for _, id := range ready {
@@ -61,6 +65,15 @@ func (pt *PhaseTracker) FilterEligible(ready []string, graph *Graph) []string {
 			continue
 		}
 		if pt.hasFailedDep(id, graph) {
+			continue
+		}
+		if pt.hasScopeConflictWithInFlight(id) {
+			continue
+		}
+		// Also check scope conflicts with phases we're about to dispatch
+		// in this same batch — both are not yet in-flight but would run
+		// concurrently.
+		if pt.hasScopeConflictWith(id, eligible) {
 			continue
 		}
 		eligible = append(eligible, id)
@@ -76,6 +89,46 @@ func (pt *PhaseTracker) hasFailedDep(phaseID string, graph *Graph) bool {
 	}
 	for dep := range deps {
 		if pt.failed[dep] {
+			return true
+		}
+	}
+	return false
+}
+
+// hasScopeConflictWithInFlight reports whether phaseID has overlapping scope
+// with any currently in-flight phase, unless one of them opts out via
+// AllowScopeOverlap. This preserves the scope-based conflict avoidance that
+// was previously handled by EffectiveParallelism in the wave-based approach.
+func (pt *PhaseTracker) hasScopeConflictWithInFlight(phaseID string) bool {
+	spec := pt.phasesByID[phaseID]
+	if spec == nil || len(spec.Scope) == 0 || spec.AllowScopeOverlap {
+		return false
+	}
+	for flyingID := range pt.inFlight {
+		flySpec := pt.phasesByID[flyingID]
+		if flySpec == nil || len(flySpec.Scope) == 0 || flySpec.AllowScopeOverlap {
+			continue
+		}
+		if _, _, overlaps := scopesOverlap(spec.Scope, flySpec.Scope); overlaps {
+			return true
+		}
+	}
+	return false
+}
+
+// hasScopeConflictWith reports whether phaseID has overlapping scope with any
+// phase in the given set of IDs.
+func (pt *PhaseTracker) hasScopeConflictWith(phaseID string, ids []string) bool {
+	spec := pt.phasesByID[phaseID]
+	if spec == nil || len(spec.Scope) == 0 || spec.AllowScopeOverlap {
+		return false
+	}
+	for _, otherID := range ids {
+		otherSpec := pt.phasesByID[otherID]
+		if otherSpec == nil || len(otherSpec.Scope) == 0 || otherSpec.AllowScopeOverlap {
+			continue
+		}
+		if _, _, overlaps := scopesOverlap(spec.Scope, otherSpec.Scope); overlaps {
 			return true
 		}
 	}
