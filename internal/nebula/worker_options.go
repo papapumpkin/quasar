@@ -6,7 +6,7 @@ import (
 
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
-	"github.com/papapumpkin/quasar/internal/board"
+	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
 // PhaseRunnerResult holds the outcome of a single phase execution.
@@ -130,22 +130,22 @@ func WithLogger(w io.Writer) Option {
 	return func(wg *WorkerGroup) { wg.Logger = w }
 }
 
-// WithBoard sets the contract board. When non-nil, the dispatch loop polls
-// phases against the board before launching worker goroutines and publishes
-// contracts on completion. Nil preserves legacy (no-board) behavior.
-func WithBoard(b board.Board) Option {
-	return func(wg *WorkerGroup) { wg.Board = b }
+// WithFabric sets the entanglement fabric. When non-nil, the dispatch loop polls
+// phases against the fabric before launching worker goroutines and publishes
+// entanglements on completion. Nil preserves legacy (no-fabric) behavior.
+func WithFabric(f fabric.Fabric) Option {
+	return func(wg *WorkerGroup) { wg.Fabric = f }
 }
 
-// WithPoller sets the board poller used to check if a phase has enough
-// context to proceed. Only used when Board is also set.
-func WithPoller(p board.Poller) Option {
+// WithPoller sets the fabric poller used to check if a phase has enough
+// context to proceed. Only used when Fabric is also set.
+func WithPoller(p fabric.Poller) Option {
 	return func(wg *WorkerGroup) { wg.Poller = p }
 }
 
-// WithPublisher sets the contract publisher used to extract and publish
-// interface contracts after a phase completes. Only used when Board is
+// WithPublisher sets the entanglement publisher used to extract and publish
+// interface entanglements after a phase completes. Only used when Fabric is
 // also set.
-func WithPublisher(p *board.Publisher) Option {
+func WithPublisher(p *fabric.Publisher) Option {
 	return func(wg *WorkerGroup) { wg.Publisher = p }
 }

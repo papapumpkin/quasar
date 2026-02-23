@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/papapumpkin/quasar/internal/beads"
-	"github.com/papapumpkin/quasar/internal/board"
+	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/dag"
 )
 
@@ -42,10 +42,10 @@ type WorkerGroup struct {
 	Gater        Gater            // nil = built from Prompter + manifest at Run time
 	Prompter     GatePrompter     // used to build Gater if Gater is nil
 	Dashboard    *Dashboard       // nil = no dashboard; used to coordinate watch-mode output
-	BeadsClient  beads.Client     // nil = hot-added phases cannot create beads
-	Board        board.Board      // nil = no board (legacy behavior)
-	Poller       board.Poller     // nil = skip polling (legacy behavior)
-	Publisher    *board.Publisher // nil = no contract publishing
+	BeadsClient  beads.Client       // nil = hot-added phases cannot create beads
+	Fabric       fabric.Fabric     // nil = no fabric (legacy behavior)
+	Poller       fabric.Poller     // nil = skip polling (legacy behavior)
+	Publisher    *fabric.Publisher // nil = no entanglement publishing
 	GlobalCycles int
 	GlobalBudget float64
 	GlobalModel  string
@@ -64,8 +64,8 @@ type WorkerGroup struct {
 	tracker         *PhaseTracker
 	progress        *ProgressReporter
 	hotReload       *HotReloader
-	blockedTracker  *board.BlockedTracker  // nil when Board is nil
-	pushbackHandler *board.PushbackHandler // nil when Board is nil
+	blockedTracker  *fabric.BlockedTracker  // nil when Fabric is nil
+	pushbackHandler *fabric.PushbackHandler // nil when Fabric is nil
 }
 
 // logger returns the effective log writer (os.Stderr if Logger is nil).
@@ -238,10 +238,10 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		go wg.hotReload.ConsumeChanges(ctx)
 	}
 
-	// Initialize board collaborators when the board is configured.
-	if wg.Board != nil && wg.Poller != nil {
-		wg.blockedTracker = board.NewBlockedTracker()
-		wg.pushbackHandler = &board.PushbackHandler{Board: wg.Board}
+	// Initialize fabric collaborators when the fabric is configured.
+	if wg.Fabric != nil && wg.Poller != nil {
+		wg.blockedTracker = fabric.NewBlockedTracker()
+		wg.pushbackHandler = &fabric.PushbackHandler{Fabric: wg.Fabric}
 	}
 
 	// Build impact-aware scheduler from phases using the DAG engine.
@@ -309,14 +309,14 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		anyInFlight := len(inFlight) > 0
 		wg.mu.Unlock()
 
-		// Board-aware polling: filter eligible through the board.
+		// Fabric-aware polling: filter eligible through the fabric.
 		// Phases that don't poll PROCEED are blocked and skipped.
-		if wg.Board != nil && wg.Poller != nil && len(eligible) > 0 {
+		if wg.Fabric != nil && wg.Poller != nil && len(eligible) > 0 {
 			eligible = wg.pollEligible(ctx, eligible)
 		}
 
 		if len(eligible) == 0 {
-			anyBlocked := wg.boardBlocked() > 0
+			anyBlocked := wg.fabricBlocked() > 0
 			if !anyInFlight && !anyBlocked {
 				break // nothing running, nothing blocked, nothing to dispatch — done
 			}
