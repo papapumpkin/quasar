@@ -1,13 +1,13 @@
 version = 1
 nebula_name = 'graph-consolidation'
-total_cost_usd = 1.2313204999999998
+total_cost_usd = 13.301623
 
 [phases]
 [phases.delete-nebula-graph]
 bead_id = 'quasar-70z'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-22T22:10:17.745549-05:00
-updated_at = 2026-02-22T22:10:17.745549-05:00
+updated_at = 2026-02-22T22:47:39.293068-05:00
 
 [phases.expose-dag-caps]
 bead_id = 'quasar-y68'
@@ -23,6 +23,12 @@ summary = 'Well-implemented DAG capability expansion (HasPath, Connected, Comput
 
 [phases.migrate-consumers]
 bead_id = 'quasar-1r3'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-22T22:10:17.393918-05:00
-updated_at = 2026-02-22T22:13:55.772631-05:00
+updated_at = 2026-02-22T22:47:39.292692-05:00
+
+[phases.migrate-consumers.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean fix converting `ComputeWaves()` wave numbering from 0-based to 1-based, aligning with all existing nebula consumer expectations; all tests pass.'
