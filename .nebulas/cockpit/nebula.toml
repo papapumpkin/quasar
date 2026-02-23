@@ -1,0 +1,42 @@
+[nebula]
+name = "cockpit"
+description = "Evolve the TUI from a phase table into a columnar task board with live worker cards, tab-based contract/scratchpad views, and inline human-decision prompts — keeping the existing galactic theme, logo, and splash."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "tui"]
+assignee = ""
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 80.0
+model = ""
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Add a columnar board view (Queued / Running / Review / Done) alongside the existing NebulaView table",
+    "Show live worker detail cards beneath the board columns with cycle, token, and file-lock info",
+    "Introduce tab navigation (Board | Contracts | Scratchpad) below the status bar",
+    "Build a contract viewer tab displaying interface agreements between coupled phases",
+    "Build a scratchpad tab as a shared, read-mostly viewport",
+    "Enhance the human-decision overlay to float above the board with inline text input",
+    "Upgrade the stats bar with a block-style progress bar and token/cost breakdown",
+]
+constraints = [
+    "Preserve the existing galactic color theme, logo, and splash animation exactly as they are",
+    "Keep NebulaView as a toggle-able alternative — the board is an additional view mode, not a replacement",
+    "Reuse existing Lip Gloss styles from styles.go wherever possible; extend only when needed",
+    "Follow the existing Bridge/message pattern — BoardView consumes the same MsgPhase* messages",
+    "Do not introduce external dependencies beyond what is already in go.mod",
+    "All new components must have corresponding test files using stdlib testing only",
+    "Adaptive layout: degrade gracefully on narrow terminals (< 80 cols) by collapsing to the existing table view",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

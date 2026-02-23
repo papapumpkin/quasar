@@ -51,7 +51,7 @@ type SQLiteBoard struct {
 
 // NewSQLiteBoard opens (or creates) a SQLite database at dbPath, enables WAL
 // mode and busy timeout, and creates the schema tables if they do not exist.
-func NewSQLiteBoard(dbPath string) (*SQLiteBoard, error) {
+func NewSQLiteBoard(ctx context.Context, dbPath string) (*SQLiteBoard, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("board: open database: %w", err)
@@ -64,19 +64,19 @@ func NewSQLiteBoard(dbPath string) (*SQLiteBoard, error) {
 	db.SetMaxOpenConns(1)
 
 	// Enable WAL mode — readers never block writers, writers never block readers.
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+	if _, err := db.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("board: enable WAL mode: %w", err)
 	}
 
 	// Busy timeout avoids SQLITE_BUSY under concurrent access from external processes.
-	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+	if _, err := db.ExecContext(ctx, "PRAGMA busy_timeout=5000"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("board: set busy timeout: %w", err)
 	}
 
 	// Create tables idempotently.
-	if _, err := db.Exec(schema); err != nil {
+	if _, err := db.ExecContext(ctx, schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("board: create schema: %w", err)
 	}
@@ -186,13 +186,36 @@ func (b *SQLiteBoard) queryContracts(ctx context.Context, query string, args ...
 		if err := rows.Scan(&c.ID, &c.Producer, &c.Kind, &c.Name, &c.Signature, &c.Package, &c.Status, &ts); err != nil {
 			return nil, fmt.Errorf("board: scan contract: %w", err)
 		}
-		c.CreatedAt, _ = time.Parse(time.DateTime, ts)
+		createdAt, parseErr := parseTimestamp(ts)
+		if parseErr != nil {
+			return nil, fmt.Errorf("board: parse contract timestamp: %w", parseErr)
+		}
+		c.CreatedAt = createdAt
 		result = append(result, c)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("board: iterate contracts: %w", err)
 	}
 	return result, nil
+}
+
+// timestampFormats lists the formats SQLite drivers may produce for
+// CURRENT_TIMESTAMP. modernc.org/sqlite typically returns RFC 3339
+// (with "T" separator and "Z" suffix), while canonical SQLite returns
+// the space-separated DateTime format.
+var timestampFormats = []string{
+	time.RFC3339,
+	time.DateTime,
+}
+
+// parseTimestamp attempts to parse a SQLite timestamp string using known formats.
+func parseTimestamp(s string) (time.Time, error) {
+	for _, layout := range timestampFormats {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unrecognized timestamp format: %q", s)
 }
 
 // ClaimFile registers file ownership for a phase. Returns ErrFileAlreadyClaimed

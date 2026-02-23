@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"testing"
 )
@@ -14,7 +15,7 @@ func testBoard(t *testing.T) *SQLiteBoard {
 	t.Helper()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "test.board.db")
-	b, err := NewSQLiteBoard(dbPath)
+	b, err := NewSQLiteBoard(context.Background(), dbPath)
 	if err != nil {
 		t.Fatalf("NewSQLiteBoard(%q): %v", dbPath, err)
 	}
@@ -65,13 +66,13 @@ func TestNewSQLiteBoard(t *testing.T) {
 		dbPath := filepath.Join(dir, "idempotent.board.db")
 
 		// Open twice — second open should succeed without error.
-		b1, err := NewSQLiteBoard(dbPath)
+		b1, err := NewSQLiteBoard(context.Background(), dbPath)
 		if err != nil {
 			t.Fatalf("first open: %v", err)
 		}
 		b1.Close()
 
-		b2, err := NewSQLiteBoard(dbPath)
+		b2, err := NewSQLiteBoard(context.Background(), dbPath)
 		if err != nil {
 			t.Fatalf("second open: %v", err)
 		}
@@ -80,7 +81,7 @@ func TestNewSQLiteBoard(t *testing.T) {
 
 	t.Run("invalid path returns error", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewSQLiteBoard(filepath.Join(os.DevNull, "nonexistent", "path.db"))
+		_, err := NewSQLiteBoard(context.Background(), filepath.Join(os.DevNull, "nonexistent", "path.db"))
 		if err == nil {
 			t.Fatal("expected error for invalid path")
 		}
@@ -437,15 +438,7 @@ func TestConcurrentAccess(t *testing.T) {
 	}
 }
 
-// itoa is a minimal int-to-string helper to avoid importing strconv in tests.
+// itoa converts an int to its string representation using stdlib strconv.
 func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	digits := []byte{}
-	for n > 0 {
-		digits = append([]byte{byte('0' + n%10)}, digits...)
-		n /= 10
-	}
-	return string(digits)
+	return strconv.Itoa(n)
 }
