@@ -9,16 +9,16 @@ scope = ["internal/tui/scratchpadview.go", "internal/tui/scratchpadview_test.go"
 
 ## Problem
 
-During a nebula run, workers sometimes produce observations, warnings, or notes that don't fit neatly into the phase timeline — architecture decisions, shared context, reminders. The cockpit mockup includes a "Scratchpad" tab as a shared, read-mostly viewport where these notes accumulate.
+During a nebula epoch, quasars produce observations, post discoveries, and trigger state transitions. The telemetry stream captures all of this, but there's no live, human-readable feed in the cockpit. The mockup includes a "Scratchpad" tab as a shared viewport where telemetry-derived notes accumulate — a running log of what's happening across all quasars.
 
 ## Solution
 
-Create a `ScratchpadView` component that renders in the `TabScratchpad` tab. It's a scrollable viewport (`bubbles/viewport`) displaying timestamped notes.
+Create a `ScratchpadView` component that renders in the `TabScratchpad` tab. It's a scrollable viewport (`bubbles/viewport`) displaying timestamped notes fed by `MsgScratchpadEntry` messages from the telemetry bridge (built in the fabric nebula's cockpit-wiring phase).
 
 ```go
 type ScratchpadEntry struct {
     Timestamp time.Time
-    PhaseID   string  // which phase wrote it (empty for system notes)
+    PhaseID   string  // which phase generated this (empty for system events)
     Text      string
 }
 
@@ -40,14 +40,19 @@ Each entry renders as:
 - Phase IDs in `colorAccent` (or `colorMuted` if empty/system)
 - Text in `colorWhite`
 
-**Data source**: A new `MsgScratchpadEntry` message type. Workers can emit scratchpad entries via the bridge. System events (nebula start, phase completion, errors) can also write entries automatically.
+**Telemetry-derived entries include:**
+- Discovery posted: `"discovery: requirements_ambiguity — <detail>"`
+- Entanglement posted: `"entanglement: <name> published by <producer>"`
+- Task state transitions: `"phase-x: running → review"`
+- Hail raised: `"⚠ hail: <kind> — <detail>"`
+- Filter failures: `"filter: build failed for phase-x"`
 
 **Behavior**:
 - Auto-scrolls to bottom when new entries arrive (unless user has scrolled up)
 - Standard viewport keybindings: `j`/`k` or arrow keys for scrolling, `g`/`G` for top/bottom
-- Read-only — no editing from the TUI (entries come from workers and system events)
+- Read-only — entries come from the telemetry bridge, not user input
 
-The viewport wraps long lines to the terminal width. The view handles the empty state with a centered `"No notes yet"` placeholder in `colorMuted`.
+The viewport wraps long lines to the terminal width. The view handles the empty state with a centered `"No events yet"` placeholder in `colorMuted`.
 
 ## Files
 
@@ -60,7 +65,7 @@ The viewport wraps long lines to the terminal width. The view handles the empty 
 - [ ] Viewport scrolls with standard keybindings
 - [ ] Auto-scrolls to bottom on new entries unless user has scrolled up
 - [ ] Integrates with tab system (appears on `TabScratchpad`)
-- [ ] New `MsgScratchpadEntry` message type defined in `msg.go`
+- [ ] Consumes `MsgScratchpadEntry` messages from the telemetry bridge
 - [ ] Empty state shows placeholder text
 - [ ] `go test ./internal/tui/...` passes
 - [ ] `go vet ./...` clean
