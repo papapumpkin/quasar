@@ -1,0 +1,40 @@
+[nebula]
+name = "contract-board"
+description = "Contract-first execution model with shared SQLite board, emergent interface contracts, worker polling, and structured pushback for conflict resolution"
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "nebula", "concurrency", "contracts"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 60.0
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Build a shared board (SQLite WAL) where completed phases post their interface contracts",
+    "Add POLLING and BLOCKED states so dependent phases check the board before starting",
+    "Enable workers to push back with structured reasons (ambiguous, insufficient, conflict)",
+    "Auto-resume blocked phases when new contracts appear on the board",
+    "Pause and escalate to HUMAN_DECISION_REQUIRED when pushback cannot be auto-resolved",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "Use modernc.org/sqlite (pure Go, no CGo) for the board store",
+    "SQLite WAL mode — readers never block writers, writers never block readers",
+    "Contracts are emergent — produced organically by completed phases, not pre-defined by a planner",
+    "Pushback threshold: only block on structural issues (can't compile), not uncertainty",
+    "Board is a single .db file alongside nebula state",
+    "All UI output goes to stderr via ui.Printer",
+    "Must integrate with existing WorkerGroup.Run dispatch loop, not replace it",
+    "No external services — local-first, single-process",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []
