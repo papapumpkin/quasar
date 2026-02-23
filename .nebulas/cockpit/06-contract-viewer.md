@@ -1,73 +1,61 @@
 +++
-id = "contract-viewer"
-title = "Contracts tab view"
+id = "entanglement-viewer"
+title = "Entanglements tab view"
 type = "feature"
 priority = 2
 depends_on = ["tab-system"]
-scope = ["internal/tui/contractview.go", "internal/tui/contractview_test.go"]
+scope = ["internal/tui/entanglementview.go", "internal/tui/entanglementview_test.go"]
 +++
 
 ## Problem
 
-When multiple phases work in parallel, they often share interfaces — a function signature, a struct definition, a database schema. The cockpit mockup shows a "Contracts" tab that displays these interface agreements between coupled phases, so the operator can see at a glance what's been agreed upon and whether any contracts are in dispute.
+When multiple phases work in parallel, they share entanglements — interface agreements (function signatures, struct definitions) that one task produces and another consumes. The cockpit mockup shows an "Entanglements" tab that displays these agreements from the fabric, so the operator can see at a glance what's been agreed upon, what's pending, and whether any are disputed.
 
-Currently there is no TUI representation of cross-phase interface contracts.
+Currently there is no TUI representation of cross-phase entanglements.
 
 ## Solution
 
-Create a `ContractView` component that renders in the `TabContracts` tab. It displays a scrollable list of contract cards, each showing:
+Create an `EntanglementView` component that renders in the `TabEntanglements` tab. It displays a scrollable list of entanglement cards, each showing:
 
-1. **Contract ID** (e.g., `contract-01`) as the card title in `colorBlueshift`
-2. **Parties**: the two phase IDs that share the contract, connected with `↔` in `colorAccent`
-3. **Status**: `fulfilled` (green), `in progress` (yellow), or `disputed` (red)
-4. **Interface body**: the shared type/function signatures rendered as syntax-highlighted Go code
+1. **Entanglement ID** as the card title in `colorBlueshift`
+2. **Parties**: producer `→` consumer (or `→ *` if consumer is NULL/any downstream) in `colorAccent`
+3. **Status**: `pending` (yellow), `fulfilled` (green), or `disputed` (red)
+4. **Interface body**: the Go type/function signature rendered as monospace code
 
-Each contract is rendered in a bordered box using `lipgloss.RoundedBorder()` with `colorMuted` borders.
+Each entanglement is rendered in a bordered box using `lipgloss.RoundedBorder()` with `colorMuted` borders.
 
 ```go
-type Contract struct {
-    ID       string
-    PhaseA   string
-    PhaseB   string
-    Status   ContractStatus // Fulfilled, InProgress, Disputed
-    Body     string         // Go interface/type definitions
-}
-
-type ContractStatus int
-const (
-    ContractInProgress ContractStatus = iota
-    ContractFulfilled
-    ContractDisputed
-)
-
-type ContractView struct {
-    contracts []Contract
-    cursor    int
-    viewport  viewport.Model
-    width     int
-    height    int
+type EntanglementView struct {
+    entanglements []fabric.Entanglement
+    cursor        int
+    viewport      viewport.Model
+    width         int
+    height        int
 }
 ```
 
-**Data source**: For this phase, contracts are populated from a new `MsgContractUpdate` message type. The message carries the contract data. The contract-board nebula (if completed) provides the backend; otherwise, the view works with whatever contract data is sent to it. The view is a pure consumer — it never writes contract data.
+**Data source**: Populated from `MsgEntanglementUpdate` messages (defined in the fabric nebula's cockpit-wiring phase). The fabric periodically emits the full entanglement list, and this view re-renders on each update. The view is a pure consumer — it never writes entanglement data.
 
-**Navigation**: Arrow keys scroll through contracts. The viewport supports scrolling for long interface definitions. `Esc` returns to the tab bar.
+**Navigation**: Arrow keys scroll through entanglements. The viewport supports scrolling for long interface definitions. `Esc` returns to the tab bar.
 
-**Future enhancement** (not in this phase): Inline editing of contracts directly in the TUI, with changes propagated to workers at their next checkpoint. For now, the view is read-only.
+**Grouping**: Entanglements are grouped by producer phase, with a section header for each. Within each group, sorted by status (disputed first, then pending, then fulfilled).
+
+**Future enhancement** (not in this phase): Inline editing of entanglements directly in the TUI, with changes propagated to quasars at their next checkpoint. For now, the view is read-only.
 
 ## Files
 
-- `internal/tui/contractview.go` — `ContractView` component with contract cards and scrollable viewport
-- `internal/tui/contractview_test.go` — Tests for contract rendering, status styling, and cursor navigation
+- `internal/tui/entanglementview.go` — `EntanglementView` component with entanglement cards and scrollable viewport
+- `internal/tui/entanglementview_test.go` — Tests for entanglement rendering, status styling, grouping, and cursor navigation
 
 ## Acceptance Criteria
 
-- [ ] Contract cards render with ID, parties, status, and interface body
-- [ ] Status colors match the galactic theme (green/yellow/red)
+- [ ] Entanglement cards render with ID, producer→consumer, status, and interface body
+- [ ] Status colors match: `pending` = yellow, `fulfilled` = green, `disputed` = red
 - [ ] Interface body renders as monospace code text
-- [ ] Cursor navigation scrolls through contracts
-- [ ] View integrates with the tab system (appears on `TabContracts`)
-- [ ] New `MsgContractUpdate` message type defined in `msg.go`
-- [ ] View handles zero contracts gracefully (shows "No contracts" placeholder)
+- [ ] Entanglements grouped by producer, sorted by status within groups
+- [ ] Cursor navigation scrolls through entanglements
+- [ ] View integrates with the tab system (appears on `TabEntanglements`)
+- [ ] Consumes `MsgEntanglementUpdate` messages from the fabric bridge
+- [ ] View handles zero entanglements gracefully (shows "No entanglements" placeholder)
 - [ ] `go test ./internal/tui/...` passes
 - [ ] `go vet ./...` clean

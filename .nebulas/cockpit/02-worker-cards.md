@@ -1,6 +1,6 @@
 +++
 id = "worker-cards"
-title = "Live worker detail cards"
+title = "Live quasar detail cards"
 type = "feature"
 priority = 2
 depends_on = ["board-view"]
@@ -9,9 +9,9 @@ scope = ["internal/tui/workercard.go", "internal/tui/workercard_test.go"]
 
 ## Problem
 
-When phases are running, the current TUI shows only a status icon and spinner in the phase row. There's no at-a-glance view of *what each worker is doing right now* — which cycle it's on, how many tokens it's burned, which files it has locked, or whether the coder or reviewer is active.
+When phases are running, the current TUI shows only a status icon and spinner in the phase row. There's no at-a-glance view of *what each quasar (worker) is doing right now* — which cycle it's on, how many tokens it's burned, which files it has claimed, or whether the coder or reviewer is active.
 
-The cockpit mockup shows detail cards beneath the board columns — one card per active worker — with a compact summary of live state.
+The cockpit mockup shows detail cards beneath the board columns — one card per active quasar — with a compact summary of live state.
 
 ## Solution
 
@@ -19,22 +19,22 @@ Create a `WorkerCard` component that renders a bordered box for each phase in th
 
 Each card contains:
 - **Phase name** as the card title (styled with `colorAccent`)
-- **Worker ID** (e.g., `w-1`, `w-2`) in `colorNebula`
+- **Quasar ID** (e.g., `q-1`, `q-2`) in `colorNebula`
 - **Cycle** counter: `2/5` — current cycle / max cycles
 - **Tokens** spent so far for this phase
-- **Files** — scope glob or list of modified files (truncated)
-- **Activity line** — current state: `coding...`, `reviewing...`, `compiling...` in appropriate color
+- **Claims** — files currently claimed by this quasar (truncated)
+- **Activity line** — current state: `coding...`, `reviewing...`, `scanning...` in appropriate color
 
 The card uses a `lipgloss.NewStyle().Border(lipgloss.RoundedBorder())` with `colorMuted` border. Width is `terminal_width / max_workers` (clamped to min 30, max 50 chars).
 
 ```go
 type WorkerCard struct {
     PhaseID    string
-    WorkerID   string
+    QuasarID   string
     Cycle      int
     MaxCycles  int
     TokensUsed int
-    Files      []string
+    Claims     []string
     Activity   string
     AgentRole  string // "coder" or "reviewer"
 }
@@ -52,7 +52,7 @@ Cards appear only when the board view is active. On narrow terminals, cards stac
 ## Acceptance Criteria
 
 - [ ] One card rendered per active (Running) phase
-- [ ] Cards show worker ID, cycle counter, token spend, files, and activity
+- [ ] Cards show quasar ID, cycle counter, token spend, claims, and activity
 - [ ] Cards use rounded border with galactic color theme
 - [ ] Cards stack horizontally up to terminal width, then wrap vertically
 - [ ] Cards appear/disappear as phases transition in/out of Running state

@@ -10,8 +10,9 @@ import (
 	"sync/atomic"
 
 	"github.com/papapumpkin/quasar/internal/beads"
-	"github.com/papapumpkin/quasar/internal/board"
 	"github.com/papapumpkin/quasar/internal/dag"
+	"github.com/papapumpkin/quasar/internal/fabric"
+	"github.com/papapumpkin/quasar/internal/tycho"
 )
 
 // NewWorkerGroup creates a WorkerGroup with required dependencies and optional
@@ -37,23 +38,24 @@ type WorkerGroup struct {
 	Nebula       *Nebula
 	State        *State
 	MaxWorkers   int
-	Watcher      *Watcher         // nil = no in-flight editing
-	Committer    GitCommitter     // nil = no phase-boundary commits
-	Gater        Gater            // nil = built from Prompter + manifest at Run time
-	Prompter     GatePrompter     // used to build Gater if Gater is nil
-	Dashboard    *Dashboard       // nil = no dashboard; used to coordinate watch-mode output
-	BeadsClient  beads.Client     // nil = hot-added phases cannot create beads
-	Board        board.Board      // nil = no board (legacy behavior)
-	Poller       board.Poller     // nil = skip polling (legacy behavior)
-	Publisher    *board.Publisher // nil = no contract publishing
+	Watcher      *Watcher          // nil = no in-flight editing
+	Committer    GitCommitter      // nil = no phase-boundary commits
+	Gater        Gater             // nil = built from Prompter + manifest at Run time
+	Prompter     GatePrompter      // used to build Gater if Gater is nil
+	Dashboard    *Dashboard        // nil = no dashboard; used to coordinate watch-mode output
+	BeadsClient  beads.Client      // nil = hot-added phases cannot create beads
+	Fabric       fabric.Fabric     // nil = no fabric (legacy behavior)
+	Poller       fabric.Poller     // nil = skip polling (legacy behavior)
+	Publisher    *fabric.Publisher // nil = no entanglement publishing
 	GlobalCycles int
 	GlobalBudget float64
 	GlobalModel  string
-	OnProgress   ProgressFunc                       // optional progress callback
-	OnRefactor   func(phaseID string, pending bool) // optional callback for refactor notifications
-	OnHotAdd     HotAddFunc                         // optional callback for hot-added phases
-	Metrics      *Metrics                           // optional; nil = no collection
-	Logger       io.Writer                          // optional; nil = os.Stderr
+	OnProgress   ProgressFunc                             // optional progress callback
+	OnRefactor   func(phaseID string, pending bool)       // optional callback for refactor notifications
+	OnHotAdd     HotAddFunc                               // optional callback for hot-added phases
+	OnHail       func(phaseID string, d fabric.Discovery) // optional callback for hail surfacing
+	Metrics      *Metrics                                 // optional; nil = no collection
+	Logger       io.Writer                                // optional; nil = os.Stderr
 
 	mu          sync.Mutex
 	outputMu    sync.Mutex // serializes checkpoint + dashboard output in watch mode
@@ -64,8 +66,9 @@ type WorkerGroup struct {
 	tracker         *PhaseTracker
 	progress        *ProgressReporter
 	hotReload       *HotReloader
-	blockedTracker  *board.BlockedTracker  // nil when Board is nil
-	pushbackHandler *board.PushbackHandler // nil when Board is nil
+	blockedTracker  *fabric.BlockedTracker  // nil when Fabric is nil
+	pushbackHandler *fabric.PushbackHandler // nil when Fabric is nil
+	tychoScheduler  *tycho.Scheduler        // nil when Fabric is nil
 }
 
 // logger returns the effective log writer (os.Stderr if Logger is nil).
@@ -238,16 +241,32 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		go wg.hotReload.ConsumeChanges(ctx)
 	}
 
-	// Initialize board collaborators when the board is configured.
-	if wg.Board != nil && wg.Poller != nil {
-		wg.blockedTracker = board.NewBlockedTracker()
-		wg.pushbackHandler = &board.PushbackHandler{Board: wg.Board}
-	}
-
 	// Build impact-aware scheduler from phases using the DAG engine.
 	scheduler, err := NewScheduler(wg.Nebula.Phases)
 	if err != nil {
 		return nil, fmt.Errorf("building scheduler: %w", err)
+	}
+
+	// Initialize fabric collaborators when the fabric is configured.
+	if wg.Fabric != nil && wg.Poller != nil {
+		wg.blockedTracker = fabric.NewBlockedTracker()
+		wg.pushbackHandler = &fabric.PushbackHandler{Fabric: wg.Fabric}
+	}
+
+	// Always create the Tycho scheduler for DAG resolution. When fabric
+	// components are nil, Scan/Reevaluate/etc. become no-ops, preserving
+	// legacy (no-fabric) behavior.
+	wg.tychoScheduler = &tycho.Scheduler{
+		Fabric:   wg.Fabric,          // may be nil
+		Poller:   wg.Poller,          // may be nil
+		Blocked:  wg.blockedTracker,  // may be nil
+		Pushback: wg.pushbackHandler, // may be nil
+		Logger:   wg.logger(),
+		Resolver: &workerEligibleResolver{
+			wg:        wg,
+			scheduler: scheduler,
+		},
+		OnHail: wg.OnHail, // may be nil — surfaced via cockpit TUI when set
 	}
 
 	wg.mu.Lock()
@@ -272,7 +291,6 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 			t.ID, t.NodeIDs, t.AggregateImpact)
 	}
 
-	done := wg.tracker.Done()
 	inFlight := wg.tracker.InFlight()
 
 	sem := make(chan struct{}, workerCount)
@@ -301,22 +319,20 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 			}
 		}
 
+		// Delegate DAG resolution and tracker filtering to Tycho.
 		wg.mu.Lock()
-		// Use scheduler for impact-sorted ready tasks, then filter
-		// through tracker for failed-dep, in-flight, and scope-conflict exclusion.
-		ready := scheduler.ReadyTasks(done)
-		eligible := wg.tracker.FilterEligible(ready, scheduler.Analyzer().DAG())
-		anyInFlight := len(inFlight) > 0
+		eligible, _ := wg.tychoScheduler.Eligible(ctx)
+		anyInFlight := wg.tychoScheduler.AnyInFlight()
 		wg.mu.Unlock()
 
-		// Board-aware polling: filter eligible through the board.
-		// Phases that don't poll PROCEED are blocked and skipped.
-		if wg.Board != nil && wg.Poller != nil && len(eligible) > 0 {
-			eligible = wg.pollEligible(ctx, eligible)
+		// Delegate fabric-aware scanning to Tycho. When fabric is not
+		// configured, Scan returns eligible unchanged (no-op).
+		if len(eligible) > 0 {
+			eligible, _ = wg.tychoScheduler.Scan(ctx, eligible, wg.snapshotBuilder())
 		}
 
 		if len(eligible) == 0 {
-			anyBlocked := wg.boardBlocked() > 0
+			anyBlocked := wg.fabricBlocked() > 0
 			if !anyInFlight && !anyBlocked {
 				break // nothing running, nothing blocked, nothing to dispatch — done
 			}

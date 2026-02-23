@@ -3,6 +3,8 @@ package loop
 import (
 	"fmt"
 	"strings"
+
+	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
 // buildCoderPrompt constructs the prompt sent to the coder agent for a given
@@ -108,5 +110,17 @@ func (l *Loop) buildReviewerPrompt(state *CycleState) string {
 	b.WriteString("3. Check for any linting issues (`go vet`, `go fmt`). If linting problems exist, flag them as issues for the coder to fix.\n")
 	b.WriteString("4. End your review with either APPROVED: or one or more ISSUE: blocks.\n")
 
+	return b.String()
+}
+
+// PrependFabricContext adds current entanglements, claims, and pulses to the
+// task description so the agent starts with full coordination context rather
+// than needing to query fabric state as its first action.
+func PrependFabricContext(desc string, snap fabric.FabricSnapshot) string {
+	var b strings.Builder
+	b.WriteString("## Current Fabric State\n\n")
+	b.WriteString(fabric.RenderSnapshot(snap))
+	b.WriteString("\n\n---\n\n")
+	b.WriteString(desc)
 	return b.String()
 }

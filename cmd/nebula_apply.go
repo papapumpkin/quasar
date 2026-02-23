@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -15,6 +16,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/claude"
 	"github.com/papapumpkin/quasar/internal/config"
+	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/loop"
 	"github.com/papapumpkin/quasar/internal/nebula"
 	"github.com/papapumpkin/quasar/internal/tui"
@@ -182,6 +184,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			coderPrompt:  coderPrompt,
 			reviewPrompt: reviewerPrompt,
 			workDir:      workDir,
+			fabric:       wg.Fabric, // nil-safe — emitFabricEvents checks for nil
 		}
 		wg.Logger = io.Discard
 		wg.Prompter = tui.NewGater(tuiProgram)
@@ -197,6 +200,18 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		wg.OnRefactor = func(phaseID string, pending bool) {
 			if pending {
 				tuiProgram.Send(tui.MsgPhaseRefactorPending{PhaseID: phaseID})
+			}
+		}
+		// Wire Tycho OnHail callback to emit MsgHail via the TUI program.
+		wg.OnHail = func(phaseID string, d fabric.Discovery) {
+			tuiProgram.Send(tui.MsgHail{PhaseID: phaseID, Discovery: d})
+		}
+		// Start telemetry bridge if a telemetry file exists.
+		telemetryPath := filepath.Join(".quasar", "telemetry", "current.jsonl")
+		if _, statErr := os.Stat(telemetryPath); statErr == nil {
+			tb := tui.NewTelemetryBridge(tuiProgram, telemetryPath)
+			if startErr := tb.Start(); startErr == nil {
+				defer tb.Stop()
 			}
 		}
 	} else {
@@ -361,8 +376,13 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					coderPrompt:  coderPrompt,
 					reviewPrompt: reviewerPrompt,
 					workDir:      nextWorkDir,
+					fabric:       wg.Fabric, // nil-safe
 				}
 				wg.Prompter = tui.NewGater(tuiProgram)
+				// Re-wire OnHail for the next nebula's TUI program.
+				wg.OnHail = func(phaseID string, d fabric.Discovery) {
+					tuiProgram.Send(tui.MsgHail{PhaseID: phaseID, Discovery: d})
+				}
 				wg.OnProgress = func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
 					tuiProgram.Send(tui.MsgNebulaProgress{
 						Completed:    completed,

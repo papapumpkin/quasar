@@ -88,9 +88,9 @@ func (wg *WorkerGroup) executePhase(ctx context.Context, phaseID string, waveNum
 
 	wg.recordResult(phaseID, ps, phaseResult, err, done, failed, inFlight)
 
-	// Publish contracts and update board state on successful completion.
+	// Publish entanglements and update fabric state on successful completion.
 	if err == nil {
-		wg.boardPhaseComplete(ctx, phaseID, phaseResult)
+		wg.fabricPhaseComplete(ctx, phaseID, phaseResult)
 	}
 }
 
