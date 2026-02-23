@@ -25,6 +25,9 @@ type FabricSnapshot struct {
 
 	// UnresolvedDiscoveries holds discoveries that have not yet been resolved.
 	UnresolvedDiscoveries []Discovery
+
+	// Pulses holds shared execution context from completed/in-progress upstream tasks.
+	Pulses []Pulse
 }
 
 // RenderSnapshot formats a FabricSnapshot into a human-readable string suitable
@@ -99,6 +102,14 @@ func RenderSnapshot(snap FabricSnapshot) string {
 			} else {
 				fmt.Fprintf(&b, "- [%s] %s (from: %s)\n", d.Kind, d.Detail, d.SourceTask)
 			}
+		}
+	}
+
+	// Shared context (pulses).
+	if len(snap.Pulses) > 0 {
+		b.WriteString("\n### Shared Context\n")
+		for _, p := range snap.Pulses {
+			fmt.Fprintf(&b, "[%s] %s: %s\n", p.TaskID, p.Kind, p.Content)
 		}
 	}
 

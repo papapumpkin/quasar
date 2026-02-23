@@ -157,9 +157,9 @@ func (m *mockFabric) ResolveDiscovery(_ context.Context, _ int64) error { return
 func (m *mockFabric) UnresolvedDiscoveries(_ context.Context) ([]fabric.Discovery, error) {
 	return nil, nil
 }
-func (m *mockFabric) AddBead(_ context.Context, _ fabric.Bead) error              { return nil }
-func (m *mockFabric) BeadsFor(_ context.Context, _ string) ([]fabric.Bead, error) { return nil, nil }
-func (m *mockFabric) Close() error                                                { return nil }
+func (m *mockFabric) EmitPulse(_ context.Context, _ fabric.Pulse) error             { return nil }
+func (m *mockFabric) PulsesFor(_ context.Context, _ string) ([]fabric.Pulse, error) { return nil, nil }
+func (m *mockFabric) Close() error                                                  { return nil }
 
 // mockPoller satisfies fabric.Poller with canned per-phase responses.
 type mockPoller struct {

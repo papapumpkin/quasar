@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'fabric'
-total_cost_usd = 27.69128235000001
+total_cost_usd = 33.09323835000001
 
 [phases]
 [phases.agent-prompt]
@@ -71,9 +71,9 @@ updated_at = 2026-02-23T14:55:26.917863-05:00
 
 [phases.pulse-cli]
 bead_id = 'quasar-qla'
-status = 'pending'
+status = 'in_progress'
 created_at = 2026-02-23T14:53:22.533181-05:00
-updated_at = 2026-02-23T14:55:26.916808-05:00
+updated_at = 2026-02-23T15:07:05.363835-05:00
 
 [phases.schema-evolution]
 bead_id = 'quasar-i8s'
@@ -101,6 +101,12 @@ summary = 'Three targeted fixes to cmd/telemetry.go (nil pointer panic, unchecke
 
 [phases.tycho-scheduler]
 bead_id = 'quasar-8i2'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T11:20:44.868698-05:00
-updated_at = 2026-02-23T14:55:27.074928-05:00
+updated_at = 2026-02-23T15:07:05.362664-05:00
+
+[phases.tycho-scheduler.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean extraction of DAG scheduling into Tycho via EligibleResolver interface — behavior-preserving refactor with proper nil-safety, correct locking, and comprehensive tests.'

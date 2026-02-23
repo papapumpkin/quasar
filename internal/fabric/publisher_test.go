@@ -69,9 +69,9 @@ func (m *mockFabric) ResolveDiscovery(_ context.Context, _ int64) error     { re
 func (m *mockFabric) UnresolvedDiscoveries(_ context.Context) ([]Discovery, error) {
 	return nil, nil
 }
-func (m *mockFabric) AddBead(_ context.Context, _ Bead) error              { return nil }
-func (m *mockFabric) BeadsFor(_ context.Context, _ string) ([]Bead, error) { return nil, nil }
-func (m *mockFabric) Close() error                                         { return nil }
+func (m *mockFabric) EmitPulse(_ context.Context, _ Pulse) error             { return nil }
+func (m *mockFabric) PulsesFor(_ context.Context, _ string) ([]Pulse, error) { return nil, nil }
+func (m *mockFabric) Close() error                                           { return nil }
 
 // initGitRepo creates a temporary git repo and returns its path.
 func initGitRepo(t *testing.T) string {

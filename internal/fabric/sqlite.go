@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS discoveries (
     created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS beads (
+CREATE TABLE IF NOT EXISTS pulses (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id    TEXT NOT NULL,
     content    TEXT NOT NULL,
@@ -471,41 +471,91 @@ func (f *SQLiteFabric) queryDiscoveries(ctx context.Context, query string, args 
 	return result, nil
 }
 
-// AddBead inserts a new bead (working memory entry) for a task.
-func (f *SQLiteFabric) AddBead(ctx context.Context, b Bead) error {
-	const q = `INSERT INTO beads (task_id, content, kind) VALUES (?, ?, ?)`
-	if _, err := f.db.ExecContext(ctx, q, b.TaskID, b.Content, b.Kind); err != nil {
-		return fmt.Errorf("fabric: add bead for %q: %w", b.TaskID, err)
+// EmitPulse inserts a new pulse (shared execution context) for a task.
+func (f *SQLiteFabric) EmitPulse(ctx context.Context, p Pulse) error {
+	const q = `INSERT INTO pulses (task_id, content, kind) VALUES (?, ?, ?)`
+	res, err := f.db.ExecContext(ctx, q, p.TaskID, p.Content, p.Kind)
+	if err != nil {
+		return fmt.Errorf("fabric: emit pulse for %q: %w", p.TaskID, err)
+	}
+	if p.ID == 0 {
+		if id, idErr := res.LastInsertId(); idErr == nil {
+			p.ID = id
+		}
 	}
 	return nil
 }
 
-// BeadsFor returns all beads associated with the given task, ordered by ID.
-func (f *SQLiteFabric) BeadsFor(ctx context.Context, taskID string) ([]Bead, error) {
+// EmitPulseReturningID inserts a new pulse and returns its auto-generated ID.
+func (f *SQLiteFabric) EmitPulseReturningID(ctx context.Context, p Pulse) (int64, error) {
+	const q = `INSERT INTO pulses (task_id, content, kind) VALUES (?, ?, ?)`
+	res, err := f.db.ExecContext(ctx, q, p.TaskID, p.Content, p.Kind)
+	if err != nil {
+		return 0, fmt.Errorf("fabric: emit pulse for %q: %w", p.TaskID, err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("fabric: last insert id: %w", err)
+	}
+	return id, nil
+}
+
+// PulsesFor returns all pulses associated with the given task, ordered by ID.
+func (f *SQLiteFabric) PulsesFor(ctx context.Context, taskID string) ([]Pulse, error) {
 	const q = `SELECT id, task_id, content, kind, created_at
-		FROM beads WHERE task_id = ? ORDER BY id`
+		FROM pulses WHERE task_id = ? ORDER BY id`
 	rows, err := f.db.QueryContext(ctx, q, taskID)
 	if err != nil {
-		return nil, fmt.Errorf("fabric: query beads for %q: %w", taskID, err)
+		return nil, fmt.Errorf("fabric: query pulses for %q: %w", taskID, err)
 	}
 	defer rows.Close()
 
-	var result []Bead
+	var result []Pulse
 	for rows.Next() {
-		var b Bead
+		var p Pulse
 		var ts string
-		if err := rows.Scan(&b.ID, &b.TaskID, &b.Content, &b.Kind, &ts); err != nil {
-			return nil, fmt.Errorf("fabric: scan bead: %w", err)
+		if err := rows.Scan(&p.ID, &p.TaskID, &p.Content, &p.Kind, &ts); err != nil {
+			return nil, fmt.Errorf("fabric: scan pulse: %w", err)
 		}
 		createdAt, parseErr := parseTimestamp(ts)
 		if parseErr != nil {
-			return nil, fmt.Errorf("fabric: parse bead timestamp: %w", parseErr)
+			return nil, fmt.Errorf("fabric: parse pulse timestamp: %w", parseErr)
 		}
-		b.CreatedAt = createdAt
-		result = append(result, b)
+		p.CreatedAt = createdAt
+		result = append(result, p)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("fabric: iterate beads: %w", err)
+		return nil, fmt.Errorf("fabric: iterate pulses: %w", err)
+	}
+	return result, nil
+}
+
+// AllPulses returns all pulses in the fabric, ordered by ID.
+func (f *SQLiteFabric) AllPulses(ctx context.Context) ([]Pulse, error) {
+	const q = `SELECT id, task_id, content, kind, created_at
+		FROM pulses ORDER BY id`
+	rows, err := f.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("fabric: query all pulses: %w", err)
+	}
+	defer rows.Close()
+
+	var result []Pulse
+	for rows.Next() {
+		var p Pulse
+		var ts string
+		if err := rows.Scan(&p.ID, &p.TaskID, &p.Content, &p.Kind, &ts); err != nil {
+			return nil, fmt.Errorf("fabric: scan pulse: %w", err)
+		}
+		createdAt, parseErr := parseTimestamp(ts)
+		if parseErr != nil {
+			return nil, fmt.Errorf("fabric: parse pulse timestamp: %w", parseErr)
+		}
+		p.CreatedAt = createdAt
+		result = append(result, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("fabric: iterate pulses: %w", err)
 	}
 	return result, nil
 }

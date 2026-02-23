@@ -40,7 +40,7 @@ func TestNewSQLiteFabric(t *testing.T) {
 		}
 
 		// Verify all five tables exist by querying sqlite_master.
-		tables := map[string]bool{"fabric": false, "entanglements": false, "file_claims": false, "discoveries": false, "beads": false}
+		tables := map[string]bool{"fabric": false, "entanglements": false, "file_claims": false, "discoveries": false, "pulses": false}
 		rows, err := b.db.Query("SELECT name FROM sqlite_master WHERE type='table'")
 		if err != nil {
 			t.Fatalf("query sqlite_master: %v", err)
@@ -610,32 +610,32 @@ func TestDiscoveries(t *testing.T) {
 	})
 }
 
-func TestBeads(t *testing.T) {
+func TestPulses(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	t.Run("add and query", func(t *testing.T) {
+	t.Run("emit and query", func(t *testing.T) {
 		t.Parallel()
 		b := testFabric(t)
 
-		bead := Bead{
+		pulse := Pulse{
 			TaskID:  "phase-1",
 			Content: "decided to use observer pattern for event handling",
-			Kind:    BeadDecision,
+			Kind:    PulseDecision,
 		}
-		if err := b.AddBead(ctx, bead); err != nil {
-			t.Fatalf("AddBead: %v", err)
+		if err := b.EmitPulse(ctx, pulse); err != nil {
+			t.Fatalf("EmitPulse: %v", err)
 		}
 
-		got, err := b.BeadsFor(ctx, "phase-1")
+		got, err := b.PulsesFor(ctx, "phase-1")
 		if err != nil {
-			t.Fatalf("BeadsFor: %v", err)
+			t.Fatalf("PulsesFor: %v", err)
 		}
 		if len(got) != 1 {
-			t.Fatalf("len(beads) = %d, want 1", len(got))
+			t.Fatalf("len(pulses) = %d, want 1", len(got))
 		}
-		if got[0].Kind != BeadDecision {
-			t.Errorf("kind = %q, want %q", got[0].Kind, BeadDecision)
+		if got[0].Kind != PulseDecision {
+			t.Errorf("kind = %q, want %q", got[0].Kind, PulseDecision)
 		}
 		if got[0].Content != "decided to use observer pattern for event handling" {
 			t.Errorf("content = %q, want expected", got[0].Content)
@@ -648,68 +648,105 @@ func TestBeads(t *testing.T) {
 		}
 	})
 
-	t.Run("multiple beads for same task", func(t *testing.T) {
+	t.Run("multiple pulses for same task", func(t *testing.T) {
 		t.Parallel()
 		b := testFabric(t)
 
-		beads := []Bead{
-			{TaskID: "phase-1", Content: "starting implementation", Kind: BeadNote},
-			{TaskID: "phase-1", Content: "build failed: missing import", Kind: BeadFailure},
-			{TaskID: "phase-1", Content: "reviewer says: add error handling", Kind: BeadReviewerFeedback},
+		pulses := []Pulse{
+			{TaskID: "phase-1", Content: "starting implementation", Kind: PulseNote},
+			{TaskID: "phase-1", Content: "build failed: missing import", Kind: PulseFailure},
+			{TaskID: "phase-1", Content: "reviewer says: add error handling", Kind: PulseReviewerFeedback},
 		}
-		for _, bd := range beads {
-			if err := b.AddBead(ctx, bd); err != nil {
-				t.Fatalf("AddBead(%q): %v", bd.Kind, err)
+		for _, p := range pulses {
+			if err := b.EmitPulse(ctx, p); err != nil {
+				t.Fatalf("EmitPulse(%q): %v", p.Kind, err)
 			}
 		}
 
-		got, err := b.BeadsFor(ctx, "phase-1")
+		got, err := b.PulsesFor(ctx, "phase-1")
 		if err != nil {
-			t.Fatalf("BeadsFor: %v", err)
+			t.Fatalf("PulsesFor: %v", err)
 		}
 		if len(got) != 3 {
-			t.Fatalf("len(beads) = %d, want 3", len(got))
+			t.Fatalf("len(pulses) = %d, want 3", len(got))
 		}
 		// Verify ordering by ID (insertion order).
-		if got[0].Kind != BeadNote || got[1].Kind != BeadFailure || got[2].Kind != BeadReviewerFeedback {
-			t.Errorf("bead kinds = [%s, %s, %s], want [note, failure, reviewer_feedback]",
+		if got[0].Kind != PulseNote || got[1].Kind != PulseFailure || got[2].Kind != PulseReviewerFeedback {
+			t.Errorf("pulse kinds = [%s, %s, %s], want [note, failure, reviewer_feedback]",
 				got[0].Kind, got[1].Kind, got[2].Kind)
 		}
 	})
 
-	t.Run("beads isolated by task", func(t *testing.T) {
+	t.Run("pulses isolated by task", func(t *testing.T) {
 		t.Parallel()
 		b := testFabric(t)
 
-		if err := b.AddBead(ctx, Bead{TaskID: "p1", Content: "note for p1", Kind: BeadNote}); err != nil {
-			t.Fatalf("AddBead p1: %v", err)
+		if err := b.EmitPulse(ctx, Pulse{TaskID: "p1", Content: "note for p1", Kind: PulseNote}); err != nil {
+			t.Fatalf("EmitPulse p1: %v", err)
 		}
-		if err := b.AddBead(ctx, Bead{TaskID: "p2", Content: "note for p2", Kind: BeadNote}); err != nil {
-			t.Fatalf("AddBead p2: %v", err)
+		if err := b.EmitPulse(ctx, Pulse{TaskID: "p2", Content: "note for p2", Kind: PulseNote}); err != nil {
+			t.Fatalf("EmitPulse p2: %v", err)
 		}
 
-		got, err := b.BeadsFor(ctx, "p1")
+		got, err := b.PulsesFor(ctx, "p1")
 		if err != nil {
-			t.Fatalf("BeadsFor: %v", err)
+			t.Fatalf("PulsesFor: %v", err)
 		}
 		if len(got) != 1 {
-			t.Fatalf("len(beads for p1) = %d, want 1", len(got))
+			t.Fatalf("len(pulses for p1) = %d, want 1", len(got))
 		}
 		if got[0].Content != "note for p1" {
 			t.Errorf("content = %q, want %q", got[0].Content, "note for p1")
 		}
 	})
 
-	t.Run("empty beads for unknown task", func(t *testing.T) {
+	t.Run("empty pulses for unknown task", func(t *testing.T) {
 		t.Parallel()
 		b := testFabric(t)
 
-		got, err := b.BeadsFor(ctx, "nonexistent")
+		got, err := b.PulsesFor(ctx, "nonexistent")
 		if err != nil {
-			t.Fatalf("BeadsFor: %v", err)
+			t.Fatalf("PulsesFor: %v", err)
 		}
 		if len(got) != 0 {
-			t.Errorf("len(beads) = %d, want 0", len(got))
+			t.Errorf("len(pulses) = %d, want 0", len(got))
+		}
+	})
+
+	t.Run("emit pulse returning ID", func(t *testing.T) {
+		t.Parallel()
+		b := testFabric(t)
+
+		id, err := b.EmitPulseReturningID(ctx, Pulse{
+			TaskID:  "phase-1",
+			Content: "cursor-based pagination chosen",
+			Kind:    PulseDecision,
+		})
+		if err != nil {
+			t.Fatalf("EmitPulseReturningID: %v", err)
+		}
+		if id == 0 {
+			t.Error("expected non-zero ID from EmitPulseReturningID")
+		}
+	})
+
+	t.Run("all pulses", func(t *testing.T) {
+		t.Parallel()
+		b := testFabric(t)
+
+		if err := b.EmitPulse(ctx, Pulse{TaskID: "t1", Content: "note 1", Kind: PulseNote}); err != nil {
+			t.Fatalf("EmitPulse: %v", err)
+		}
+		if err := b.EmitPulse(ctx, Pulse{TaskID: "t2", Content: "note 2", Kind: PulseDecision}); err != nil {
+			t.Fatalf("EmitPulse: %v", err)
+		}
+
+		got, err := b.AllPulses(ctx)
+		if err != nil {
+			t.Fatalf("AllPulses: %v", err)
+		}
+		if len(got) != 2 {
+			t.Fatalf("len(all pulses) = %d, want 2", len(got))
 		}
 	})
 }

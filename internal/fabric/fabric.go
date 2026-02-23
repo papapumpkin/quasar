@@ -8,6 +8,7 @@ package fabric
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -48,13 +49,29 @@ const (
 	DiscoveryBudgetAlert           = "budget_alert"
 )
 
-// Bead kinds for agent working memory entries.
+// Pulse kinds for shared execution context emissions.
 const (
-	BeadNote             = "note"
-	BeadDecision         = "decision"
-	BeadFailure          = "failure"
-	BeadReviewerFeedback = "reviewer_feedback"
+	PulseNote             = "note"
+	PulseDecision         = "decision"
+	PulseFailure          = "failure"
+	PulseReviewerFeedback = "reviewer_feedback"
 )
+
+// ValidPulseKinds enumerates the allowed values for Pulse.Kind.
+var ValidPulseKinds = map[string]bool{
+	PulseNote:             true,
+	PulseDecision:         true,
+	PulseFailure:          true,
+	PulseReviewerFeedback: true,
+}
+
+// ValidatePulseKind returns an error if kind is not a recognized pulse kind.
+func ValidatePulseKind(kind string) error {
+	if !ValidPulseKinds[kind] {
+		return fmt.Errorf("invalid pulse kind %q: must be one of note, decision, failure, reviewer_feedback", kind)
+	}
+	return nil
+}
 
 // Entanglement represents an interface entanglement published by a completed phase.
 type Entanglement struct {
@@ -82,9 +99,10 @@ type Discovery struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
-// Bead represents agent working memory — a timestamped note, decision, failure
-// record, or reviewer feedback associated with a specific task.
-type Bead struct {
+// Pulse is a structured context emission from a quasar during execution.
+// Pulses propagate through the fabric so concurrent and downstream quasars
+// share execution context without direct communication.
+type Pulse struct {
 	ID        int64     `json:"id"`
 	TaskID    string    `json:"task_id"`
 	Content   string    `json:"content"`
@@ -160,11 +178,11 @@ type Fabric interface {
 	// UnresolvedDiscoveries returns all discoveries that have not been resolved.
 	UnresolvedDiscoveries(ctx context.Context) ([]Discovery, error)
 
-	// AddBead inserts a new bead (working memory entry) for a task.
-	AddBead(ctx context.Context, b Bead) error
+	// EmitPulse inserts a new pulse (shared execution context) for a task.
+	EmitPulse(ctx context.Context, p Pulse) error
 
-	// BeadsFor returns all beads associated with the given task.
-	BeadsFor(ctx context.Context, taskID string) ([]Bead, error)
+	// PulsesFor returns all pulses associated with the given task.
+	PulsesFor(ctx context.Context, taskID string) ([]Pulse, error)
 
 	// Close releases database resources.
 	Close() error
