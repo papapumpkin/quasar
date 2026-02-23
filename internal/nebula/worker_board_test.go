@@ -589,3 +589,58 @@ func TestPollEligible_ConflictEscalates(t *testing.T) {
 		t.Errorf("expected 1 gate signal, got %d", len(wg.gateSignals))
 	}
 }
+
+func TestPollEligible_OverriddenSkipsPolling(t *testing.T) {
+	t.Parallel()
+
+	phases := []PhaseSpec{{ID: "a", Title: "Phase A"}}
+	wg := minimalWorkerGroup(t, phases)
+
+	mb := newMockBoard()
+	mp := newMockPoller()
+	// Use a non-standard decision so the PushbackHandler's default case
+	// returns ActionProceed — the only code path that triggers the
+	// Unblock+Override sequence in handlePollBlock.
+	mp.setDecision("a", board.PollResult{
+		Decision: board.PollDecision("SOFT_WARN"),
+		Reason:   "non-critical warning",
+	})
+	wg.Board = mb
+	wg.Poller = mp
+	wg.blockedTracker = board.NewBlockedTracker()
+	wg.pushbackHandler = &board.PushbackHandler{Board: mb}
+	wg.tracker = NewPhaseTracker(wg.Nebula.Phases, wg.State)
+
+	// --- Step 1: first pollEligible triggers the override flow ---
+	eligible := []string{"a"}
+	result := wg.pollEligible(context.Background(), eligible)
+
+	// handlePollBlock blocks then immediately unblocks+overrides; the phase
+	// is NOT added to proceed during the iteration that called handlePollBlock.
+	if len(result) != 0 {
+		t.Fatalf("expected 0 eligible on first call (override happens in handlePollBlock), got %v", result)
+	}
+	// Phase should be unblocked (ActionProceed removes it from blocked set).
+	if wg.blockedTracker.Len() != 0 {
+		t.Fatalf("expected 0 blocked phases after override, got %d", wg.blockedTracker.Len())
+	}
+	// Phase should be marked as overridden.
+	if !wg.blockedTracker.IsOverridden("a") {
+		t.Fatal("expected phase 'a' to be marked as overridden")
+	}
+	// Poller was called exactly once during the first pollEligible.
+	if mp.getPollCount("a") != 1 {
+		t.Errorf("expected 1 poll call on first pass, got %d", mp.getPollCount("a"))
+	}
+
+	// --- Step 2: second pollEligible skips polling for overridden phase ---
+	result = wg.pollEligible(context.Background(), eligible)
+
+	if len(result) != 1 || result[0] != "a" {
+		t.Fatalf("expected ['a'] eligible on second call, got %v", result)
+	}
+	// Poller should NOT have been called again — override skips polling.
+	if mp.getPollCount("a") != 1 {
+		t.Errorf("expected poll count still 1 after override skip, got %d", mp.getPollCount("a"))
+	}
+}
