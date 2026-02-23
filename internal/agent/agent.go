@@ -21,12 +21,13 @@ type MCPConfig struct {
 
 // Agent describes the configuration for a single agent invocation.
 type Agent struct {
-	Role         Role
-	SystemPrompt string
-	Model        string
-	MaxBudgetUSD float64
-	AllowedTools []string   // Tool permissions for this agent (passed as --allowedTools flags)
-	MCP          *MCPConfig // Optional MCP server configuration
+	Role          Role
+	SystemPrompt  string
+	ContextPrefix string // Project context prepended to SystemPrompt for cache-friendly prefixing.
+	Model         string
+	MaxBudgetUSD  float64
+	AllowedTools  []string   // Tool permissions for this agent (passed as --allowedTools flags)
+	MCP           *MCPConfig // Optional MCP server configuration
 }
 
 // InvocationResult holds the output and cost metrics from a single agent invocation.

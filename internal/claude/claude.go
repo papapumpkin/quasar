@@ -52,8 +52,12 @@ func buildArgs(a agent.Agent, prompt string) []string {
 		"--output-format", "json",
 	}
 
-	if a.SystemPrompt != "" {
-		args = append(args, "--system-prompt", a.SystemPrompt)
+	systemPrompt := a.SystemPrompt
+	if a.ContextPrefix != "" {
+		systemPrompt = a.ContextPrefix + "\n\n" + systemPrompt
+	}
+	if systemPrompt != "" {
+		args = append(args, "--system-prompt", systemPrompt)
 	}
 
 	if a.Model != "" {

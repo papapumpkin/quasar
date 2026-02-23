@@ -23,6 +23,7 @@ type Loop struct {
 	ReviewPrompt   string
 	WorkDir        string
 	MCP            *agent.MCPConfig // Optional MCP server config passed to agents.
+	ContextPrefix  string           // Project context prepended to agent system prompts for cache-friendly prefixing.
 	RefactorCh     <-chan string    // Optional channel carrying updated task descriptions from phase edits.
 	CommitSummary  string           // Short label for cycle commit messages. If empty, derived from task title.
 }
@@ -65,11 +66,12 @@ func (l *Loop) RunExistingTask(ctx context.Context, beadID, taskDescription stri
 // GenerateCheckpoint asks the coder to summarize its current progress for resumption.
 func (l *Loop) GenerateCheckpoint(ctx context.Context, beadID, taskDescription string) (string, error) {
 	a := agent.Agent{
-		Role:         agent.RoleCoder,
-		SystemPrompt: l.CoderPrompt,
-		Model:        l.Model,
-		MaxBudgetUSD: 0.50,
-		AllowedTools: []string{"Read", "Glob", "Grep"},
+		Role:          agent.RoleCoder,
+		SystemPrompt:  l.CoderPrompt,
+		ContextPrefix: l.ContextPrefix,
+		Model:         l.Model,
+		MaxBudgetUSD:  0.50,
+		AllowedTools:  []string{"Read", "Glob", "Grep"},
 	}
 	prompt := fmt.Sprintf(
 		"You were working on task (bead %s): %s\n\n"+
@@ -304,10 +306,11 @@ func (l *Loop) initCycleState(ctx context.Context, beadID, taskDescription strin
 // coderAgent builds the agent configuration for the coder role.
 func (l *Loop) coderAgent(budget float64) agent.Agent {
 	return agent.Agent{
-		Role:         agent.RoleCoder,
-		SystemPrompt: l.CoderPrompt,
-		Model:        l.Model,
-		MaxBudgetUSD: budget,
+		Role:          agent.RoleCoder,
+		SystemPrompt:  l.CoderPrompt,
+		ContextPrefix: l.ContextPrefix,
+		Model:         l.Model,
+		MaxBudgetUSD:  budget,
 		AllowedTools: []string{
 			"Read", "Edit", "Write", "Glob", "Grep",
 			"Bash(go *)", "Bash(git diff *)", "Bash(git status)", "Bash(git log *)",
@@ -319,10 +322,11 @@ func (l *Loop) coderAgent(budget float64) agent.Agent {
 // reviewerAgent builds the agent configuration for the reviewer role.
 func (l *Loop) reviewerAgent(budget float64) agent.Agent {
 	return agent.Agent{
-		Role:         agent.RoleReviewer,
-		SystemPrompt: l.ReviewPrompt,
-		Model:        l.Model,
-		MaxBudgetUSD: budget,
+		Role:          agent.RoleReviewer,
+		SystemPrompt:  l.ReviewPrompt,
+		ContextPrefix: l.ContextPrefix,
+		Model:         l.Model,
+		MaxBudgetUSD:  budget,
 		AllowedTools: []string{
 			"Read", "Glob", "Grep",
 			"Bash(go vet *)", "Bash(git diff *)", "Bash(git log *)",
