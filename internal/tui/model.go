@@ -48,6 +48,7 @@ type AppModel struct {
 	NebulaView NebulaView
 	Detail     DetailPanel
 	Gate       *GatePrompt
+	Hail       *HailOverlay
 	Overlay    *CompletionOverlay
 	Toasts     []Toast
 	Keys       KeyMap
@@ -457,9 +458,15 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case MsgHail:
-		toast, cmd := NewToast(fmt.Sprintf("⚠ hail from %s: %s", msg.PhaseID, msg.Discovery.Detail), true)
-		m.Toasts = append(m.Toasts, toast)
-		cmds = append(cmds, cmd)
+		// Show the hail overlay when the board view is active; otherwise fallback to a toast.
+		if m.Mode == ModeNebula && m.ActiveTab == TabBoard && m.Depth == DepthPhases {
+			m.Hail = NewHailOverlay(msg, nil)
+			cmds = append(cmds, m.Hail.Input.Focus())
+		} else {
+			toast, cmd := NewToast(fmt.Sprintf("⚠ hail from %s: %s", msg.PhaseID, msg.Discovery.Detail), true)
+			m.Toasts = append(m.Toasts, toast)
+			cmds = append(cmds, cmd)
+		}
 
 	case MsgScratchpadEntry:
 		m.Scratchpad = append(m.Scratchpad, msg)
@@ -590,6 +597,11 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Gate mode overrides normal keys.
 	if m.Gate != nil {
 		return m.handleGateKey(msg)
+	}
+
+	// Hail overlay overrides normal keys when active.
+	if m.Hail != nil {
+		return m.handleHailKey(msg)
 	}
 
 	// When viewing a single file's diff, route scroll keys to the detail panel.
@@ -1156,6 +1168,35 @@ func (m *AppModel) resolveGate(action nebula.GateAction) {
 	}
 }
 
+// handleHailKey routes key events to the hail overlay's text input.
+// Esc dismisses the overlay (empty response), Enter submits the response.
+func (m AppModel) handleHailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.Keys.Back):
+		m.resolveHail("")
+		return m, nil
+	case key.Matches(msg, m.Keys.Enter):
+		response := m.Hail.HandleInput()
+		if response != "" {
+			m.resolveHail(response)
+		}
+		return m, nil
+	default:
+		// Forward the key to the textinput widget.
+		var cmd tea.Cmd
+		m.Hail.Input, cmd = m.Hail.Input.Update(msg)
+		return m, cmd
+	}
+}
+
+// resolveHail sends the response and clears the hail overlay.
+func (m *AppModel) resolveHail(response string) {
+	if m.Hail != nil {
+		m.Hail.Resolve(response)
+		m.Hail = nil
+	}
+}
+
 // moveUp delegates to the active view based on depth.
 // When the diff file list is active, navigation targets it instead of the main list.
 func (m *AppModel) moveUp() {
@@ -1551,6 +1592,14 @@ func (m AppModel) View() string {
 	sections = append(sections, footer.View())
 
 	base := lipgloss.JoinVertical(lipgloss.Left, sections...)
+
+	// Hail overlay — rendered over a dimmed background when a human decision is pending.
+	if m.Hail != nil {
+		dimmed := styleOverlayDimmed.Width(m.Width).Height(m.Height).Render(base)
+		overlayContent := m.Hail.View(m.Width, m.Height)
+		overlayBox := centerOverlay(overlayContent, m.Width, m.Height)
+		return compositeOverlay(dimmed, overlayBox, m.Width, m.Height)
+	}
 
 	// Quit confirmation overlay — rendered over a dimmed background.
 	if m.ShowQuitConfirm {

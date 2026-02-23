@@ -342,6 +342,36 @@ var (
 				Foreground(colorDanger)
 )
 
+// Hail overlay styles — red-bordered interrupt for human decisions.
+var (
+	// styleHailOverlay wraps the entire hail box with a red rounded border.
+	styleHailOverlay = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(colorDanger).
+				Padding(1, 2)
+
+	// styleHailHeader styles the "⚠  HAIL" title in bold red.
+	styleHailHeader = lipgloss.NewStyle().
+			Foreground(colorDanger).
+			Bold(true)
+
+	// styleHailContext styles task context lines (phase, quasar, cycle).
+	styleHailContext = lipgloss.NewStyle().
+				Foreground(colorAccent)
+
+	// styleHailKind styles the discovery kind in muted gray.
+	styleHailKind = lipgloss.NewStyle().
+			Foreground(colorMuted)
+
+	// styleHailDetail styles the discovery detail text.
+	styleHailDetail = lipgloss.NewStyle().
+			Foreground(colorWhite)
+
+	// styleHailOption styles option labels (a/b/c) in blueshift cyan.
+	styleHailOption = lipgloss.NewStyle().
+			Foreground(colorBlueshift)
+)
+
 // Toast notification styles.
 var styleToast = lipgloss.NewStyle().
 	Background(colorDanger).

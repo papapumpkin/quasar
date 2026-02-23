@@ -69,11 +69,6 @@ func TestAppModelHandlesMsgDiscoveryPosted(t *testing.T) {
 func TestAppModelHandlesMsgHail(t *testing.T) {
 	t.Parallel()
 
-	m := NewAppModel(ModeNebula)
-	m.Detail = NewDetailPanel(80, 10)
-	m.Width = 80
-	m.Height = 24
-
 	disc := fabric.Discovery{
 		ID:         1,
 		SourceTask: "phase-3",
@@ -81,14 +76,46 @@ func TestAppModelHandlesMsgHail(t *testing.T) {
 		Detail:     "unclear API contract",
 	}
 
-	var tm tea.Model = m
-	tm, _ = tm.Update(MsgHail{PhaseID: "phase-3", Discovery: disc})
-	am := tm.(AppModel)
+	t.Run("shows overlay when board view is active", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeNebula)
+		m.Detail = NewDetailPanel(80, 10)
+		m.Width = 80
+		m.Height = 24
+		m.ActiveTab = TabBoard
+		m.Depth = DepthPhases
 
-	// Hail should produce a toast notification.
-	if len(am.Toasts) == 0 {
-		t.Error("expected at least one toast notification for hail")
-	}
+		var tm tea.Model = m
+		tm, _ = tm.Update(MsgHail{PhaseID: "phase-3", Discovery: disc})
+		am := tm.(AppModel)
+
+		if am.Hail == nil {
+			t.Error("expected hail overlay to be set in board mode")
+		}
+		if am.Hail != nil && am.Hail.PhaseID != "phase-3" {
+			t.Errorf("expected hail phase %q, got %q", "phase-3", am.Hail.PhaseID)
+		}
+	})
+
+	t.Run("falls back to toast outside board view", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeNebula)
+		m.Detail = NewDetailPanel(80, 10)
+		m.Width = 80
+		m.Height = 24
+		m.ActiveTab = TabEntanglements
+
+		var tm tea.Model = m
+		tm, _ = tm.Update(MsgHail{PhaseID: "phase-3", Discovery: disc})
+		am := tm.(AppModel)
+
+		if am.Hail != nil {
+			t.Error("expected hail overlay to be nil outside board view")
+		}
+		if len(am.Toasts) == 0 {
+			t.Error("expected at least one toast notification for hail")
+		}
+	})
 }
 
 func TestAppModelHandlesMsgScratchpadEntry(t *testing.T) {
