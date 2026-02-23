@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'fabric'
-total_cost_usd = 33.09323835000001
+total_cost_usd = 37.379510350000004
 
 [phases]
 [phases.agent-prompt]
@@ -59,9 +59,9 @@ summary = 'Clean, comprehensive rename from internal/board to internal/fabric wi
 
 [phases.filters]
 bead_id = 'quasar-r37'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-23T11:20:44.484307-05:00
-updated_at = 2026-02-23T14:55:26.917385-05:00
+updated_at = 2026-02-23T15:17:07.791851-05:00
 
 [phases.neutron-archival]
 bead_id = 'quasar-xuw'
@@ -71,9 +71,15 @@ updated_at = 2026-02-23T14:55:26.917863-05:00
 
 [phases.pulse-cli]
 bead_id = 'quasar-qla'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T14:53:22.533181-05:00
-updated_at = 2026-02-23T15:07:05.363835-05:00
+updated_at = 2026-02-23T15:17:07.791375-05:00
+
+[phases.pulse-cli.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean dead-code removal and DRY refactor of pulse row-scanning into a shared helper, following established codebase patterns — low risk, all tests passing.'
 
 [phases.schema-evolution]
 bead_id = 'quasar-i8s'
