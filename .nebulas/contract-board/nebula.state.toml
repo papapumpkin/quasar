@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'contract-board'
-total_cost_usd = 11.1168713
+total_cost_usd = 20.63488065
 
 [phases]
 [phases.board-store]
@@ -41,9 +41,9 @@ summary = 'Well-implemented Publisher with AST-based contract extraction from gi
 
 [phases.integration-tests]
 bead_id = 'quasar-0iy'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-23T00:03:49.361455-05:00
-updated_at = 2026-02-23T09:16:57.224584-05:00
+updated_at = 2026-02-23T10:20:09.35665-05:00
 
 [phases.poll-prompt]
 bead_id = 'quasar-719'
@@ -83,6 +83,12 @@ summary = 'PushbackHandler implementation is clean, well-tested, and correctly r
 
 [phases.worker-integration]
 bead_id = 'quasar-0rq'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T00:03:48.845784-05:00
-updated_at = 2026-02-23T09:49:29.037259-05:00
+updated_at = 2026-02-23T10:20:09.356151-05:00
+
+[phases.worker-integration.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Added a focused unit test for the override-skips-polling path in pollEligible, covering both the trigger and the subsequent skip; clean code, all checks pass.'
