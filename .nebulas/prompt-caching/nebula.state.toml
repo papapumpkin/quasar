@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'prompt-caching'
-total_cost_usd = 8.25643025
+total_cost_usd = 10.40312575
 
 [phases]
 [phases.agent-context-prefix]
@@ -17,9 +17,15 @@ summary = 'Well-executed additive change adding a `ContextPrefix` field through 
 
 [phases.config-opt-in]
 bead_id = 'quasar-ph9'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-22T23:14:00.667716-05:00
-updated_at = 2026-02-22T23:41:49.456836-05:00
+updated_at = 2026-02-22T23:48:49.635486-05:00
+
+[phases.config-opt-in.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean implementation of `--no-context` CLI flag, `QUASAR_NO_CONTEXT` env var, and manifest `context_caching` field with correct three-level precedence for opt-out project context caching.'
 
 [phases.context-scanner]
 bead_id = 'quasar-cak'
@@ -47,9 +53,9 @@ summary = 'Well-written test suite adding 13 new tests across scanner and tree m
 
 [phases.integration-tests]
 bead_id = 'quasar-3co'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-22T23:14:01.07662-05:00
-updated_at = 2026-02-22T23:27:45.460574-05:00
+updated_at = 2026-02-22T23:48:49.636009-05:00
 
 [phases.nebula-wiring]
 bead_id = 'quasar-8st'

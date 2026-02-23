@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -272,6 +273,67 @@ func TestScanEmptyRepo(t *testing.T) {
 	// Should not have conventions.
 	if strings.Contains(snap, "## Conventions") {
 		t.Error("empty repo should not have conventions section")
+	}
+}
+
+func TestScanDeterminismStress(t *testing.T) {
+	t.Parallel()
+	dir := initTestRepo(t)
+
+	s := &Scanner{}
+	ctx := context.Background()
+	const runs = 100
+
+	// Run scans in parallel and collect results.
+	snapshots := make([]string, runs)
+	errs := make([]error, runs)
+	var wg sync.WaitGroup
+	wg.Add(runs)
+
+	for i := 0; i < runs; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			snap, err := s.Scan(ctx, dir)
+			snapshots[idx] = snap
+			errs[idx] = err
+		}(i)
+	}
+	wg.Wait()
+
+	// Check for scan errors.
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("scan %d failed: %v", i, err)
+		}
+	}
+
+	// All snapshots must be byte-identical.
+	for i := 1; i < runs; i++ {
+		if snapshots[0] != snapshots[i] {
+			t.Errorf("snapshot 0 and %d differ (len %d vs %d)",
+				i, len(snapshots[0]), len(snapshots[i]))
+			// Show first divergence point for debugging.
+			for j := 0; j < len(snapshots[0]) && j < len(snapshots[i]); j++ {
+				if snapshots[0][j] != snapshots[i][j] {
+					start := j - 20
+					if start < 0 {
+						start = 0
+					}
+					end0 := j + 20
+					if end0 > len(snapshots[0]) {
+						end0 = len(snapshots[0])
+					}
+					endi := j + 20
+					if endi > len(snapshots[i]) {
+						endi = len(snapshots[i])
+					}
+					t.Errorf("first difference at byte %d:\n  snap 0: ...%q...\n  snap %d: ...%q...",
+						j, snapshots[0][start:end0], i, snapshots[i][start:endi])
+					break
+				}
+			}
+			break // one failure is enough
+		}
 	}
 }
 

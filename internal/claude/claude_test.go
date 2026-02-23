@@ -403,6 +403,111 @@ func TestBuildArgs_MCPConfigEmptyPath(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Context prefix tests
+// ---------------------------------------------------------------------------
+
+func TestBuildArgs_ContextPrefixPrepended(t *testing.T) {
+	t.Parallel()
+
+	a := agent.Agent{
+		SystemPrompt:  "You are a coder.",
+		ContextPrefix: "# Project Context\n\n- Go project",
+	}
+	args := buildArgs(a, "do stuff")
+
+	// Find the --system-prompt value.
+	var systemPrompt string
+	for i, arg := range args {
+		if arg == "--system-prompt" && i+1 < len(args) {
+			systemPrompt = args[i+1]
+			break
+		}
+	}
+	if systemPrompt == "" {
+		t.Fatal("expected --system-prompt flag to be present")
+	}
+
+	// The system prompt should start with the context prefix.
+	if !strings.HasPrefix(systemPrompt, "# Project Context") {
+		t.Errorf("system prompt should start with context prefix, got %q", systemPrompt[:min(len(systemPrompt), 50)])
+	}
+
+	// The original system prompt should appear after the context prefix.
+	if !strings.Contains(systemPrompt, "You are a coder.") {
+		t.Error("system prompt should still contain the original system prompt")
+	}
+
+	// They should be separated by a double newline.
+	if !strings.Contains(systemPrompt, "- Go project\n\nYou are a coder.") {
+		t.Errorf("context prefix and system prompt should be joined by double newline, got %q", systemPrompt)
+	}
+}
+
+func TestBuildArgs_ContextPrefixEmpty(t *testing.T) {
+	t.Parallel()
+
+	a := agent.Agent{
+		SystemPrompt:  "You are a coder.",
+		ContextPrefix: "",
+	}
+	args := buildArgs(a, "do stuff")
+
+	// Find the --system-prompt value.
+	var systemPrompt string
+	for i, arg := range args {
+		if arg == "--system-prompt" && i+1 < len(args) {
+			systemPrompt = args[i+1]
+			break
+		}
+	}
+
+	// With no context prefix, the system prompt should be exactly the original.
+	if systemPrompt != "You are a coder." {
+		t.Errorf("system prompt = %q, want %q", systemPrompt, "You are a coder.")
+	}
+}
+
+func TestBuildArgs_ContextPrefixNoSystemPrompt(t *testing.T) {
+	t.Parallel()
+
+	a := agent.Agent{
+		ContextPrefix: "# Project Context\n\nSome context",
+	}
+	args := buildArgs(a, "do stuff")
+
+	// Find the --system-prompt value.
+	var systemPrompt string
+	for i, arg := range args {
+		if arg == "--system-prompt" && i+1 < len(args) {
+			systemPrompt = args[i+1]
+			break
+		}
+	}
+	if systemPrompt == "" {
+		t.Fatal("expected --system-prompt flag when ContextPrefix is set even with empty SystemPrompt")
+	}
+
+	// Should contain the context prefix.
+	if !strings.HasPrefix(systemPrompt, "# Project Context") {
+		t.Errorf("system prompt should start with context prefix, got %q", systemPrompt)
+	}
+}
+
+func TestBuildArgs_NeitherContextNorSystemPrompt(t *testing.T) {
+	t.Parallel()
+
+	a := agent.Agent{}
+	args := buildArgs(a, "do stuff")
+
+	// Neither set — no --system-prompt flag at all.
+	for _, arg := range args {
+		if arg == "--system-prompt" {
+			t.Fatal("expected no --system-prompt flag when both ContextPrefix and SystemPrompt are empty")
+		}
+	}
+}
+
 func TestBuildEnv_StripsCLAUDECODE(t *testing.T) {
 	base := []string{"PATH=/usr/bin", "CLAUDECODE=something", "HOME=/home/user"}
 	env := buildEnv(base)

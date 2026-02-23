@@ -476,6 +476,143 @@ func TestReviewerAgent(t *testing.T) {
 	}
 }
 
+func TestCoderAgentWithContextPrefix(t *testing.T) {
+	t.Parallel()
+
+	l := &Loop{
+		CoderPrompt:   "You are a coder.",
+		ContextPrefix: "# Project Context\n\n- Go project",
+	}
+	a := l.coderAgent(1.0)
+	if a.ContextPrefix != "# Project Context\n\n- Go project" {
+		t.Errorf("ContextPrefix = %q, want %q", a.ContextPrefix, "# Project Context\n\n- Go project")
+	}
+}
+
+func TestCoderAgentWithoutContextPrefix(t *testing.T) {
+	t.Parallel()
+
+	l := &Loop{
+		CoderPrompt: "You are a coder.",
+	}
+	a := l.coderAgent(1.0)
+	if a.ContextPrefix != "" {
+		t.Errorf("ContextPrefix = %q, want empty", a.ContextPrefix)
+	}
+}
+
+func TestReviewerAgentWithContextPrefix(t *testing.T) {
+	t.Parallel()
+
+	l := &Loop{
+		ReviewPrompt:  "You are a reviewer.",
+		ContextPrefix: "# Project Context\n\n- Go project",
+	}
+	a := l.reviewerAgent(1.0)
+	if a.ContextPrefix != "# Project Context\n\n- Go project" {
+		t.Errorf("ContextPrefix = %q, want %q", a.ContextPrefix, "# Project Context\n\n- Go project")
+	}
+}
+
+func TestReviewerAgentWithoutContextPrefix(t *testing.T) {
+	t.Parallel()
+
+	l := &Loop{
+		ReviewPrompt: "You are a reviewer.",
+	}
+	a := l.reviewerAgent(1.0)
+	if a.ContextPrefix != "" {
+		t.Errorf("ContextPrefix = %q, want empty", a.ContextPrefix)
+	}
+}
+
+func TestContextPrefixPropagatedToInvoker(t *testing.T) {
+	t.Parallel()
+
+	inv := &fakeInvoker{
+		responses: []agent.InvocationResult{
+			{ResultText: "coded", CostUSD: 0.30},
+			{ResultText: "APPROVED: LGTM.", CostUSD: 0.20},
+		},
+	}
+	l := &Loop{
+		Invoker:       inv,
+		UI:            &noopUI{},
+		MaxCycles:     3,
+		MaxBudgetUSD:  10.0,
+		ContextPrefix: "# Cached Context",
+	}
+	_, err := l.runLoop(context.Background(), "bead-1", "task")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Both coder and reviewer agents should carry the context prefix.
+	if len(inv.agents) < 2 {
+		t.Fatalf("expected at least 2 agent invocations, got %d", len(inv.agents))
+	}
+	for i, a := range inv.agents {
+		if a.ContextPrefix != "# Cached Context" {
+			t.Errorf("agent[%d] (role=%s) ContextPrefix = %q, want %q",
+				i, a.Role, a.ContextPrefix, "# Cached Context")
+		}
+	}
+}
+
+func TestNoContextPrefixWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	inv := &fakeInvoker{
+		responses: []agent.InvocationResult{
+			{ResultText: "coded", CostUSD: 0.30},
+			{ResultText: "APPROVED: LGTM.", CostUSD: 0.20},
+		},
+	}
+	l := &Loop{
+		Invoker:      inv,
+		UI:           &noopUI{},
+		MaxCycles:    3,
+		MaxBudgetUSD: 10.0,
+		// ContextPrefix intentionally not set.
+	}
+	_, err := l.runLoop(context.Background(), "bead-1", "task")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for i, a := range inv.agents {
+		if a.ContextPrefix != "" {
+			t.Errorf("agent[%d] (role=%s) ContextPrefix = %q, want empty",
+				i, a.Role, a.ContextPrefix)
+		}
+	}
+}
+
+func TestGenerateCheckpointWithContextPrefix(t *testing.T) {
+	t.Parallel()
+
+	inv := &fakeInvoker{
+		responses: []agent.InvocationResult{
+			{ResultText: "Progress: done", CostUSD: 0.10},
+		},
+	}
+	l := &Loop{
+		Invoker:       inv,
+		ContextPrefix: "# Checkpoint Context",
+	}
+	_, err := l.GenerateCheckpoint(context.Background(), "bead-1", "my task")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(inv.agents) != 1 {
+		t.Fatalf("expected 1 agent invocation, got %d", len(inv.agents))
+	}
+	if inv.agents[0].ContextPrefix != "# Checkpoint Context" {
+		t.Errorf("checkpoint agent ContextPrefix = %q, want %q",
+			inv.agents[0].ContextPrefix, "# Checkpoint Context")
+	}
+}
+
 func TestCoderAgentWithMCP(t *testing.T) {
 	t.Parallel()
 
