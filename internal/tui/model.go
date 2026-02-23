@@ -235,6 +235,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.LoopView.StartAgent(msg.Role)
 	case MsgAgentDone:
 		m.LoopView.FinishAgent(msg.Role, msg.CostUSD, msg.DurationMs)
+		m.StatusBar.TotalTokens += msg.Tokens
 	case MsgCycleSummary:
 		m.StatusBar.CostUSD = msg.Data.TotalCostUSD
 		m.LoopView.Approved = msg.Data.Approved
@@ -297,6 +298,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
 			lv.FinishAgent(msg.Role, msg.CostUSD, msg.DurationMs)
 		}
+		m.StatusBar.TotalTokens += msg.Tokens
 		if m.FocusedPhase == msg.PhaseID {
 			m.updateDetailFromSelection()
 		}
@@ -1538,6 +1540,11 @@ func (m AppModel) View() string {
 	}
 
 	sections = append(sections, middleStr)
+
+	// Bottom bar — aggregate stats line (tokens, cost, elapsed, progress).
+	if bottomBar := m.StatusBar.BottomBar(); bottomBar != "" {
+		sections = append(sections, bottomBar)
+	}
 
 	// Footer — always full terminal width.
 	footer := m.buildFooter()

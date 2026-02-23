@@ -40,6 +40,7 @@ type MsgAgentDone struct {
 	Role       string
 	CostUSD    float64
 	DurationMs int64
+	Tokens     int
 }
 
 // MsgCycleSummary is sent after each phase with structured summary data.
@@ -120,6 +121,7 @@ type MsgPhaseAgentDone struct {
 	Role       string
 	CostUSD    float64
 	DurationMs int64
+	Tokens     int
 }
 
 // MsgPhaseAgentOutput carries agent output for a specific phase.
