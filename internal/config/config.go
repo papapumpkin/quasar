@@ -21,6 +21,7 @@ type Config struct {
 	CoderSystemPrompt    string   `mapstructure:"coder_system_prompt"`
 	ReviewerSystemPrompt string   `mapstructure:"reviewer_system_prompt"`
 	Verbose              bool     `mapstructure:"verbose"`
+	NoContext            bool     `mapstructure:"no_context"`
 	LintCommands         []string `mapstructure:"lint_commands"`
 }
 
@@ -36,6 +37,7 @@ func Load() (Config, error) {
 	viper.SetDefault("coder_system_prompt", "")
 	viper.SetDefault("reviewer_system_prompt", "")
 	viper.SetDefault("verbose", false)
+	viper.SetDefault("no_context", false)
 	viper.SetDefault("lint_commands", DefaultLintCommands)
 
 	var cfg Config

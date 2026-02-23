@@ -28,6 +28,7 @@ func addNebulaApplyFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("watch", false, "watch for phase file changes during execution (with --auto)")
 	cmd.Flags().Int("max-workers", 1, "maximum concurrent workers (with --auto)")
 	cmd.Flags().Bool("no-tui", false, "disable TUI even on a TTY (use stderr output)")
+	cmd.Flags().Bool("no-context", false, "disable project context caching for agent prompts")
 	cmd.Flags().Bool("no-splash", false, "skip the startup splash animation")
 }
 
@@ -128,14 +129,26 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		workDir = wd
 	}
 
+	// Determine whether project context caching is disabled.
+	// Precedence: CLI flag > env/config > manifest > default (enabled).
+	noContext, _ := cmd.Flags().GetBool("no-context")
+	if !cmd.Flags().Changed("no-context") {
+		noContext = cfg.NoContext
+	}
+	if !noContext && n.Manifest.Execution.ContextCaching != nil && !*n.Manifest.Execution.ContextCaching {
+		noContext = true
+	}
+
 	// Generate project context snapshot for prompt cache prefixing.
 	var contextPrefix string
 	scanner := &snapshot.Scanner{}
-	snap, scanErr := scanner.Scan(ctx, workDir)
-	if scanErr != nil {
-		fmt.Fprintf(os.Stderr, "warning: context scan failed: %v\n", scanErr)
-	} else {
-		contextPrefix = snap
+	if !noContext {
+		snap, scanErr := scanner.Scan(ctx, workDir)
+		if scanErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: context scan failed: %v\n", scanErr)
+		} else {
+			contextPrefix = snap
+		}
 	}
 
 	// Create nebula branch if in a git repo. Non-fatal if git is unavailable.
@@ -363,12 +376,22 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				)
 				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, noSplash)
 				// Re-scan context for the next nebula's working directory.
-				nextSnap, nextScanErr := scanner.Scan(ctx, nextWorkDir)
-				if nextScanErr != nil {
-					fmt.Fprintf(os.Stderr, "warning: context scan failed: %v\n", nextScanErr)
+				// Respect noContext: skip scanning if context caching is disabled.
+				// Also check the next nebula's manifest context_caching setting.
+				nextNoContext := noContext
+				if !nextNoContext && nextN.Manifest.Execution.ContextCaching != nil && !*nextN.Manifest.Execution.ContextCaching {
+					nextNoContext = true
+				}
+				if nextNoContext {
 					contextPrefix = ""
 				} else {
-					contextPrefix = nextSnap
+					nextSnap, nextScanErr := scanner.Scan(ctx, nextWorkDir)
+					if nextScanErr != nil {
+						fmt.Fprintf(os.Stderr, "warning: context scan failed: %v\n", nextScanErr)
+						contextPrefix = ""
+					} else {
+						contextPrefix = nextSnap
+					}
 				}
 
 				wg.Runner = &tuiLoopAdapter{

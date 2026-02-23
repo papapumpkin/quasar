@@ -35,6 +35,7 @@ func init() {
 	runCmd.Flags().String("reviewer-prompt-file", "", "file containing custom reviewer system prompt")
 	runCmd.Flags().Bool("auto", false, "run a single task from stdin and exit (non-interactive)")
 	runCmd.Flags().Bool("no-tui", false, "disable TUI even on a TTY (use stderr printer)")
+	runCmd.Flags().Bool("no-context", false, "disable project context caching for agent prompts")
 	runCmd.Flags().Bool("no-splash", false, "skip the startup splash animation")
 
 	rootCmd.AddCommand(runCmd)
@@ -138,6 +139,9 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 	if v, _ := cmd.Flags().GetBool("verbose"); v {
 		cfg.Verbose = true
 	}
+	if v, _ := cmd.Flags().GetBool("no-context"); v {
+		cfg.NoContext = true
+	}
 }
 
 // loadPrompts resolves coder and reviewer system prompts from config and flag overrides.
@@ -194,12 +198,14 @@ func buildLoop(cfg *config.Config, uiHandler ui.UI, coderPrompt, reviewerPrompt 
 
 	// Generate project context snapshot for prompt cache prefixing.
 	var contextPrefix string
-	scanner := &snapshot.Scanner{}
-	snap, scanErr := scanner.Scan(context.Background(), workDir)
-	if scanErr != nil {
-		fmt.Fprintf(os.Stderr, "warning: context scan failed: %v\n", scanErr)
-	} else {
-		contextPrefix = snap
+	if !cfg.NoContext {
+		scanner := &snapshot.Scanner{}
+		snap, scanErr := scanner.Scan(context.Background(), workDir)
+		if scanErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: context scan failed: %v\n", scanErr)
+		} else {
+			contextPrefix = snap
+		}
 	}
 
 	return &loop.Loop{
