@@ -7,31 +7,31 @@ total_cost_usd = 17.245643750000006
 bead_id = 'quasar-gw0'
 status = 'created'
 created_at = 2026-02-23T11:20:45.300454-05:00
-updated_at = 2026-02-23T11:20:45.300454-05:00
+updated_at = 2026-02-23T14:04:52.173925-05:00
 
 [phases.bead-cli]
-bead_id = 'quasar-ml9'
-status = 'failed'
+bead_id = 'quasar-iwi'
+status = 'created'
 created_at = 2026-02-23T11:20:44.092948-05:00
-updated_at = 2026-02-23T12:25:52.624589-05:00
+updated_at = 2026-02-23T14:04:51.778097-05:00
 
 [phases.cockpit-wiring]
 bead_id = 'quasar-wch'
 status = 'created'
 created_at = 2026-02-23T11:20:46.355402-05:00
-updated_at = 2026-02-23T11:20:46.355402-05:00
+updated_at = 2026-02-23T14:04:52.174887-05:00
 
 [phases.discovery-cli]
-bead_id = 'quasar-3zv'
-status = 'failed'
+bead_id = 'quasar-cji'
+status = 'in_progress'
 created_at = 2026-02-23T11:20:43.710474-05:00
-updated_at = 2026-02-23T12:25:46.30062-05:00
+updated_at = 2026-02-23T14:04:52.56697-05:00
 
 [phases.fabric-cli]
-bead_id = 'quasar-4nq'
-status = 'failed'
+bead_id = 'quasar-211'
+status = 'created'
 created_at = 2026-02-23T11:20:43.272333-05:00
-updated_at = 2026-02-23T12:25:49.519326-05:00
+updated_at = 2026-02-23T14:04:51.025533-05:00
 
 [phases.fabric-rename]
 bead_id = 'quasar-c7d'
@@ -46,16 +46,16 @@ needs_human_review = false
 summary = 'Clean, comprehensive rename from internal/board to internal/fabric with correct vocabulary updates throughout; three minor issues (one stale comment, stub files pending deletion, no Consumer field test) are non-blocking.'
 
 [phases.filters]
-bead_id = 'quasar-ibk'
-status = 'failed'
+bead_id = 'quasar-r37'
+status = 'created'
 created_at = 2026-02-23T11:20:44.484307-05:00
-updated_at = 2026-02-23T12:25:43.21544-05:00
+updated_at = 2026-02-23T14:04:52.172796-05:00
 
 [phases.neutron-archival]
 bead_id = 'quasar-xuw'
 status = 'created'
 created_at = 2026-02-23T11:20:46.02521-05:00
-updated_at = 2026-02-23T11:20:46.02521-05:00
+updated_at = 2026-02-23T14:04:52.174486-05:00
 
 [phases.schema-evolution]
 bead_id = 'quasar-i8s'
@@ -85,4 +85,4 @@ summary = 'Three targeted fixes to cmd/telemetry.go (nil pointer panic, unchecke
 bead_id = 'quasar-8i2'
 status = 'created'
 created_at = 2026-02-23T11:20:44.868698-05:00
-updated_at = 2026-02-23T11:20:44.868698-05:00
+updated_at = 2026-02-23T14:04:52.173441-05:00
