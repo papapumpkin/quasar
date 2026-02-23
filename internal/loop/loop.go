@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/papapumpkin/quasar/internal/agent"
+	"github.com/papapumpkin/quasar/internal/filter"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
@@ -15,6 +16,7 @@ type Loop struct {
 	Git            CycleCommitter // Optional; nil disables per-cycle commits.
 	Hooks          []Hook         // Lifecycle hooks (e.g., BeadHook for tracking).
 	Linter         Linter         // Optional; nil disables lint checks between coder and reviewer.
+	Filter         filter.Filter  // Optional; nil skips pre-reviewer filtering and goes straight to reviewer.
 	MaxCycles      int
 	MaxLintRetries int // Max times coder is asked to fix lint issues per cycle. 0 uses DefaultMaxLintRetries.
 	MaxBudgetUSD   float64
@@ -114,6 +116,23 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 		// Run lint checks and let the coder fix issues before reviewer handoff.
 		if err := l.runLintFixLoop(ctx, state, perAgentBudget); err != nil {
 			return nil, err
+		}
+
+		// Run pre-reviewer filter checks. If the filter fails, bounce
+		// the failure back to the coder as findings instead of invoking
+		// the reviewer.
+		if l.Filter != nil {
+			failed, err := l.runFilterChecks(ctx, state)
+			if err != nil {
+				return nil, err
+			}
+			if failed {
+				// Filter failed — skip reviewer, continue to next cycle.
+				l.sealCycleSHA(state)
+				l.drainRefactor(state)
+				l.emit(ctx, Event{Kind: EventCycleStart, BeadID: beadID, Cycle: cycle})
+				continue
+			}
 		}
 
 		if err := l.runReviewerPhase(ctx, state, perAgentBudget); err != nil {
@@ -240,6 +259,47 @@ func (l *Loop) runLintFixLoop(ctx context.Context, state *CycleState, perAgentBu
 	}
 
 	return nil
+}
+
+// runFilterChecks runs the pre-reviewer filter chain. If the filter fails, it
+// records a synthetic finding from the failing check and returns true to signal
+// the caller should skip the reviewer and bounce to the next coder cycle.
+// Returns (false, nil) when the filter passes or is nil.
+func (l *Loop) runFilterChecks(ctx context.Context, state *CycleState) (failed bool, err error) {
+	state.Phase = PhaseFiltering
+	l.UI.Info("running pre-reviewer filter checks…")
+
+	result, err := l.Filter.Run(ctx, l.WorkDir)
+	if err != nil {
+		// Infrastructure error (e.g. context cancelled) is fatal.
+		return false, fmt.Errorf("filter execution failed: %w", err)
+	}
+
+	if result.Passed {
+		state.FilterOutput = ""
+		state.FilterCheckName = ""
+		l.UI.Info("filter checks passed")
+		return false, nil
+	}
+
+	// Filter failed — build a synthetic finding from the first failure.
+	failure := result.FirstFailure()
+	state.FilterOutput = failure.Output
+	state.FilterCheckName = failure.Name
+	l.UI.Info(fmt.Sprintf("filter check %q failed (%s), bouncing to coder", failure.Name, failure.Elapsed))
+
+	// Surface the failure as a finding so the coder sees it next cycle.
+	state.Findings = []ReviewFinding{{
+		Severity:    "critical",
+		Description: fmt.Sprintf("[filter:%s] %s", failure.Name, truncate(failure.Output, 3000)),
+		Cycle:       state.Cycle,
+	}}
+	l.UI.IssuesFound(1)
+	state.Phase = PhaseResolvingIssues
+	state.AllFindings = append(state.AllFindings, state.Findings...)
+	l.emitBeadUpdate(state, "in_progress")
+
+	return true, nil
 }
 
 // drainRefactor checks the RefactorCh for a pending phase edit and applies it
