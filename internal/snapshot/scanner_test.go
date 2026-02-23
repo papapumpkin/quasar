@@ -244,3 +244,118 @@ func TestScanUntrackedConventionIgnored(t *testing.T) {
 		t.Error("untracked CLAUDE.md content should not appear in snapshot")
 	}
 }
+
+func TestScanEmptyRepo(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	run(t, dir, "git", "init")
+	run(t, dir, "git", "config", "user.email", "test@test.com")
+	run(t, dir, "git", "config", "user.name", "test")
+
+	// Create an empty initial commit (git allows --allow-empty).
+	run(t, dir, "git", "commit", "--allow-empty", "-m", "init")
+
+	s := &Scanner{}
+	snap, err := s.Scan(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should still produce a valid snapshot with project header.
+	if !strings.Contains(snap, "# Project Context") {
+		t.Error("empty repo should still have project context header")
+	}
+	if !strings.Contains(snap, "## Structure") {
+		t.Error("empty repo should still have structure section")
+	}
+	// Should not have conventions.
+	if strings.Contains(snap, "## Conventions") {
+		t.Error("empty repo should not have conventions section")
+	}
+}
+
+func TestScanDeterministicByteEquality(t *testing.T) {
+	t.Parallel()
+	dir := initTestRepo(t)
+
+	s := &Scanner{}
+	ctx := context.Background()
+
+	// Run scan 5 times and assert all are byte-identical.
+	var snapshots []string
+	for i := 0; i < 5; i++ {
+		snap, err := s.Scan(ctx, dir)
+		if err != nil {
+			t.Fatalf("scan %d: %v", i, err)
+		}
+		snapshots = append(snapshots, snap)
+	}
+
+	for i := 1; i < len(snapshots); i++ {
+		if snapshots[0] != snapshots[i] {
+			t.Errorf("snapshot 0 and %d differ:\n--- snap 0 ---\n%s\n--- snap %d ---\n%s",
+				i, snapshots[0], i, snapshots[i])
+		}
+	}
+}
+
+func TestScanRustProject(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	run(t, dir, "git", "init")
+	run(t, dir, "git", "config", "user.email", "test@test.com")
+	run(t, dir, "git", "config", "user.name", "test")
+
+	writeFile(t, dir, "Cargo.toml", "[package]\nname = \"my-crate\"\nversion = \"0.1.0\"\n")
+
+	mkdirAll(t, dir, "src")
+	writeFile(t, dir, "src/main.rs", "fn main() {}\n")
+
+	run(t, dir, "git", "add", ".")
+	run(t, dir, "git", "commit", "-m", "init")
+
+	s := &Scanner{}
+	snap, err := s.Scan(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(snap, "Rust") {
+		t.Error("should detect Rust language")
+	}
+	if !strings.Contains(snap, "my-crate") {
+		t.Error("should detect Cargo.toml name")
+	}
+}
+
+func TestScanNoManifest(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	run(t, dir, "git", "init")
+	run(t, dir, "git", "config", "user.email", "test@test.com")
+	run(t, dir, "git", "config", "user.name", "test")
+
+	writeFile(t, dir, "README.txt", "hello\n")
+	writeFile(t, dir, "data.csv", "a,b,c\n")
+
+	run(t, dir, "git", "add", ".")
+	run(t, dir, "git", "commit", "-m", "init")
+
+	s := &Scanner{}
+	snap, err := s.Scan(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Without a manifest, it should fall back to the directory name.
+	if !strings.Contains(snap, "**Directory**") {
+		t.Error("repo without manifest should show directory fallback")
+	}
+	// Should not show language or module.
+	if strings.Contains(snap, "**Language**") {
+		t.Error("repo without manifest should not show language")
+	}
+}
