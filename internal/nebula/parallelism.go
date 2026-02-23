@@ -42,7 +42,7 @@ func EffectiveParallelism(wave Wave, phases []PhaseSpec, d *dag.DAG, maxWorkers 
 			}
 
 			// Connected by dependency — serialized, no conflict.
-			if graph.Connected(a.ID, b.ID) {
+			if d.Connected(a.ID, b.ID) {
 				continue
 			}
 
@@ -90,10 +90,10 @@ func EffectiveParallelism(wave Wave, phases []PhaseSpec, d *dag.DAG, maxWorkers 
 
 // WaveParallelism computes effective parallelism for each wave in order.
 // Returns a slice parallel to waves with the max useful workers per wave.
-func WaveParallelism(waves []Wave, phases []PhaseSpec, graph *Graph, maxWorkers int) []int {
+func WaveParallelism(waves []Wave, phases []PhaseSpec, d *dag.DAG, maxWorkers int) []int {
 	result := make([]int, len(waves))
 	for i, wave := range waves {
-		result[i] = EffectiveParallelism(wave, phases, graph, maxWorkers)
+		result[i] = EffectiveParallelism(wave, phases, d, maxWorkers)
 	}
 	return result
 }

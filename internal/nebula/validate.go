@@ -1,7 +1,10 @@
 package nebula
 
 import (
+	"errors"
 	"fmt"
+
+	"github.com/papapumpkin/quasar/internal/dag"
 )
 
 // Validate checks a nebula for structural correctness:
@@ -139,10 +142,12 @@ func Validate(n *Nebula) []ValidationError {
 		}
 	}
 
-	// Cycle detection via topological sort.
+	// Cycle detection via DAG construction.
+	var d *dag.DAG
 	if len(errs) == 0 {
-		g := NewGraph(n.Phases)
-		if _, err := g.Sort(); err != nil {
+		var err error
+		d, err = phasesToDAG(n.Phases)
+		if err != nil {
 			errs = append(errs, ValidationError{
 				SourceFile: "nebula.toml",
 				Err:        err,
@@ -152,7 +157,7 @@ func Validate(n *Nebula) []ValidationError {
 
 	// Scope overlap detection for parallel phases.
 	if len(errs) == 0 {
-		errs = append(errs, validateScopeOverlaps(n.Phases)...)
+		errs = append(errs, validateScopeOverlaps(n.Phases, d)...)
 	}
 
 	return errs
@@ -165,7 +170,7 @@ func Validate(n *Nebula) []ValidationError {
 // the graph. On failure, they are rolled back. The caller is responsible for
 // removing any blocks edges that should not be kept (e.g. for in-flight or
 // done phases).
-func ValidateHotAdd(phase PhaseSpec, existingIDs map[string]bool, graph *Graph) []ValidationError {
+func ValidateHotAdd(phase PhaseSpec, existingIDs map[string]bool, d *dag.DAG) []ValidationError {
 	var errs []ValidationError
 
 	if phase.ID == "" {
@@ -196,41 +201,38 @@ func ValidateHotAdd(phase PhaseSpec, existingIDs map[string]bool, graph *Graph) 
 	}
 
 	// Tentatively add the node and edges to check for cycles.
-	graph.AddNode(phase.ID)
+	d.AddNodeIdempotent(phase.ID, phase.Priority)
 	for _, dep := range phase.DependsOn {
-		graph.AddEdge(phase.ID, dep)
+		if err := d.AddEdge(phase.ID, dep); err != nil {
+			if errors.Is(err, dag.ErrCycle) {
+				errs = append(errs, ValidationError{
+					PhaseID:    phase.ID,
+					SourceFile: phase.SourceFile,
+					Err:        fmt.Errorf("%w: adding %q would create a cycle", ErrDependencyCycle, phase.ID),
+				})
+				rollbackHotAdd(d, phase)
+				return errs
+			}
+		}
 	}
 	for _, blocked := range phase.Blocks {
-		graph.AddEdge(blocked, phase.ID)
-	}
-
-	if _, err := graph.Sort(); err != nil {
-		errs = append(errs, ValidationError{
-			PhaseID:    phase.ID,
-			SourceFile: phase.SourceFile,
-			Err:        fmt.Errorf("%w: adding %q would create a cycle", ErrDependencyCycle, phase.ID),
-		})
-		// Roll back the tentative graph mutations.
-		rollbackHotAdd(graph, phase)
+		if err := d.AddEdge(blocked, phase.ID); err != nil {
+			if errors.Is(err, dag.ErrCycle) {
+				errs = append(errs, ValidationError{
+					PhaseID:    phase.ID,
+					SourceFile: phase.SourceFile,
+					Err:        fmt.Errorf("%w: adding %q would create a cycle", ErrDependencyCycle, phase.ID),
+				})
+				rollbackHotAdd(d, phase)
+				return errs
+			}
+		}
 	}
 
 	return errs
 }
 
-// rollbackHotAdd removes a phase node and its edges from the graph.
-func rollbackHotAdd(graph *Graph, phase PhaseSpec) {
-	for _, dep := range phase.DependsOn {
-		delete(graph.adjacency[phase.ID], dep)
-		if graph.reverse[dep] != nil {
-			delete(graph.reverse[dep], phase.ID)
-		}
-	}
-	for _, blocked := range phase.Blocks {
-		delete(graph.adjacency[blocked], phase.ID)
-		if graph.reverse[phase.ID] != nil {
-			delete(graph.reverse[phase.ID], blocked)
-		}
-	}
-	delete(graph.adjacency, phase.ID)
-	delete(graph.reverse, phase.ID)
+// rollbackHotAdd removes a phase node and all its edges from the DAG.
+func rollbackHotAdd(d *dag.DAG, phase PhaseSpec) {
+	_ = d.Remove(phase.ID)
 }

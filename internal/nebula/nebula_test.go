@@ -174,10 +174,13 @@ func TestGraph_Sort(t *testing.T) {
 		{ID: "c", DependsOn: []string{"a", "b"}},
 	}
 
-	g := NewGraph(phases)
-	sorted, err := g.Sort()
+	g, err := phasesToDAG(phases)
 	if err != nil {
-		t.Fatalf("Sort failed: %v", err)
+		t.Fatalf("phasesToDAG failed: %v", err)
+	}
+	sorted, err := g.TopologicalSort()
+	if err != nil {
+		t.Fatalf("TopologicalSort failed: %v", err)
 	}
 
 	// a must come before b, and b before c.
@@ -200,8 +203,7 @@ func TestGraph_SortCycleDetection(t *testing.T) {
 		{ID: "y", DependsOn: []string{"x"}},
 	}
 
-	g := NewGraph(phases)
-	_, err := g.Sort()
+	_, err := phasesToDAG(phases)
 	if err == nil {
 		t.Fatal("expected cycle detection error")
 	}
@@ -217,7 +219,7 @@ func TestGraph_Ready(t *testing.T) {
 		{ID: "c"},
 	}
 
-	g := NewGraph(phases)
+	g, _ := phasesToDAG(phases)
 
 	// Initially, a and c should be ready.
 	ready := g.Ready(map[string]bool{})
@@ -1164,7 +1166,7 @@ func TestGraph_ComputeWaves_Linear(t *testing.T) {
 		{ID: "b", DependsOn: []string{"a"}},
 		{ID: "c", DependsOn: []string{"b"}},
 	}
-	g := NewGraph(phases)
+	g, _ := phasesToDAG(phases)
 	waves, err := g.ComputeWaves()
 	if err != nil {
 		t.Fatalf("ComputeWaves failed: %v", err)
@@ -1172,14 +1174,14 @@ func TestGraph_ComputeWaves_Linear(t *testing.T) {
 	if len(waves) != 3 {
 		t.Fatalf("expected 3 waves, got %d", len(waves))
 	}
-	if waves[0].PhaseIDs[0] != "a" {
-		t.Errorf("wave 1: expected [a], got %v", waves[0].PhaseIDs)
+	if waves[0].NodeIDs[0] != "a" {
+		t.Errorf("wave 1: expected [a], got %v", waves[0].NodeIDs)
 	}
-	if waves[1].PhaseIDs[0] != "b" {
-		t.Errorf("wave 2: expected [b], got %v", waves[1].PhaseIDs)
+	if waves[1].NodeIDs[0] != "b" {
+		t.Errorf("wave 2: expected [b], got %v", waves[1].NodeIDs)
 	}
-	if waves[2].PhaseIDs[0] != "c" {
-		t.Errorf("wave 3: expected [c], got %v", waves[2].PhaseIDs)
+	if waves[2].NodeIDs[0] != "c" {
+		t.Errorf("wave 3: expected [c], got %v", waves[2].NodeIDs)
 	}
 }
 
@@ -1191,7 +1193,7 @@ func TestGraph_ComputeWaves_Parallel(t *testing.T) {
 		{ID: "c"},
 		{ID: "d", DependsOn: []string{"a", "b", "c"}},
 	}
-	g := NewGraph(phases)
+	g, _ := phasesToDAG(phases)
 	waves, err := g.ComputeWaves()
 	if err != nil {
 		t.Fatalf("ComputeWaves failed: %v", err)
@@ -1199,15 +1201,15 @@ func TestGraph_ComputeWaves_Parallel(t *testing.T) {
 	if len(waves) != 2 {
 		t.Fatalf("expected 2 waves, got %d", len(waves))
 	}
-	if len(waves[0].PhaseIDs) != 3 {
-		t.Errorf("wave 1: expected 3 phases, got %d", len(waves[0].PhaseIDs))
+	if len(waves[0].NodeIDs) != 3 {
+		t.Errorf("wave 1: expected 3 phases, got %d", len(waves[0].NodeIDs))
 	}
-	// PhaseIDs should be sorted within each wave.
-	if waves[0].PhaseIDs[0] != "a" || waves[0].PhaseIDs[1] != "b" || waves[0].PhaseIDs[2] != "c" {
-		t.Errorf("wave 1: expected [a, b, c], got %v", waves[0].PhaseIDs)
+	// NodeIDs should be sorted within each wave.
+	if waves[0].NodeIDs[0] != "a" || waves[0].NodeIDs[1] != "b" || waves[0].NodeIDs[2] != "c" {
+		t.Errorf("wave 1: expected [a, b, c], got %v", waves[0].NodeIDs)
 	}
-	if waves[1].PhaseIDs[0] != "d" {
-		t.Errorf("wave 2: expected [d], got %v", waves[1].PhaseIDs)
+	if waves[1].NodeIDs[0] != "d" {
+		t.Errorf("wave 2: expected [d], got %v", waves[1].NodeIDs)
 	}
 }
 
@@ -1217,8 +1219,8 @@ func TestGraph_ComputeWaves_Cycle(t *testing.T) {
 		{ID: "x", DependsOn: []string{"y"}},
 		{ID: "y", DependsOn: []string{"x"}},
 	}
-	g := NewGraph(phases)
-	_, err := g.ComputeWaves()
+	// phasesToDAG detects cycles during edge addition.
+	_, err := phasesToDAG(phases)
 	if err == nil {
 		t.Fatal("expected cycle detection error")
 	}
@@ -1233,7 +1235,7 @@ func TestGraph_ComputeWaves_WaveNumbers(t *testing.T) {
 		{ID: "a"},
 		{ID: "b", DependsOn: []string{"a"}},
 	}
-	g := NewGraph(phases)
+	g, _ := phasesToDAG(phases)
 	waves, err := g.ComputeWaves()
 	if err != nil {
 		t.Fatalf("ComputeWaves failed: %v", err)
@@ -1250,9 +1252,9 @@ func TestGraph_ComputeWaves_WaveNumbers(t *testing.T) {
 func TestRenderPlan_Output(t *testing.T) {
 	t.Parallel()
 	waves := []Wave{
-		{Number: 1, PhaseIDs: []string{"test", "vet", "lint"}},
-		{Number: 2, PhaseIDs: []string{"build"}},
-		{Number: 3, PhaseIDs: []string{"deploy"}},
+		{Number: 1, NodeIDs: []string{"test", "vet", "lint"}},
+		{Number: 2, NodeIDs: []string{"build"}},
+		{Number: 3, NodeIDs: []string{"deploy"}},
 	}
 
 	var buf strings.Builder
@@ -1289,7 +1291,7 @@ func TestRenderPlan_Output(t *testing.T) {
 func TestRenderPlan_NoBudget(t *testing.T) {
 	t.Parallel()
 	waves := []Wave{
-		{Number: 1, PhaseIDs: []string{"a"}},
+		{Number: 1, NodeIDs: []string{"a"}},
 	}
 
 	var buf strings.Builder

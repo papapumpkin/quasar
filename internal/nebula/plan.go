@@ -186,8 +186,8 @@ func RenderPlan(w io.Writer, nebulaName string, waves []Wave, phaseCount int, bu
 
 	for _, wave := range waves {
 		label := fmt.Sprintf("Wave %d", wave.Number)
-		phases := strings.Join(wave.PhaseIDs, ", ")
-		if len(wave.PhaseIDs) > 1 {
+		phases := strings.Join(wave.NodeIDs, ", ")
+		if len(wave.NodeIDs) > 1 {
 			fmt.Fprintf(w, "   "+ansi.Dim+"%s (parallel):"+ansi.Reset+" %s\n", label, phases)
 		} else {
 			fmt.Fprintf(w, "   "+ansi.Dim+"%s:"+ansi.Reset+"            %s\n", label, phases)

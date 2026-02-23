@@ -124,9 +124,9 @@ func TestEffectiveParallelism(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			graph := NewGraph(tt.phases)
-			wave := Wave{Number: 1, PhaseIDs: tt.waveIDs}
-			got := EffectiveParallelism(wave, tt.phases, graph, tt.maxWorkers)
+			d, _ := phasesToDAG(tt.phases)
+			wave := Wave{Number: 1, NodeIDs: tt.waveIDs}
+			got := EffectiveParallelism(wave, tt.phases, d, tt.maxWorkers)
 			if got != tt.want {
 				t.Errorf("EffectiveParallelism() = %d, want %d", got, tt.want)
 			}
@@ -146,14 +146,14 @@ func TestWaveParallelism(t *testing.T) {
 		{ID: "d", Scope: []string{"docs/"}, DependsOn: []string{"a"}},
 		{ID: "e", Scope: []string{"docs/"}, DependsOn: []string{"b"}},
 	}
-	graph := NewGraph(phases)
+	d, _ := phasesToDAG(phases)
 
 	waves := []Wave{
-		{Number: 1, PhaseIDs: []string{"a", "b", "c"}},
-		{Number: 2, PhaseIDs: []string{"d", "e"}},
+		{Number: 1, NodeIDs: []string{"a", "b", "c"}},
+		{Number: 2, NodeIDs: []string{"d", "e"}},
 	}
 
-	got := WaveParallelism(waves, phases, graph, 10)
+	got := WaveParallelism(waves, phases, d, 10)
 	if len(got) != 2 {
 		t.Fatalf("WaveParallelism() returned %d values, want 2", len(got))
 	}

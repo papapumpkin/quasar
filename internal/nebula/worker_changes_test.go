@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/papapumpkin/quasar/internal/dag"
 )
 
 func writeTestPhaseFile(t *testing.T, dir, id, body string) string {
@@ -188,7 +190,7 @@ func TestHandlePhaseAdded_BadFile(t *testing.T) {
 	}
 }
 
-func newTestHotReloaderWithLiveState(t *testing.T, buf *bytes.Buffer, mu *sync.Mutex, neb *Nebula, state *State, graph *Graph, phasesByID map[string]*PhaseSpec, done, failed, inFlight map[string]bool, opts ...func(*HotReloaderConfig)) *HotReloader {
+func newTestHotReloaderWithLiveState(t *testing.T, buf *bytes.Buffer, mu *sync.Mutex, neb *Nebula, state *State, d *dag.DAG, phasesByID map[string]*PhaseSpec, done, failed, inFlight map[string]bool, opts ...func(*HotReloaderConfig)) *HotReloader {
 	t.Helper()
 	tracker := &PhaseTracker{
 		phasesByID: phasesByID,
@@ -209,7 +211,7 @@ func newTestHotReloaderWithLiveState(t *testing.T, buf *bytes.Buffer, mu *sync.M
 		opt(&cfg)
 	}
 	hr := NewHotReloader(cfg)
-	hr.InitLiveState(graph, phasesByID)
+	hr.InitLiveState(d, phasesByID)
 	return hr
 }
 
@@ -227,7 +229,7 @@ func TestHandlePhaseAdded_WithLiveState(t *testing.T) {
 		Version: 1,
 		Phases:  map[string]*PhaseState{"existing": {Status: PhaseStatusDone}},
 	}
-	graph := NewGraph(neb.Phases)
+	graph, _ := phasesToDAG(neb.Phases)
 	phasesByID := map[string]*PhaseSpec{"existing": &neb.Phases[0]}
 	done := map[string]bool{"existing": true}
 	failed := map[string]bool{}
@@ -285,7 +287,7 @@ func TestHandlePhaseAdded_DuplicateID(t *testing.T) {
 		Version: 1,
 		Phases:  map[string]*PhaseState{"dup": {Status: PhaseStatusPending}},
 	}
-	graph := NewGraph(neb.Phases)
+	graph, _ := phasesToDAG(neb.Phases)
 	phasesByID := map[string]*PhaseSpec{"dup": &neb.Phases[0]}
 
 	hr := newTestHotReloaderWithLiveState(t, &buf, &mu, neb, state, graph, phasesByID, map[string]bool{}, map[string]bool{}, map[string]bool{})
@@ -331,7 +333,7 @@ func TestHandlePhaseAdded_WithBlocks(t *testing.T) {
 			"tests": {Status: PhaseStatusPending},
 		},
 	}
-	graph := NewGraph(neb.Phases)
+	graph, _ := phasesToDAG(neb.Phases)
 	phasesByID := map[string]*PhaseSpec{"setup": &neb.Phases[0], "tests": &neb.Phases[1]}
 	done := map[string]bool{"setup": true}
 
@@ -387,7 +389,7 @@ func TestHandlePhaseAdded_BlocksRunningPhase(t *testing.T) {
 			"running": {Status: PhaseStatusInProgress},
 		},
 	}
-	graph := NewGraph(neb.Phases)
+	graph, _ := phasesToDAG(neb.Phases)
 	phasesByID := map[string]*PhaseSpec{"setup": &neb.Phases[0], "running": &neb.Phases[1]}
 	done := map[string]bool{"setup": true}
 	inFlight := map[string]bool{"running": true}
@@ -437,7 +439,7 @@ func TestHandlePhaseAdded_OnHotAddCallback(t *testing.T) {
 		Version: 1,
 		Phases:  map[string]*PhaseState{"existing": {Status: PhaseStatusDone}},
 	}
-	graph := NewGraph(neb.Phases)
+	graph, _ := phasesToDAG(neb.Phases)
 	phasesByID := map[string]*PhaseSpec{"existing": &neb.Phases[0]}
 
 	var callbackPhaseID, callbackTitle string
@@ -488,7 +490,7 @@ func TestHandlePhaseAdded_CreatesBead(t *testing.T) {
 		Version: 1,
 		Phases:  map[string]*PhaseState{"existing": {Status: PhaseStatusDone}},
 	}
-	graph := NewGraph(neb.Phases)
+	graph, _ := phasesToDAG(neb.Phases)
 	client := newMockBeadsClient()
 	phasesByID := map[string]*PhaseSpec{"existing": &neb.Phases[0]}
 
@@ -536,7 +538,7 @@ func TestHandlePhaseAdded_BeadCreateFails(t *testing.T) {
 		Version: 1,
 		Phases:  map[string]*PhaseState{"existing": {Status: PhaseStatusDone}},
 	}
-	graph := NewGraph(neb.Phases)
+	graph, _ := phasesToDAG(neb.Phases)
 	client := newMockBeadsClient()
 	client.createErr = fmt.Errorf("bead creation failed")
 	phasesByID := map[string]*PhaseSpec{"existing": &neb.Phases[0]}

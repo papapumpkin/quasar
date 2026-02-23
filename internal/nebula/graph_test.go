@@ -12,7 +12,7 @@ func TestHasPath(t *testing.T) {
 		{ID: "c"},
 		{ID: "d"}, // isolated node
 	}
-	g := NewGraph(phases)
+	g, _ := phasesToDAG(phases)
 
 	tests := []struct {
 		name string
@@ -52,7 +52,7 @@ func TestConnected(t *testing.T) {
 		{ID: "c"},
 		{ID: "d"},
 	}
-	g := NewGraph(phases)
+	g, _ := phasesToDAG(phases)
 
 	tests := []struct {
 		name string
@@ -89,7 +89,7 @@ func TestConnected_DisconnectedComponents(t *testing.T) {
 		{ID: "c", DependsOn: []string{"d"}},
 		{ID: "d"},
 	}
-	g := NewGraph(phases)
+	g, _ := phasesToDAG(phases)
 
 	tests := []struct {
 		name string
@@ -126,7 +126,7 @@ func TestHasPath_DisconnectedComponents(t *testing.T) {
 		{ID: "c", DependsOn: []string{"d"}},
 		{ID: "d"},
 	}
-	g := NewGraph(phases)
+	g, _ := phasesToDAG(phases)
 
 	tests := []struct {
 		name string
@@ -159,7 +159,7 @@ func TestRemoveEdge(t *testing.T) {
 		{ID: "b", DependsOn: []string{"c"}},
 		{ID: "c"},
 	}
-	g := NewGraph(phases)
+	g, _ := phasesToDAG(phases)
 
 	// a depends on b; removing that edge should break the path.
 	if !g.HasPath("a", "b") {
@@ -188,7 +188,7 @@ func TestRemoveNode(t *testing.T) {
 		{ID: "b", DependsOn: []string{"a"}},
 		{ID: "c", DependsOn: []string{"b"}},
 	}
-	g := NewGraph(phases)
+	g, _ := phasesToDAG(phases)
 
 	// b depends on a, c depends on b.
 	if !g.HasPath("c", "a") {
@@ -196,14 +196,14 @@ func TestRemoveNode(t *testing.T) {
 	}
 
 	// Remove node b: should sever connections.
-	g.RemoveNode("b")
+	_ = g.Remove("b")
 
 	if g.HasPath("c", "a") {
 		t.Error("expected no path c → a after removing b")
 	}
 
 	// a and c should still be in the graph as nodes.
-	sorted, err := g.Sort()
+	sorted, err := g.TopologicalSort()
 	if err != nil {
 		t.Fatalf("unexpected cycle after removal: %v", err)
 	}
@@ -226,5 +226,5 @@ func TestRemoveNode(t *testing.T) {
 	}
 
 	// Removing a non-existent node is a no-op.
-	g.RemoveNode("nonexistent")
+	_ = g.Remove("nonexistent")
 }

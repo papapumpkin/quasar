@@ -305,13 +305,13 @@ func validateAgainstDAG(result *ArchitectResult, req ArchitectRequest) []string 
 		}
 	}
 
-	// Check for duplicates and cycles using the graph.
-	graph := NewGraph(req.Nebula.Phases)
-	// For refactor mode, remove the old phase from the graph so it can be re-added cleanly.
+	// Check for duplicates and cycles using the DAG.
+	d, _ := phasesToDAG(req.Nebula.Phases)
+	// For refactor mode, remove the old phase from the DAG so it can be re-added cleanly.
 	if req.Mode == ArchitectModeRefactor {
-		graph.RemoveNode(req.PhaseID)
+		_ = d.Remove(req.PhaseID)
 	}
-	validationErrs := ValidateHotAdd(result.PhaseSpec, existingIDs, graph)
+	validationErrs := ValidateHotAdd(result.PhaseSpec, existingIDs, d)
 	for _, ve := range validationErrs {
 		errs = append(errs, ve.Error())
 	}
