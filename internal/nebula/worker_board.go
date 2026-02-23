@@ -17,18 +17,15 @@ func (wg *WorkerGroup) boardBlocked() int {
 }
 
 // buildBoardSnapshot constructs a BoardSnapshot from the board and tracker
-// state. Must be called with wg.mu held (reads tracker maps).
+// state. Must be called with wg.mu held. The lock is temporarily released
+// during Board I/O (SQLite queries) to avoid blocking worker goroutines
+// that need the mutex for recordResult calls.
 func (wg *WorkerGroup) buildBoardSnapshot(ctx context.Context) (board.BoardSnapshot, error) {
 	snap := board.BoardSnapshot{
 		FileClaims: make(map[string]string),
 	}
 
-	contracts, err := wg.Board.AllContracts(ctx)
-	if err != nil {
-		return snap, fmt.Errorf("fetching contracts: %w", err)
-	}
-	snap.Contracts = contracts
-
+	// Read tracker maps under the lock — these are fast, in-memory reads.
 	done := wg.tracker.Done()
 	failed := wg.tracker.Failed()
 	inFlight := wg.tracker.InFlight()
@@ -38,12 +35,26 @@ func (wg *WorkerGroup) buildBoardSnapshot(ctx context.Context) (board.BoardSnaps
 			snap.Completed = append(snap.Completed, id)
 		}
 	}
+	var inFlightIDs []string
 	for id := range inFlight {
 		snap.InProgress = append(snap.InProgress, id)
+		inFlightIDs = append(inFlightIDs, id)
 	}
 
+	// Release the lock before performing Board I/O (SQLite queries under
+	// WAL mode). This allows worker goroutines to acquire wg.mu for
+	// recordResult calls while we wait on the database.
+	wg.mu.Unlock()
+
+	contracts, err := wg.Board.AllContracts(ctx)
+	if err != nil {
+		wg.mu.Lock() // re-acquire before returning
+		return snap, fmt.Errorf("fetching contracts: %w", err)
+	}
+	snap.Contracts = contracts
+
 	// Collect file claims for in-progress phases.
-	for id := range inFlight {
+	for _, id := range inFlightIDs {
 		claims, claimErr := wg.Board.ClaimsFor(ctx, id)
 		if claimErr != nil {
 			continue // non-fatal
@@ -53,6 +64,7 @@ func (wg *WorkerGroup) buildBoardSnapshot(ctx context.Context) (board.BoardSnaps
 		}
 	}
 
+	wg.mu.Lock() // re-acquire before returning
 	return snap, nil
 }
 
@@ -74,6 +86,13 @@ func (wg *WorkerGroup) pollEligible(ctx context.Context, eligible []string) []st
 	for _, id := range eligible {
 		// Skip already-blocked phases — they wait for re-evaluation.
 		if wg.blockedTracker.Get(id) != nil {
+			continue
+		}
+
+		// Phases previously overridden by the pushback handler skip
+		// polling entirely — they proceed without re-interrogation.
+		if wg.blockedTracker.IsOverridden(id) {
+			proceed = append(proceed, id)
 			continue
 		}
 
@@ -117,9 +136,11 @@ func (wg *WorkerGroup) handlePollBlock(ctx context.Context, phaseID string, resu
 	case board.ActionEscalate:
 		wg.escalatePhase(ctx, phaseID, bp)
 	case board.ActionProceed:
-		// Pushback handler overrode the block — unblock and let the next
-		// iteration pick the phase up via normal eligibility.
+		// Pushback handler overrode the block — unblock and mark as
+		// overridden so future dispatch cycles skip polling for this phase
+		// (preventing retry counter reset in a block-unblock loop).
 		wg.blockedTracker.Unblock(phaseID)
+		wg.blockedTracker.Override(phaseID)
 	}
 }
 

@@ -378,8 +378,17 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		}
 	}
 
-	// Drain remaining in-flight goroutines on context cancellation.
+	// Drain remaining in-flight goroutines on context cancellation or
+	// post-loop exit (e.g., all-blocked escalation).
 	wg.drainActive(completionCh, &activeCount)
+
+	// Process any gate signals accumulated during or after the loop
+	// (e.g., from escalateAllBlocked). This ensures escalated phases
+	// trigger MarkRemainingSkipped and produce proper error returns.
+	stop, retErr := wg.processGateSignals()
+	if stop {
+		return wg.collectResults(), retErr
+	}
 
 	// Record track completion as a single aggregate wave for metrics
 	// compatibility. The wave number is 0, effective parallelism is the

@@ -83,13 +83,15 @@ const MaxPollRetries = 5
 // It is not safe for concurrent use; callers must provide their own synchronization
 // if access from multiple goroutines is needed.
 type BlockedTracker struct {
-	phases map[string]*BlockedPhase
+	phases     map[string]*BlockedPhase
+	overridden map[string]bool // phases where pushback handler chose ActionProceed
 }
 
 // NewBlockedTracker creates an empty BlockedTracker.
 func NewBlockedTracker() *BlockedTracker {
 	return &BlockedTracker{
-		phases: make(map[string]*BlockedPhase),
+		phases:     make(map[string]*BlockedPhase),
+		overridden: make(map[string]bool),
 	}
 }
 
@@ -113,6 +115,19 @@ func (bt *BlockedTracker) Block(phaseID string, result PollResult) {
 // escalates).
 func (bt *BlockedTracker) Unblock(phaseID string) {
 	delete(bt.phases, phaseID)
+}
+
+// Override marks a phase as overridden by the pushback handler (ActionProceed
+// despite a non-PROCEED poll result). Overridden phases skip future polling
+// to avoid resetting retry counters in a block-unblock loop.
+func (bt *BlockedTracker) Override(phaseID string) {
+	bt.overridden[phaseID] = true
+}
+
+// IsOverridden returns true if the phase was previously overridden by the
+// pushback handler and should skip polling.
+func (bt *BlockedTracker) IsOverridden(phaseID string) bool {
+	return bt.overridden[phaseID]
 }
 
 // Get returns the BlockedPhase for the given ID, or nil if not tracked.
