@@ -52,17 +52,18 @@ func (a *loopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDescr
 // This ensures each nebula phase sends UI messages tagged with its phase ID,
 // enabling the TUI to track per-phase cycle timelines independently.
 type tuiLoopAdapter struct {
-	program      *tui.Program
-	invoker      agent.Invoker
-	beads        beads.Client
-	git          loop.CycleCommitter
-	linter       loop.Linter
-	maxCycles    int
-	maxBudget    float64
-	model        string
-	coderPrompt  string
-	reviewPrompt string
-	workDir      string
+	program       *tui.Program
+	invoker       agent.Invoker
+	beads         beads.Client
+	git           loop.CycleCommitter
+	linter        loop.Linter
+	maxCycles     int
+	maxBudget     float64
+	model         string
+	coderPrompt   string
+	reviewPrompt  string
+	workDir       string
+	contextPrefix string
 }
 
 func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, phaseTitle, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
@@ -81,6 +82,7 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 		CoderPrompt:   a.coderPrompt,
 		ReviewPrompt:  a.reviewPrompt,
 		WorkDir:       a.workDir,
+		ContextPrefix: a.contextPrefix,
 		CommitSummary: phaseTitle,
 	}
 
@@ -108,17 +110,18 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 func (a *tuiLoopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error) {
 	phaseUI := tui.NewPhaseUIBridge(a.program, "checkpoint", a.workDir)
 	l := &loop.Loop{
-		Invoker:      a.invoker,
-		UI:           phaseUI,
-		Git:          a.git,
-		Hooks:        []loop.Hook{&loop.BeadHook{Beads: a.beads, UI: phaseUI}},
-		Linter:       a.linter,
-		MaxCycles:    a.maxCycles,
-		MaxBudgetUSD: a.maxBudget,
-		Model:        a.model,
-		CoderPrompt:  a.coderPrompt,
-		ReviewPrompt: a.reviewPrompt,
-		WorkDir:      a.workDir,
+		Invoker:       a.invoker,
+		UI:            phaseUI,
+		Git:           a.git,
+		Hooks:         []loop.Hook{&loop.BeadHook{Beads: a.beads, UI: phaseUI}},
+		Linter:        a.linter,
+		MaxCycles:     a.maxCycles,
+		MaxBudgetUSD:  a.maxBudget,
+		Model:         a.model,
+		CoderPrompt:   a.coderPrompt,
+		ReviewPrompt:  a.reviewPrompt,
+		WorkDir:       a.workDir,
+		ContextPrefix: a.contextPrefix,
 	}
 	return l.GenerateCheckpoint(ctx, beadID, phaseDescription)
 }

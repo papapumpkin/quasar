@@ -17,6 +17,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/claude"
 	"github.com/papapumpkin/quasar/internal/config"
 	"github.com/papapumpkin/quasar/internal/loop"
+	"github.com/papapumpkin/quasar/internal/snapshot"
 	"github.com/papapumpkin/quasar/internal/tui"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
@@ -191,18 +192,29 @@ func buildLoop(cfg *config.Config, uiHandler ui.UI, coderPrompt, reviewerPrompt 
 
 	beadHook := &loop.BeadHook{Beads: beadsClient, UI: uiHandler}
 
+	// Generate project context snapshot for prompt cache prefixing.
+	var contextPrefix string
+	scanner := &snapshot.Scanner{}
+	snap, scanErr := scanner.Scan(context.Background(), workDir)
+	if scanErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: context scan failed: %v\n", scanErr)
+	} else {
+		contextPrefix = snap
+	}
+
 	return &loop.Loop{
-		Invoker:      claudeInv,
-		UI:           uiHandler,
-		Git:          git,
-		Hooks:        []loop.Hook{beadHook},
-		Linter:       loop.NewLinter(cfg.LintCommands, workDir),
-		MaxCycles:    cfg.MaxReviewCycles,
-		MaxBudgetUSD: cfg.MaxBudgetUSD,
-		Model:        cfg.Model,
-		CoderPrompt:  coderPrompt,
-		ReviewPrompt: reviewerPrompt,
-		WorkDir:      workDir,
+		Invoker:       claudeInv,
+		UI:            uiHandler,
+		Git:           git,
+		Hooks:         []loop.Hook{beadHook},
+		Linter:        loop.NewLinter(cfg.LintCommands, workDir),
+		MaxCycles:     cfg.MaxReviewCycles,
+		MaxBudgetUSD:  cfg.MaxBudgetUSD,
+		Model:         cfg.Model,
+		CoderPrompt:   coderPrompt,
+		ReviewPrompt:  reviewerPrompt,
+		WorkDir:       workDir,
+		ContextPrefix: contextPrefix,
 	}, nil
 }
 

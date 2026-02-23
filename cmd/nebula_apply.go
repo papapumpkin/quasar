@@ -17,6 +17,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/config"
 	"github.com/papapumpkin/quasar/internal/loop"
 	"github.com/papapumpkin/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/snapshot"
 	"github.com/papapumpkin/quasar/internal/tui"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
@@ -127,6 +128,16 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		workDir = wd
 	}
 
+	// Generate project context snapshot for prompt cache prefixing.
+	var contextPrefix string
+	scanner := &snapshot.Scanner{}
+	snap, scanErr := scanner.Scan(ctx, workDir)
+	if scanErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: context scan failed: %v\n", scanErr)
+	} else {
+		contextPrefix = snap
+	}
+
 	// Create nebula branch if in a git repo. Non-fatal if git is unavailable.
 	branchMgr, branchErr := nebula.NewBranchManager(ctx, workDir, n.Manifest.Nebula.Name)
 	if branchErr != nil {
@@ -171,17 +182,18 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		tuiProgram = tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir, noSplash)
 		// Per-phase loops with PhaseUIBridge for hierarchical TUI tracking.
 		wg.Runner = &tuiLoopAdapter{
-			program:      tuiProgram,
-			invoker:      claudeInv,
-			beads:        client,
-			git:          git,
-			linter:       loop.NewLinter(cfg.LintCommands, workDir),
-			maxCycles:    cfg.MaxReviewCycles,
-			maxBudget:    cfg.MaxBudgetUSD,
-			model:        cfg.Model,
-			coderPrompt:  coderPrompt,
-			reviewPrompt: reviewerPrompt,
-			workDir:      workDir,
+			program:       tuiProgram,
+			invoker:       claudeInv,
+			beads:         client,
+			git:           git,
+			linter:        loop.NewLinter(cfg.LintCommands, workDir),
+			maxCycles:     cfg.MaxReviewCycles,
+			maxBudget:     cfg.MaxBudgetUSD,
+			model:         cfg.Model,
+			coderPrompt:   coderPrompt,
+			reviewPrompt:  reviewerPrompt,
+			workDir:       workDir,
+			contextPrefix: contextPrefix,
 		}
 		wg.Logger = io.Discard
 		wg.Prompter = tui.NewGater(tuiProgram)
@@ -202,17 +214,18 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	} else {
 		// Stderr path: single shared loop with Printer UI.
 		taskLoop := &loop.Loop{
-			Invoker:      claudeInv,
-			UI:           printer,
-			Git:          git,
-			Hooks:        []loop.Hook{&loop.BeadHook{Beads: client, UI: printer}},
-			Linter:       loop.NewLinter(cfg.LintCommands, workDir),
-			MaxCycles:    cfg.MaxReviewCycles,
-			MaxBudgetUSD: cfg.MaxBudgetUSD,
-			Model:        cfg.Model,
-			CoderPrompt:  coderPrompt,
-			ReviewPrompt: reviewerPrompt,
-			WorkDir:      workDir,
+			Invoker:       claudeInv,
+			UI:            printer,
+			Git:           git,
+			Hooks:         []loop.Hook{&loop.BeadHook{Beads: client, UI: printer}},
+			Linter:        loop.NewLinter(cfg.LintCommands, workDir),
+			MaxCycles:     cfg.MaxReviewCycles,
+			MaxBudgetUSD:  cfg.MaxBudgetUSD,
+			Model:         cfg.Model,
+			CoderPrompt:   coderPrompt,
+			ReviewPrompt:  reviewerPrompt,
+			WorkDir:       workDir,
+			ContextPrefix: contextPrefix,
 		}
 		wg.Runner = &loopAdapter{loop: taskLoop}
 		// Stderr path: use dashboard and terminal gater.
@@ -349,18 +362,28 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					nebula.WithCommitter(nextPhaseCommitter),
 				)
 				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, noSplash)
+				// Re-scan context for the next nebula's working directory.
+				nextSnap, nextScanErr := scanner.Scan(ctx, nextWorkDir)
+				if nextScanErr != nil {
+					fmt.Fprintf(os.Stderr, "warning: context scan failed: %v\n", nextScanErr)
+					contextPrefix = ""
+				} else {
+					contextPrefix = nextSnap
+				}
+
 				wg.Runner = &tuiLoopAdapter{
-					program:      tuiProgram,
-					invoker:      claudeInv,
-					beads:        client,
-					git:          loop.NewCycleCommitterWithBranch(ctx, nextWorkDir, nextBranchName),
-					linter:       loop.NewLinter(cfg.LintCommands, nextWorkDir),
-					maxCycles:    cfg.MaxReviewCycles,
-					maxBudget:    cfg.MaxBudgetUSD,
-					model:        cfg.Model,
-					coderPrompt:  coderPrompt,
-					reviewPrompt: reviewerPrompt,
-					workDir:      nextWorkDir,
+					program:       tuiProgram,
+					invoker:       claudeInv,
+					beads:         client,
+					git:           loop.NewCycleCommitterWithBranch(ctx, nextWorkDir, nextBranchName),
+					linter:        loop.NewLinter(cfg.LintCommands, nextWorkDir),
+					maxCycles:     cfg.MaxReviewCycles,
+					maxBudget:     cfg.MaxBudgetUSD,
+					model:         cfg.Model,
+					coderPrompt:   coderPrompt,
+					reviewPrompt:  reviewerPrompt,
+					workDir:       nextWorkDir,
+					contextPrefix: contextPrefix,
 				}
 				wg.Prompter = tui.NewGater(tuiProgram)
 				wg.OnProgress = func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
