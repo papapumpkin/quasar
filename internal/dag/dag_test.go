@@ -978,8 +978,8 @@ func TestComputeWaves(t *testing.T) {
 		if len(waves) != 1 {
 			t.Fatalf("got %d waves, want 1", len(waves))
 		}
-		if waves[0].Number != 0 {
-			t.Errorf("wave number = %d, want 0", waves[0].Number)
+		if waves[0].Number != 1 {
+			t.Errorf("wave number = %d, want 1", waves[0].Number)
 		}
 		if len(waves[0].NodeIDs) != 1 || waves[0].NodeIDs[0] != "a" {
 			t.Errorf("wave 0 nodes = %v, want [a]", waves[0].NodeIDs)
@@ -1026,11 +1026,11 @@ func TestComputeWaves(t *testing.T) {
 		if len(waves) != 3 {
 			t.Fatalf("got %d waves, want 3", len(waves))
 		}
-		// Wave 0: c (no deps), Wave 1: b (depends on c), Wave 2: a (depends on b)
+		// Wave 1: c (no deps), Wave 2: b (depends on c), Wave 3: a (depends on b)
 		wantWaves := [][]string{{"c"}, {"b"}, {"a"}}
 		for i, ww := range wantWaves {
-			if waves[i].Number != i {
-				t.Errorf("wave %d number = %d", i, waves[i].Number)
+			if waves[i].Number != i+1 {
+				t.Errorf("wave %d number = %d, want %d", i, waves[i].Number, i+1)
 			}
 			if len(waves[i].NodeIDs) != len(ww) {
 				t.Errorf("wave %d = %v, want %v", i, waves[i].NodeIDs, ww)
@@ -1064,7 +1064,7 @@ func TestComputeWaves(t *testing.T) {
 		if len(waves) != 3 {
 			t.Fatalf("got %d waves, want 3", len(waves))
 		}
-		// Wave 0: d, Wave 1: b,c (sorted), Wave 2: a
+		// Wave 1: d, Wave 2: b,c (sorted), Wave 3: a
 		wantWaves := [][]string{{"d"}, {"b", "c"}, {"a"}}
 		for i, ww := range wantWaves {
 			if len(waves[i].NodeIDs) != len(ww) {
@@ -1120,7 +1120,7 @@ func TestComputeWaves(t *testing.T) {
 		if len(waves) != 4 {
 			t.Fatalf("got %d waves, want 4", len(waves))
 		}
-		// Wave 0: f, Wave 1: d,e, Wave 2: b,c, Wave 3: a
+		// Wave 1: f, Wave 2: d,e, Wave 3: b,c, Wave 4: a
 		wantWaves := [][]string{{"f"}, {"d", "e"}, {"b", "c"}, {"a"}}
 		for i, ww := range wantWaves {
 			if len(waves[i].NodeIDs) != len(ww) {

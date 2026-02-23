@@ -24,7 +24,7 @@ var ErrSelfEdge = errors.New("self-referencing edge")
 
 // Wave represents a batch of nodes whose dependencies all fall in prior waves.
 type Wave struct {
-	Number  int      // zero-based wave index
+	Number  int      // one-based wave index
 	NodeIDs []string // node IDs in this wave, sorted alphabetically
 }
 
@@ -202,7 +202,7 @@ func (d *DAG) ComputeWaves() ([]Wave, error) {
 
 	for len(current) > 0 {
 		wave := Wave{
-			Number:  len(waves),
+			Number:  len(waves) + 1,
 			NodeIDs: current,
 		}
 		waves = append(waves, wave)
