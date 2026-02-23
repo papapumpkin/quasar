@@ -11,9 +11,9 @@ updated_at = 2026-02-23T11:20:45.300454-05:00
 
 [phases.bead-cli]
 bead_id = 'quasar-ml9'
-status = 'created'
+status = 'failed'
 created_at = 2026-02-23T11:20:44.092948-05:00
-updated_at = 2026-02-23T11:20:44.092948-05:00
+updated_at = 2026-02-23T12:25:52.624589-05:00
 
 [phases.cockpit-wiring]
 bead_id = 'quasar-wch'
@@ -23,15 +23,15 @@ updated_at = 2026-02-23T11:20:46.355402-05:00
 
 [phases.discovery-cli]
 bead_id = 'quasar-3zv'
-status = 'created'
+status = 'failed'
 created_at = 2026-02-23T11:20:43.710474-05:00
-updated_at = 2026-02-23T11:20:43.710474-05:00
+updated_at = 2026-02-23T12:25:46.30062-05:00
 
 [phases.fabric-cli]
 bead_id = 'quasar-4nq'
-status = 'created'
+status = 'failed'
 created_at = 2026-02-23T11:20:43.272333-05:00
-updated_at = 2026-02-23T11:20:43.272333-05:00
+updated_at = 2026-02-23T12:25:49.519326-05:00
 
 [phases.fabric-rename]
 bead_id = 'quasar-c7d'
@@ -47,9 +47,9 @@ summary = 'Clean, comprehensive rename from internal/board to internal/fabric wi
 
 [phases.filters]
 bead_id = 'quasar-ibk'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-02-23T11:20:44.484307-05:00
-updated_at = 2026-02-23T12:16:28.203376-05:00
+updated_at = 2026-02-23T12:25:43.21544-05:00
 
 [phases.neutron-archival]
 bead_id = 'quasar-xuw'

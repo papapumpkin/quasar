@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -391,15 +392,19 @@ func TestLintCheck(t *testing.T) {
 	t.Run("SkipsIfNotAvailable", func(t *testing.T) {
 		t.Parallel()
 
-		// Temporarily set PATH to empty to ensure golangci-lint is not found.
-		// Note: we can't actually modify the environment in parallel tests,
-		// so we just call lintCheck and accept either outcome.
 		output, err := lintCheck(context.Background(), t.TempDir())
-		// If golangci-lint isn't installed, this should pass silently.
-		// If it is installed and the dir has no Go code, it may fail.
-		// Either way, no panic.
-		_ = output
-		_ = err
+		_, lookErr := exec.LookPath("golangci-lint")
+		if lookErr != nil {
+			// golangci-lint is not installed — skip path should succeed silently.
+			if err != nil {
+				t.Errorf("expected nil error when golangci-lint absent, got %v", err)
+			}
+			if output != "" {
+				t.Errorf("expected empty output when golangci-lint absent, got %q", output)
+			}
+		}
+		// If golangci-lint IS installed, the call may fail on the empty temp dir,
+		// which is fine — we only assert the skip path above.
 	})
 }
 

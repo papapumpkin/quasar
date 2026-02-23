@@ -1961,11 +1961,7 @@ func TestRunLoopWithFilter(t *testing.T) {
 	t.Run("FilterFailsThenPassesSecondCycle", func(t *testing.T) {
 		t.Parallel()
 		// Filter that fails first time, passes second time.
-		callCount := 0
-		ff := &fakeFilter{}
-		origRun := ff.Run
-		_ = origRun
-		// Use a custom filter instead.
+		// Use a custom filter that fails first time, passes second time.
 		var customFilter countingFilter
 		customFilter.results = []*filter.Result{
 			{
@@ -1982,8 +1978,6 @@ func TestRunLoopWithFilter(t *testing.T) {
 				},
 			},
 		}
-		_ = callCount
-
 		inv := &fakeInvoker{
 			responses: []agent.InvocationResult{
 				// Cycle 1: coder
