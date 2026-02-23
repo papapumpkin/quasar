@@ -650,3 +650,124 @@ func TestEscalateAllBlocked(t *testing.T) {
 		}
 	})
 }
+
+// --- workerEligibleResolver tests ---
+
+func TestWorkerEligibleResolver(t *testing.T) {
+	t.Parallel()
+
+	t.Run("resolves ready tasks from DAG", func(t *testing.T) {
+		t.Parallel()
+		// a has no deps, b depends on a.
+		phases := []PhaseSpec{
+			{ID: "a"},
+			{ID: "b", DependsOn: []string{"a"}},
+		}
+		state := &State{Version: 1, Phases: make(map[string]*PhaseState)}
+		neb := &Nebula{Phases: phases}
+		wg := NewWorkerGroup(neb, state, WithLogger(&bytes.Buffer{}))
+		wg.tracker = NewPhaseTracker(phases, state)
+
+		scheduler, err := NewScheduler(phases)
+		if err != nil {
+			t.Fatalf("NewScheduler: %v", err)
+		}
+		resolver := &workerEligibleResolver{wg: wg, scheduler: scheduler}
+
+		// Initially only "a" should be eligible (b depends on a).
+		eligible := resolver.ResolveEligible()
+		if len(eligible) != 1 || eligible[0] != "a" {
+			t.Errorf("expected [a] eligible, got %v", eligible)
+		}
+
+		// After marking "a" as done, "b" should become eligible.
+		wg.tracker.Done()["a"] = true
+		eligible = resolver.ResolveEligible()
+		if len(eligible) != 1 || eligible[0] != "b" {
+			t.Errorf("expected [b] eligible after a is done, got %v", eligible)
+		}
+	})
+
+	t.Run("excludes in-flight tasks", func(t *testing.T) {
+		t.Parallel()
+		phases := []PhaseSpec{{ID: "a"}, {ID: "b"}}
+		state := &State{Version: 1, Phases: make(map[string]*PhaseState)}
+		neb := &Nebula{Phases: phases}
+		wg := NewWorkerGroup(neb, state, WithLogger(&bytes.Buffer{}))
+		wg.tracker = NewPhaseTracker(phases, state)
+
+		scheduler, err := NewScheduler(phases)
+		if err != nil {
+			t.Fatalf("NewScheduler: %v", err)
+		}
+		resolver := &workerEligibleResolver{wg: wg, scheduler: scheduler}
+
+		// Mark "a" as in-flight.
+		wg.tracker.InFlight()["a"] = true
+
+		eligible := resolver.ResolveEligible()
+		got := make(map[string]bool)
+		for _, id := range eligible {
+			got[id] = true
+		}
+		if got["a"] {
+			t.Error("expected in-flight a to be excluded")
+		}
+		if !got["b"] {
+			t.Error("expected b to be eligible")
+		}
+	})
+
+	t.Run("AnyInFlight reports correctly", func(t *testing.T) {
+		t.Parallel()
+		phases := []PhaseSpec{{ID: "a"}}
+		state := &State{Version: 1, Phases: make(map[string]*PhaseState)}
+		neb := &Nebula{Phases: phases}
+		wg := NewWorkerGroup(neb, state, WithLogger(&bytes.Buffer{}))
+		wg.tracker = NewPhaseTracker(phases, state)
+
+		scheduler, err := NewScheduler(phases)
+		if err != nil {
+			t.Fatalf("NewScheduler: %v", err)
+		}
+		resolver := &workerEligibleResolver{wg: wg, scheduler: scheduler}
+
+		if resolver.AnyInFlight() {
+			t.Error("expected no in-flight initially")
+		}
+
+		wg.tracker.InFlight()["a"] = true
+		if !resolver.AnyInFlight() {
+			t.Error("expected in-flight after marking a")
+		}
+	})
+
+	t.Run("excludes tasks with failed dependencies", func(t *testing.T) {
+		t.Parallel()
+		phases := []PhaseSpec{
+			{ID: "a"},
+			{ID: "b", DependsOn: []string{"a"}},
+		}
+		state := &State{Version: 1, Phases: make(map[string]*PhaseState)}
+		neb := &Nebula{Phases: phases}
+		wg := NewWorkerGroup(neb, state, WithLogger(&bytes.Buffer{}))
+		wg.tracker = NewPhaseTracker(phases, state)
+
+		scheduler, err := NewScheduler(phases)
+		if err != nil {
+			t.Fatalf("NewScheduler: %v", err)
+		}
+		resolver := &workerEligibleResolver{wg: wg, scheduler: scheduler}
+
+		// Mark "a" as done and failed.
+		wg.tracker.Done()["a"] = true
+		wg.tracker.Failed()["a"] = true
+
+		eligible := resolver.ResolveEligible()
+		for _, id := range eligible {
+			if id == "b" {
+				t.Error("expected b to be excluded (failed dependency a)")
+			}
+		}
+	})
+}

@@ -839,3 +839,145 @@ func TestLogger(t *testing.T) {
 		}
 	})
 }
+
+// --- mock EligibleResolver ---
+
+type mockResolver struct {
+	eligible  []string
+	inFlight  bool
+	callCount int
+}
+
+func (r *mockResolver) ResolveEligible() []string {
+	r.callCount++
+	return r.eligible
+}
+
+func (r *mockResolver) AnyInFlight() bool {
+	return r.inFlight
+}
+
+// --- Eligible tests ---
+
+func TestEligible(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil resolver returns nil", func(t *testing.T) {
+		t.Parallel()
+		s := &Scheduler{}
+		eligible, err := s.Eligible(context.Background())
+		if err != nil {
+			t.Fatalf("Eligible error: %v", err)
+		}
+		if eligible != nil {
+			t.Errorf("expected nil eligible, got %v", eligible)
+		}
+	})
+
+	t.Run("returns resolver results", func(t *testing.T) {
+		t.Parallel()
+		r := &mockResolver{eligible: []string{"a", "b", "c"}}
+		s := &Scheduler{Resolver: r}
+
+		eligible, err := s.Eligible(context.Background())
+		if err != nil {
+			t.Fatalf("Eligible error: %v", err)
+		}
+		if len(eligible) != 3 {
+			t.Errorf("expected 3 eligible, got %d", len(eligible))
+		}
+		if r.callCount != 1 {
+			t.Errorf("expected 1 resolver call, got %d", r.callCount)
+		}
+	})
+
+	t.Run("returns empty slice when nothing is ready", func(t *testing.T) {
+		t.Parallel()
+		r := &mockResolver{eligible: []string{}}
+		s := &Scheduler{Resolver: r}
+
+		eligible, err := s.Eligible(context.Background())
+		if err != nil {
+			t.Fatalf("Eligible error: %v", err)
+		}
+		if len(eligible) != 0 {
+			t.Errorf("expected 0 eligible, got %d", len(eligible))
+		}
+	})
+}
+
+// --- AnyInFlight tests ---
+
+func TestAnyInFlight(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil resolver returns false", func(t *testing.T) {
+		t.Parallel()
+		s := &Scheduler{}
+		if s.AnyInFlight() {
+			t.Error("expected false for nil resolver")
+		}
+	})
+
+	t.Run("delegates to resolver", func(t *testing.T) {
+		t.Parallel()
+		r := &mockResolver{inFlight: true}
+		s := &Scheduler{Resolver: r}
+		if !s.AnyInFlight() {
+			t.Error("expected true when resolver reports in-flight")
+		}
+
+		r.inFlight = false
+		if s.AnyInFlight() {
+			t.Error("expected false when resolver reports no in-flight")
+		}
+	})
+}
+
+// --- Scan nil-safe tests ---
+
+func TestScan_NilFabricComponents(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil poller returns all eligible", func(t *testing.T) {
+		t.Parallel()
+		s := &Scheduler{
+			Blocked: fabric.NewBlockedTracker(),
+		}
+		sb := &mockSnapshotBuilder{snap: fabric.FabricSnapshot{}}
+		proceed, err := s.Scan(context.Background(), []string{"a", "b"}, sb)
+		if err != nil {
+			t.Fatalf("Scan error: %v", err)
+		}
+		if len(proceed) != 2 {
+			t.Errorf("expected 2 phases, got %d", len(proceed))
+		}
+	})
+
+	t.Run("nil blocked tracker returns all eligible", func(t *testing.T) {
+		t.Parallel()
+		s := &Scheduler{
+			Poller: newMockPoller(),
+		}
+		sb := &mockSnapshotBuilder{snap: fabric.FabricSnapshot{}}
+		proceed, err := s.Scan(context.Background(), []string{"a", "b"}, sb)
+		if err != nil {
+			t.Fatalf("Scan error: %v", err)
+		}
+		if len(proceed) != 2 {
+			t.Errorf("expected 2 phases, got %d", len(proceed))
+		}
+	})
+
+	t.Run("nil snapshot builder returns all eligible", func(t *testing.T) {
+		t.Parallel()
+		s, _, _, _ := newTestScheduler()
+		proceed, err := s.Scan(context.Background(), []string{"a", "b"}, nil)
+		if err != nil {
+			t.Fatalf("Scan error: %v", err)
+		}
+		if len(proceed) != 2 {
+			t.Errorf("expected 2 phases, got %d", len(proceed))
+		}
+	})
+}

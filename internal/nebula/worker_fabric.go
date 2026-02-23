@@ -8,6 +8,30 @@ import (
 	"github.com/papapumpkin/quasar/internal/tycho"
 )
 
+// workerEligibleResolver implements tycho.EligibleResolver by combining
+// the nebula Scheduler's DAG-aware ready-task selection with the
+// PhaseTracker's filtering. The caller must hold wg.mu when calling
+// ResolveEligible and AnyInFlight, since they read tracker state.
+type workerEligibleResolver struct {
+	wg        *WorkerGroup
+	scheduler *Scheduler // nebula's impact-aware DAG scheduler
+}
+
+// ResolveEligible returns task IDs sorted by impact score that have all
+// DAG dependencies satisfied and pass tracker filtering. Must be called
+// with wg.mu held.
+func (r *workerEligibleResolver) ResolveEligible() []string {
+	done := r.wg.tracker.Done()
+	ready := r.scheduler.ReadyTasks(done)
+	return r.wg.tracker.FilterEligible(ready, r.scheduler.Analyzer().DAG())
+}
+
+// AnyInFlight reports whether any tasks are currently executing. Must be
+// called with wg.mu held.
+func (r *workerEligibleResolver) AnyInFlight() bool {
+	return len(r.wg.tracker.InFlight()) > 0
+}
+
 // workerSnapshotBuilder implements tycho.SnapshotBuilder by reading
 // from the WorkerGroup's tracker and Fabric. It captures the mutex
 // and tracker references so Tycho can request snapshots without
@@ -96,8 +120,7 @@ func (wg *WorkerGroup) buildFabricSnapshot(ctx context.Context) (fabric.FabricSn
 // handed to the pushback handler and either blocked or escalated.
 // Must NOT be called with wg.mu held.
 func (wg *WorkerGroup) pollEligible(ctx context.Context, eligible []string) []string {
-	sb := &workerSnapshotBuilder{wg: wg}
-	proceed, _ := wg.tychoScheduler.Scan(ctx, eligible, sb)
+	proceed, _ := wg.tychoScheduler.Scan(ctx, eligible, wg.snapshotBuilder())
 	return proceed
 }
 
@@ -142,8 +165,7 @@ func (wg *WorkerGroup) reevaluateBlocked(ctx context.Context) {
 	if wg.tychoScheduler == nil {
 		return
 	}
-	sb := &workerSnapshotBuilder{wg: wg}
-	_, _ = wg.tychoScheduler.Reevaluate(ctx, sb)
+	_, _ = wg.tychoScheduler.Reevaluate(ctx, wg.snapshotBuilder())
 }
 
 // escalateAllBlocked escalates every remaining blocked phase via the Tycho

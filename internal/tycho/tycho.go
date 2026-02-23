@@ -20,6 +20,20 @@ type SnapshotBuilder interface {
 	BuildSnapshot(ctx context.Context) (fabric.FabricSnapshot, error)
 }
 
+// EligibleResolver provides DAG-aware eligible task resolution. It combines
+// topological sort with impact scoring and tracker-based filtering (in-flight,
+// failed, scope-conflict exclusion) into a single pipeline. Implementations
+// are responsible for their own locking when accessing shared tracker state.
+type EligibleResolver interface {
+	// ResolveEligible returns task IDs sorted by impact score that have
+	// all DAG dependencies satisfied and pass tracker filtering (not
+	// in-flight, not failed, no failed dependencies, no scope conflicts).
+	ResolveEligible() []string
+
+	// AnyInFlight reports whether any tasks are currently executing.
+	AnyInFlight() bool
+}
+
 // StaleItem describes a claim or task that appears stuck.
 type StaleItem struct {
 	Kind    string        // "claim" or "task"
@@ -29,18 +43,44 @@ type StaleItem struct {
 }
 
 // Scheduler observes fabric state and resolves the DAG to determine
-// which tasks are eligible for execution. It encapsulates scanning gate
-// logic, blocked-task re-polling, stale detection, and hail triggering.
+// which tasks are eligible for execution. It encapsulates DAG resolution,
+// scanning gate logic, blocked-task re-polling, stale detection, and hail
+// triggering. When fabric components (Fabric, Poller, etc.) are nil, fabric
+// operations are skipped, preserving legacy (no-fabric) behavior.
 type Scheduler struct {
 	Fabric   fabric.Fabric
 	Poller   fabric.Poller
 	Blocked  *fabric.BlockedTracker
 	Pushback *fabric.PushbackHandler
 	Logger   io.Writer
+	Resolver EligibleResolver // provides DAG + tracker resolution
 
 	// OnHail is called when a blocked task requires human intervention.
 	// If nil, escalations are logged but not surfaced.
 	OnHail func(phaseID string, discovery fabric.Discovery)
+}
+
+// Eligible returns task IDs that have all DAG dependencies satisfied and
+// are not currently running, blocked, or done. It delegates to the
+// EligibleResolver, which encapsulates DAG topological sort, impact
+// scoring, and tracker-based filtering. The caller must hold any required
+// locks for the resolver's state (typically the WorkerGroup mutex).
+// Returns nil when no Resolver is configured.
+func (s *Scheduler) Eligible(_ context.Context) ([]string, error) {
+	if s.Resolver == nil {
+		return nil, nil
+	}
+	return s.Resolver.ResolveEligible(), nil
+}
+
+// AnyInFlight reports whether any tasks are currently executing. It
+// delegates to the EligibleResolver. Returns false when no Resolver is
+// configured.
+func (s *Scheduler) AnyInFlight() bool {
+	if s.Resolver == nil {
+		return false
+	}
+	return s.Resolver.AnyInFlight()
 }
 
 // Scan filters eligible task IDs through fabric polling. Tasks that poll
@@ -48,9 +88,17 @@ type Scheduler struct {
 // either blocked or escalated. The snapshot builder is used to construct
 // the fabric snapshot for polling context.
 //
+// When fabric components (Poller, Blocked) are nil, all eligible tasks are
+// returned unchanged — this preserves legacy (no-fabric) behavior.
+//
 // Tasks already tracked as blocked are skipped (they await re-evaluation).
 // Tasks previously overridden by the pushback handler skip polling entirely.
 func (s *Scheduler) Scan(ctx context.Context, eligible []string, sb SnapshotBuilder) ([]string, error) {
+	// When fabric components are not configured, all eligible tasks proceed.
+	if s.Poller == nil || s.Blocked == nil || sb == nil {
+		return eligible, nil
+	}
+
 	snap, err := sb.BuildSnapshot(ctx)
 	if err != nil {
 		fmt.Fprintf(s.logger(), "warning: failed to build fabric snapshot: %v\n", err)
