@@ -324,18 +324,23 @@ func (f *SQLiteFabric) ClaimsFor(ctx context.Context, phaseID string) ([]string,
 	return paths, nil
 }
 
-// PostDiscovery inserts a new discovery record into the fabric.
-func (f *SQLiteFabric) PostDiscovery(ctx context.Context, d Discovery) error {
+// PostDiscovery inserts a new discovery record into the fabric and returns its ID.
+func (f *SQLiteFabric) PostDiscovery(ctx context.Context, d Discovery) (int64, error) {
 	const q = `INSERT INTO discoveries (source_task, kind, detail, affects, resolved)
 		VALUES (?, ?, ?, ?, FALSE)`
 	var affects *string
 	if d.Affects != "" {
 		affects = &d.Affects
 	}
-	if _, err := f.db.ExecContext(ctx, q, d.SourceTask, d.Kind, d.Detail, affects); err != nil {
-		return fmt.Errorf("fabric: post discovery from %q: %w", d.SourceTask, err)
+	res, err := f.db.ExecContext(ctx, q, d.SourceTask, d.Kind, d.Detail, affects)
+	if err != nil {
+		return 0, fmt.Errorf("fabric: post discovery from %q: %w", d.SourceTask, err)
 	}
-	return nil
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("fabric: get discovery id: %w", err)
+	}
+	return id, nil
 }
 
 // Discoveries returns all discoveries posted by the given task.

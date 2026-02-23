@@ -452,7 +452,7 @@ func TestDiscoveries(t *testing.T) {
 			Detail:     "both phases modify shared.go",
 			Affects:    "phase-2",
 		}
-		if err := b.PostDiscovery(ctx, d); err != nil {
+		if _, err := b.PostDiscovery(ctx, d); err != nil {
 			t.Fatalf("PostDiscovery: %v", err)
 		}
 
@@ -489,7 +489,7 @@ func TestDiscoveries(t *testing.T) {
 			Kind:       DiscoveryBudgetAlert,
 			Detail:     "approaching 80% budget",
 		}
-		if err := b.PostDiscovery(ctx, d); err != nil {
+		if _, err := b.PostDiscovery(ctx, d); err != nil {
 			t.Fatalf("PostDiscovery: %v", err)
 		}
 
@@ -509,10 +509,10 @@ func TestDiscoveries(t *testing.T) {
 		t.Parallel()
 		b := testFabric(t)
 
-		if err := b.PostDiscovery(ctx, Discovery{SourceTask: "p1", Kind: DiscoveryFileConflict, Detail: "conflict A"}); err != nil {
+		if _, err := b.PostDiscovery(ctx, Discovery{SourceTask: "p1", Kind: DiscoveryFileConflict, Detail: "conflict A"}); err != nil {
 			t.Fatalf("post A: %v", err)
 		}
-		if err := b.PostDiscovery(ctx, Discovery{SourceTask: "p2", Kind: DiscoveryMissingDependency, Detail: "missing dep B"}); err != nil {
+		if _, err := b.PostDiscovery(ctx, Discovery{SourceTask: "p2", Kind: DiscoveryMissingDependency, Detail: "missing dep B"}); err != nil {
 			t.Fatalf("post B: %v", err)
 		}
 
@@ -529,7 +529,7 @@ func TestDiscoveries(t *testing.T) {
 		t.Parallel()
 		b := testFabric(t)
 
-		if err := b.PostDiscovery(ctx, Discovery{SourceTask: "p1", Kind: DiscoveryEntanglementDispute, Detail: "signature mismatch"}); err != nil {
+		if _, err := b.PostDiscovery(ctx, Discovery{SourceTask: "p1", Kind: DiscoveryEntanglementDispute, Detail: "signature mismatch"}); err != nil {
 			t.Fatalf("PostDiscovery: %v", err)
 		}
 
@@ -558,10 +558,10 @@ func TestDiscoveries(t *testing.T) {
 		t.Parallel()
 		b := testFabric(t)
 
-		if err := b.PostDiscovery(ctx, Discovery{SourceTask: "p1", Kind: DiscoveryFileConflict, Detail: "conflict 1"}); err != nil {
+		if _, err := b.PostDiscovery(ctx, Discovery{SourceTask: "p1", Kind: DiscoveryFileConflict, Detail: "conflict 1"}); err != nil {
 			t.Fatalf("post 1: %v", err)
 		}
-		if err := b.PostDiscovery(ctx, Discovery{SourceTask: "p2", Kind: DiscoveryRequirementsAmbiguity, Detail: "ambiguity 2"}); err != nil {
+		if _, err := b.PostDiscovery(ctx, Discovery{SourceTask: "p2", Kind: DiscoveryRequirementsAmbiguity, Detail: "ambiguity 2"}); err != nil {
 			t.Fatalf("post 2: %v", err)
 		}
 

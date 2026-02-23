@@ -114,7 +114,9 @@ func (m *mockFabric) ClaimsFor(_ context.Context, phaseID string) ([]string, err
 	return result, nil
 }
 
-func (m *mockFabric) PostDiscovery(_ context.Context, _ fabric.Discovery) error { return nil }
+func (m *mockFabric) PostDiscovery(_ context.Context, _ fabric.Discovery) (int64, error) {
+	return 0, nil
+}
 func (m *mockFabric) Discoveries(_ context.Context, _ string) ([]fabric.Discovery, error) {
 	return nil, nil
 }

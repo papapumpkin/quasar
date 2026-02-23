@@ -55,7 +55,7 @@ func (m *mockFabric) FileOwner(_ context.Context, _ string) (string, error) { re
 func (m *mockFabric) ClaimsFor(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
 }
-func (m *mockFabric) PostDiscovery(_ context.Context, _ Discovery) error { return nil }
+func (m *mockFabric) PostDiscovery(_ context.Context, _ Discovery) (int64, error) { return 0, nil }
 func (m *mockFabric) Discoveries(_ context.Context, _ string) ([]Discovery, error) {
 	return nil, nil
 }

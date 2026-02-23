@@ -136,8 +136,8 @@ type Fabric interface {
 	// ClaimsFor returns all file paths claimed by the given phase.
 	ClaimsFor(ctx context.Context, phaseID string) ([]string, error)
 
-	// PostDiscovery inserts a new discovery record.
-	PostDiscovery(ctx context.Context, d Discovery) error
+	// PostDiscovery inserts a new discovery record and returns its ID.
+	PostDiscovery(ctx context.Context, d Discovery) (int64, error)
 
 	// Discoveries returns all discoveries posted by the given task.
 	Discoveries(ctx context.Context, taskID string) ([]Discovery, error)
