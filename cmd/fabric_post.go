@@ -172,6 +172,8 @@ func extractFuncDecl(d *ast.FuncDecl, pkg string) []fabric.Entanglement {
 }
 
 // extractTypeSpecs extracts entanglements from exported type declarations.
+// Interfaces get KindInterface and their exported methods are also extracted
+// as KindMethod, matching the publisher's behavior.
 func extractTypeSpecs(d *ast.GenDecl, pkg string) []fabric.Entanglement {
 	var entanglements []fabric.Entanglement
 	for _, spec := range d.Specs {
@@ -180,19 +182,74 @@ func extractTypeSpecs(d *ast.GenDecl, pkg string) []fabric.Entanglement {
 			continue
 		}
 
-		kind := fabric.KindType
-		if _, isIface := ts.Type.(*ast.InterfaceType); isIface {
-			kind = fabric.KindInterface
+		iface, isIface := ts.Type.(*ast.InterfaceType)
+		if isIface {
+			entanglements = append(entanglements, fabric.Entanglement{
+				Kind:      fabric.KindInterface,
+				Name:      ts.Name.Name,
+				Signature: "interface " + ts.Name.Name,
+				Package:   pkg,
+			})
+			entanglements = append(entanglements, extractInterfaceMethods(iface, ts.Name.Name, pkg)...)
+		} else {
+			entanglements = append(entanglements, fabric.Entanglement{
+				Kind:      fabric.KindType,
+				Name:      ts.Name.Name,
+				Signature: fmt.Sprintf("type %s", ts.Name.Name),
+				Package:   pkg,
+			})
 		}
+	}
+	return entanglements
+}
 
+// extractInterfaceMethods extracts exported method signatures from an
+// interface type as KindMethod entanglements.
+func extractInterfaceMethods(iface *ast.InterfaceType, ifaceName, pkg string) []fabric.Entanglement {
+	if iface.Methods == nil {
+		return nil
+	}
+	var entanglements []fabric.Entanglement
+	for _, method := range iface.Methods.List {
+		if len(method.Names) == 0 {
+			continue // embedded interface
+		}
+		name := method.Names[0].Name
+		if !ast.IsExported(name) {
+			continue
+		}
+		sig := name
+		if ft, ok := method.Type.(*ast.FuncType); ok {
+			sig = name + formatFuncTypeBrief(ft)
+		}
 		entanglements = append(entanglements, fabric.Entanglement{
-			Kind:      kind,
-			Name:      ts.Name.Name,
-			Signature: fmt.Sprintf("type %s", ts.Name.Name),
+			Kind:      fabric.KindMethod,
+			Name:      ifaceName + "." + name,
+			Signature: sig,
 			Package:   pkg,
 		})
 	}
 	return entanglements
+}
+
+// formatFuncTypeBrief formats a function type signature for display.
+func formatFuncTypeBrief(ft *ast.FuncType) string {
+	var b strings.Builder
+	b.WriteString("(")
+	b.WriteString(formatFieldListBrief(ft.Params))
+	b.WriteString(")")
+	if ft.Results != nil && len(ft.Results.List) > 0 {
+		results := formatFieldListBrief(ft.Results)
+		if len(ft.Results.List) == 1 && len(ft.Results.List[0].Names) == 0 {
+			b.WriteString(" ")
+			b.WriteString(results)
+		} else {
+			b.WriteString(" (")
+			b.WriteString(results)
+			b.WriteString(")")
+		}
+	}
+	return b.String()
 }
 
 // formatFuncSig formats a function declaration signature for display.
@@ -218,14 +275,18 @@ func formatFuncSig(d *ast.FuncDecl) string {
 	return b.String()
 }
 
-// formatRecvTypeName extracts the receiver type name from an expression.
+// formatRecvTypeName extracts the receiver type name from an expression,
+// stripping pointer receivers and generic type parameters to match the
+// publisher's formatRecvType behavior.
 func formatRecvTypeName(expr ast.Expr) string {
 	switch t := expr.(type) {
 	case *ast.StarExpr:
-		return "*" + formatRecvTypeName(t.X)
+		return formatRecvTypeName(t.X)
 	case *ast.Ident:
 		return t.Name
 	case *ast.IndexExpr:
+		return formatRecvTypeName(t.X)
+	case *ast.IndexListExpr:
 		return formatRecvTypeName(t.X)
 	default:
 		return "?"

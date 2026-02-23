@@ -129,6 +129,28 @@ func (f *SQLiteFabric) GetPhaseState(ctx context.Context, phaseID string) (strin
 	return state, nil
 }
 
+// AllPhaseStates returns a map of phase ID to current state for all phases in the fabric table.
+func (f *SQLiteFabric) AllPhaseStates(ctx context.Context) (map[string]string, error) {
+	rows, err := f.db.QueryContext(ctx, "SELECT task_id, state FROM fabric ORDER BY task_id")
+	if err != nil {
+		return nil, fmt.Errorf("fabric: all phase states: %w", err)
+	}
+	defer rows.Close()
+
+	states := make(map[string]string)
+	for rows.Next() {
+		var id, state string
+		if err := rows.Scan(&id, &state); err != nil {
+			return nil, fmt.Errorf("fabric: scan phase state: %w", err)
+		}
+		states[id] = state
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("fabric: iterate phase states: %w", err)
+	}
+	return states, nil
+}
+
 // PublishEntanglement inserts or updates a single entanglement (upsert on unique constraint).
 func (f *SQLiteFabric) PublishEntanglement(ctx context.Context, e Entanglement) error {
 	return f.PublishEntanglements(ctx, []Entanglement{e})
@@ -331,6 +353,30 @@ func (f *SQLiteFabric) ClaimsFor(ctx context.Context, phaseID string) ([]string,
 		return nil, fmt.Errorf("fabric: iterate claims: %w", err)
 	}
 	return paths, nil
+}
+
+// AllClaims returns all file claims in the fabric.
+func (f *SQLiteFabric) AllClaims(ctx context.Context) ([]Claim, error) {
+	rows, err := f.db.QueryContext(ctx, "SELECT filepath, owner_task, claimed_at FROM file_claims ORDER BY filepath")
+	if err != nil {
+		return nil, fmt.Errorf("fabric: all claims: %w", err)
+	}
+	defer rows.Close()
+
+	var claims []Claim
+	for rows.Next() {
+		var c Claim
+		var ts string
+		if err := rows.Scan(&c.Filepath, &c.OwnerTask, &ts); err != nil {
+			return nil, fmt.Errorf("fabric: scan claim: %w", err)
+		}
+		c.ClaimedAt, _ = parseTimestamp(ts)
+		claims = append(claims, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("fabric: iterate claims: %w", err)
+	}
+	return claims, nil
 }
 
 // PostDiscovery inserts a new discovery record into the fabric and returns its ID.

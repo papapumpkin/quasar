@@ -96,6 +96,25 @@ func (m *mockFabric) ReleaseClaims(_ context.Context, ownerPhaseID string) error
 	return nil
 }
 
+func (m *mockFabric) ReleaseFileClaim(_ context.Context, filepath, ownerPhaseID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.claims[filepath] == ownerPhaseID {
+		delete(m.claims, filepath)
+	}
+	return nil
+}
+
+func (m *mockFabric) AllPhaseStates(_ context.Context) (map[string]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := make(map[string]string, len(m.states))
+	for k, v := range m.states {
+		cp[k] = v
+	}
+	return cp, nil
+}
+
 func (m *mockFabric) FileOwner(_ context.Context, filepath string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -112,6 +131,16 @@ func (m *mockFabric) ClaimsFor(_ context.Context, phaseID string) ([]string, err
 		}
 	}
 	return result, nil
+}
+
+func (m *mockFabric) AllClaims(_ context.Context) ([]fabric.Claim, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var claims []fabric.Claim
+	for fp, owner := range m.claims {
+		claims = append(claims, fabric.Claim{Filepath: fp, OwnerTask: owner})
+	}
+	return claims, nil
 }
 
 func (m *mockFabric) PostDiscovery(_ context.Context, _ fabric.Discovery) (int64, error) {

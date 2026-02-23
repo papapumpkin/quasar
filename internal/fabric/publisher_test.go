@@ -51,10 +51,15 @@ func (m *mockFabric) ClaimFile(_ context.Context, fp, owner string) error {
 }
 
 func (m *mockFabric) ReleaseClaims(_ context.Context, _ string) error       { return nil }
+func (m *mockFabric) ReleaseFileClaim(_ context.Context, _, _ string) error { return nil }
 func (m *mockFabric) FileOwner(_ context.Context, _ string) (string, error) { return "", nil }
+func (m *mockFabric) AllPhaseStates(_ context.Context) (map[string]string, error) {
+	return nil, nil
+}
 func (m *mockFabric) ClaimsFor(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
 }
+func (m *mockFabric) AllClaims(_ context.Context) ([]Claim, error)                { return nil, nil }
 func (m *mockFabric) PostDiscovery(_ context.Context, _ Discovery) (int64, error) { return 0, nil }
 func (m *mockFabric) Discoveries(_ context.Context, _ string) ([]Discovery, error) {
 	return nil, nil

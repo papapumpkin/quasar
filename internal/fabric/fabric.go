@@ -110,6 +110,9 @@ type Fabric interface {
 	// and no error if the phase has no fabric entry.
 	GetPhaseState(ctx context.Context, phaseID string) (string, error)
 
+	// AllPhaseStates returns a map of phase ID to current state for all phases.
+	AllPhaseStates(ctx context.Context) (map[string]string, error)
+
 	// PublishEntanglement inserts or updates a single entanglement (upsert on producer+kind+name).
 	PublishEntanglement(ctx context.Context, e Entanglement) error
 
@@ -129,12 +132,18 @@ type Fabric interface {
 	// ReleaseClaims removes all file claims held by the given phase.
 	ReleaseClaims(ctx context.Context, ownerPhaseID string) error
 
+	// ReleaseFileClaim removes a specific file claim if it is owned by the given phase.
+	ReleaseFileClaim(ctx context.Context, filepath, ownerPhaseID string) error
+
 	// FileOwner returns the phase ID that owns the given file path, or empty
 	// string if unclaimed.
 	FileOwner(ctx context.Context, filepath string) (string, error)
 
 	// ClaimsFor returns all file paths claimed by the given phase.
 	ClaimsFor(ctx context.Context, phaseID string) ([]string, error)
+
+	// AllClaims returns all file claims in the fabric.
+	AllClaims(ctx context.Context) ([]Claim, error)
 
 	// PostDiscovery inserts a new discovery record and returns its ID.
 	PostDiscovery(ctx context.Context, d Discovery) (int64, error)

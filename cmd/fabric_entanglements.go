@@ -75,8 +75,8 @@ func renderEntanglements(entanglements []fabric.Entanglement) string {
 			if e.Signature != "" {
 				display = e.Signature
 			}
-			fmt.Fprintf(&b, "- [%s] %s %s (pkg: %s, status: %s)\n",
-				e.Status, e.Kind, display, e.Package, e.Status)
+			fmt.Fprintf(&b, "- [%s] %s %s (pkg: %s)\n",
+				e.Status, e.Kind, display, e.Package)
 		}
 	}
 	return b.String()
