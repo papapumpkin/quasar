@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'contract-board'
-total_cost_usd = 20.63488065
+total_cost_usd = 23.93860765
 
 [phases]
 [phases.board-store]
@@ -41,9 +41,15 @@ summary = 'Well-implemented Publisher with AST-based contract extraction from gi
 
 [phases.integration-tests]
 bead_id = 'quasar-0iy'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T00:03:49.361455-05:00
-updated_at = 2026-02-23T10:20:09.35665-05:00
+updated_at = 2026-02-23T10:28:29.081445-05:00
+
+[phases.integration-tests.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Comprehensive integration test suite for the contract-board pipeline using real SQLite, covering happy paths, pushback/escalation, file claim conflicts, contradictory contracts, concurrency, and nil-board backward compatibility — all passing cleanly with race detection.'
 
 [phases.poll-prompt]
 bead_id = 'quasar-719'
