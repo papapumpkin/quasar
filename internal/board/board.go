@@ -13,12 +13,13 @@ import (
 
 // Phase states for the board's task lifecycle.
 const (
-	StateQueued  = "queued"
-	StatePolling = "polling"
-	StateRunning = "running"
-	StateBlocked = "blocked"
-	StateDone    = "done"
-	StateFailed  = "failed"
+	StateQueued        = "queued"
+	StatePolling       = "polling"
+	StateRunning       = "running"
+	StateBlocked       = "blocked"
+	StateDone          = "done"
+	StateFailed        = "failed"
+	StateHumanDecision = "human_decision"
 )
 
 // Contract kinds describing what a phase produced.

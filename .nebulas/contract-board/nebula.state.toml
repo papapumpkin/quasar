@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'contract-board'
-total_cost_usd = 2.6419935
+total_cost_usd = 3.36453825
 
 [phases]
 [phases.board-store]
@@ -17,9 +17,15 @@ summary = 'SQLite-backed board store with clean interface, solid WAL-mode setup,
 
 [phases.contract-model]
 bead_id = 'quasar-zaq'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T00:03:46.414331-05:00
-updated_at = 2026-02-23T09:16:57.388267-05:00
+updated_at = 2026-02-23T09:20:08.294407-05:00
+
+[phases.contract-model.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'New contract data model and snapshot renderer are clean, well-tested via vet, and correctly integrate with existing board types — low-risk additive change with no issues found.'
 
 [phases.contract-publisher]
 bead_id = 'quasar-17p'
@@ -41,9 +47,9 @@ updated_at = 2026-02-23T09:16:57.223941-05:00
 
 [phases.polling-state]
 bead_id = 'quasar-69w'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-23T00:03:47.38794-05:00
-updated_at = 2026-02-23T09:16:57.223699-05:00
+updated_at = 2026-02-23T09:20:08.294818-05:00
 
 [phases.pushback-handler]
 bead_id = 'quasar-ajf'
