@@ -3,7 +3,9 @@ package tui
 import (
 	"time"
 
+	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/tycho"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
@@ -306,3 +308,33 @@ type MsgPhaseBeadUpdate struct {
 
 // MsgSplashDone signals that the splash screen timer has elapsed.
 type MsgSplashDone struct{}
+
+// Fabric bridge messages — carry fabric event data for the cockpit TUI.
+
+// MsgEntanglementUpdate carries entanglement data for the cockpit viewer.
+type MsgEntanglementUpdate struct {
+	Entanglements []fabric.Entanglement
+}
+
+// MsgDiscoveryPosted surfaces a new discovery in the cockpit.
+type MsgDiscoveryPosted struct {
+	Discovery fabric.Discovery
+}
+
+// MsgHail surfaces a human-attention-required interrupt from a blocked phase.
+type MsgHail struct {
+	PhaseID   string
+	Discovery fabric.Discovery
+}
+
+// MsgScratchpadEntry adds a timestamped note to the scratchpad view.
+type MsgScratchpadEntry struct {
+	Timestamp time.Time
+	PhaseID   string
+	Text      string
+}
+
+// MsgStaleWarning alerts the operator to stale state detected by the Tycho scheduler.
+type MsgStaleWarning struct {
+	Items []tycho.StaleItem
+}

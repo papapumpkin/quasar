@@ -13,7 +13,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/tycho"
 )
 
 // Mode indicates which top-level view the TUI is displaying.
@@ -76,6 +78,12 @@ type AppModel struct {
 	Paused    bool   // whether execution is paused
 	Stopping  bool   // whether a stop has been requested
 	NebulaDir string // path to nebula directory for intervention files
+
+	// Fabric bridge state — stored for later rendering by cockpit components.
+	Entanglements []fabric.Entanglement // latest entanglement snapshot
+	Discoveries   []fabric.Discovery    // posted discoveries
+	Scratchpad    []MsgScratchpadEntry  // timestamped scratchpad notes
+	StaleItems    []tycho.StaleItem     // latest stale warning items
 
 	// Home mode state (landing page).
 	HomeCursor     int            // cursor position in the home nebula list
@@ -434,6 +442,32 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// MsgSplashDone is kept for programmatic splash dismissal (e.g. tests).
 	case MsgSplashDone:
 		m.Splash = nil
+
+	// --- Fabric bridge messages ---
+	case MsgEntanglementUpdate:
+		m.Entanglements = msg.Entanglements
+
+	case MsgDiscoveryPosted:
+		m.Discoveries = append(m.Discoveries, msg.Discovery)
+		toast, cmd := NewToast(fmt.Sprintf("discovery: %s", msg.Discovery.Kind), false)
+		m.Toasts = append(m.Toasts, toast)
+		cmds = append(cmds, cmd)
+
+	case MsgHail:
+		toast, cmd := NewToast(fmt.Sprintf("⚠ hail from %s: %s", msg.PhaseID, msg.Discovery.Detail), true)
+		m.Toasts = append(m.Toasts, toast)
+		cmds = append(cmds, cmd)
+
+	case MsgScratchpadEntry:
+		m.Scratchpad = append(m.Scratchpad, msg)
+
+	case MsgStaleWarning:
+		m.StaleItems = msg.Items
+		if len(msg.Items) > 0 {
+			toast, cmd := NewToast(fmt.Sprintf("stale: %d items need attention", len(msg.Items)), true)
+			m.Toasts = append(m.Toasts, toast)
+			cmds = append(cmds, cmd)
+		}
 
 	}
 

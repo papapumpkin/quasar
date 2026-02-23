@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
@@ -353,4 +354,28 @@ func (b *PhaseUIBridge) RefactorApplied(phaseID string) {
 func (b *PhaseUIBridge) BeadUpdate(taskBeadID, title, status string, children []ui.BeadChild) {
 	root := buildBeadInfoTree(taskBeadID, title, status, children)
 	b.program.Send(MsgPhaseBeadUpdate{PhaseID: b.phaseID, TaskBeadID: taskBeadID, Root: root})
+}
+
+// EntanglementPublished sends MsgEntanglementUpdate with the full entanglement list.
+func (b *PhaseUIBridge) EntanglementPublished(entanglements []fabric.Entanglement) {
+	b.program.Send(MsgEntanglementUpdate{Entanglements: entanglements})
+}
+
+// DiscoveryPosted sends MsgDiscoveryPosted when a new discovery is recorded.
+func (b *PhaseUIBridge) DiscoveryPosted(d fabric.Discovery) {
+	b.program.Send(MsgDiscoveryPosted{Discovery: d})
+}
+
+// Hail sends MsgHail when a phase requires human attention.
+func (b *PhaseUIBridge) Hail(phaseID string, d fabric.Discovery) {
+	b.program.Send(MsgHail{PhaseID: phaseID, Discovery: d})
+}
+
+// ScratchpadNote sends MsgScratchpadEntry with a timestamped note.
+func (b *PhaseUIBridge) ScratchpadNote(phaseID, text string) {
+	b.program.Send(MsgScratchpadEntry{
+		Timestamp: time.Now(),
+		PhaseID:   phaseID,
+		Text:      text,
+	})
 }

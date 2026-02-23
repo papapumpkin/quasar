@@ -11,6 +11,7 @@ import (
 
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/loop"
 	"github.com/papapumpkin/quasar/internal/nebula"
 	"github.com/papapumpkin/quasar/internal/tui"
@@ -63,6 +64,7 @@ type tuiLoopAdapter struct {
 	coderPrompt  string
 	reviewPrompt string
 	workDir      string
+	fabric       fabric.Fabric // nil when fabric is not configured
 }
 
 func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, phaseTitle, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
@@ -96,6 +98,10 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 	}
 
 	result, err := l.RunExistingTask(ctx, beadID, phaseDescription)
+
+	// After the loop completes, emit fabric events if fabric is available.
+	a.emitFabricEvents(ctx, phaseID, phaseUI)
+
 	if err != nil {
 		if result != nil {
 			return toPhaseRunnerResult(result), err
@@ -103,6 +109,24 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 		return nil, err
 	}
 	return toPhaseRunnerResult(result), nil
+}
+
+// emitFabricEvents queries the fabric for entanglements and discoveries
+// produced by this phase and emits the corresponding TUI messages.
+func (a *tuiLoopAdapter) emitFabricEvents(ctx context.Context, phaseID string, phaseUI *tui.PhaseUIBridge) {
+	if a.fabric == nil {
+		return
+	}
+	// Emit entanglement update with the full list.
+	if ents, err := a.fabric.AllEntanglements(ctx); err == nil && len(ents) > 0 {
+		phaseUI.EntanglementPublished(ents)
+	}
+	// Emit discoveries posted by this phase.
+	if discs, err := a.fabric.Discoveries(ctx, phaseID); err == nil {
+		for _, d := range discs {
+			phaseUI.DiscoveryPosted(d)
+		}
+	}
 }
 
 func (a *tuiLoopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error) {

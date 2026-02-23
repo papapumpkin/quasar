@@ -50,11 +50,12 @@ type WorkerGroup struct {
 	GlobalCycles int
 	GlobalBudget float64
 	GlobalModel  string
-	OnProgress   ProgressFunc                       // optional progress callback
-	OnRefactor   func(phaseID string, pending bool) // optional callback for refactor notifications
-	OnHotAdd     HotAddFunc                         // optional callback for hot-added phases
-	Metrics      *Metrics                           // optional; nil = no collection
-	Logger       io.Writer                          // optional; nil = os.Stderr
+	OnProgress   ProgressFunc                             // optional progress callback
+	OnRefactor   func(phaseID string, pending bool)       // optional callback for refactor notifications
+	OnHotAdd     HotAddFunc                               // optional callback for hot-added phases
+	OnHail       func(phaseID string, d fabric.Discovery) // optional callback for hail surfacing
+	Metrics      *Metrics                                 // optional; nil = no collection
+	Logger       io.Writer                                // optional; nil = os.Stderr
 
 	mu          sync.Mutex
 	outputMu    sync.Mutex // serializes checkpoint + dashboard output in watch mode
@@ -265,6 +266,7 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 			wg:        wg,
 			scheduler: scheduler,
 		},
+		OnHail: wg.OnHail, // may be nil — surfaced via cockpit TUI when set
 	}
 
 	wg.mu.Lock()
