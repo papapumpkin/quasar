@@ -1,5 +1,9 @@
 package nebula
 
+import (
+	"github.com/papapumpkin/quasar/internal/dag"
+)
+
 // PhaseTracker manages phase state tracking: which phases are done, failed,
 // in-flight, and which are eligible for dispatch. It operates on shared maps
 // that are passed in from the orchestrator so that all collaborators can see
@@ -58,13 +62,13 @@ func (pt *PhaseTracker) InFlight() map[string]bool {
 // scope, the first one (highest impact, since ready is impact-sorted) is
 // admitted and subsequent conflicting phases are deferred until the next
 // dispatch cycle.
-func (pt *PhaseTracker) FilterEligible(ready []string, graph *Graph) []string {
+func (pt *PhaseTracker) FilterEligible(ready []string, d *dag.DAG) []string {
 	var eligible []string
 	for _, id := range ready {
 		if pt.inFlight[id] || pt.failed[id] {
 			continue
 		}
-		if pt.hasFailedDep(id, graph) {
+		if pt.hasFailedDep(id, d) {
 			continue
 		}
 		if pt.hasScopeConflictWithInFlight(id) {
@@ -82,12 +86,8 @@ func (pt *PhaseTracker) FilterEligible(ready []string, graph *Graph) []string {
 }
 
 // hasFailedDep reports whether any direct dependency of phaseID has failed.
-func (pt *PhaseTracker) hasFailedDep(phaseID string, graph *Graph) bool {
-	deps, ok := graph.adjacency[phaseID]
-	if !ok {
-		return false
-	}
-	for dep := range deps {
+func (pt *PhaseTracker) hasFailedDep(phaseID string, d *dag.DAG) bool {
+	for _, dep := range d.DepsFor(phaseID) {
 		if pt.failed[dep] {
 			return true
 		}
