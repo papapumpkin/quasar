@@ -12,6 +12,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/dag"
 	"github.com/papapumpkin/quasar/internal/fabric"
+	"github.com/papapumpkin/quasar/internal/tycho"
 )
 
 // NewWorkerGroup creates a WorkerGroup with required dependencies and optional
@@ -66,6 +67,7 @@ type WorkerGroup struct {
 	hotReload       *HotReloader
 	blockedTracker  *fabric.BlockedTracker  // nil when Fabric is nil
 	pushbackHandler *fabric.PushbackHandler // nil when Fabric is nil
+	tychoScheduler  *tycho.Scheduler        // nil when Fabric is nil
 }
 
 // logger returns the effective log writer (os.Stderr if Logger is nil).
@@ -242,6 +244,13 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	if wg.Fabric != nil && wg.Poller != nil {
 		wg.blockedTracker = fabric.NewBlockedTracker()
 		wg.pushbackHandler = &fabric.PushbackHandler{Fabric: wg.Fabric}
+		wg.tychoScheduler = &tycho.Scheduler{
+			Fabric:   wg.Fabric,
+			Poller:   wg.Poller,
+			Blocked:  wg.blockedTracker,
+			Pushback: wg.pushbackHandler,
+			Logger:   wg.logger(),
+		}
 	}
 
 	// Build impact-aware scheduler from phases using the DAG engine.

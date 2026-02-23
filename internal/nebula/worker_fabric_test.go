@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/papapumpkin/quasar/internal/fabric"
+	"github.com/papapumpkin/quasar/internal/tycho"
 )
 
 // --- mock types for fabric unit tests ---
@@ -199,7 +200,7 @@ func (p *mockPoller) Poll(_ context.Context, phaseID string, _ fabric.FabricSnap
 // --- helpers ---
 
 // newFabricTestWorkerGroup creates a minimal WorkerGroup wired for fabric unit tests.
-// It sets up tracker, blockedTracker, pushbackHandler, and a log buffer.
+// It sets up tracker, blockedTracker, pushbackHandler, tychoScheduler, and a log buffer.
 func newFabricTestWorkerGroup(phases []PhaseSpec) (*WorkerGroup, *mockFabric, *mockPoller, *bytes.Buffer) {
 	mf := newMockFabric()
 	mp := newMockPoller()
@@ -222,8 +223,17 @@ func newFabricTestWorkerGroup(phases []PhaseSpec) (*WorkerGroup, *mockFabric, *m
 
 	// Initialize collaborators that Run() would normally create.
 	wg.tracker = NewPhaseTracker(phases, state)
-	wg.blockedTracker = fabric.NewBlockedTracker()
-	wg.pushbackHandler = &fabric.PushbackHandler{Fabric: mf}
+	bt := fabric.NewBlockedTracker()
+	ph := &fabric.PushbackHandler{Fabric: mf}
+	wg.blockedTracker = bt
+	wg.pushbackHandler = ph
+	wg.tychoScheduler = &tycho.Scheduler{
+		Fabric:   mf,
+		Poller:   mp,
+		Blocked:  bt,
+		Pushback: ph,
+		Logger:   &logBuf,
+	}
 
 	return wg, mf, mp, &logBuf
 }
@@ -340,9 +350,9 @@ func TestPollEligible(t *testing.T) {
 	})
 }
 
-// --- handlePollBlock tests ---
+// --- Tycho handlePollBlock tests (via the Tycho scheduler directly) ---
 
-func TestHandlePollBlock(t *testing.T) {
+func TestTychoHandlePollBlock(t *testing.T) {
 	t.Parallel()
 
 	t.Run("retry action keeps phase blocked", func(t *testing.T) {
@@ -358,7 +368,7 @@ func TestHandlePollBlock(t *testing.T) {
 			InProgress: []string{"producer-phase"},
 		}
 
-		wg.handlePollBlock(context.Background(), "a", result, snap)
+		wg.tychoScheduler.HandlePollBlock(context.Background(), "a", result, snap)
 
 		bp := wg.blockedTracker.Get("a")
 		if bp == nil {
@@ -379,6 +389,7 @@ func TestHandlePollBlock(t *testing.T) {
 
 		// Exhaust retries so pushback handler escalates.
 		wg.pushbackHandler.MaxRetries = 1
+		wg.tychoScheduler.Pushback.MaxRetries = 1
 
 		result := fabric.PollResult{
 			Decision: fabric.PollNeedInfo,
@@ -387,13 +398,13 @@ func TestHandlePollBlock(t *testing.T) {
 		snap := fabric.FabricSnapshot{}
 
 		// First call: retry count=0, should retry.
-		wg.handlePollBlock(context.Background(), "a", result, snap)
+		wg.tychoScheduler.HandlePollBlock(context.Background(), "a", result, snap)
 		if wg.blockedTracker.Get("a") == nil {
 			t.Fatal("expected a to be blocked after first handlePollBlock")
 		}
 
 		// Second call: retry count increments to 1 (>= MaxRetries=1), should escalate.
-		wg.handlePollBlock(context.Background(), "a", result, snap)
+		wg.tychoScheduler.HandlePollBlock(context.Background(), "a", result, snap)
 
 		// After escalation, phase should be unblocked from the blocked tracker.
 		if wg.blockedTracker.Get("a") != nil {
@@ -404,14 +415,6 @@ func TestHandlePollBlock(t *testing.T) {
 		state, _ := mf.GetPhaseState(context.Background(), "a")
 		if state != fabric.StateHumanDecision {
 			t.Errorf("expected fabric state %q, got %q", fabric.StateHumanDecision, state)
-		}
-
-		// Phase should be marked as failed in the tracker.
-		if !wg.tracker.Failed()["a"] {
-			t.Error("expected phase a to be marked as failed in tracker")
-		}
-		if !wg.tracker.Done()["a"] {
-			t.Error("expected phase a to be marked as done in tracker")
 		}
 	})
 
@@ -429,7 +432,7 @@ func TestHandlePollBlock(t *testing.T) {
 		}
 		snap := fabric.FabricSnapshot{}
 
-		wg.handlePollBlock(context.Background(), "a", result, snap)
+		wg.tychoScheduler.HandlePollBlock(context.Background(), "a", result, snap)
 
 		if wg.blockedTracker.Get("a") != nil {
 			t.Error("expected a to be unblocked after proceed action")
@@ -509,7 +512,7 @@ func TestFabricPhaseComplete(t *testing.T) {
 func TestReevaluateBlocked(t *testing.T) {
 	t.Parallel()
 
-	t.Run("nil tracker is a no-op", func(t *testing.T) {
+	t.Run("nil scheduler is a no-op", func(t *testing.T) {
 		t.Parallel()
 		wg := &WorkerGroup{}
 		// Should not panic.
@@ -590,7 +593,7 @@ func TestReevaluateBlocked(t *testing.T) {
 func TestEscalateAllBlocked(t *testing.T) {
 	t.Parallel()
 
-	t.Run("nil tracker is a no-op", func(t *testing.T) {
+	t.Run("nil scheduler is a no-op", func(t *testing.T) {
 		t.Parallel()
 		wg := &WorkerGroup{}
 		// Should not panic.

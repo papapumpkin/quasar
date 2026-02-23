@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/papapumpkin/quasar/internal/fabric"
+	"github.com/papapumpkin/quasar/internal/tycho"
 )
 
 // --- helpers for integration tests ---
@@ -86,8 +87,17 @@ func newIntegrationWorkerGroup(t *testing.T, phases []PhaseSpec) (*WorkerGroup, 
 	)
 
 	wg.tracker = NewPhaseTracker(phases, state)
-	wg.blockedTracker = fabric.NewBlockedTracker()
-	wg.pushbackHandler = &fabric.PushbackHandler{Fabric: f}
+	bt := fabric.NewBlockedTracker()
+	ph := &fabric.PushbackHandler{Fabric: f}
+	wg.blockedTracker = bt
+	wg.pushbackHandler = ph
+	wg.tychoScheduler = &tycho.Scheduler{
+		Fabric:   f,
+		Poller:   p,
+		Blocked:  bt,
+		Pushback: ph,
+		Logger:   &logBuf,
+	}
 
 	return wg, f, p, &logBuf
 }
