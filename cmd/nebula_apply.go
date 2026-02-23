@@ -385,7 +385,6 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					}
 				}
 
-				n = nextN
 				branchName = nextBranchName
 				workDir = nextWorkDir
 				continue
