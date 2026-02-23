@@ -814,3 +814,526 @@ func TestLargeDAG(t *testing.T) {
 		t.Errorf("last = %q, want n099", order[99])
 	}
 }
+
+func TestHasPath(t *testing.T) {
+	t.Parallel()
+
+	t.Run("direct path", func(t *testing.T) {
+		t.Parallel()
+		// a → b
+		d := buildDAG(t, []nodeSpec{
+			{"b", 1, nil},
+			{"a", 1, []string{"b"}},
+		})
+		if !d.HasPath("a", "b") {
+			t.Error("HasPath(a, b) = false, want true")
+		}
+	})
+
+	t.Run("transitive path", func(t *testing.T) {
+		t.Parallel()
+		// a → b → c
+		d := buildDAG(t, []nodeSpec{
+			{"c", 1, nil},
+			{"b", 1, []string{"c"}},
+			{"a", 1, []string{"b"}},
+		})
+		if !d.HasPath("a", "c") {
+			t.Error("HasPath(a, c) = false, want true")
+		}
+	})
+
+	t.Run("no path", func(t *testing.T) {
+		t.Parallel()
+		// a → b, c (disconnected)
+		d := buildDAG(t, []nodeSpec{
+			{"b", 1, nil},
+			{"c", 1, nil},
+			{"a", 1, []string{"b"}},
+		})
+		if d.HasPath("a", "c") {
+			t.Error("HasPath(a, c) = true, want false")
+		}
+	})
+
+	t.Run("reverse direction has no path", func(t *testing.T) {
+		t.Parallel()
+		// a → b
+		d := buildDAG(t, []nodeSpec{
+			{"b", 1, nil},
+			{"a", 1, []string{"b"}},
+		})
+		if d.HasPath("b", "a") {
+			t.Error("HasPath(b, a) = true, want false")
+		}
+	})
+
+	t.Run("same node returns false", func(t *testing.T) {
+		t.Parallel()
+		d := buildDAG(t, []nodeSpec{
+			{"a", 1, nil},
+		})
+		if d.HasPath("a", "a") {
+			t.Error("HasPath(a, a) = true, want false")
+		}
+	})
+
+	t.Run("nonexistent nodes", func(t *testing.T) {
+		t.Parallel()
+		d := New()
+		if d.HasPath("x", "y") {
+			t.Error("HasPath on empty DAG = true, want false")
+		}
+	})
+
+	t.Run("cycle check in AddEdge still works", func(t *testing.T) {
+		t.Parallel()
+		d := New()
+		_ = d.AddNode("a", 1)
+		_ = d.AddNode("b", 1)
+		_ = d.AddEdge("a", "b")
+		err := d.AddEdge("b", "a")
+		if !errors.Is(err, ErrCycle) {
+			t.Errorf("AddEdge(b, a) = %v, want ErrCycle", err)
+		}
+	})
+}
+
+func TestConnected(t *testing.T) {
+	t.Parallel()
+
+	t.Run("forward path", func(t *testing.T) {
+		t.Parallel()
+		// a → b
+		d := buildDAG(t, []nodeSpec{
+			{"b", 1, nil},
+			{"a", 1, []string{"b"}},
+		})
+		if !d.Connected("a", "b") {
+			t.Error("Connected(a, b) = false, want true")
+		}
+	})
+
+	t.Run("reverse path", func(t *testing.T) {
+		t.Parallel()
+		// a → b; checking Connected(b, a) should be true
+		d := buildDAG(t, []nodeSpec{
+			{"b", 1, nil},
+			{"a", 1, []string{"b"}},
+		})
+		if !d.Connected("b", "a") {
+			t.Error("Connected(b, a) = false, want true")
+		}
+	})
+
+	t.Run("disconnected", func(t *testing.T) {
+		t.Parallel()
+		d := buildDAG(t, []nodeSpec{
+			{"a", 1, nil},
+			{"b", 1, nil},
+		})
+		if d.Connected("a", "b") {
+			t.Error("Connected(a, b) = true, want false")
+		}
+	})
+
+	t.Run("transitive connection", func(t *testing.T) {
+		t.Parallel()
+		// a → b → c
+		d := buildDAG(t, []nodeSpec{
+			{"c", 1, nil},
+			{"b", 1, []string{"c"}},
+			{"a", 1, []string{"b"}},
+		})
+		if !d.Connected("c", "a") {
+			t.Error("Connected(c, a) = false, want true")
+		}
+	})
+}
+
+func TestComputeWaves(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty DAG", func(t *testing.T) {
+		t.Parallel()
+		d := New()
+		waves, err := d.ComputeWaves()
+		if err != nil {
+			t.Fatalf("ComputeWaves: %v", err)
+		}
+		if waves != nil {
+			t.Errorf("ComputeWaves on empty DAG = %v, want nil", waves)
+		}
+	})
+
+	t.Run("single node", func(t *testing.T) {
+		t.Parallel()
+		d := buildDAG(t, []nodeSpec{
+			{"a", 1, nil},
+		})
+		waves, err := d.ComputeWaves()
+		if err != nil {
+			t.Fatalf("ComputeWaves: %v", err)
+		}
+		if len(waves) != 1 {
+			t.Fatalf("got %d waves, want 1", len(waves))
+		}
+		if waves[0].Number != 0 {
+			t.Errorf("wave number = %d, want 0", waves[0].Number)
+		}
+		if len(waves[0].NodeIDs) != 1 || waves[0].NodeIDs[0] != "a" {
+			t.Errorf("wave 0 nodes = %v, want [a]", waves[0].NodeIDs)
+		}
+	})
+
+	t.Run("all independent", func(t *testing.T) {
+		t.Parallel()
+		d := buildDAG(t, []nodeSpec{
+			{"c", 1, nil},
+			{"a", 1, nil},
+			{"b", 1, nil},
+		})
+		waves, err := d.ComputeWaves()
+		if err != nil {
+			t.Fatalf("ComputeWaves: %v", err)
+		}
+		if len(waves) != 1 {
+			t.Fatalf("got %d waves, want 1", len(waves))
+		}
+		want := []string{"a", "b", "c"}
+		if len(waves[0].NodeIDs) != len(want) {
+			t.Fatalf("wave 0 nodes = %v, want %v", waves[0].NodeIDs, want)
+		}
+		for i, id := range want {
+			if waves[0].NodeIDs[i] != id {
+				t.Errorf("wave 0 node[%d] = %q, want %q", i, waves[0].NodeIDs[i], id)
+			}
+		}
+	})
+
+	t.Run("linear chain", func(t *testing.T) {
+		t.Parallel()
+		// a → b → c (a depends on b, b depends on c)
+		d := buildDAG(t, []nodeSpec{
+			{"c", 1, nil},
+			{"b", 1, []string{"c"}},
+			{"a", 1, []string{"b"}},
+		})
+		waves, err := d.ComputeWaves()
+		if err != nil {
+			t.Fatalf("ComputeWaves: %v", err)
+		}
+		if len(waves) != 3 {
+			t.Fatalf("got %d waves, want 3", len(waves))
+		}
+		// Wave 0: c (no deps), Wave 1: b (depends on c), Wave 2: a (depends on b)
+		wantWaves := [][]string{{"c"}, {"b"}, {"a"}}
+		for i, ww := range wantWaves {
+			if waves[i].Number != i {
+				t.Errorf("wave %d number = %d", i, waves[i].Number)
+			}
+			if len(waves[i].NodeIDs) != len(ww) {
+				t.Errorf("wave %d = %v, want %v", i, waves[i].NodeIDs, ww)
+				continue
+			}
+			for j, id := range ww {
+				if waves[i].NodeIDs[j] != id {
+					t.Errorf("wave %d node[%d] = %q, want %q", i, j, waves[i].NodeIDs[j], id)
+				}
+			}
+		}
+	})
+
+	t.Run("diamond", func(t *testing.T) {
+		t.Parallel()
+		//     a
+		//    / \
+		//   b   c
+		//    \ /
+		//     d
+		d := buildDAG(t, []nodeSpec{
+			{"d", 1, nil},
+			{"b", 1, []string{"d"}},
+			{"c", 1, []string{"d"}},
+			{"a", 1, []string{"b", "c"}},
+		})
+		waves, err := d.ComputeWaves()
+		if err != nil {
+			t.Fatalf("ComputeWaves: %v", err)
+		}
+		if len(waves) != 3 {
+			t.Fatalf("got %d waves, want 3", len(waves))
+		}
+		// Wave 0: d, Wave 1: b,c (sorted), Wave 2: a
+		wantWaves := [][]string{{"d"}, {"b", "c"}, {"a"}}
+		for i, ww := range wantWaves {
+			if len(waves[i].NodeIDs) != len(ww) {
+				t.Errorf("wave %d = %v, want %v", i, waves[i].NodeIDs, ww)
+				continue
+			}
+			for j, id := range ww {
+				if waves[i].NodeIDs[j] != id {
+					t.Errorf("wave %d node[%d] = %q, want %q", i, j, waves[i].NodeIDs[j], id)
+				}
+			}
+		}
+	})
+
+	t.Run("cycle detection", func(t *testing.T) {
+		t.Parallel()
+		// Force a cycle by manipulating internal state.
+		d := New()
+		_ = d.AddNode("a", 1)
+		_ = d.AddNode("b", 1)
+		d.adjacency["a"]["b"] = true
+		d.reverse["b"]["a"] = true
+		d.adjacency["b"]["a"] = true
+		d.reverse["a"]["b"] = true
+
+		_, err := d.ComputeWaves()
+		if !errors.Is(err, ErrCycle) {
+			t.Errorf("ComputeWaves on cycle = %v, want ErrCycle", err)
+		}
+	})
+
+	t.Run("complex multi-wave", func(t *testing.T) {
+		t.Parallel()
+		//   a
+		//  / \
+		// b   c
+		// |   |
+		// d   e
+		//  \ /
+		//   f
+		d := buildDAG(t, []nodeSpec{
+			{"f", 1, nil},
+			{"d", 1, []string{"f"}},
+			{"e", 1, []string{"f"}},
+			{"b", 1, []string{"d"}},
+			{"c", 1, []string{"e"}},
+			{"a", 1, []string{"b", "c"}},
+		})
+		waves, err := d.ComputeWaves()
+		if err != nil {
+			t.Fatalf("ComputeWaves: %v", err)
+		}
+		if len(waves) != 4 {
+			t.Fatalf("got %d waves, want 4", len(waves))
+		}
+		// Wave 0: f, Wave 1: d,e, Wave 2: b,c, Wave 3: a
+		wantWaves := [][]string{{"f"}, {"d", "e"}, {"b", "c"}, {"a"}}
+		for i, ww := range wantWaves {
+			if len(waves[i].NodeIDs) != len(ww) {
+				t.Errorf("wave %d = %v, want %v", i, waves[i].NodeIDs, ww)
+				continue
+			}
+			for j, id := range ww {
+				if waves[i].NodeIDs[j] != id {
+					t.Errorf("wave %d node[%d] = %q, want %q", i, j, waves[i].NodeIDs[j], id)
+				}
+			}
+		}
+	})
+}
+
+func TestDepsFor(t *testing.T) {
+	t.Parallel()
+
+	t.Run("has deps", func(t *testing.T) {
+		t.Parallel()
+		d := buildDAG(t, []nodeSpec{
+			{"c", 1, nil},
+			{"b", 1, nil},
+			{"a", 1, []string{"b", "c"}},
+		})
+		deps := d.DepsFor("a")
+		want := []string{"b", "c"}
+		if len(deps) != len(want) {
+			t.Fatalf("DepsFor(a) = %v, want %v", deps, want)
+		}
+		for i, id := range want {
+			if deps[i] != id {
+				t.Errorf("deps[%d] = %q, want %q", i, deps[i], id)
+			}
+		}
+	})
+
+	t.Run("no deps", func(t *testing.T) {
+		t.Parallel()
+		d := buildDAG(t, []nodeSpec{
+			{"a", 1, nil},
+		})
+		deps := d.DepsFor("a")
+		if deps != nil {
+			t.Errorf("DepsFor(a) = %v, want nil", deps)
+		}
+	})
+
+	t.Run("nonexistent node", func(t *testing.T) {
+		t.Parallel()
+		d := New()
+		deps := d.DepsFor("x")
+		if deps != nil {
+			t.Errorf("DepsFor(x) = %v, want nil", deps)
+		}
+	})
+
+	t.Run("sorted alphabetically", func(t *testing.T) {
+		t.Parallel()
+		d := buildDAG(t, []nodeSpec{
+			{"z", 1, nil},
+			{"m", 1, nil},
+			{"a", 1, nil},
+			{"root", 1, []string{"z", "m", "a"}},
+		})
+		deps := d.DepsFor("root")
+		want := []string{"a", "m", "z"}
+		if len(deps) != len(want) {
+			t.Fatalf("DepsFor(root) = %v, want %v", deps, want)
+		}
+		for i, id := range want {
+			if deps[i] != id {
+				t.Errorf("deps[%d] = %q, want %q", i, deps[i], id)
+			}
+		}
+	})
+}
+
+func TestAddNodeIdempotent(t *testing.T) {
+	t.Parallel()
+
+	t.Run("new node", func(t *testing.T) {
+		t.Parallel()
+		d := New()
+		d.AddNodeIdempotent("a", 5)
+		if d.Len() != 1 {
+			t.Errorf("Len() = %d, want 1", d.Len())
+		}
+		n := d.Node("a")
+		if n == nil {
+			t.Fatal("Node(a) returned nil")
+		}
+		if n.Priority != 5 {
+			t.Errorf("Priority = %d, want 5", n.Priority)
+		}
+		if n.Metadata == nil {
+			t.Error("Metadata is nil, want initialized map")
+		}
+	})
+
+	t.Run("existing node is no-op", func(t *testing.T) {
+		t.Parallel()
+		d := New()
+		d.AddNodeIdempotent("a", 5)
+		d.AddNodeIdempotent("a", 10) // should be no-op
+		if d.Len() != 1 {
+			t.Errorf("Len() = %d, want 1", d.Len())
+		}
+		n := d.Node("a")
+		if n.Priority != 5 {
+			t.Errorf("Priority = %d, want 5 (original, not overwritten)", n.Priority)
+		}
+	})
+
+	t.Run("can add edges after idempotent add", func(t *testing.T) {
+		t.Parallel()
+		d := New()
+		d.AddNodeIdempotent("a", 1)
+		d.AddNodeIdempotent("b", 1)
+		if err := d.AddEdge("a", "b"); err != nil {
+			t.Fatalf("AddEdge after AddNodeIdempotent: %v", err)
+		}
+	})
+}
+
+func TestRemoveEdge(t *testing.T) {
+	t.Parallel()
+
+	t.Run("remove existing edge", func(t *testing.T) {
+		t.Parallel()
+		// a → b → c
+		d := buildDAG(t, []nodeSpec{
+			{"c", 1, nil},
+			{"b", 1, []string{"c"}},
+			{"a", 1, []string{"b"}},
+		})
+		d.RemoveEdge("a", "b")
+		// a should have no deps now.
+		deps := d.DepsFor("a")
+		if deps != nil {
+			t.Errorf("DepsFor(a) after RemoveEdge = %v, want nil", deps)
+		}
+		// b→c should still exist.
+		deps = d.DepsFor("b")
+		if len(deps) != 1 || deps[0] != "c" {
+			t.Errorf("DepsFor(b) = %v, want [c]", deps)
+		}
+		// Nodes should still exist.
+		if d.Len() != 3 {
+			t.Errorf("Len() = %d, want 3", d.Len())
+		}
+	})
+
+	t.Run("remove nonexistent edge is no-op", func(t *testing.T) {
+		t.Parallel()
+		d := buildDAG(t, []nodeSpec{
+			{"a", 1, nil},
+			{"b", 1, nil},
+		})
+		d.RemoveEdge("a", "b") // no edge exists, should not panic
+		if d.Len() != 2 {
+			t.Errorf("Len() = %d, want 2", d.Len())
+		}
+	})
+
+	t.Run("remove edge with nonexistent nodes is no-op", func(t *testing.T) {
+		t.Parallel()
+		d := New()
+		d.RemoveEdge("x", "y") // no nodes exist, should not panic
+	})
+
+	t.Run("reverse map cleaned up", func(t *testing.T) {
+		t.Parallel()
+		d := buildDAG(t, []nodeSpec{
+			{"b", 1, nil},
+			{"a", 1, []string{"b"}},
+		})
+		d.RemoveEdge("a", "b")
+		// After removing a→b, b's reverse map should no longer contain a.
+		desc := d.Descendants("b")
+		if len(desc) != 0 {
+			t.Errorf("Descendants(b) after RemoveEdge = %v, want empty", desc)
+		}
+	})
+
+	t.Run("can re-add edge after removal", func(t *testing.T) {
+		t.Parallel()
+		d := buildDAG(t, []nodeSpec{
+			{"b", 1, nil},
+			{"a", 1, []string{"b"}},
+		})
+		d.RemoveEdge("a", "b")
+		if err := d.AddEdge("a", "b"); err != nil {
+			t.Fatalf("AddEdge after RemoveEdge: %v", err)
+		}
+		deps := d.DepsFor("a")
+		if len(deps) != 1 || deps[0] != "b" {
+			t.Errorf("DepsFor(a) after re-add = %v, want [b]", deps)
+		}
+	})
+
+	t.Run("allows previously cyclic edge after removal", func(t *testing.T) {
+		t.Parallel()
+		// a → b → c, removing b→c should allow c→a
+		d := buildDAG(t, []nodeSpec{
+			{"c", 1, nil},
+			{"b", 1, []string{"c"}},
+			{"a", 1, []string{"b"}},
+		})
+		d.RemoveEdge("b", "c")
+		// Now there's no path from c to a, so c→a should be allowed
+		if err := d.AddEdge("c", "a"); err != nil {
+			t.Fatalf("AddEdge(c, a) after breaking chain: %v", err)
+		}
+	})
+}

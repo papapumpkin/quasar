@@ -1,0 +1,21 @@
+version = 1
+nebula_name = 'graph-consolidation'
+
+[phases]
+[phases.delete-nebula-graph]
+bead_id = 'quasar-70z'
+status = 'created'
+created_at = 2026-02-22T22:10:17.745549-05:00
+updated_at = 2026-02-22T22:10:17.745549-05:00
+
+[phases.expose-dag-caps]
+bead_id = 'quasar-y68'
+status = 'in_progress'
+created_at = 2026-02-22T22:10:16.989608-05:00
+updated_at = 2026-02-22T22:10:21.35598-05:00
+
+[phases.migrate-consumers]
+bead_id = 'quasar-1r3'
+status = 'created'
+created_at = 2026-02-22T22:10:17.393918-05:00
+updated_at = 2026-02-22T22:10:17.393918-05:00

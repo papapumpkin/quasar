@@ -22,6 +22,12 @@ var ErrDuplicateNode = errors.New("duplicate node")
 // ErrSelfEdge is returned when an edge would create a self-loop.
 var ErrSelfEdge = errors.New("self-referencing edge")
 
+// Wave represents a batch of nodes whose dependencies all fall in prior waves.
+type Wave struct {
+	Number  int      // zero-based wave index
+	NodeIDs []string // node IDs in this wave, sorted alphabetically
+}
+
 // Node represents a task in the DAG.
 type Node struct {
 	ID       string
@@ -89,7 +95,7 @@ func (d *DAG) AddEdge(from, to string) error {
 	// Check if adding this edge would create a cycle: does 'from' already
 	// have a path reachable from 'to'? If so, adding to→...→from + from→to
 	// would create a cycle.
-	if d.hasPath(to, from) {
+	if d.HasPath(to, from) {
 		return fmt.Errorf("%w: edge %s → %s would create a cycle", ErrCycle, from, to)
 	}
 	d.adjacency[from][to] = true
@@ -117,6 +123,110 @@ func (d *DAG) Remove(id string) error {
 
 	delete(d.nodes, id)
 	return nil
+}
+
+// AddNodeIdempotent adds a node with the given ID and priority. If a node
+// with that ID already exists, it is a no-op (the existing node is unchanged).
+func (d *DAG) AddNodeIdempotent(id string, priority int) {
+	if _, exists := d.nodes[id]; exists {
+		return
+	}
+	d.nodes[id] = &Node{
+		ID:       id,
+		Priority: priority,
+		Metadata: make(map[string]any),
+	}
+	d.adjacency[id] = make(map[string]bool)
+	d.reverse[id] = make(map[string]bool)
+}
+
+// RemoveEdge removes a single directed edge from → to. If either node does
+// not exist or the edge does not exist, it is a no-op.
+func (d *DAG) RemoveEdge(from, to string) {
+	if d.adjacency[from] != nil {
+		delete(d.adjacency[from], to)
+	}
+	if d.reverse[to] != nil {
+		delete(d.reverse[to], from)
+	}
+}
+
+// Connected reports whether there is a directed path between a and b in
+// either direction: HasPath(a,b) || HasPath(b,a).
+func (d *DAG) Connected(a, b string) bool {
+	return d.HasPath(a, b) || d.HasPath(b, a)
+}
+
+// DepsFor returns the direct dependency IDs for the given node, sorted
+// alphabetically. Returns nil if the node does not exist or has no
+// dependencies.
+func (d *DAG) DepsFor(id string) []string {
+	adj, ok := d.adjacency[id]
+	if !ok || len(adj) == 0 {
+		return nil
+	}
+	deps := make([]string, 0, len(adj))
+	for dep := range adj {
+		deps = append(deps, dep)
+	}
+	sort.Strings(deps)
+	return deps
+}
+
+// ComputeWaves produces layer-based wave groupings using Kahn's algorithm.
+// Each wave contains nodes whose dependencies all fall in prior waves.
+// Node IDs within each wave are sorted alphabetically for deterministic output.
+// Returns ErrCycle if the graph contains a cycle.
+func (d *DAG) ComputeWaves() ([]Wave, error) {
+	if len(d.nodes) == 0 {
+		return nil, nil
+	}
+
+	// Compute in-degree (number of forward edges / dependencies) for each node.
+	inDegree := make(map[string]int, len(d.nodes))
+	for id := range d.nodes {
+		inDegree[id] = len(d.adjacency[id])
+	}
+
+	// Seed with zero-dependency nodes.
+	var current []string
+	for id, deg := range inDegree {
+		if deg == 0 {
+			current = append(current, id)
+		}
+	}
+	sort.Strings(current)
+
+	var waves []Wave
+	processed := 0
+
+	for len(current) > 0 {
+		wave := Wave{
+			Number:  len(waves),
+			NodeIDs: current,
+		}
+		waves = append(waves, wave)
+		processed += len(current)
+
+		var next []string
+		for _, id := range current {
+			// For each dependent of this node, decrement in-degree.
+			for dependent := range d.reverse[id] {
+				inDegree[dependent]--
+				if inDegree[dependent] == 0 {
+					next = append(next, dependent)
+				}
+			}
+		}
+		sort.Strings(next)
+		current = next
+	}
+
+	if processed != len(d.nodes) {
+		return nil, fmt.Errorf("%w: not all nodes could be grouped into waves (%d of %d)",
+			ErrCycle, processed, len(d.nodes))
+	}
+	return waves, nil
 }
 
 // Node returns the node with the given ID, or nil if not found.
@@ -235,9 +345,9 @@ func (d *DAG) Descendants(id string) []string {
 	return result
 }
 
-// hasPath reports whether there is a directed path from src to dst
+// HasPath reports whether there is a directed path from src to dst
 // through the dependency graph (forward edges).
-func (d *DAG) hasPath(src, dst string) bool {
+func (d *DAG) HasPath(src, dst string) bool {
 	if src == dst {
 		return false
 	}
