@@ -1,232 +1,33 @@
 package nebula
 
 import (
+	"errors"
 	"fmt"
-	"sort"
+
+	"github.com/papapumpkin/quasar/internal/dag"
 )
 
-// Graph is a dependency DAG over phase IDs.
-type Graph struct {
-	// adjacency maps phaseID → set of phase IDs it depends on.
-	adjacency map[string]map[string]bool
-	// reverse maps phaseID → set of phase IDs that depend on it.
-	reverse map[string]map[string]bool
-}
+// Wave is an alias for dag.Wave, bridging the nebula and dag packages.
+// Within nebula, waves group phases whose dependencies are all in prior waves.
+type Wave = dag.Wave
 
-// NewGraph builds a dependency graph from a list of phase specs.
-func NewGraph(phases []PhaseSpec) *Graph {
-	g := &Graph{
-		adjacency: make(map[string]map[string]bool),
-		reverse:   make(map[string]map[string]bool),
+// phasesToDAG constructs a *dag.DAG from a slice of phase specs.
+// It returns an error wrapping ErrDependencyCycle if adding edges
+// reveals a cycle.
+func phasesToDAG(phases []PhaseSpec) (*dag.DAG, error) {
+	d := dag.New()
+	for _, p := range phases {
+		d.AddNodeIdempotent(p.ID, p.Priority)
 	}
 	for _, p := range phases {
-		if g.adjacency[p.ID] == nil {
-			g.adjacency[p.ID] = make(map[string]bool)
-		}
-		if g.reverse[p.ID] == nil {
-			g.reverse[p.ID] = make(map[string]bool)
-		}
 		for _, dep := range p.DependsOn {
-			g.adjacency[p.ID][dep] = true
-			if g.reverse[dep] == nil {
-				g.reverse[dep] = make(map[string]bool)
-			}
-			g.reverse[dep][p.ID] = true
-		}
-	}
-	return g
-}
-
-// AddNode adds a new node to the graph. It is a no-op if the node already exists.
-func (g *Graph) AddNode(id string) {
-	if g.adjacency[id] == nil {
-		g.adjacency[id] = make(map[string]bool)
-	}
-	if g.reverse[id] == nil {
-		g.reverse[id] = make(map[string]bool)
-	}
-}
-
-// AddEdge adds a dependency edge: from depends on to.
-func (g *Graph) AddEdge(from, to string) {
-	if g.adjacency[from] == nil {
-		g.adjacency[from] = make(map[string]bool)
-	}
-	g.adjacency[from][to] = true
-	if g.reverse[to] == nil {
-		g.reverse[to] = make(map[string]bool)
-	}
-	g.reverse[to][from] = true
-}
-
-// RemoveEdge removes the dependency edge from → to. It is a no-op if the
-// edge does not exist.
-func (g *Graph) RemoveEdge(from, to string) {
-	if g.adjacency[from] != nil {
-		delete(g.adjacency[from], to)
-	}
-	if g.reverse[to] != nil {
-		delete(g.reverse[to], from)
-	}
-}
-
-// RemoveNode removes a node and all its edges from the graph.
-func (g *Graph) RemoveNode(id string) {
-	// Remove all edges from this node to its dependencies.
-	for dep := range g.adjacency[id] {
-		if g.reverse[dep] != nil {
-			delete(g.reverse[dep], id)
-		}
-	}
-	delete(g.adjacency, id)
-
-	// Remove all edges from nodes that depend on this node.
-	for dependent := range g.reverse[id] {
-		if g.adjacency[dependent] != nil {
-			delete(g.adjacency[dependent], id)
-		}
-	}
-	delete(g.reverse, id)
-}
-
-// Sort returns phase IDs in topological order (dependencies first).
-// Returns an error if a cycle is detected.
-func (g *Graph) Sort() ([]string, error) {
-	// Kahn's algorithm.
-	inDegree := make(map[string]int)
-	for id := range g.adjacency {
-		inDegree[id] = len(g.adjacency[id])
-	}
-
-	var queue []string
-	for id, deg := range inDegree {
-		if deg == 0 {
-			queue = append(queue, id)
-		}
-	}
-
-	var sorted []string
-	for len(queue) > 0 {
-		id := queue[0]
-		queue = queue[1:]
-		sorted = append(sorted, id)
-
-		for dependent := range g.reverse[id] {
-			inDegree[dependent]--
-			if inDegree[dependent] == 0 {
-				queue = append(queue, dependent)
-			}
-		}
-	}
-
-	if len(sorted) != len(g.adjacency) {
-		return nil, fmt.Errorf("%w: not all phases could be ordered", ErrDependencyCycle)
-	}
-
-	return sorted, nil
-}
-
-// Ready returns phase IDs that have no unfinished dependencies.
-// done is the set of phase IDs that are already completed.
-func (g *Graph) Ready(done map[string]bool) []string {
-	var ready []string
-	for id, deps := range g.adjacency {
-		if done[id] {
-			continue
-		}
-		allMet := true
-		for dep := range deps {
-			if !done[dep] {
-				allMet = false
-				break
-			}
-		}
-		if allMet {
-			ready = append(ready, id)
-		}
-	}
-	return ready
-}
-
-// Wave represents a group of phases that can execute in parallel
-// because all their dependencies are satisfied by prior waves.
-type Wave struct {
-	Number   int      // 1-based wave number
-	PhaseIDs []string // Phase IDs in this wave
-}
-
-// ComputeWaves groups phase IDs into dependency waves using Kahn's algorithm.
-// Wave 1 contains phases with no dependencies, wave 2 contains phases whose
-// dependencies are all in wave 1, and so on. Returns an error if a cycle is detected.
-func (g *Graph) ComputeWaves() ([]Wave, error) {
-	inDegree := make(map[string]int)
-	for id := range g.adjacency {
-		inDegree[id] = len(g.adjacency[id])
-	}
-
-	// Collect initial wave: nodes with zero in-degree.
-	var current []string
-	for id, deg := range inDegree {
-		if deg == 0 {
-			current = append(current, id)
-		}
-	}
-
-	var waves []Wave
-	visited := 0
-	for len(current) > 0 {
-		sort.Strings(current) // deterministic ordering within each wave
-		waves = append(waves, Wave{
-			Number:   len(waves) + 1,
-			PhaseIDs: current,
-		})
-		visited += len(current)
-
-		var next []string
-		for _, id := range current {
-			for dependent := range g.reverse[id] {
-				inDegree[dependent]--
-				if inDegree[dependent] == 0 {
-					next = append(next, dependent)
+			if err := d.AddEdge(p.ID, dep); err != nil {
+				if errors.Is(err, dag.ErrCycle) {
+					return d, fmt.Errorf("%w: %v", ErrDependencyCycle, err)
 				}
-			}
-		}
-		current = next
-	}
-
-	if visited != len(g.adjacency) {
-		return nil, fmt.Errorf("%w: not all phases could be grouped into waves", ErrDependencyCycle)
-	}
-
-	return waves, nil
-}
-
-// HasPath reports whether there is a directed path from 'from' to 'to'
-// in the dependency graph (i.e., 'from' transitively depends on 'to').
-func (g *Graph) HasPath(from, to string) bool {
-	if from == to {
-		return false
-	}
-	visited := make(map[string]bool)
-	queue := []string{from}
-	for len(queue) > 0 {
-		cur := queue[0]
-		queue = queue[1:]
-		for dep := range g.adjacency[cur] {
-			if dep == to {
-				return true
-			}
-			if !visited[dep] {
-				visited[dep] = true
-				queue = append(queue, dep)
+				return d, fmt.Errorf("phase %q → %q: %w", p.ID, dep, err)
 			}
 		}
 	}
-	return false
-}
-
-// Connected reports whether a and b are connected in either direction
-// (i.e., one transitively depends on the other).
-func (g *Graph) Connected(a, b string) bool {
-	return g.HasPath(a, b) || g.HasPath(b, a)
+	return d, nil
 }

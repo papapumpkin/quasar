@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/papapumpkin/quasar/internal/ansi"
+	"github.com/papapumpkin/quasar/internal/dag"
 )
 
 // Dashboard renders a live-updating progress view of a nebula execution to a writer.
@@ -107,7 +108,12 @@ func (d *Dashboard) renderPlain() {
 // buildLines constructs the dashboard output as a slice of formatted lines.
 func (d *Dashboard) buildLines() []string {
 	completed, active, total := d.countStatuses()
-	graph := NewGraph(d.Nebula.Phases)
+	dg, err := phasesToDAG(d.Nebula.Phases)
+	if err != nil {
+		// Nebula is already validated; log and fall back to no-dependency view.
+		fmt.Fprintf(d.Writer, "warning: dashboard DAG build: %v\n", err)
+		dg = dag.New()
+	}
 
 	var lines []string
 
@@ -128,9 +134,9 @@ func (d *Dashboard) buildLines() []string {
 			status = ps.Status
 		}
 
-		isBlocked := d.isBlocked(phase.ID, graph)
+		isBlocked := d.isBlocked(phase.ID, dg)
 		icon := statusIcon(status, isBlocked)
-		suffix := d.phaseSuffix(phase.ID, graph, status, isBlocked)
+		suffix := d.phaseSuffix(phase.ID, dg, status, isBlocked)
 
 		line := fmt.Sprintf("  %s %02d %s%s",
 			icon, i+1, phase.ID, suffix)
@@ -169,12 +175,8 @@ func (d *Dashboard) countStatuses() (completed, active, total int) {
 }
 
 // isBlocked reports whether a phase has any unfinished dependency.
-func (d *Dashboard) isBlocked(phaseID string, graph *Graph) bool {
-	deps, ok := graph.adjacency[phaseID]
-	if !ok {
-		return false
-	}
-	for dep := range deps {
+func (d *Dashboard) isBlocked(phaseID string, dg *dag.DAG) bool {
+	for _, dep := range dg.DepsFor(phaseID) {
 		ps := d.State.Phases[dep]
 		if ps == nil || (ps.Status != PhaseStatusDone && ps.Status != PhaseStatusFailed) {
 			return true
@@ -184,7 +186,7 @@ func (d *Dashboard) isBlocked(phaseID string, graph *Graph) bool {
 }
 
 // phaseSuffix builds the trailing info for a phase line (cost, cycles, blocked deps).
-func (d *Dashboard) phaseSuffix(phaseID string, graph *Graph, status PhaseStatus, isBlocked bool) string {
+func (d *Dashboard) phaseSuffix(phaseID string, dg *dag.DAG, status PhaseStatus, isBlocked bool) string {
 	var parts []string
 
 	// Cost info for done/in-progress phases (future: track per-phase cost if available).
@@ -192,9 +194,8 @@ func (d *Dashboard) phaseSuffix(phaseID string, graph *Graph, status PhaseStatus
 
 	if isBlocked && status == PhaseStatusPending {
 		// Show which phases block this one.
-		deps := graph.adjacency[phaseID]
 		var blocking []string
-		for dep := range deps {
+		for _, dep := range dg.DepsFor(phaseID) {
 			ps := d.State.Phases[dep]
 			if ps == nil || (ps.Status != PhaseStatusDone && ps.Status != PhaseStatusFailed) {
 				blocking = append(blocking, dep)

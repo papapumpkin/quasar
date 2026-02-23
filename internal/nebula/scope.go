@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/papapumpkin/quasar/internal/dag"
 )
 
 // validateScopeOverlaps checks that parallel phases (not connected by
 // dependencies) do not declare overlapping file scopes.
-func validateScopeOverlaps(phases []PhaseSpec) []ValidationError {
+func validateScopeOverlaps(phases []PhaseSpec, d *dag.DAG) []ValidationError {
 	var errs []ValidationError
 
 	// Collect only phases with non-empty scopes.
@@ -22,15 +24,13 @@ func validateScopeOverlaps(phases []PhaseSpec) []ValidationError {
 		return nil
 	}
 
-	g := NewGraph(phases)
-
 	// Check each unordered pair of scoped phases.
 	for i := 0; i < len(scoped); i++ {
 		for j := i + 1; j < len(scoped); j++ {
 			a, b := scoped[i], scoped[j]
 
 			// Serialized by dependency — no conflict possible.
-			if g.Connected(a.ID, b.ID) {
+			if d.Connected(a.ID, b.ID) {
 				continue
 			}
 
