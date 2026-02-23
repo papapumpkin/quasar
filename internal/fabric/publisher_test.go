@@ -71,6 +71,8 @@ func (m *mockFabric) UnresolvedDiscoveries(_ context.Context) ([]Discovery, erro
 }
 func (m *mockFabric) EmitPulse(_ context.Context, _ Pulse) error             { return nil }
 func (m *mockFabric) PulsesFor(_ context.Context, _ string) ([]Pulse, error) { return nil, nil }
+func (m *mockFabric) AllPulses(_ context.Context) ([]Pulse, error)           { return nil, nil }
+func (m *mockFabric) PurgeAll(_ context.Context) error                       { return nil }
 func (m *mockFabric) Close() error                                           { return nil }
 
 // initGitRepo creates a temporary git repo and returns its path.

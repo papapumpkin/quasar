@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'fabric'
-total_cost_usd = 40.914300350000005
+total_cost_usd = 47.7694471
 
 [phases]
 [phases.agent-prompt]
@@ -23,9 +23,15 @@ updated_at = 2026-02-23T14:40:41.361989-05:00
 
 [phases.cockpit-wiring]
 bead_id = 'quasar-wch'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T11:20:46.355402-05:00
-updated_at = 2026-02-23T15:27:51.655308-05:00
+updated_at = 2026-02-23T15:39:36.229127-05:00
+
+[phases.cockpit-wiring.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Fabric-to-TUI plumbing correctly wires 5 new message types, PhaseUIBridge extensions, a JSONL telemetry tailer, and AppModel data storage with clean code, proper nil-safety, and solid test coverage.'
 
 [phases.discovery-cli]
 bead_id = 'quasar-cji'
@@ -77,9 +83,9 @@ summary = 'Well-implemented pre-reviewer filter chain with build/vet/lint/test/c
 
 [phases.neutron-archival]
 bead_id = 'quasar-xuw'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-23T11:20:46.02521-05:00
-updated_at = 2026-02-23T14:55:26.917863-05:00
+updated_at = 2026-02-23T15:39:36.229667-05:00
 
 [phases.pulse-cli]
 bead_id = 'quasar-qla'

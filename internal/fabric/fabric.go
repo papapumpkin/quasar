@@ -184,6 +184,12 @@ type Fabric interface {
 	// PulsesFor returns all pulses associated with the given task.
 	PulsesFor(ctx context.Context, taskID string) ([]Pulse, error)
 
+	// AllPulses returns every pulse in the fabric.
+	AllPulses(ctx context.Context) ([]Pulse, error)
+
+	// PurgeAll removes all state from the fabric (all tables).
+	PurgeAll(ctx context.Context) error
+
 	// Close releases database resources.
 	Close() error
 }

@@ -159,6 +159,8 @@ func (m *mockFabric) UnresolvedDiscoveries(_ context.Context) ([]fabric.Discover
 }
 func (m *mockFabric) EmitPulse(_ context.Context, _ fabric.Pulse) error             { return nil }
 func (m *mockFabric) PulsesFor(_ context.Context, _ string) ([]fabric.Pulse, error) { return nil, nil }
+func (m *mockFabric) AllPulses(_ context.Context) ([]fabric.Pulse, error)           { return nil, nil }
+func (m *mockFabric) PurgeAll(_ context.Context) error                              { return nil }
 func (m *mockFabric) Close() error                                                  { return nil }
 
 // mockPoller satisfies fabric.Poller with canned per-phase responses.

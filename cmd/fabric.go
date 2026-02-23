@@ -1,8 +1,7 @@
 // Package cmd provides CLI commands for quasar.
 //
 // fabric.go defines the root `quasar fabric` command group and registers all
-// fabric subcommands. Placeholder subcommands (archive, purge) are registered
-// here but defer their implementation to the neutron-archival phase.
+// fabric subcommands. Archive and purge are implemented in fabric_archive.go.
 package cmd
 
 import (
@@ -32,22 +31,6 @@ func init() {
 	_ = viper.BindPFlag("task_id", fabricCmd.PersistentFlags().Lookup("task"))
 	_ = viper.BindEnv("fabric_db", "QUASAR_FABRIC_DB")
 	_ = viper.BindEnv("task_id", "QUASAR_TASK_ID")
-
-	// Register placeholder subcommands for deferred phases.
-	fabricCmd.AddCommand(&cobra.Command{
-		Use:   "archive",
-		Short: "Snapshot and purge fabric state for an epoch (not yet implemented)",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return fmt.Errorf("fabric archive: not yet implemented (deferred to neutron-archival phase)")
-		},
-	})
-	fabricCmd.AddCommand(&cobra.Command{
-		Use:   "purge",
-		Short: "Discard fabric state for an abandoned epoch (not yet implemented)",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return fmt.Errorf("fabric purge: not yet implemented (deferred to neutron-archival phase)")
-		},
-	})
 
 	rootCmd.AddCommand(fabricCmd)
 }
