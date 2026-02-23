@@ -370,7 +370,10 @@ func (f *SQLiteFabric) AllClaims(ctx context.Context) ([]Claim, error) {
 		if err := rows.Scan(&c.Filepath, &c.OwnerTask, &ts); err != nil {
 			return nil, fmt.Errorf("fabric: scan claim: %w", err)
 		}
-		c.ClaimedAt, _ = parseTimestamp(ts)
+		c.ClaimedAt, err = parseTimestamp(ts)
+		if err != nil {
+			return nil, fmt.Errorf("fabric: parse claim timestamp: %w", err)
+		}
 		claims = append(claims, c)
 	}
 	if err := rows.Err(); err != nil {

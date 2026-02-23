@@ -12,6 +12,11 @@ import (
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
+// NOTE: AST formatting helpers (ExprString, FormatFuncSignature,
+// FormatRecvType, FormatFieldType, FormatFieldList, FormatTypeSignature)
+// are exported from internal/fabric and reused here to stay consistent
+// with the Publisher's extraction logic.
+
 func init() {
 	cmd := &cobra.Command{
 		Use:   "post",
@@ -155,11 +160,11 @@ func extractFuncDecl(d *ast.FuncDecl, pkg string) []fabric.Entanglement {
 
 	kind := fabric.KindFunction
 	name := d.Name.Name
-	sig := formatFuncSig(d)
+	sig := fabric.FormatFuncSignature(d)
 
 	if d.Recv != nil && len(d.Recv.List) > 0 {
 		kind = fabric.KindMethod
-		recvType := formatRecvTypeName(d.Recv.List[0].Type)
+		recvType := fabric.FormatRecvType(d.Recv.List[0].Type)
 		name = recvType + "." + d.Name.Name
 	}
 
@@ -195,7 +200,7 @@ func extractTypeSpecs(d *ast.GenDecl, pkg string) []fabric.Entanglement {
 			entanglements = append(entanglements, fabric.Entanglement{
 				Kind:      fabric.KindType,
 				Name:      ts.Name.Name,
-				Signature: fmt.Sprintf("type %s", ts.Name.Name),
+				Signature: fabric.FormatTypeSignature(ts),
 				Package:   pkg,
 			})
 		}
@@ -218,122 +223,12 @@ func extractInterfaceMethods(iface *ast.InterfaceType, ifaceName, pkg string) []
 		if !ast.IsExported(name) {
 			continue
 		}
-		sig := name
-		if ft, ok := method.Type.(*ast.FuncType); ok {
-			sig = name + formatFuncTypeBrief(ft)
-		}
 		entanglements = append(entanglements, fabric.Entanglement{
 			Kind:      fabric.KindMethod,
 			Name:      ifaceName + "." + name,
-			Signature: sig,
+			Signature: name + fabric.FormatFieldType(method.Type),
 			Package:   pkg,
 		})
 	}
 	return entanglements
-}
-
-// formatFuncTypeBrief formats a function type signature for display.
-func formatFuncTypeBrief(ft *ast.FuncType) string {
-	var b strings.Builder
-	b.WriteString("(")
-	b.WriteString(formatFieldListBrief(ft.Params))
-	b.WriteString(")")
-	if ft.Results != nil && len(ft.Results.List) > 0 {
-		results := formatFieldListBrief(ft.Results)
-		if len(ft.Results.List) == 1 && len(ft.Results.List[0].Names) == 0 {
-			b.WriteString(" ")
-			b.WriteString(results)
-		} else {
-			b.WriteString(" (")
-			b.WriteString(results)
-			b.WriteString(")")
-		}
-	}
-	return b.String()
-}
-
-// formatFuncSig formats a function declaration signature for display.
-func formatFuncSig(d *ast.FuncDecl) string {
-	var b strings.Builder
-	b.WriteString("func ")
-	if d.Recv != nil && len(d.Recv.List) > 0 {
-		fmt.Fprintf(&b, "(%s) ", formatRecvTypeName(d.Recv.List[0].Type))
-	}
-	b.WriteString(d.Name.Name)
-	b.WriteString("(")
-	if d.Type.Params != nil {
-		b.WriteString(formatFieldListBrief(d.Type.Params))
-	}
-	b.WriteString(")")
-	if d.Type.Results != nil && len(d.Type.Results.List) > 0 {
-		if len(d.Type.Results.List) == 1 && len(d.Type.Results.List[0].Names) == 0 {
-			fmt.Fprintf(&b, " %s", exprStr(d.Type.Results.List[0].Type))
-		} else {
-			fmt.Fprintf(&b, " (%s)", formatFieldListBrief(d.Type.Results))
-		}
-	}
-	return b.String()
-}
-
-// formatRecvTypeName extracts the receiver type name from an expression,
-// stripping pointer receivers and generic type parameters to match the
-// publisher's formatRecvType behavior.
-func formatRecvTypeName(expr ast.Expr) string {
-	switch t := expr.(type) {
-	case *ast.StarExpr:
-		return formatRecvTypeName(t.X)
-	case *ast.Ident:
-		return t.Name
-	case *ast.IndexExpr:
-		return formatRecvTypeName(t.X)
-	case *ast.IndexListExpr:
-		return formatRecvTypeName(t.X)
-	default:
-		return "?"
-	}
-}
-
-// formatFieldListBrief formats a field list as a comma-separated type list.
-func formatFieldListBrief(fl *ast.FieldList) string {
-	if fl == nil || len(fl.List) == 0 {
-		return ""
-	}
-	var parts []string
-	for _, f := range fl.List {
-		typeStr := exprStr(f.Type)
-		if len(f.Names) == 0 {
-			parts = append(parts, typeStr)
-		} else {
-			for _, n := range f.Names {
-				parts = append(parts, n.Name+" "+typeStr)
-			}
-		}
-	}
-	return strings.Join(parts, ", ")
-}
-
-// exprStr returns a simple string representation of an AST expression.
-func exprStr(expr ast.Expr) string {
-	switch t := expr.(type) {
-	case *ast.Ident:
-		return t.Name
-	case *ast.StarExpr:
-		return "*" + exprStr(t.X)
-	case *ast.SelectorExpr:
-		return exprStr(t.X) + "." + t.Sel.Name
-	case *ast.ArrayType:
-		return "[]" + exprStr(t.Elt)
-	case *ast.MapType:
-		return "map[" + exprStr(t.Key) + "]" + exprStr(t.Value)
-	case *ast.InterfaceType:
-		return "interface{}"
-	case *ast.Ellipsis:
-		return "..." + exprStr(t.Elt)
-	case *ast.FuncType:
-		return "func(...)"
-	case *ast.ChanType:
-		return "chan " + exprStr(t.Value)
-	default:
-		return "?"
-	}
 }

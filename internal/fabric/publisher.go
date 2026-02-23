@@ -137,11 +137,11 @@ func (p *Publisher) extractFuncDecl(d *ast.FuncDecl, pkg string) []Entanglement 
 
 	kind := KindFunction
 	name := d.Name.Name
-	sig := formatFuncSignature(d)
+	sig := FormatFuncSignature(d)
 
 	if d.Recv != nil && len(d.Recv.List) > 0 {
 		kind = KindMethod
-		recvType := formatRecvType(d.Recv.List[0].Type)
+		recvType := FormatRecvType(d.Recv.List[0].Type)
 		name = recvType + "." + d.Name.Name
 	}
 
@@ -178,7 +178,7 @@ func (p *Publisher) extractTypeSpecs(d *ast.GenDecl, pkg string) []Entanglement 
 			entanglements = append(entanglements, Entanglement{
 				Kind:      KindType,
 				Name:      ts.Name.Name,
-				Signature: formatTypeSignature(ts),
+				Signature: FormatTypeSignature(ts),
 				Package:   pkg,
 			})
 		}
@@ -204,55 +204,55 @@ func extractInterfaceMethods(iface *ast.InterfaceType, ifaceName, pkg string) []
 		entanglements = append(entanglements, Entanglement{
 			Kind:      KindMethod,
 			Name:      ifaceName + "." + name,
-			Signature: name + formatFieldType(method.Type),
+			Signature: name + FormatFieldType(method.Type),
 			Package:   pkg,
 		})
 	}
 	return entanglements
 }
 
-// formatFuncSignature builds a human-readable signature from a FuncDecl.
-func formatFuncSignature(d *ast.FuncDecl) string {
+// FormatFuncSignature builds a human-readable signature from a FuncDecl.
+func FormatFuncSignature(d *ast.FuncDecl) string {
 	var b strings.Builder
 	b.WriteString("func ")
 	if d.Recv != nil && len(d.Recv.List) > 0 {
 		b.WriteString("(")
-		b.WriteString(formatRecvType(d.Recv.List[0].Type))
+		b.WriteString(FormatRecvType(d.Recv.List[0].Type))
 		b.WriteString(") ")
 	}
 	b.WriteString(d.Name.Name)
-	b.WriteString(formatFieldType(d.Type))
+	b.WriteString(FormatFieldType(d.Type))
 	return b.String()
 }
 
-// formatRecvType returns the receiver type name, stripping pointer markers.
-func formatRecvType(expr ast.Expr) string {
+// FormatRecvType returns the receiver type name, stripping pointer markers.
+func FormatRecvType(expr ast.Expr) string {
 	switch t := expr.(type) {
 	case *ast.StarExpr:
-		return formatRecvType(t.X)
+		return FormatRecvType(t.X)
 	case *ast.Ident:
 		return t.Name
 	case *ast.IndexExpr:
-		return formatRecvType(t.X)
+		return FormatRecvType(t.X)
 	case *ast.IndexListExpr:
-		return formatRecvType(t.X)
+		return FormatRecvType(t.X)
 	default:
 		return "?"
 	}
 }
 
-// formatFieldType returns a string representation of a function type.
-func formatFieldType(expr ast.Expr) string {
+// FormatFieldType returns a string representation of a function type.
+func FormatFieldType(expr ast.Expr) string {
 	ft, ok := expr.(*ast.FuncType)
 	if !ok {
 		return ""
 	}
 	var b strings.Builder
 	b.WriteString("(")
-	b.WriteString(formatFieldList(ft.Params))
+	b.WriteString(FormatFieldList(ft.Params))
 	b.WriteString(")")
 	if ft.Results != nil && len(ft.Results.List) > 0 {
-		results := formatFieldList(ft.Results)
+		results := FormatFieldList(ft.Results)
 		if len(ft.Results.List) == 1 && len(ft.Results.List[0].Names) == 0 {
 			b.WriteString(" ")
 			b.WriteString(results)
@@ -265,14 +265,14 @@ func formatFieldType(expr ast.Expr) string {
 	return b.String()
 }
 
-// formatFieldList formats a parameter or result list.
-func formatFieldList(fl *ast.FieldList) string {
+// FormatFieldList formats a parameter or result list.
+func FormatFieldList(fl *ast.FieldList) string {
 	if fl == nil || len(fl.List) == 0 {
 		return ""
 	}
 	var parts []string
 	for _, field := range fl.List {
-		typStr := exprString(field.Type)
+		typStr := ExprString(field.Type)
 		if len(field.Names) == 0 {
 			parts = append(parts, typStr)
 		} else {
@@ -284,44 +284,44 @@ func formatFieldList(fl *ast.FieldList) string {
 	return strings.Join(parts, ", ")
 }
 
-// exprString returns a best-effort string for an AST expression.
-func exprString(expr ast.Expr) string {
+// ExprString returns a best-effort string for an AST expression.
+func ExprString(expr ast.Expr) string {
 	switch t := expr.(type) {
 	case *ast.Ident:
 		return t.Name
 	case *ast.SelectorExpr:
-		return exprString(t.X) + "." + t.Sel.Name
+		return ExprString(t.X) + "." + t.Sel.Name
 	case *ast.StarExpr:
-		return "*" + exprString(t.X)
+		return "*" + ExprString(t.X)
 	case *ast.ArrayType:
 		if t.Len == nil {
-			return "[]" + exprString(t.Elt)
+			return "[]" + ExprString(t.Elt)
 		}
-		return "[...]" + exprString(t.Elt)
+		return "[...]" + ExprString(t.Elt)
 	case *ast.MapType:
-		return "map[" + exprString(t.Key) + "]" + exprString(t.Value)
+		return "map[" + ExprString(t.Key) + "]" + ExprString(t.Value)
 	case *ast.InterfaceType:
 		return "interface{}"
 	case *ast.Ellipsis:
-		return "..." + exprString(t.Elt)
+		return "..." + ExprString(t.Elt)
 	case *ast.FuncType:
-		return "func" + formatFieldType(t)
+		return "func" + FormatFieldType(t)
 	case *ast.ChanType:
 		switch t.Dir {
 		case ast.SEND:
-			return "chan<- " + exprString(t.Value)
+			return "chan<- " + ExprString(t.Value)
 		case ast.RECV:
-			return "<-chan " + exprString(t.Value)
+			return "<-chan " + ExprString(t.Value)
 		default:
-			return "chan " + exprString(t.Value)
+			return "chan " + ExprString(t.Value)
 		}
 	default:
 		return "?"
 	}
 }
 
-// formatTypeSignature returns a compact type declaration string.
-func formatTypeSignature(ts *ast.TypeSpec) string {
+// FormatTypeSignature returns a compact type declaration string.
+func FormatTypeSignature(ts *ast.TypeSpec) string {
 	var b strings.Builder
 	b.WriteString("type ")
 	b.WriteString(ts.Name.Name)
@@ -333,13 +333,13 @@ func formatTypeSignature(ts *ast.TypeSpec) string {
 	case *ast.Ident:
 		b.WriteString(t.Name)
 	case *ast.SelectorExpr:
-		b.WriteString(exprString(t))
+		b.WriteString(ExprString(t))
 	case *ast.ArrayType:
-		b.WriteString(exprString(t))
+		b.WriteString(ExprString(t))
 	case *ast.MapType:
-		b.WriteString(exprString(t))
+		b.WriteString(ExprString(t))
 	case *ast.FuncType:
-		b.WriteString("func" + formatFieldType(t))
+		b.WriteString("func" + FormatFieldType(t))
 	default:
 		b.WriteString("?")
 	}
