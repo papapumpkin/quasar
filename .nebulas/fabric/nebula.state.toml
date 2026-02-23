@@ -1,25 +1,25 @@
 version = 1
 nebula_name = 'fabric'
-total_cost_usd = 19.476403750000006
+total_cost_usd = 27.69128235000001
 
 [phases]
 [phases.agent-prompt]
 bead_id = 'quasar-gw0'
 status = 'created'
 created_at = 2026-02-23T11:20:45.300454-05:00
-updated_at = 2026-02-23T14:04:52.173925-05:00
+updated_at = 2026-02-23T14:40:40.9696-05:00
 
 [phases.bead-cli]
 bead_id = 'quasar-iwi'
-status = 'created'
+status = 'done'
 created_at = 2026-02-23T11:20:44.092948-05:00
-updated_at = 2026-02-23T14:04:51.778097-05:00
+updated_at = 2026-02-23T14:40:41.361989-05:00
 
 [phases.cockpit-wiring]
 bead_id = 'quasar-wch'
 status = 'created'
 created_at = 2026-02-23T11:20:46.355402-05:00
-updated_at = 2026-02-23T14:04:52.174887-05:00
+updated_at = 2026-02-23T14:40:40.971022-05:00
 
 [phases.discovery-cli]
 bead_id = 'quasar-cji'
@@ -35,9 +35,15 @@ summary = 'Well-structured discovery system with CLI command, hail mechanism, va
 
 [phases.fabric-cli]
 bead_id = 'quasar-211'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T11:20:43.272333-05:00
-updated_at = 2026-02-23T14:11:20.116242-05:00
+updated_at = 2026-02-23T14:36:03.966651-05:00
+
+[phases.fabric-cli.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean consolidation of divergent AST formatting helpers into exported functions, fixing subtle signature mismatches between CLI and publisher extraction paths, plus a swallowed-error fix in AllClaims.'
 
 [phases.fabric-rename]
 bead_id = 'quasar-c7d'
@@ -55,13 +61,13 @@ summary = 'Clean, comprehensive rename from internal/board to internal/fabric wi
 bead_id = 'quasar-r37'
 status = 'created'
 created_at = 2026-02-23T11:20:44.484307-05:00
-updated_at = 2026-02-23T14:04:52.172796-05:00
+updated_at = 2026-02-23T14:40:40.968736-05:00
 
 [phases.neutron-archival]
 bead_id = 'quasar-xuw'
 status = 'created'
 created_at = 2026-02-23T11:20:46.02521-05:00
-updated_at = 2026-02-23T14:04:52.174486-05:00
+updated_at = 2026-02-23T14:40:40.970082-05:00
 
 [phases.schema-evolution]
 bead_id = 'quasar-i8s'
@@ -89,6 +95,6 @@ summary = 'Three targeted fixes to cmd/telemetry.go (nil pointer panic, unchecke
 
 [phases.tycho-scheduler]
 bead_id = 'quasar-8i2'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-23T11:20:44.868698-05:00
-updated_at = 2026-02-23T14:04:52.173441-05:00
+updated_at = 2026-02-23T14:40:41.524774-05:00

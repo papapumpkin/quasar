@@ -3,13 +3,13 @@ id = "agent-prompt"
 title = "Fabric protocol injection into agent prompts"
 type = "feature"
 priority = 2
-depends_on = ["fabric-cli", "discovery-cli", "bead-cli"]
+depends_on = ["fabric-cli", "discovery-cli"]
 scope = ["internal/agent/prompt.go", "internal/agent/prompt_test.go"]
 +++
 
 ## Problem
 
-Quasars (worker agents) need to know the fabric protocol — how to read entanglements, claim files, post discoveries, and record beads. This protocol must be injected into their system prompt so they follow it during execution. Currently, agents receive a task description but no coordination protocol.
+Quasars (worker agents) need to know the fabric protocol — how to read entanglements, claim files, and post discoveries. This protocol must be injected into their system prompt so they follow it during execution. Currently, agents receive a task description but no coordination protocol. Agents already use beads (via the existing `beads.Client`) for task tracking — the fabric protocol covers only fabric-specific coordination.
 
 ## Solution
 
@@ -48,15 +48,9 @@ WHEN you encounter an unexpected issue outside your task scope:
   Run: quasar discovery --kind missing_dependency --detail "<what you need>"
   Then STOP and wait for resolution.
 
-TRACK your reasoning:
-  Run: quasar bead add --kind decision "switched approach because..."
-  Run: quasar bead add --kind failure "approach X failed because..."
-  Run: quasar bead add --kind note "important: this function has a subtle nil case"
-
 RULES:
   - Never modify files you haven't claimed.
   - Never change an entangled interface without posting a discovery.
-  - If the reviewer gives you feedback, record it: quasar bead add --kind reviewer_feedback "..."
   - Only STOP for genuine blockers. If you're uncertain but can write compilable code, proceed.
 `
 ```
