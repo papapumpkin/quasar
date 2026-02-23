@@ -30,6 +30,52 @@ func TestPushbackHandler_NeedInfo_PlausibleProducer(t *testing.T) {
 	}
 }
 
+func TestPushbackHandler_NeedInfo_PlausibleProducer_HardCap(t *testing.T) {
+	t.Parallel()
+
+	h := &PushbackHandler{MaxRetries: 3}
+	bp := &BlockedPhase{
+		PhaseID:    "phase-consumer",
+		BlockedAt:  time.Now(),
+		RetryCount: 6, // at 2*MaxRetries hard cap
+		LastResult: PollResult{
+			Decision:    PollNeedInfo,
+			Reason:      "missing type definitions",
+			MissingInfo: []string{"phase-producer"},
+		},
+	}
+	inProgress := []string{"phase-producer"}
+	snap := BoardSnapshot{}
+
+	action := h.Handle(context.Background(), bp, inProgress, snap)
+	if action != ActionEscalate {
+		t.Errorf("expected ActionEscalate when plausible producer exists but 2*MaxRetries reached, got %q", action)
+	}
+}
+
+func TestPushbackHandler_NeedInfo_PlausibleProducer_BelowHardCap(t *testing.T) {
+	t.Parallel()
+
+	h := &PushbackHandler{MaxRetries: 3}
+	bp := &BlockedPhase{
+		PhaseID:    "phase-consumer",
+		BlockedAt:  time.Now(),
+		RetryCount: 5, // below 2*MaxRetries (6)
+		LastResult: PollResult{
+			Decision:    PollNeedInfo,
+			Reason:      "missing type definitions",
+			MissingInfo: []string{"phase-producer"},
+		},
+	}
+	inProgress := []string{"phase-producer"}
+	snap := BoardSnapshot{}
+
+	action := h.Handle(context.Background(), bp, inProgress, snap)
+	if action != ActionRetry {
+		t.Errorf("expected ActionRetry when plausible producer exists and below 2*MaxRetries, got %q", action)
+	}
+}
+
 func TestPushbackHandler_NeedInfo_NoProducer_Escalates(t *testing.T) {
 	t.Parallel()
 
@@ -299,7 +345,7 @@ func TestHasPlausibleProducer(t *testing.T) {
 			want:        true,
 		},
 		{
-			name:        "substring match",
+			name:        "phase ID in missing info string",
 			missingInfo: []string{"phase-auth types"},
 			inProgress:  []string{"phase-auth"},
 			want:        true,
@@ -327,6 +373,30 @@ func TestHasPlausibleProducer(t *testing.T) {
 			missingInfo: nil,
 			inProgress:  []string{"phase-a"},
 			want:        false,
+		},
+		{
+			name:        "short phase ID skipped",
+			missingInfo: []string{"the database connection id is missing"},
+			inProgress:  []string{"db"},
+			want:        false,
+		},
+		{
+			name:        "short phase ID at boundary skipped",
+			missingInfo: []string{"id lookup failed"},
+			inProgress:  []string{"id"},
+			want:        false,
+		},
+		{
+			name:        "reverse direction not matched",
+			missingInfo: []string{"db"},
+			inProgress:  []string{"phase-db-migration"},
+			want:        false,
+		},
+		{
+			name:        "phase ID at min length matches",
+			missingInfo: []string{"need auth service"},
+			inProgress:  []string{"auth"},
+			want:        true,
 		},
 	}
 

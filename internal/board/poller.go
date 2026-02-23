@@ -73,8 +73,10 @@ type BlockedPhase struct {
 	LastResult PollResult
 }
 
-// MaxPollRetries is the default number of re-polls before a blocked phase
-// escalates to HUMAN_DECISION_REQUIRED.
+// MaxPollRetries is the legacy default number of re-polls before a blocked phase
+// escalates to HUMAN_DECISION_REQUIRED. It is used by BlockedTracker.NeedsEscalation
+// for backward compatibility. New code should use PushbackHandler (which defaults to
+// DefaultMaxRetries) for retry decisions instead of calling NeedsEscalation directly.
 const MaxPollRetries = 5
 
 // BlockedTracker manages the set of phases that are waiting for board context.

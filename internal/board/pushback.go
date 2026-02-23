@@ -29,16 +29,27 @@ const (
 // It distinguishes transient blocks (a dependency will publish soon) from
 // permanent ones (missing decomposition or genuine conflict) and routes
 // accordingly.
+//
+// Retry limits: DefaultMaxRetries (used here) controls how many auto-retries
+// the handler allows before escalating. This supersedes the older MaxPollRetries
+// constant in poller.go, which BlockedTracker.NeedsEscalation still references
+// for backward compatibility. New code should use PushbackHandler for retry
+// decisions rather than calling NeedsEscalation directly.
 type PushbackHandler struct {
 	// Board provides access to phase state and contract queries.
+	// TODO: used in step 3 (codebase check for existing symbols) — not yet implemented.
 	Board Board
 
-	// MaxRetries is the maximum number of auto-retries before escalating.
+	// MaxRetries is the maximum number of auto-retries before escalating
+	// when no plausible producer exists. When a plausible producer is found,
+	// the hard cap is 2*MaxRetries to allow extra time for the producer to
+	// finish, while still preventing infinite retry loops.
 	// Zero value defaults to DefaultMaxRetries.
 	MaxRetries int
 
 	// RetryDelay is the minimum time between retries. Zero means immediate
 	// retry on board change.
+	// TODO: not yet referenced in retry logic — reserved for future rate-limiting.
 	RetryDelay time.Duration
 }
 
@@ -67,14 +78,21 @@ func (h *PushbackHandler) Handle(ctx context.Context, bp *BlockedPhase, inProgre
 }
 
 // handleNeedInfo processes NEED_INFO pushback. If an in-progress phase could
-// plausibly produce the missing info, the phase retries. Otherwise it escalates
-// after exhausting retries.
+// plausibly produce the missing info, the phase retries — but only up to
+// 2*MaxRetries to prevent infinite loops from loose heuristic matches.
+// Without a plausible producer, escalation happens at MaxRetries.
 func (h *PushbackHandler) handleNeedInfo(_ context.Context, bp *BlockedPhase, inProgress []string) PushbackAction {
+	max := h.maxRetries()
 	if hasPlausibleProducer(bp.LastResult.MissingInfo, inProgress) {
+		// A running phase might produce what we need, allow extra retries
+		// but still cap at 2x to avoid infinite loops from loose matching.
+		if bp.RetryCount >= 2*max {
+			return ActionEscalate
+		}
 		return ActionRetry
 	}
 	// No in-progress phase can help — check retry budget.
-	if bp.RetryCount >= h.maxRetries() {
+	if bp.RetryCount >= max {
 		return ActionEscalate
 	}
 	return ActionRetry
@@ -91,16 +109,25 @@ func (h *PushbackHandler) handleConflict(_ context.Context, bp *BlockedPhase, sn
 	return ActionEscalate
 }
 
-// hasPlausibleProducer returns true if any in-progress phase ID appears to
-// match the missing info tokens. This is a heuristic: if a missing info item
-// contains a phase ID (or vice versa), that phase might produce the needed
-// contract. The caller should treat this as an optimistic signal.
+// minProducerMatchLen is the minimum length a phase ID must have to be
+// considered in substring matching. Short IDs like "db" or "id" would
+// otherwise match almost every missing-info string.
+const minProducerMatchLen = 4
+
+// hasPlausibleProducer returns true if any in-progress phase ID appears as a
+// substring within a missing-info entry. Only the forward direction is checked
+// (phase ID contained in missing-info string) to avoid false positives from
+// short info tokens matching long phase IDs. Phase IDs shorter than
+// minProducerMatchLen are skipped to prevent spurious matches.
 func hasPlausibleProducer(missingInfo []string, inProgress []string) bool {
 	for _, phaseID := range inProgress {
+		if len(phaseID) < minProducerMatchLen {
+			continue
+		}
+		phLower := strings.ToLower(phaseID)
 		for _, info := range missingInfo {
 			lower := strings.ToLower(info)
-			phLower := strings.ToLower(phaseID)
-			if strings.Contains(lower, phLower) || strings.Contains(phLower, lower) {
+			if strings.Contains(lower, phLower) {
 				return true
 			}
 		}
