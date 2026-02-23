@@ -6,6 +6,7 @@ import (
 
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/board"
 )
 
 // PhaseRunnerResult holds the outcome of a single phase execution.
@@ -127,4 +128,24 @@ func WithMetrics(m *Metrics) Option {
 // WithLogger sets the log output writer. Nil defaults to os.Stderr.
 func WithLogger(w io.Writer) Option {
 	return func(wg *WorkerGroup) { wg.Logger = w }
+}
+
+// WithBoard sets the contract board. When non-nil, the dispatch loop polls
+// phases against the board before launching worker goroutines and publishes
+// contracts on completion. Nil preserves legacy (no-board) behavior.
+func WithBoard(b board.Board) Option {
+	return func(wg *WorkerGroup) { wg.Board = b }
+}
+
+// WithPoller sets the board poller used to check if a phase has enough
+// context to proceed. Only used when Board is also set.
+func WithPoller(p board.Poller) Option {
+	return func(wg *WorkerGroup) { wg.Poller = p }
+}
+
+// WithPublisher sets the contract publisher used to extract and publish
+// interface contracts after a phase completes. Only used when Board is
+// also set.
+func WithPublisher(p *board.Publisher) Option {
+	return func(wg *WorkerGroup) { wg.Publisher = p }
 }

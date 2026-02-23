@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'contract-board'
-total_cost_usd = 8.6459665
+total_cost_usd = 11.1168713
 
 [phases]
 [phases.board-store]
@@ -71,12 +71,18 @@ summary = 'Well-designed polling types and blocked-phase tracker with comprehens
 
 [phases.pushback-handler]
 bead_id = 'quasar-ajf'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T00:03:48.391545-05:00
-updated_at = 2026-02-23T09:39:18.983038-05:00
+updated_at = 2026-02-23T09:49:29.036781-05:00
+
+[phases.pushback-handler.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'PushbackHandler implementation is clean, well-tested, and correctly routes NEED_INFO/CONFLICT pushback with appropriate retry caps and escalation logic.'
 
 [phases.worker-integration]
 bead_id = 'quasar-0rq'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-23T00:03:48.845784-05:00
-updated_at = 2026-02-23T09:16:57.224381-05:00
+updated_at = 2026-02-23T09:49:29.037259-05:00

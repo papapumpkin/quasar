@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/board"
 	"github.com/papapumpkin/quasar/internal/dag"
 )
 
@@ -36,12 +37,15 @@ type WorkerGroup struct {
 	Nebula       *Nebula
 	State        *State
 	MaxWorkers   int
-	Watcher      *Watcher     // nil = no in-flight editing
-	Committer    GitCommitter // nil = no phase-boundary commits
-	Gater        Gater        // nil = built from Prompter + manifest at Run time
-	Prompter     GatePrompter // used to build Gater if Gater is nil
-	Dashboard    *Dashboard   // nil = no dashboard; used to coordinate watch-mode output
-	BeadsClient  beads.Client // nil = hot-added phases cannot create beads
+	Watcher      *Watcher         // nil = no in-flight editing
+	Committer    GitCommitter     // nil = no phase-boundary commits
+	Gater        Gater            // nil = built from Prompter + manifest at Run time
+	Prompter     GatePrompter     // used to build Gater if Gater is nil
+	Dashboard    *Dashboard       // nil = no dashboard; used to coordinate watch-mode output
+	BeadsClient  beads.Client     // nil = hot-added phases cannot create beads
+	Board        board.Board      // nil = no board (legacy behavior)
+	Poller       board.Poller     // nil = skip polling (legacy behavior)
+	Publisher    *board.Publisher // nil = no contract publishing
 	GlobalCycles int
 	GlobalBudget float64
 	GlobalModel  string
@@ -57,9 +61,11 @@ type WorkerGroup struct {
 	gateSignals []gateSignal // collected after each batch
 
 	// Collaborators — constructed during Run.
-	tracker   *PhaseTracker
-	progress  *ProgressReporter
-	hotReload *HotReloader
+	tracker         *PhaseTracker
+	progress        *ProgressReporter
+	hotReload       *HotReloader
+	blockedTracker  *board.BlockedTracker  // nil when Board is nil
+	pushbackHandler *board.PushbackHandler // nil when Board is nil
 }
 
 // logger returns the effective log writer (os.Stderr if Logger is nil).
@@ -232,6 +238,12 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		go wg.hotReload.ConsumeChanges(ctx)
 	}
 
+	// Initialize board collaborators when the board is configured.
+	if wg.Board != nil && wg.Poller != nil {
+		wg.blockedTracker = board.NewBlockedTracker()
+		wg.pushbackHandler = &board.PushbackHandler{Board: wg.Board}
+	}
+
 	// Build impact-aware scheduler from phases using the DAG engine.
 	scheduler, err := NewScheduler(wg.Nebula.Phases)
 	if err != nil {
@@ -297,12 +309,26 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		anyInFlight := len(inFlight) > 0
 		wg.mu.Unlock()
 
+		// Board-aware polling: filter eligible through the board.
+		// Phases that don't poll PROCEED are blocked and skipped.
+		if wg.Board != nil && wg.Poller != nil && len(eligible) > 0 {
+			eligible = wg.pollEligible(ctx, eligible)
+		}
+
 		if len(eligible) == 0 {
-			if !anyInFlight {
-				break // nothing running, nothing to dispatch — done
+			anyBlocked := wg.boardBlocked() > 0
+			if !anyInFlight && !anyBlocked {
+				break // nothing running, nothing blocked, nothing to dispatch — done
+			}
+			if !anyInFlight && anyBlocked {
+				// Dead end: blocked phases with nothing running to produce
+				// the missing contracts. Escalate all to human decision.
+				wg.escalateAllBlocked(ctx)
+				break
 			}
 			// Wait for any one in-flight phase to complete, then re-evaluate.
 			wg.awaitCompletion(completionCh, &activeCount)
+			wg.reevaluateBlocked(ctx)
 			stop, retErr := wg.processGateSignals()
 			if stop {
 				wg.drainActive(completionCh, &activeCount)
@@ -344,6 +370,7 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		// re-evaluating. This avoids busy-spinning and ensures newly-ready
 		// phases are picked up as soon as any dependency completes.
 		wg.awaitCompletion(completionCh, &activeCount)
+		wg.reevaluateBlocked(ctx)
 		stop, retErr := wg.processGateSignals()
 		if stop {
 			wg.drainActive(completionCh, &activeCount)
