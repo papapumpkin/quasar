@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'contract-board'
-total_cost_usd = 3.36453825
+total_cost_usd = 5.311573749999999
 
 [phases]
 [phases.board-store]
@@ -29,9 +29,9 @@ summary = 'New contract data model and snapshot renderer are clean, well-tested 
 
 [phases.contract-publisher]
 bead_id = 'quasar-17p'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-23T00:03:46.894484-05:00
-updated_at = 2026-02-23T09:16:57.223157-05:00
+updated_at = 2026-02-23T09:27:15.082127-05:00
 
 [phases.integration-tests]
 bead_id = 'quasar-0iy'
@@ -47,9 +47,15 @@ updated_at = 2026-02-23T09:16:57.223941-05:00
 
 [phases.polling-state]
 bead_id = 'quasar-69w'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T00:03:47.38794-05:00
-updated_at = 2026-02-23T09:20:08.294818-05:00
+updated_at = 2026-02-23T09:27:15.081547-05:00
+
+[phases.polling-state.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-designed polling types and blocked-phase tracker with comprehensive tests, value-copy safety on All(), and clear concurrency documentation — low-risk foundational code for the phase dispatch pipeline.'
 
 [phases.pushback-handler]
 bead_id = 'quasar-ajf'
