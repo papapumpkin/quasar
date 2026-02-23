@@ -1,6 +1,25 @@
 package nebula
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/papapumpkin/quasar/internal/dag"
+)
+
+// buildTestDAG constructs a *dag.DAG from phase specs, mirroring the
+// dependency structure that the scheduler would build.
+func buildTestDAG(phases []PhaseSpec) *dag.DAG {
+	d := dag.New()
+	for _, p := range phases {
+		d.AddNodeIdempotent(p.ID, p.Priority)
+	}
+	for _, p := range phases {
+		for _, dep := range p.DependsOn {
+			_ = d.AddEdge(p.ID, dep)
+		}
+	}
+	return d
+}
 
 func TestFilterEligible_ScopeConflictWithInFlight(t *testing.T) {
 	t.Parallel()
@@ -13,7 +32,7 @@ func TestFilterEligible_ScopeConflictWithInFlight(t *testing.T) {
 	}
 	state := &State{Phases: map[string]*PhaseState{}}
 	pt := NewPhaseTracker(phases, state)
-	graph := NewGraph(phases) // no deps
+	graph := buildTestDAG(phases)
 
 	// Mark "a" as in-flight.
 	pt.inFlight["a"] = true
@@ -52,7 +71,7 @@ func TestFilterEligible_ScopeConflictBetweenEligible(t *testing.T) {
 	}
 	state := &State{Phases: map[string]*PhaseState{}}
 	pt := NewPhaseTracker(phases, state)
-	graph := NewGraph(phases)
+	graph := buildTestDAG(phases)
 
 	ready := []string{"a", "b"} // a comes first (higher impact)
 	eligible := pt.FilterEligible(ready, graph)
@@ -75,7 +94,7 @@ func TestFilterEligible_AllowScopeOverlapBypass(t *testing.T) {
 	}
 	state := &State{Phases: map[string]*PhaseState{}}
 	pt := NewPhaseTracker(phases, state)
-	graph := NewGraph(phases)
+	graph := buildTestDAG(phases)
 
 	// Mark a as in-flight.
 	pt.inFlight["a"] = true
@@ -99,7 +118,7 @@ func TestFilterEligible_NoScopeNoConflict(t *testing.T) {
 	}
 	state := &State{Phases: map[string]*PhaseState{}}
 	pt := NewPhaseTracker(phases, state)
-	graph := NewGraph(phases)
+	graph := buildTestDAG(phases)
 
 	pt.inFlight["a"] = true
 

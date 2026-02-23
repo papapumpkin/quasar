@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/dag"
 )
 
 // HotReloader handles in-flight file watching, phase modification, hot-add
@@ -32,7 +33,7 @@ type HotReloader struct {
 	pendingRefactors map[string]string
 
 	// Live DAG state — shared with the orchestrator via the tracker.
-	liveGraph      *Graph
+	liveGraph      *dag.DAG
 	livePhasesByID map[string]*PhaseSpec
 	hotAdded       chan string
 	hotAddWg       sync.WaitGroup
@@ -74,8 +75,8 @@ func NewHotReloader(cfg HotReloaderConfig) *HotReloader {
 
 // InitLiveState sets up the live DAG state for hot-add support.
 // Must be called with mu held.
-func (hr *HotReloader) InitLiveState(graph *Graph, phasesByID map[string]*PhaseSpec) {
-	hr.liveGraph = graph
+func (hr *HotReloader) InitLiveState(d *dag.DAG, phasesByID map[string]*PhaseSpec) {
+	hr.liveGraph = d
 	hr.livePhasesByID = phasesByID
 	hr.hotAdded = make(chan string, 16)
 }

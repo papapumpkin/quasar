@@ -12,8 +12,8 @@ func TestValidateHotAdd(t *testing.T) {
 
 	t.Run("valid phase no deps", func(t *testing.T) {
 		t.Parallel()
-		graph := NewGraph([]PhaseSpec{{ID: "a", Title: "A"}})
-		errs := ValidateHotAdd(PhaseSpec{ID: "b", Title: "B"}, map[string]bool{"a": true}, graph)
+		d, _ := phasesToDAG([]PhaseSpec{{ID: "a", Title: "A"}})
+		errs := ValidateHotAdd(PhaseSpec{ID: "b", Title: "B"}, map[string]bool{"a": true}, d)
 		if len(errs) > 0 {
 			t.Errorf("expected no errors, got %v", errs)
 		}
@@ -21,8 +21,8 @@ func TestValidateHotAdd(t *testing.T) {
 
 	t.Run("valid phase with deps", func(t *testing.T) {
 		t.Parallel()
-		graph := NewGraph([]PhaseSpec{{ID: "a", Title: "A"}})
-		errs := ValidateHotAdd(PhaseSpec{ID: "b", Title: "B", DependsOn: []string{"a"}}, map[string]bool{"a": true}, graph)
+		d, _ := phasesToDAG([]PhaseSpec{{ID: "a", Title: "A"}})
+		errs := ValidateHotAdd(PhaseSpec{ID: "b", Title: "B", DependsOn: []string{"a"}}, map[string]bool{"a": true}, d)
 		if len(errs) > 0 {
 			t.Errorf("expected no errors, got %v", errs)
 		}
@@ -30,8 +30,8 @@ func TestValidateHotAdd(t *testing.T) {
 
 	t.Run("missing id", func(t *testing.T) {
 		t.Parallel()
-		graph := NewGraph([]PhaseSpec{{ID: "a", Title: "A"}})
-		errs := ValidateHotAdd(PhaseSpec{Title: "No ID"}, map[string]bool{"a": true}, graph)
+		d, _ := phasesToDAG([]PhaseSpec{{ID: "a", Title: "A"}})
+		errs := ValidateHotAdd(PhaseSpec{Title: "No ID"}, map[string]bool{"a": true}, d)
 		if len(errs) != 1 {
 			t.Fatalf("expected 1 error, got %d", len(errs))
 		}
@@ -42,8 +42,8 @@ func TestValidateHotAdd(t *testing.T) {
 
 	t.Run("missing title", func(t *testing.T) {
 		t.Parallel()
-		graph := NewGraph([]PhaseSpec{{ID: "a", Title: "A"}})
-		errs := ValidateHotAdd(PhaseSpec{ID: "b"}, map[string]bool{"a": true}, graph)
+		d, _ := phasesToDAG([]PhaseSpec{{ID: "a", Title: "A"}})
+		errs := ValidateHotAdd(PhaseSpec{ID: "b"}, map[string]bool{"a": true}, d)
 		if len(errs) != 1 {
 			t.Fatalf("expected 1 error, got %d", len(errs))
 		}
@@ -54,8 +54,8 @@ func TestValidateHotAdd(t *testing.T) {
 
 	t.Run("duplicate id", func(t *testing.T) {
 		t.Parallel()
-		graph := NewGraph([]PhaseSpec{{ID: "a", Title: "A"}})
-		errs := ValidateHotAdd(PhaseSpec{ID: "a", Title: "Dup"}, map[string]bool{"a": true}, graph)
+		d, _ := phasesToDAG([]PhaseSpec{{ID: "a", Title: "A"}})
+		errs := ValidateHotAdd(PhaseSpec{ID: "a", Title: "Dup"}, map[string]bool{"a": true}, d)
 		if len(errs) != 1 {
 			t.Fatalf("expected 1 error, got %d", len(errs))
 		}
@@ -67,14 +67,14 @@ func TestValidateHotAdd(t *testing.T) {
 	t.Run("cycle detection", func(t *testing.T) {
 		t.Parallel()
 		// a → b (b depends on a). Adding c that depends on b and blocks a creates cycle.
-		graph := NewGraph([]PhaseSpec{
+		d, _ := phasesToDAG([]PhaseSpec{
 			{ID: "a", Title: "A"},
 			{ID: "b", Title: "B", DependsOn: []string{"a"}},
 		})
 		errs := ValidateHotAdd(
 			PhaseSpec{ID: "c", Title: "C", DependsOn: []string{"b"}, Blocks: []string{"a"}},
 			map[string]bool{"a": true, "b": true},
-			graph,
+			d,
 		)
 		if len(errs) != 1 {
 			t.Fatalf("expected 1 error, got %d", len(errs))
@@ -83,29 +83,28 @@ func TestValidateHotAdd(t *testing.T) {
 			t.Errorf("expected ErrDependencyCycle, got %v", errs[0].Err)
 		}
 
-		// Graph should be rolled back: c should not exist.
-		_, hasC := graph.adjacency["c"]
-		if hasC && len(graph.adjacency["c"]) > 0 {
-			t.Error("expected graph rollback: c should not have edges")
+		// DAG should be rolled back: c should not exist.
+		if d.Node("c") != nil {
+			t.Error("expected graph rollback: c should not exist in DAG")
 		}
 	})
 
 	t.Run("blocks field adds edges", func(t *testing.T) {
 		t.Parallel()
-		graph := NewGraph([]PhaseSpec{
+		d, _ := phasesToDAG([]PhaseSpec{
 			{ID: "a", Title: "A"},
 			{ID: "b", Title: "B", DependsOn: []string{"a"}},
 		})
 		errs := ValidateHotAdd(
 			PhaseSpec{ID: "c", Title: "C", DependsOn: []string{"a"}, Blocks: []string{"b"}},
 			map[string]bool{"a": true, "b": true},
-			graph,
+			d,
 		)
 		if len(errs) > 0 {
 			t.Errorf("expected no errors, got %v", errs)
 		}
 		// b should now depend on c (reverse edge from blocks).
-		if !graph.adjacency["b"]["c"] {
+		if !d.HasPath("b", "c") {
 			t.Error("expected b to depend on c after blocks injection")
 		}
 	})
@@ -113,22 +112,22 @@ func TestValidateHotAdd(t *testing.T) {
 
 func TestRollbackHotAdd(t *testing.T) {
 	t.Parallel()
-	graph := NewGraph([]PhaseSpec{
+	d, _ := phasesToDAG([]PhaseSpec{
 		{ID: "a", Title: "A"},
 		{ID: "b", Title: "B"},
 	})
 
 	phase := PhaseSpec{ID: "c", Title: "C", DependsOn: []string{"a"}, Blocks: []string{"b"}}
-	graph.AddNode("c")
-	graph.AddEdge("c", "a")
-	graph.AddEdge("b", "c")
+	d.AddNodeIdempotent("c", 0)
+	_ = d.AddEdge("c", "a")
+	_ = d.AddEdge("b", "c")
 
-	rollbackHotAdd(graph, phase)
+	rollbackHotAdd(d, phase)
 
-	if _, hasC := graph.adjacency["c"]; hasC {
-		t.Error("expected c to be removed from adjacency after rollback")
+	if d.Node("c") != nil {
+		t.Error("expected c to be removed from DAG after rollback")
 	}
-	if graph.adjacency["b"]["c"] {
+	if d.HasPath("b", "c") {
 		t.Error("expected b→c edge to be removed after rollback")
 	}
 }
@@ -151,7 +150,7 @@ func TestCheckHotAddedReady(t *testing.T) {
 			"b": {Status: PhaseStatusPending},
 		},
 	}
-	graph := NewGraph(neb.Phases)
+	d, _ := phasesToDAG(neb.Phases)
 	phasesByID := map[string]*PhaseSpec{"a": &neb.Phases[0], "b": &neb.Phases[1]}
 	done := map[string]bool{"a": true}
 	failed := map[string]bool{}
@@ -174,7 +173,7 @@ func TestCheckHotAddedReady(t *testing.T) {
 		Logger:   &buf,
 		Mu:       &mu,
 	})
-	hr.InitLiveState(graph, phasesByID)
+	hr.InitLiveState(d, phasesByID)
 
 	// b has deps satisfied and is pending — should be signaled.
 	hr.CheckHotAddedReady()

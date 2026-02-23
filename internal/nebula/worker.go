@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/dag"
 )
 
 // NewWorkerGroup creates a WorkerGroup with required dependencies and optional
@@ -139,8 +140,8 @@ func (wg *WorkerGroup) ensureGater() {
 }
 
 // gatePlan displays the execution plan and gates it for approval via the Gater.
-func (wg *WorkerGroup) gatePlan(ctx context.Context, graph *Graph) error {
-	waves, err := graph.ComputeWaves()
+func (wg *WorkerGroup) gatePlan(ctx context.Context, d *dag.DAG) error {
+	waves, err := d.ComputeWaves()
 	if err != nil {
 		return fmt.Errorf("failed to compute execution waves: %w", err)
 	}
@@ -231,10 +232,6 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		go wg.hotReload.ConsumeChanges(ctx)
 	}
 
-	// Keep the legacy graph for backward compatibility (dashboard,
-	// tracker.FilterEligible, hotreload, validate).
-	graph := NewGraph(wg.Nebula.Phases)
-
 	// Build impact-aware scheduler from phases using the DAG engine.
 	scheduler, err := NewScheduler(wg.Nebula.Phases)
 	if err != nil {
@@ -242,10 +239,10 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	}
 
 	wg.mu.Lock()
-	wg.hotReload.InitLiveState(graph, wg.tracker.PhasesByIDMap())
+	wg.hotReload.InitLiveState(scheduler.Analyzer().DAG(), wg.tracker.PhasesByIDMap())
 	wg.mu.Unlock()
 
-	if err := wg.gatePlan(ctx, graph); err != nil {
+	if err := wg.gatePlan(ctx, scheduler.Analyzer().DAG()); err != nil {
 		return nil, err
 	}
 
@@ -296,7 +293,7 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		// Use scheduler for impact-sorted ready tasks, then filter
 		// through tracker for failed-dep, in-flight, and scope-conflict exclusion.
 		ready := scheduler.ReadyTasks(done)
-		eligible := wg.tracker.FilterEligible(ready, graph)
+		eligible := wg.tracker.FilterEligible(ready, scheduler.Analyzer().DAG())
 		anyInFlight := len(inFlight) > 0
 		wg.mu.Unlock()
 

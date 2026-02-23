@@ -154,7 +154,8 @@ func TestValidateScopeOverlaps(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			errs := validateScopeOverlaps(tt.phases)
+			d, _ := phasesToDAG(tt.phases)
+			errs := validateScopeOverlaps(tt.phases, d)
 			if len(errs) != tt.wantCount {
 				t.Fatalf("got %d errors, want %d: %v", len(errs), tt.wantCount, errs)
 			}

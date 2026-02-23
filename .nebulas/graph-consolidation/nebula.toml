@@ -1,0 +1,27 @@
+[nebula]
+name = "graph-consolidation"
+description = "Consolidate the duplicated DAG implementations: eliminate nebula.Graph in favor of the richer dag.DAG/TaskAnalyzer, exposing missing capabilities (Connected, ComputeWaves) on the canonical type."
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["refactor", "dag"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 30.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+  "Single source of truth for the dependency DAG topology",
+  "Eliminate nebula.Graph and all direct adjacency/reverse map access",
+  "Preserve all existing behavior: waves, scope validation, hot-reload, dashboard",
+]
+constraints = [
+  "No new external dependencies",
+  "All existing tests must continue to pass",
+  "dag.DAG must not import from nebula (no circular imports)",
+]

@@ -1,11 +1,13 @@
 package nebula
 
+import "github.com/papapumpkin/quasar/internal/dag"
+
 // EffectiveParallelism computes the maximum useful workers for a wave.
 // It starts with the wave width (number of phases), caps at maxWorkers,
 // then reduces for phases that must serialize due to scope overlap
 // without a dependency relationship.
-func EffectiveParallelism(wave Wave, phases []PhaseSpec, graph *Graph, maxWorkers int) int {
-	n := len(wave.PhaseIDs)
+func EffectiveParallelism(wave Wave, phases []PhaseSpec, d *dag.DAG, maxWorkers int) int {
+	n := len(wave.NodeIDs)
 	if n == 0 {
 		return 0
 	}
@@ -20,8 +22,8 @@ func EffectiveParallelism(wave Wave, phases []PhaseSpec, graph *Graph, maxWorker
 	}
 
 	// Collect the wave's phase specs.
-	waveSpecs := make([]PhaseSpec, 0, len(wave.PhaseIDs))
-	for _, id := range wave.PhaseIDs {
+	waveSpecs := make([]PhaseSpec, 0, len(wave.NodeIDs))
+	for _, id := range wave.NodeIDs {
 		if spec, ok := specByID[id]; ok {
 			waveSpecs = append(waveSpecs, spec)
 		}
@@ -40,7 +42,7 @@ func EffectiveParallelism(wave Wave, phases []PhaseSpec, graph *Graph, maxWorker
 			}
 
 			// Connected by dependency — serialized, no conflict.
-			if graph.Connected(a.ID, b.ID) {
+			if d.Connected(a.ID, b.ID) {
 				continue
 			}
 
@@ -88,10 +90,10 @@ func EffectiveParallelism(wave Wave, phases []PhaseSpec, graph *Graph, maxWorker
 
 // WaveParallelism computes effective parallelism for each wave in order.
 // Returns a slice parallel to waves with the max useful workers per wave.
-func WaveParallelism(waves []Wave, phases []PhaseSpec, graph *Graph, maxWorkers int) []int {
+func WaveParallelism(waves []Wave, phases []PhaseSpec, d *dag.DAG, maxWorkers int) []int {
 	result := make([]int, len(waves))
 	for i, wave := range waves {
-		result[i] = EffectiveParallelism(wave, phases, graph, maxWorkers)
+		result[i] = EffectiveParallelism(wave, phases, d, maxWorkers)
 	}
 	return result
 }
