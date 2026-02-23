@@ -26,6 +26,7 @@ const (
 	KindType      = "type"
 	KindFunction  = "function"
 	KindInterface = "interface"
+	KindMethod    = "method"
 	KindPackage   = "package"
 	KindFile      = "file"
 )
