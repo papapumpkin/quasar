@@ -474,14 +474,8 @@ func (f *SQLiteFabric) queryDiscoveries(ctx context.Context, query string, args 
 // EmitPulse inserts a new pulse (shared execution context) for a task.
 func (f *SQLiteFabric) EmitPulse(ctx context.Context, p Pulse) error {
 	const q = `INSERT INTO pulses (task_id, content, kind) VALUES (?, ?, ?)`
-	res, err := f.db.ExecContext(ctx, q, p.TaskID, p.Content, p.Kind)
-	if err != nil {
+	if _, err := f.db.ExecContext(ctx, q, p.TaskID, p.Content, p.Kind); err != nil {
 		return fmt.Errorf("fabric: emit pulse for %q: %w", p.TaskID, err)
-	}
-	if p.ID == 0 {
-		if id, idErr := res.LastInsertId(); idErr == nil {
-			p.ID = id
-		}
 	}
 	return nil
 }
@@ -504,39 +498,21 @@ func (f *SQLiteFabric) EmitPulseReturningID(ctx context.Context, p Pulse) (int64
 func (f *SQLiteFabric) PulsesFor(ctx context.Context, taskID string) ([]Pulse, error) {
 	const q = `SELECT id, task_id, content, kind, created_at
 		FROM pulses WHERE task_id = ? ORDER BY id`
-	rows, err := f.db.QueryContext(ctx, q, taskID)
-	if err != nil {
-		return nil, fmt.Errorf("fabric: query pulses for %q: %w", taskID, err)
-	}
-	defer rows.Close()
-
-	var result []Pulse
-	for rows.Next() {
-		var p Pulse
-		var ts string
-		if err := rows.Scan(&p.ID, &p.TaskID, &p.Content, &p.Kind, &ts); err != nil {
-			return nil, fmt.Errorf("fabric: scan pulse: %w", err)
-		}
-		createdAt, parseErr := parseTimestamp(ts)
-		if parseErr != nil {
-			return nil, fmt.Errorf("fabric: parse pulse timestamp: %w", parseErr)
-		}
-		p.CreatedAt = createdAt
-		result = append(result, p)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("fabric: iterate pulses: %w", err)
-	}
-	return result, nil
+	return f.queryPulses(ctx, q, taskID)
 }
 
 // AllPulses returns all pulses in the fabric, ordered by ID.
 func (f *SQLiteFabric) AllPulses(ctx context.Context) ([]Pulse, error) {
 	const q = `SELECT id, task_id, content, kind, created_at
 		FROM pulses ORDER BY id`
-	rows, err := f.db.QueryContext(ctx, q)
+	return f.queryPulses(ctx, q)
+}
+
+// queryPulses is a shared helper for scanning pulse rows.
+func (f *SQLiteFabric) queryPulses(ctx context.Context, query string, args ...any) ([]Pulse, error) {
+	rows, err := f.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("fabric: query all pulses: %w", err)
+		return nil, fmt.Errorf("fabric: query pulses: %w", err)
 	}
 	defer rows.Close()
 
