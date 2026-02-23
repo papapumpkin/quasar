@@ -27,6 +27,8 @@ type Loop struct {
 	MCP            *agent.MCPConfig // Optional MCP server config passed to agents.
 	RefactorCh     <-chan string    // Optional channel carrying updated task descriptions from phase edits.
 	CommitSummary  string           // Short label for cycle commit messages. If empty, derived from task title.
+	FabricEnabled  bool             // When true, inject fabric protocol into agent system prompts.
+	TaskID         string           // Task ID for fabric context (QUASAR_TASK_ID).
 }
 
 // TaskResult holds the outcome of a completed task loop.
@@ -362,10 +364,15 @@ func (l *Loop) initCycleState(ctx context.Context, beadID, taskDescription strin
 }
 
 // coderAgent builds the agent configuration for the coder role.
+// When FabricEnabled is true, the fabric protocol is appended to the system prompt.
 func (l *Loop) coderAgent(budget float64) agent.Agent {
+	sysPrompt := agent.BuildSystemPrompt(l.CoderPrompt, agent.PromptOpts{
+		FabricEnabled: l.FabricEnabled,
+		TaskID:        l.TaskID,
+	})
 	return agent.Agent{
 		Role:         agent.RoleCoder,
-		SystemPrompt: l.CoderPrompt,
+		SystemPrompt: sysPrompt,
 		Model:        l.Model,
 		MaxBudgetUSD: budget,
 		AllowedTools: []string{
