@@ -8,6 +8,7 @@ import (
 func TestBoardViewPartition_CorrectColumns(t *testing.T) {
 	t.Parallel()
 	bv := NewBoardView()
+	bv.Width = 150 // Full width: all 7 columns visible, no remapping.
 	bv.Phases = []PhaseEntry{
 		{ID: "queued", Status: PhaseWaiting},
 		{ID: "running", Status: PhaseWorking},
@@ -53,6 +54,36 @@ func TestBoardViewPartition_CorrectColumns(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBoardViewPartition_MediumWidthRemapping(t *testing.T) {
+	t.Parallel()
+	bv := NewBoardView()
+	bv.Width = 120 // Medium width: Scanning and Blocked columns merge into Queued.
+	bv.Phases = []PhaseEntry{
+		{ID: "queued", Status: PhaseWaiting},
+		{ID: "blocked", Status: PhaseWaiting, BlockedBy: "other"},
+		{ID: "running", Status: PhaseWorking},
+	}
+
+	buckets := bv.partition()
+
+	// At medium width, blocked phases should be remapped into Queued.
+	if len(buckets[ColQueued]) != 2 {
+		t.Errorf("expected 2 entries in Queued (original + remapped blocked), got %d", len(buckets[ColQueued]))
+	}
+	// Blocked column should be empty at medium width.
+	if len(buckets[ColBlocked]) != 0 {
+		t.Errorf("expected 0 entries in Blocked at medium width, got %d", len(buckets[ColBlocked]))
+	}
+	// Scanning column should also be empty.
+	if len(buckets[ColScanning]) != 0 {
+		t.Errorf("expected 0 entries in Scanning at medium width, got %d", len(buckets[ColScanning]))
+	}
+	// Running should be unaffected.
+	if len(buckets[ColRunning]) != 1 {
+		t.Errorf("expected 1 entry in Running, got %d", len(buckets[ColRunning]))
 	}
 }
 

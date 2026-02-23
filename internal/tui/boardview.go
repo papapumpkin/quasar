@@ -60,23 +60,29 @@ func NewBoardView() BoardView {
 
 // SelectedPhase returns the phase entry at the cursor position.
 func (bv BoardView) SelectedPhase() *PhaseEntry {
-	flat := bv.flatOrder()
+	buckets := bv.partition()
+	cols := bv.visibleColumns()
+	flat := bv.flatOrder(buckets, cols)
 	if bv.Cursor < 0 || bv.Cursor >= len(flat) {
 		return nil
 	}
 	return flat[bv.Cursor]
 }
 
-// MoveUp moves the cursor up within the current column.
+// MoveUp moves the cursor to the previous phase in the flat column-first order,
+// which may cross column boundaries. Use MoveLeft/MoveRight to jump between columns.
 func (bv *BoardView) MoveUp() {
 	if bv.Cursor > 0 {
 		bv.Cursor--
 	}
 }
 
-// MoveDown moves the cursor down within the current column.
+// MoveDown moves the cursor to the next phase in the flat column-first order,
+// which may cross column boundaries. Use MoveLeft/MoveRight to jump between columns.
 func (bv *BoardView) MoveDown() {
-	flat := bv.flatOrder()
+	buckets := bv.partition()
+	cols := bv.visibleColumns()
+	flat := bv.flatOrder(buckets, cols)
 	max := len(flat) - 1
 	if max < 0 {
 		max = 0
@@ -90,7 +96,7 @@ func (bv *BoardView) MoveDown() {
 func (bv *BoardView) MoveLeft() {
 	buckets := bv.partition()
 	cols := bv.visibleColumns()
-	flat := bv.flatOrder()
+	flat := bv.flatOrder(buckets, cols)
 	if len(flat) == 0 {
 		return
 	}
@@ -121,7 +127,7 @@ func (bv *BoardView) MoveLeft() {
 func (bv *BoardView) MoveRight() {
 	buckets := bv.partition()
 	cols := bv.visibleColumns()
-	flat := bv.flatOrder()
+	flat := bv.flatOrder(buckets, cols)
 	if len(flat) == 0 {
 		return
 	}
@@ -147,10 +153,23 @@ func (bv *BoardView) MoveRight() {
 }
 
 // partition distributes phases into column buckets based on status.
+// It is width-aware: at medium terminal widths where Scanning and Blocked
+// columns are not visible, their entries are remapped into Queued so that
+// no phases are silently dropped from the board.
 func (bv BoardView) partition() [colCount][]int {
 	var buckets [colCount][]int
+	visible := bv.visibleColumns()
+	visibleSet := make(map[BoardColumn]bool, len(visible))
+	for _, c := range visible {
+		visibleSet[c] = true
+	}
 	for i, p := range bv.Phases {
 		col := statusToColumn(p)
+		// At medium width, Scanning and Blocked columns are not visible.
+		// Remap their entries into Queued so phases are never lost.
+		if !visibleSet[col] {
+			col = ColQueued
+		}
 		buckets[col] = append(buckets[col], i)
 	}
 	return buckets
@@ -194,9 +213,8 @@ func (bv BoardView) ShouldFallback() bool {
 }
 
 // flatOrder returns pointers to phases in column-first order matching visible columns.
-func (bv BoardView) flatOrder() []*PhaseEntry {
-	buckets := bv.partition()
-	cols := bv.visibleColumns()
+// It accepts pre-computed buckets and columns to avoid redundant partition() calls.
+func (bv BoardView) flatOrder(buckets [colCount][]int, cols []BoardColumn) []*PhaseEntry {
 	var flat []*PhaseEntry
 	for _, col := range cols {
 		for _, idx := range buckets[col] {
@@ -239,7 +257,7 @@ func (bv BoardView) View() string {
 
 	buckets := bv.partition()
 	cols := bv.visibleColumns()
-	flat := bv.flatOrder()
+	flat := bv.flatOrder(buckets, cols)
 
 	colWidth := bv.columnWidth(len(cols))
 
