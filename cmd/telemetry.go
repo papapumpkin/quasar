@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -65,11 +67,12 @@ func runTelemetry(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	return tailFollow(cmd.OutOrStdout(), f, path)
+	return tailFollow(cmd.Context(), cmd.OutOrStdout(), f, path)
 }
 
 // tailFollow watches the file for new data using fsnotify and prints new events.
-func tailFollow(w io.Writer, f *os.File, path string) error {
+// It respects context cancellation for clean shutdown.
+func tailFollow(ctx context.Context, w io.Writer, f *os.File, path string) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("telemetry: create watcher: %w", err)
@@ -81,23 +84,39 @@ func tailFollow(w io.Writer, f *os.File, path string) error {
 	}
 
 	reader := bufio.NewReader(f)
-	for event := range watcher.Events {
-		if event.Op&fsnotify.Write == 0 {
-			continue
-		}
-		// Read all new lines available.
-		for {
-			line, err := reader.ReadString('\n')
-			line = strings.TrimSpace(line)
-			if line != "" {
-				printEvent(w, line)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return nil
 			}
-			if err != nil {
-				break
+			if event.Op&fsnotify.Write == 0 {
+				continue
 			}
+			readNewLines(reader, w)
+		case watchErr, ok := <-watcher.Errors:
+			if !ok {
+				return nil
+			}
+			return fmt.Errorf("telemetry: watcher error: %w", watchErr)
 		}
 	}
-	return nil
+}
+
+// readNewLines drains all available lines from the reader and prints them.
+func readNewLines(reader *bufio.Reader, w io.Writer) {
+	for {
+		line, err := reader.ReadString('\n')
+		line = strings.TrimSpace(line)
+		if line != "" {
+			printEvent(w, line)
+		}
+		if err != nil {
+			return
+		}
+	}
 }
 
 // printEvent decodes a JSONL line and prints a human-readable representation.
@@ -168,11 +187,21 @@ func resolveTelemetryPath(epochID string) (string, error) {
 		return "", fmt.Errorf("telemetry: cannot read %s: %w", dir, err)
 	}
 
-	var jsonlFiles []os.DirEntry
+	type fileEntry struct {
+		name string
+		info fs.FileInfo
+	}
+	var jsonlFiles []fileEntry
 	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".jsonl") {
-			jsonlFiles = append(jsonlFiles, e)
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
+			continue
 		}
+		info, err := e.Info()
+		if err != nil {
+			// Skip entries whose metadata can't be read (e.g., deleted between ReadDir and Info).
+			continue
+		}
+		jsonlFiles = append(jsonlFiles, fileEntry{name: e.Name(), info: info})
 	}
 	if len(jsonlFiles) == 0 {
 		return "", fmt.Errorf("telemetry: no JSONL files in %s", dir)
@@ -180,10 +209,8 @@ func resolveTelemetryPath(epochID string) (string, error) {
 
 	// Sort by modification time, most recent last.
 	sort.Slice(jsonlFiles, func(i, j int) bool {
-		fi, _ := jsonlFiles[i].Info()
-		fj, _ := jsonlFiles[j].Info()
-		return fi.ModTime().Before(fj.ModTime())
+		return jsonlFiles[i].info.ModTime().Before(jsonlFiles[j].info.ModTime())
 	})
 
-	return filepath.Join(dir, jsonlFiles[len(jsonlFiles)-1].Name()), nil
+	return filepath.Join(dir, jsonlFiles[len(jsonlFiles)-1].name), nil
 }
