@@ -1,0 +1,51 @@
+version = 1
+nebula_name = 'cockpit'
+
+[phases]
+[phases.board-view]
+bead_id = 'quasar-7jb'
+status = 'in_progress'
+created_at = 2026-02-23T15:56:11.788154-05:00
+updated_at = 2026-02-23T15:56:15.121928-05:00
+
+[phases.decision-overlay]
+bead_id = 'quasar-xlz'
+status = 'created'
+created_at = 2026-02-23T15:56:13.490806-05:00
+updated_at = 2026-02-23T15:56:13.490806-05:00
+
+[phases.entanglement-viewer]
+bead_id = 'quasar-qfv3'
+status = 'created'
+created_at = 2026-02-23T15:56:14.060611-05:00
+updated_at = 2026-02-23T15:56:14.060611-05:00
+
+[phases.model-integration]
+bead_id = 'quasar-t7s4'
+status = 'created'
+created_at = 2026-02-23T15:56:14.97329-05:00
+updated_at = 2026-02-23T15:56:14.97329-05:00
+
+[phases.scratchpad-view]
+bead_id = 'quasar-a3t8'
+status = 'created'
+created_at = 2026-02-23T15:56:14.48234-05:00
+updated_at = 2026-02-23T15:56:14.48234-05:00
+
+[phases.stats-bar-upgrade]
+bead_id = 'quasar-az8'
+status = 'created'
+created_at = 2026-02-23T15:56:13.039133-05:00
+updated_at = 2026-02-23T15:56:13.039133-05:00
+
+[phases.tab-system]
+bead_id = 'quasar-ziw'
+status = 'created'
+created_at = 2026-02-23T15:56:12.609027-05:00
+updated_at = 2026-02-23T15:56:12.609027-05:00
+
+[phases.worker-cards]
+bead_id = 'quasar-5cj'
+status = 'created'
+created_at = 2026-02-23T15:56:12.213158-05:00
+updated_at = 2026-02-23T15:56:12.213158-05:00
