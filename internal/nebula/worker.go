@@ -296,7 +296,7 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		// Use scheduler for impact-sorted ready tasks, then filter
 		// through tracker for failed-dep, in-flight, and scope-conflict exclusion.
 		ready := scheduler.ReadyTasks(done)
-		eligible := wg.tracker.FilterEligible(ready, graph)
+		eligible := wg.tracker.FilterEligible(ready, scheduler.Analyzer().DAG())
 		anyInFlight := len(inFlight) > 0
 		wg.mu.Unlock()
 
