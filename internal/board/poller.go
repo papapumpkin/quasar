@@ -78,6 +78,8 @@ type BlockedPhase struct {
 const MaxPollRetries = 5
 
 // BlockedTracker manages the set of phases that are waiting for board context.
+// It is not safe for concurrent use; callers must provide their own synchronization
+// if access from multiple goroutines is needed.
 type BlockedTracker struct {
 	phases map[string]*BlockedPhase
 }
@@ -116,11 +118,12 @@ func (bt *BlockedTracker) Get(phaseID string) *BlockedPhase {
 	return bt.phases[phaseID]
 }
 
-// All returns a snapshot of all currently blocked phases.
-func (bt *BlockedTracker) All() []*BlockedPhase {
-	result := make([]*BlockedPhase, 0, len(bt.phases))
+// All returns a snapshot of all currently blocked phases. The returned slice
+// contains copies, so mutating them does not affect the tracker's internal state.
+func (bt *BlockedTracker) All() []BlockedPhase {
+	result := make([]BlockedPhase, 0, len(bt.phases))
 	for _, bp := range bt.phases {
-		result = append(result, bp)
+		result = append(result, *bp)
 	}
 	return result
 }
