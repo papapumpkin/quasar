@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'prompt-caching'
-total_cost_usd = 6.228283749999999
+total_cost_usd = 8.25643025
 
 [phases]
 [phases.agent-context-prefix]
@@ -17,9 +17,9 @@ summary = 'Well-executed additive change adding a `ContextPrefix` field through 
 
 [phases.config-opt-in]
 bead_id = 'quasar-ph9'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-22T23:14:00.667716-05:00
-updated_at = 2026-02-22T23:27:45.460388-05:00
+updated_at = 2026-02-22T23:41:49.456836-05:00
 
 [phases.context-scanner]
 bead_id = 'quasar-cak'
@@ -53,6 +53,12 @@ updated_at = 2026-02-22T23:27:45.460574-05:00
 
 [phases.nebula-wiring]
 bead_id = 'quasar-8st'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-22T23:14:00.2352-05:00
-updated_at = 2026-02-22T23:35:43.084367-05:00
+updated_at = 2026-02-22T23:41:49.456307-05:00
+
+[phases.nebula-wiring.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Context snapshot scanner correctly wired into nebula apply and single-task run paths with consistent propagation, non-fatal error handling, and clean build/tests.'
