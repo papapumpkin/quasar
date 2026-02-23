@@ -3,13 +3,13 @@ id = "agent-prompt"
 title = "Fabric protocol injection into agent prompts"
 type = "feature"
 priority = 2
-depends_on = ["fabric-cli", "discovery-cli"]
+depends_on = ["fabric-cli", "discovery-cli", "pulse-cli"]
 scope = ["internal/agent/prompt.go", "internal/agent/prompt_test.go"]
 +++
 
 ## Problem
 
-Quasars (worker agents) need to know the fabric protocol — how to read entanglements, claim files, and post discoveries. This protocol must be injected into their system prompt so they follow it during execution. Currently, agents receive a task description but no coordination protocol. Agents already use beads (via the existing `beads.Client`) for task tracking — the fabric protocol covers only fabric-specific coordination.
+Quasars (worker agents) need to know the fabric protocol — how to read entanglements, claim files, post discoveries, and emit pulses. This protocol must be injected into their system prompt so they follow it during execution. Currently, agents receive a task description but no coordination protocol.
 
 ## Solution
 
@@ -48,9 +48,16 @@ WHEN you encounter an unexpected issue outside your task scope:
   Run: quasar discovery --kind missing_dependency --detail "<what you need>"
   Then STOP and wait for resolution.
 
+SHARE context with other quasars via pulses:
+  Run: quasar pulse emit --kind decision "switched approach because..."
+  Run: quasar pulse emit --kind failure "approach X failed because..."
+  Run: quasar pulse emit --kind note "important: this function has a subtle nil case"
+  Run: quasar pulse emit --kind reviewer_feedback "reviewer said: add context.Context"
+
 RULES:
   - Never modify files you haven't claimed.
   - Never change an entangled interface without posting a discovery.
+  - Emit pulses for decisions, failures, and observations that other quasars should know about.
   - Only STOP for genuine blockers. If you're uncertain but can write compilable code, proceed.
 `
 ```
@@ -83,7 +90,7 @@ type PromptOpts struct {
 When the task enters SCANNING and transitions to RUNNING, Tycho pre-loads relevant fabric state into the agent's initial context. This is injected as part of the task description:
 
 ```go
-// PrependFabricContext adds current entanglements and claims to the task description.
+// PrependFabricContext adds current entanglements, claims, and pulses to the task description.
 func PrependFabricContext(desc string, snap fabric.FabricSnapshot, taskID string) string {
     var b strings.Builder
     b.WriteString("## Current Fabric State\n\n")
@@ -119,7 +126,7 @@ When `FabricEnabled` is true, the coder prompt includes the protocol block and p
 
 - [ ] `FabricProtocol` constant matches the design brief exactly
 - [ ] `BuildSystemPrompt` appends protocol when `FabricEnabled` is true
-- [ ] `PrependFabricContext` renders current entanglements and claims before the task description
+- [ ] `PrependFabricContext` renders current entanglements, claims, and upstream pulses before the task description
 - [ ] Protocol is NOT injected when `FabricEnabled` is false (backward compatible)
 - [ ] `Loop` passes fabric context to the coder agent when enabled
 - [ ] `go test ./internal/agent/...` passes

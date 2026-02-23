@@ -26,7 +26,7 @@ internal/
 | Interface agreements | Entanglement | internal/fabric |
 | File ownership | Claim | internal/fabric |
 | Agent-surfaced issues | Discovery | internal/fabric |
-| Agent working memory | Bead | internal/fabric |
+| Shared execution context | Pulse | internal/fabric |
 | Pre-review checks | Filter | internal/filter |
 | DAG scheduler | Tycho | internal/tycho |
 | Archived snapshot | Neutron | internal/neutron |

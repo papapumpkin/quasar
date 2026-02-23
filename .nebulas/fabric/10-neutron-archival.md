@@ -9,7 +9,7 @@ scope = ["internal/neutron/**", "cmd/fabric_archive.go"]
 
 ## Problem
 
-When a nebula epoch completes, the fabric retains all its state — entanglements, claims, discoveries, beads, task records. This state should be archived into a self-contained snapshot (a "neutron") and purged from the active fabric so it stays clean for future epochs. Additionally, stale claims and epochs need automatic cleanup to prevent coordination deadlocks.
+When a nebula epoch completes, the fabric retains all its state — entanglements, claims, discoveries, pulses, task records. This state should be archived into a self-contained snapshot (a "neutron") and purged from the active fabric so it stays clean for future epochs. Additionally, stale claims and epochs need automatic cleanup to prevent coordination deadlocks.
 
 ## Solution
 
@@ -42,7 +42,7 @@ The archive process:
    - The full discovery log — every dispute, hail, and resolution
    - Aggregate stats — total tokens, wall-clock time, rework cycles per task, cost
    - The task graph with final states
-   - All beads from all tasks in the epoch
+   - All pulses from all tasks in the epoch
 5. Does NOT copy: claims, intermediate scanning states, worker assignments
 6. Purges the epoch's rows from the active fabric
 7. Logs completion to telemetry
@@ -85,7 +85,7 @@ CREATE TABLE discoveries (
     created     TIMESTAMP
 );
 
-CREATE TABLE beads (
+CREATE TABLE pulses (
     id        INTEGER PRIMARY KEY,
     task_id   TEXT NOT NULL,
     content   TEXT NOT NULL,
@@ -148,7 +148,7 @@ Complete the placeholder subcommands from the fabric-cli phase:
 ## Acceptance Criteria
 
 - [ ] `Archive` creates a standalone neutron SQLite with correct schema and data
-- [ ] Neutron contains entanglements, discoveries, beads, tasks, metadata — but NOT claims or scanning states
+- [ ] Neutron contains entanglements, discoveries, pulses, tasks, metadata — but NOT claims or scanning states
 - [ ] `Archive` refuses to run if claims or discoveries are unresolved (unless forced)
 - [ ] `Purge` removes all epoch state from the active fabric
 - [ ] `Reaper` releases claims older than threshold with no running task

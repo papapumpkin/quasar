@@ -9,7 +9,7 @@ scope = ["internal/telemetry/**", "cmd/telemetry.go"]
 
 ## Problem
 
-There is no structured record of what happened during a nebula execution. The TUI shows live state, but once the session ends, the only artifacts are the code changes and bead state. The design calls for a JSONL event stream that records every state transition, making runs auditable, replayable, and analyzable.
+There is no structured record of what happened during a nebula execution. The TUI shows live state, but once the session ends, the only artifacts are the code changes and fabric state. The design calls for a JSONL event stream that records every state transition, making runs auditable, replayable, and analyzable.
 
 ## Solution
 
@@ -38,6 +38,7 @@ Event kinds:
 - `claim_released` — file claim released
 - `discovery_posted` — discovery posted to fabric
 - `discovery_resolved` — discovery resolved
+- `pulse_emitted` — quasar emitted a pulse (shared execution context)
 - `filter_result` — pre-reviewer filter outcome
 - `cycle_start` — coder-reviewer cycle begins
 - `cycle_done` — cycle completes (approved or issues found)

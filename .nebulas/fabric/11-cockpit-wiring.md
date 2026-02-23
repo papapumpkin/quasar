@@ -75,6 +75,7 @@ In `cmd/nebula_adapters.go`, when constructing the `tuiLoopAdapter`:
 The telemetry emitter is already writing events. Add a `TelemetryBridge` that reads the JSONL file and converts certain event kinds into scratchpad entries:
 - `discovery_posted` → scratchpad entry
 - `entanglement_posted` → scratchpad entry
+- `pulse_emitted` → scratchpad entry (e.g., "q-1 decision: switched to cursor-based pagination")
 - `task_state` transitions → scratchpad entry (e.g., "phase-x: running → review")
 
 This is a lightweight goroutine that tails the telemetry file and sends `MsgScratchpadEntry` to the TUI program.

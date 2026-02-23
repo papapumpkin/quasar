@@ -1,6 +1,6 @@
 [nebula]
 name = "fabric"
-description = "Rename internal/board to internal/fabric with canonical vocabulary (entanglements, claims, discoveries, beads), evolve the schema, add CLI subcommands, extract the Tycho scheduler, build filters, telemetry, neutron archival, and agent prompt injection."
+description = "Rename internal/board to internal/fabric with canonical vocabulary (entanglements, claims, discoveries, pulses), evolve the schema, add CLI subcommands, extract the Tycho scheduler, build filters, telemetry, neutron archival, and agent prompt injection."
 
 [defaults]
 type = "feature"
@@ -13,17 +13,16 @@ max_workers = 1
 max_review_cycles = 5
 max_budget_usd = 120.0
 model = ""
-gate = "review"
 
 [context]
 repo = "github.com/papapumpkin/quasar"
 working_dir = "."
 goals = [
     "Rename internal/board to internal/fabric with canonical vocabulary throughout the codebase",
-    "Evolve the SQLite schema — add consumer column, pending status, discoveries table, beads table",
+    "Evolve the SQLite schema — add consumer column, pending status, discoveries table, pulses table",
     "Build quasar fabric CLI subcommands for all fabric operations",
     "Add discovery system with 5 kinds and hail mechanism for cockpit surfacing",
-    "Migrate bead storage from Dolt to fabric SQLite with quasar bead CLI",
+    "Build pulse system — shared execution context between concurrent quasars (quasar pulse emit/list)",
     "Extract DAG scheduling from WorkerGroup into internal/tycho",
     "Build pre-reviewer filters (go build/vet/lint/test + claim validation) in internal/filter",
     "Inject fabric protocol into agent system prompts",
