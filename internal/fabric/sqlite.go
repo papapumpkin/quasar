@@ -538,12 +538,23 @@ func (f *SQLiteFabric) queryPulses(ctx context.Context, query string, args ...an
 
 // PurgeAll removes all data from all fabric tables. This is used by the
 // neutron archival system to clean up after snapshotting an epoch.
+// All deletes are executed in a single transaction for atomicity.
 func (f *SQLiteFabric) PurgeAll(ctx context.Context) error {
+	tx, err := f.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("fabric: begin purge transaction: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // rollback after commit is a no-op
+
 	tables := []string{"pulses", "discoveries", "file_claims", "entanglements", "fabric"}
 	for _, table := range tables {
-		if _, err := f.db.ExecContext(ctx, "DELETE FROM "+table); err != nil {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
 			return fmt.Errorf("fabric: purge table %s: %w", table, err)
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("fabric: commit purge: %w", err)
 	}
 	return nil
 }

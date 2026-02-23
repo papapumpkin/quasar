@@ -68,7 +68,9 @@ func (r *Reaper) Run(ctx context.Context) ([]ReapAction, error) {
 }
 
 // reapClaims releases file claims that are older than the threshold and whose
-// owning task is not currently running.
+// owning task is not currently running. Since ReleaseClaims removes all claims
+// for an owner at once, we track already-released owners to avoid redundant
+// DB calls and produce accurate action reports.
 func (r *Reaper) reapClaims(ctx context.Context, now time.Time, threshold time.Duration) ([]ReapAction, error) {
 	claims, err := r.Fabric.AllClaims(ctx)
 	if err != nil {
@@ -80,8 +82,14 @@ func (r *Reaper) reapClaims(ctx context.Context, now time.Time, threshold time.D
 		return nil, fmt.Errorf("read phase states: %w", err)
 	}
 
+	released := make(map[string]bool)
 	var actions []ReapAction
 	for _, c := range claims {
+		// Skip if we already released all claims for this owner.
+		if released[c.OwnerTask] {
+			continue
+		}
+
 		age := now.Sub(c.ClaimedAt)
 		if age < threshold {
 			continue
@@ -96,17 +104,21 @@ func (r *Reaper) reapClaims(ctx context.Context, now time.Time, threshold time.D
 		if err := r.Fabric.ReleaseClaims(ctx, c.OwnerTask); err != nil {
 			return actions, fmt.Errorf("release claims for %s: %w", c.OwnerTask, err)
 		}
+		released[c.OwnerTask] = true
 
 		actions = append(actions, ReapAction{
 			Kind:    "released_claim",
-			Details: fmt.Sprintf("released claim on %q held by %q (age: %s, state: %s)", c.Filepath, c.OwnerTask, age.Round(time.Second), state),
+			Details: fmt.Sprintf("released claims held by %q (age: %s, state: %s)", c.OwnerTask, age.Round(time.Second), state),
 		})
 	}
 	return actions, nil
 }
 
-// flagStaleEpochs identifies epochs where no task has transitioned state
-// recently and flags them for human review.
+// flagStaleEpochs identifies epochs where all tasks are terminal and leftover
+// state (claims or unresolved discoveries) has persisted beyond the StaleEpoch
+// threshold. Since the Fabric interface does not expose updated_at timestamps
+// directly, claim age is used as a proxy: if any claim is older than the
+// threshold, the epoch is considered stale.
 func (r *Reaper) flagStaleEpochs(ctx context.Context, now time.Time, threshold time.Duration) ([]ReapAction, error) {
 	states, err := r.Fabric.AllPhaseStates(ctx)
 	if err != nil {
@@ -117,11 +129,7 @@ func (r *Reaper) flagStaleEpochs(ctx context.Context, now time.Time, threshold t
 		return nil, nil
 	}
 
-	// Check if any task is actively running or recently changed.
-	// Since we don't have updated_at exposed through the interface, we check
-	// whether any tasks are in terminal states and all claims are stale.
-	// If every task is in a terminal state (done/failed) and there are still
-	// claims or unresolved discoveries, the epoch is stale.
+	// Only flag when every task is in a terminal state.
 	allTerminal := true
 	for _, state := range states {
 		if state != fabric.StateDone && state != fabric.StateFailed {
@@ -150,14 +158,27 @@ func (r *Reaper) flagStaleEpochs(ctx context.Context, now time.Time, threshold t
 		return nil, nil
 	}
 
-	_ = now       // used for threshold comparison in future enhanced logic
-	_ = threshold // reserved for updated_at-based staleness check
+	// Use claim age as a proxy for epoch staleness. If no claims exist,
+	// fall back to flagging unconditionally (unresolved discoveries alone
+	// with all-terminal tasks is inherently stale).
+	if len(claims) > 0 {
+		stale := false
+		for _, c := range claims {
+			if now.Sub(c.ClaimedAt) >= threshold {
+				stale = true
+				break
+			}
+		}
+		if !stale {
+			return nil, nil
+		}
+	}
 
 	var actions []ReapAction
 	actions = append(actions, ReapAction{
 		Kind: "flagged_epoch",
-		Details: fmt.Sprintf("all %d tasks terminal but %d claims and %d unresolved discoveries remain",
-			len(states), len(claims), len(unresolved)),
+		Details: fmt.Sprintf("all %d tasks terminal but %d claims and %d unresolved discoveries remain (stale > %s)",
+			len(states), len(claims), len(unresolved), threshold),
 	})
 	return actions, nil
 }
