@@ -60,6 +60,7 @@ type AppModel struct {
 
 	// Nebula navigation state.
 	Depth        ViewDepth            // current navigation depth
+	ActiveTab    CockpitTab           // active cockpit tab (board, entanglements, scratchpad)
 	FocusedPhase string               // phase ID we're drilled into
 	PhaseLoops   map[string]*LoopView // per-phase cycle timelines
 
@@ -681,6 +682,24 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// diff inline instead of drilling down into the loop view.
 	if m.ShowDiff && m.DiffFileList != nil && key.Matches(msg, m.Keys.OpenDiff) {
 		return m.showFileDiff()
+	}
+
+	// Tab navigation — only active in nebula mode at DepthPhases.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases {
+		switch msg.String() {
+		case "tab":
+			m.ActiveTab = m.ActiveTab.Next()
+			return m, nil
+		case "shift+tab":
+			m.ActiveTab = m.ActiveTab.Prev()
+			return m, nil
+		case "1", "2", "3":
+			n := int(msg.String()[0] - '0')
+			if tab, ok := TabFromNumber(n); ok {
+				m.ActiveTab = tab
+			}
+			return m, nil
+		}
 	}
 
 	// Home mode: Enter selects a nebula and exits the TUI.
@@ -1469,6 +1488,12 @@ func (m AppModel) View() string {
 	sections = append(sections, m.StatusBar.View())
 	sections = append(sections, "") // Spacing between header and content.
 
+	// Tab bar — only in nebula mode at DepthPhases level.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases {
+		tb := TabBar{ActiveTab: m.ActiveTab, Width: contentWidth}
+		sections = append(sections, tb.View())
+	}
+
 	// Top banner (S-A or XS-A modes) — between status bar and content.
 	if bannerView := m.Banner.View(); bannerView != "" {
 		sections = append(sections, bannerView)
@@ -1610,8 +1635,24 @@ func (m AppModel) renderMainView() string {
 	case ModeNebula:
 		switch m.Depth {
 		case DepthPhases:
-			m.NebulaView.Width = w
-			return m.NebulaView.View()
+			switch m.ActiveTab {
+			case TabBoard:
+				m.NebulaView.Width = w
+				return m.NebulaView.View()
+			case TabEntanglements:
+				return lipgloss.NewStyle().
+					Foreground(colorMuted).
+					PaddingLeft(2).
+					Render("(coming soon)")
+			case TabScratchpad:
+				return lipgloss.NewStyle().
+					Foreground(colorMuted).
+					PaddingLeft(2).
+					Render("(coming soon)")
+			default:
+				m.NebulaView.Width = w
+				return m.NebulaView.View()
+			}
 		default:
 			// Show the focused phase's loop view.
 			if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
