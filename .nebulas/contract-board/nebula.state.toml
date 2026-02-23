@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'contract-board'
-total_cost_usd = 5.311573749999999
+total_cost_usd = 7.173177249999999
 
 [phases]
 [phases.board-store]
@@ -29,9 +29,15 @@ summary = 'New contract data model and snapshot renderer are clean, well-tested 
 
 [phases.contract-publisher]
 bead_id = 'quasar-17p'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T00:03:46.894484-05:00
-updated_at = 2026-02-23T09:27:15.082127-05:00
+updated_at = 2026-02-23T09:34:09.059968-05:00
+
+[phases.contract-publisher.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented Publisher with AST-based contract extraction from git diffs, comprehensive tests, and proper error handling — three minor cosmetic/edge-case refinements noted.'
 
 [phases.integration-tests]
 bead_id = 'quasar-0iy'
@@ -41,9 +47,9 @@ updated_at = 2026-02-23T09:16:57.224584-05:00
 
 [phases.poll-prompt]
 bead_id = 'quasar-719'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-23T00:03:47.888227-05:00
-updated_at = 2026-02-23T09:16:57.223941-05:00
+updated_at = 2026-02-23T09:34:09.060386-05:00
 
 [phases.polling-state]
 bead_id = 'quasar-69w'
