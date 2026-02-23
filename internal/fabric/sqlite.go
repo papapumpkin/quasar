@@ -288,6 +288,15 @@ func (f *SQLiteFabric) ReleaseClaims(ctx context.Context, ownerPhaseID string) e
 	return nil
 }
 
+// ReleaseFileClaim removes a specific file claim if it is owned by the given phase.
+// Returns nil if the file was not claimed.
+func (f *SQLiteFabric) ReleaseFileClaim(ctx context.Context, filepath, ownerPhaseID string) error {
+	if _, err := f.db.ExecContext(ctx, "DELETE FROM file_claims WHERE filepath = ? AND owner_task = ?", filepath, ownerPhaseID); err != nil {
+		return fmt.Errorf("fabric: release file claim %q for %q: %w", filepath, ownerPhaseID, err)
+	}
+	return nil
+}
+
 // FileOwner returns the phase ID that owns the given file path, or empty string
 // if unclaimed.
 func (f *SQLiteFabric) FileOwner(ctx context.Context, filepath string) (string, error) {
