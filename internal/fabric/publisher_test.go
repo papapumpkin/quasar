@@ -55,7 +55,18 @@ func (m *mockFabric) FileOwner(_ context.Context, _ string) (string, error) { re
 func (m *mockFabric) ClaimsFor(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
 }
-func (m *mockFabric) Close() error { return nil }
+func (m *mockFabric) PostDiscovery(_ context.Context, _ Discovery) error { return nil }
+func (m *mockFabric) Discoveries(_ context.Context, _ string) ([]Discovery, error) {
+	return nil, nil
+}
+func (m *mockFabric) AllDiscoveries(_ context.Context) ([]Discovery, error) { return nil, nil }
+func (m *mockFabric) ResolveDiscovery(_ context.Context, _ int64) error     { return nil }
+func (m *mockFabric) UnresolvedDiscoveries(_ context.Context) ([]Discovery, error) {
+	return nil, nil
+}
+func (m *mockFabric) AddBead(_ context.Context, _ Bead) error              { return nil }
+func (m *mockFabric) BeadsFor(_ context.Context, _ string) ([]Bead, error) { return nil, nil }
+func (m *mockFabric) Close() error                                         { return nil }
 
 // initGitRepo creates a temporary git repo and returns its path.
 func initGitRepo(t *testing.T) string {

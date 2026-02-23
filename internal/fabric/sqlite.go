@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS entanglements (
     name       TEXT NOT NULL,
     signature  TEXT NOT NULL,
     package    TEXT NOT NULL DEFAULT '',
-    status     TEXT NOT NULL DEFAULT 'fulfilled',
+    status     TEXT NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(producer, kind, name)
 );
@@ -42,6 +42,24 @@ CREATE TABLE IF NOT EXISTS file_claims (
     filepath   TEXT PRIMARY KEY,
     owner_task TEXT NOT NULL,
     claimed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS discoveries (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_task TEXT NOT NULL,
+    kind        TEXT NOT NULL,
+    detail      TEXT NOT NULL,
+    affects     TEXT,
+    resolved    BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS beads (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id    TEXT NOT NULL,
+    content    TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 `
 
@@ -146,7 +164,7 @@ func (f *SQLiteFabric) PublishEntanglements(ctx context.Context, entanglements [
 	for _, e := range entanglements {
 		status := e.Status
 		if status == "" {
-			status = StatusFulfilled
+			status = StatusPending
 		}
 		var consumer *string
 		if e.Consumer != "" {
@@ -304,6 +322,129 @@ func (f *SQLiteFabric) ClaimsFor(ctx context.Context, phaseID string) ([]string,
 		return nil, fmt.Errorf("fabric: iterate claims: %w", err)
 	}
 	return paths, nil
+}
+
+// PostDiscovery inserts a new discovery record into the fabric.
+func (f *SQLiteFabric) PostDiscovery(ctx context.Context, d Discovery) error {
+	const q = `INSERT INTO discoveries (source_task, kind, detail, affects, resolved)
+		VALUES (?, ?, ?, ?, FALSE)`
+	var affects *string
+	if d.Affects != "" {
+		affects = &d.Affects
+	}
+	if _, err := f.db.ExecContext(ctx, q, d.SourceTask, d.Kind, d.Detail, affects); err != nil {
+		return fmt.Errorf("fabric: post discovery from %q: %w", d.SourceTask, err)
+	}
+	return nil
+}
+
+// Discoveries returns all discoveries posted by the given task.
+func (f *SQLiteFabric) Discoveries(ctx context.Context, taskID string) ([]Discovery, error) {
+	const q = `SELECT id, source_task, kind, detail, affects, resolved, created_at
+		FROM discoveries WHERE source_task = ? ORDER BY id`
+	return f.queryDiscoveries(ctx, q, taskID)
+}
+
+// AllDiscoveries returns every discovery in the fabric.
+func (f *SQLiteFabric) AllDiscoveries(ctx context.Context) ([]Discovery, error) {
+	const q = `SELECT id, source_task, kind, detail, affects, resolved, created_at
+		FROM discoveries ORDER BY id`
+	return f.queryDiscoveries(ctx, q)
+}
+
+// ResolveDiscovery marks a discovery as resolved by its ID.
+func (f *SQLiteFabric) ResolveDiscovery(ctx context.Context, id int64) error {
+	const q = `UPDATE discoveries SET resolved = TRUE WHERE id = ?`
+	res, err := f.db.ExecContext(ctx, q, id)
+	if err != nil {
+		return fmt.Errorf("fabric: resolve discovery %d: %w", id, err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("fabric: resolve discovery rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("fabric: discovery %d not found", id)
+	}
+	return nil
+}
+
+// UnresolvedDiscoveries returns all discoveries that have not been resolved.
+func (f *SQLiteFabric) UnresolvedDiscoveries(ctx context.Context) ([]Discovery, error) {
+	const q = `SELECT id, source_task, kind, detail, affects, resolved, created_at
+		FROM discoveries WHERE resolved = FALSE ORDER BY id`
+	return f.queryDiscoveries(ctx, q)
+}
+
+// queryDiscoveries is a shared helper for scanning discovery rows.
+func (f *SQLiteFabric) queryDiscoveries(ctx context.Context, query string, args ...any) ([]Discovery, error) {
+	rows, err := f.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("fabric: query discoveries: %w", err)
+	}
+	defer rows.Close()
+
+	var result []Discovery
+	for rows.Next() {
+		var d Discovery
+		var ts string
+		var affects sql.NullString
+		if err := rows.Scan(&d.ID, &d.SourceTask, &d.Kind, &d.Detail, &affects, &d.Resolved, &ts); err != nil {
+			return nil, fmt.Errorf("fabric: scan discovery: %w", err)
+		}
+		if affects.Valid {
+			d.Affects = affects.String
+		}
+		createdAt, parseErr := parseTimestamp(ts)
+		if parseErr != nil {
+			return nil, fmt.Errorf("fabric: parse discovery timestamp: %w", parseErr)
+		}
+		d.CreatedAt = createdAt
+		result = append(result, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("fabric: iterate discoveries: %w", err)
+	}
+	return result, nil
+}
+
+// AddBead inserts a new bead (working memory entry) for a task.
+func (f *SQLiteFabric) AddBead(ctx context.Context, b Bead) error {
+	const q = `INSERT INTO beads (task_id, content, kind) VALUES (?, ?, ?)`
+	if _, err := f.db.ExecContext(ctx, q, b.TaskID, b.Content, b.Kind); err != nil {
+		return fmt.Errorf("fabric: add bead for %q: %w", b.TaskID, err)
+	}
+	return nil
+}
+
+// BeadsFor returns all beads associated with the given task, ordered by ID.
+func (f *SQLiteFabric) BeadsFor(ctx context.Context, taskID string) ([]Bead, error) {
+	const q = `SELECT id, task_id, content, kind, created_at
+		FROM beads WHERE task_id = ? ORDER BY id`
+	rows, err := f.db.QueryContext(ctx, q, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("fabric: query beads for %q: %w", taskID, err)
+	}
+	defer rows.Close()
+
+	var result []Bead
+	for rows.Next() {
+		var b Bead
+		var ts string
+		if err := rows.Scan(&b.ID, &b.TaskID, &b.Content, &b.Kind, &ts); err != nil {
+			return nil, fmt.Errorf("fabric: scan bead: %w", err)
+		}
+		createdAt, parseErr := parseTimestamp(ts)
+		if parseErr != nil {
+			return nil, fmt.Errorf("fabric: parse bead timestamp: %w", parseErr)
+		}
+		b.CreatedAt = createdAt
+		result = append(result, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("fabric: iterate beads: %w", err)
+	}
+	return result, nil
 }
 
 // Close releases the database connection.

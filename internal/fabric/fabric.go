@@ -39,6 +39,23 @@ const (
 	StatusPending   = "pending"
 )
 
+// Discovery kinds surfaced by agents during execution.
+const (
+	DiscoveryEntanglementDispute   = "entanglement_dispute"
+	DiscoveryMissingDependency     = "missing_dependency"
+	DiscoveryFileConflict          = "file_conflict"
+	DiscoveryRequirementsAmbiguity = "requirements_ambiguity"
+	DiscoveryBudgetAlert           = "budget_alert"
+)
+
+// Bead kinds for agent working memory entries.
+const (
+	BeadNote             = "note"
+	BeadDecision         = "decision"
+	BeadFailure          = "failure"
+	BeadReviewerFeedback = "reviewer_feedback"
+)
+
 // Entanglement represents an interface entanglement published by a completed phase.
 type Entanglement struct {
 	ID        int64     `json:"id"`
@@ -49,6 +66,29 @@ type Entanglement struct {
 	Signature string    `json:"signature"`
 	Package   string    `json:"package"`
 	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// Discovery represents an agent-surfaced issue that may require human or
+// automated attention. Discoveries are posted by agents during execution
+// and can target a specific task or broadcast to all consumers.
+type Discovery struct {
+	ID         int64     `json:"id"`
+	SourceTask string    `json:"source_task"`
+	Kind       string    `json:"kind"`
+	Detail     string    `json:"detail"`
+	Affects    string    `json:"affects,omitempty"`
+	Resolved   bool      `json:"resolved"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// Bead represents agent working memory — a timestamped note, decision, failure
+// record, or reviewer feedback associated with a specific task.
+type Bead struct {
+	ID        int64     `json:"id"`
+	TaskID    string    `json:"task_id"`
+	Content   string    `json:"content"`
+	Kind      string    `json:"kind"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -95,6 +135,27 @@ type Fabric interface {
 
 	// ClaimsFor returns all file paths claimed by the given phase.
 	ClaimsFor(ctx context.Context, phaseID string) ([]string, error)
+
+	// PostDiscovery inserts a new discovery record.
+	PostDiscovery(ctx context.Context, d Discovery) error
+
+	// Discoveries returns all discoveries posted by the given task.
+	Discoveries(ctx context.Context, taskID string) ([]Discovery, error)
+
+	// AllDiscoveries returns every discovery in the fabric.
+	AllDiscoveries(ctx context.Context) ([]Discovery, error)
+
+	// ResolveDiscovery marks a discovery as resolved.
+	ResolveDiscovery(ctx context.Context, id int64) error
+
+	// UnresolvedDiscoveries returns all discoveries that have not been resolved.
+	UnresolvedDiscoveries(ctx context.Context) ([]Discovery, error)
+
+	// AddBead inserts a new bead (working memory entry) for a task.
+	AddBead(ctx context.Context, b Bead) error
+
+	// BeadsFor returns all beads associated with the given task.
+	BeadsFor(ctx context.Context, taskID string) ([]Bead, error)
 
 	// Close releases database resources.
 	Close() error

@@ -7,8 +7,9 @@ import (
 )
 
 // FabricSnapshot is the full fabric state injected into a scanning phase's context.
-// It aggregates all fulfilled entanglements, file claims, and phase progress so that
-// a dependent phase can understand the interface surface available to it.
+// It aggregates all fulfilled entanglements, file claims, phase progress, and
+// unresolved discoveries so that a dependent phase can understand the interface
+// surface and outstanding issues.
 type FabricSnapshot struct {
 	// Entanglements holds all fulfilled entanglements published by completed phases.
 	Entanglements []Entanglement
@@ -21,6 +22,9 @@ type FabricSnapshot struct {
 
 	// InProgress lists phase IDs that are currently running.
 	InProgress []string
+
+	// UnresolvedDiscoveries holds discoveries that have not yet been resolved.
+	UnresolvedDiscoveries []Discovery
 }
 
 // RenderSnapshot formats a FabricSnapshot into a human-readable string suitable
@@ -81,6 +85,20 @@ func RenderSnapshot(snap FabricSnapshot) string {
 	} else {
 		for _, id := range snap.InProgress {
 			fmt.Fprintf(&b, "- %s\n", id)
+		}
+	}
+
+	// Unresolved discoveries.
+	b.WriteString("\n### Unresolved Discoveries\n")
+	if len(snap.UnresolvedDiscoveries) == 0 {
+		b.WriteString("(none)\n")
+	} else {
+		for _, d := range snap.UnresolvedDiscoveries {
+			if d.Affects != "" {
+				fmt.Fprintf(&b, "- [%s] %s (from: %s, affects: %s)\n", d.Kind, d.Detail, d.SourceTask, d.Affects)
+			} else {
+				fmt.Fprintf(&b, "- [%s] %s (from: %s)\n", d.Kind, d.Detail, d.SourceTask)
+			}
 		}
 	}
 

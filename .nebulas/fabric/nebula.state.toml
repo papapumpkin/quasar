@@ -1,5 +1,6 @@
 version = 1
 nebula_name = 'fabric'
+total_cost_usd = 12.185824250000005
 
 [phases]
 [phases.agent-prompt]
@@ -34,9 +35,15 @@ updated_at = 2026-02-23T11:20:43.272333-05:00
 
 [phases.fabric-rename]
 bead_id = 'quasar-c7d'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T11:20:42.505461-05:00
-updated_at = 2026-02-23T11:20:46.520096-05:00
+updated_at = 2026-02-23T11:52:55.260762-05:00
+
+[phases.fabric-rename.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, comprehensive rename from internal/board to internal/fabric with correct vocabulary updates throughout; three minor issues (one stale comment, stub files pending deletion, no Consumer field test) are non-blocking.'
 
 [phases.filters]
 bead_id = 'quasar-ibk'
@@ -52,9 +59,9 @@ updated_at = 2026-02-23T11:20:46.02521-05:00
 
 [phases.schema-evolution]
 bead_id = 'quasar-i8s'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-23T11:20:42.913086-05:00
-updated_at = 2026-02-23T11:20:42.913086-05:00
+updated_at = 2026-02-23T11:52:55.261801-05:00
 
 [phases.telemetry]
 bead_id = 'quasar-ee7'

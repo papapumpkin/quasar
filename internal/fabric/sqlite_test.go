@@ -39,8 +39,8 @@ func TestNewSQLiteFabric(t *testing.T) {
 			t.Errorf("journal_mode = %q, want %q", mode, "wal")
 		}
 
-		// Verify all three tables exist by querying sqlite_master.
-		tables := map[string]bool{"fabric": false, "entanglements": false, "file_claims": false}
+		// Verify all five tables exist by querying sqlite_master.
+		tables := map[string]bool{"fabric": false, "entanglements": false, "file_claims": false, "discoveries": false, "beads": false}
 		rows, err := b.db.Query("SELECT name FROM sqlite_master WHERE type='table'")
 		if err != nil {
 			t.Fatalf("query sqlite_master: %v", err)
@@ -170,8 +170,8 @@ func TestEntanglements(t *testing.T) {
 		if got[0].Name != "Fabric" || got[0].Kind != KindInterface {
 			t.Errorf("entanglement = %+v, want Name=Fabric Kind=interface", got[0])
 		}
-		if got[0].Status != StatusFulfilled {
-			t.Errorf("status = %q, want %q", got[0].Status, StatusFulfilled)
+		if got[0].Status != StatusPending {
+			t.Errorf("status = %q, want %q", got[0].Status, StatusPending)
 		}
 	})
 
@@ -436,6 +436,282 @@ func TestConcurrentAccess(t *testing.T) {
 	for err := range errs {
 		t.Errorf("concurrent operation error: %v", err)
 	}
+}
+
+func TestDiscoveries(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	t.Run("post and query by task", func(t *testing.T) {
+		t.Parallel()
+		b := testFabric(t)
+
+		d := Discovery{
+			SourceTask: "phase-1",
+			Kind:       DiscoveryFileConflict,
+			Detail:     "both phases modify shared.go",
+			Affects:    "phase-2",
+		}
+		if err := b.PostDiscovery(ctx, d); err != nil {
+			t.Fatalf("PostDiscovery: %v", err)
+		}
+
+		got, err := b.Discoveries(ctx, "phase-1")
+		if err != nil {
+			t.Fatalf("Discoveries: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("len(discoveries) = %d, want 1", len(got))
+		}
+		if got[0].Kind != DiscoveryFileConflict {
+			t.Errorf("kind = %q, want %q", got[0].Kind, DiscoveryFileConflict)
+		}
+		if got[0].Detail != "both phases modify shared.go" {
+			t.Errorf("detail = %q, want %q", got[0].Detail, "both phases modify shared.go")
+		}
+		if got[0].Affects != "phase-2" {
+			t.Errorf("affects = %q, want %q", got[0].Affects, "phase-2")
+		}
+		if got[0].Resolved {
+			t.Error("expected resolved=false for new discovery")
+		}
+		if got[0].ID == 0 {
+			t.Error("expected non-zero ID")
+		}
+	})
+
+	t.Run("post without affects", func(t *testing.T) {
+		t.Parallel()
+		b := testFabric(t)
+
+		d := Discovery{
+			SourceTask: "phase-1",
+			Kind:       DiscoveryBudgetAlert,
+			Detail:     "approaching 80% budget",
+		}
+		if err := b.PostDiscovery(ctx, d); err != nil {
+			t.Fatalf("PostDiscovery: %v", err)
+		}
+
+		got, err := b.Discoveries(ctx, "phase-1")
+		if err != nil {
+			t.Fatalf("Discoveries: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("len(discoveries) = %d, want 1", len(got))
+		}
+		if got[0].Affects != "" {
+			t.Errorf("affects = %q, want empty", got[0].Affects)
+		}
+	})
+
+	t.Run("all discoveries across tasks", func(t *testing.T) {
+		t.Parallel()
+		b := testFabric(t)
+
+		if err := b.PostDiscovery(ctx, Discovery{SourceTask: "p1", Kind: DiscoveryFileConflict, Detail: "conflict A"}); err != nil {
+			t.Fatalf("post A: %v", err)
+		}
+		if err := b.PostDiscovery(ctx, Discovery{SourceTask: "p2", Kind: DiscoveryMissingDependency, Detail: "missing dep B"}); err != nil {
+			t.Fatalf("post B: %v", err)
+		}
+
+		got, err := b.AllDiscoveries(ctx)
+		if err != nil {
+			t.Fatalf("AllDiscoveries: %v", err)
+		}
+		if len(got) != 2 {
+			t.Errorf("len(AllDiscoveries) = %d, want 2", len(got))
+		}
+	})
+
+	t.Run("resolve discovery", func(t *testing.T) {
+		t.Parallel()
+		b := testFabric(t)
+
+		if err := b.PostDiscovery(ctx, Discovery{SourceTask: "p1", Kind: DiscoveryEntanglementDispute, Detail: "signature mismatch"}); err != nil {
+			t.Fatalf("PostDiscovery: %v", err)
+		}
+
+		all, err := b.AllDiscoveries(ctx)
+		if err != nil {
+			t.Fatalf("AllDiscoveries: %v", err)
+		}
+		if len(all) != 1 {
+			t.Fatalf("expected 1 discovery, got %d", len(all))
+		}
+
+		if err := b.ResolveDiscovery(ctx, all[0].ID); err != nil {
+			t.Fatalf("ResolveDiscovery: %v", err)
+		}
+
+		unresolved, err := b.UnresolvedDiscoveries(ctx)
+		if err != nil {
+			t.Fatalf("UnresolvedDiscoveries: %v", err)
+		}
+		if len(unresolved) != 0 {
+			t.Errorf("len(UnresolvedDiscoveries) = %d, want 0", len(unresolved))
+		}
+	})
+
+	t.Run("unresolved discoveries", func(t *testing.T) {
+		t.Parallel()
+		b := testFabric(t)
+
+		if err := b.PostDiscovery(ctx, Discovery{SourceTask: "p1", Kind: DiscoveryFileConflict, Detail: "conflict 1"}); err != nil {
+			t.Fatalf("post 1: %v", err)
+		}
+		if err := b.PostDiscovery(ctx, Discovery{SourceTask: "p2", Kind: DiscoveryRequirementsAmbiguity, Detail: "ambiguity 2"}); err != nil {
+			t.Fatalf("post 2: %v", err)
+		}
+
+		// Resolve the first one.
+		all, err := b.AllDiscoveries(ctx)
+		if err != nil {
+			t.Fatalf("AllDiscoveries: %v", err)
+		}
+		if err := b.ResolveDiscovery(ctx, all[0].ID); err != nil {
+			t.Fatalf("ResolveDiscovery: %v", err)
+		}
+
+		unresolved, err := b.UnresolvedDiscoveries(ctx)
+		if err != nil {
+			t.Fatalf("UnresolvedDiscoveries: %v", err)
+		}
+		if len(unresolved) != 1 {
+			t.Fatalf("len(UnresolvedDiscoveries) = %d, want 1", len(unresolved))
+		}
+		if unresolved[0].Kind != DiscoveryRequirementsAmbiguity {
+			t.Errorf("kind = %q, want %q", unresolved[0].Kind, DiscoveryRequirementsAmbiguity)
+		}
+	})
+
+	t.Run("resolve nonexistent returns error", func(t *testing.T) {
+		t.Parallel()
+		b := testFabric(t)
+
+		err := b.ResolveDiscovery(ctx, 9999)
+		if err == nil {
+			t.Fatal("expected error for nonexistent discovery")
+		}
+	})
+
+	t.Run("empty discoveries for unknown task", func(t *testing.T) {
+		t.Parallel()
+		b := testFabric(t)
+
+		got, err := b.Discoveries(ctx, "nonexistent")
+		if err != nil {
+			t.Fatalf("Discoveries: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("len(discoveries) = %d, want 0", len(got))
+		}
+	})
+}
+
+func TestBeads(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	t.Run("add and query", func(t *testing.T) {
+		t.Parallel()
+		b := testFabric(t)
+
+		bead := Bead{
+			TaskID:  "phase-1",
+			Content: "decided to use observer pattern for event handling",
+			Kind:    BeadDecision,
+		}
+		if err := b.AddBead(ctx, bead); err != nil {
+			t.Fatalf("AddBead: %v", err)
+		}
+
+		got, err := b.BeadsFor(ctx, "phase-1")
+		if err != nil {
+			t.Fatalf("BeadsFor: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("len(beads) = %d, want 1", len(got))
+		}
+		if got[0].Kind != BeadDecision {
+			t.Errorf("kind = %q, want %q", got[0].Kind, BeadDecision)
+		}
+		if got[0].Content != "decided to use observer pattern for event handling" {
+			t.Errorf("content = %q, want expected", got[0].Content)
+		}
+		if got[0].TaskID != "phase-1" {
+			t.Errorf("task_id = %q, want %q", got[0].TaskID, "phase-1")
+		}
+		if got[0].ID == 0 {
+			t.Error("expected non-zero ID")
+		}
+	})
+
+	t.Run("multiple beads for same task", func(t *testing.T) {
+		t.Parallel()
+		b := testFabric(t)
+
+		beads := []Bead{
+			{TaskID: "phase-1", Content: "starting implementation", Kind: BeadNote},
+			{TaskID: "phase-1", Content: "build failed: missing import", Kind: BeadFailure},
+			{TaskID: "phase-1", Content: "reviewer says: add error handling", Kind: BeadReviewerFeedback},
+		}
+		for _, bd := range beads {
+			if err := b.AddBead(ctx, bd); err != nil {
+				t.Fatalf("AddBead(%q): %v", bd.Kind, err)
+			}
+		}
+
+		got, err := b.BeadsFor(ctx, "phase-1")
+		if err != nil {
+			t.Fatalf("BeadsFor: %v", err)
+		}
+		if len(got) != 3 {
+			t.Fatalf("len(beads) = %d, want 3", len(got))
+		}
+		// Verify ordering by ID (insertion order).
+		if got[0].Kind != BeadNote || got[1].Kind != BeadFailure || got[2].Kind != BeadReviewerFeedback {
+			t.Errorf("bead kinds = [%s, %s, %s], want [note, failure, reviewer_feedback]",
+				got[0].Kind, got[1].Kind, got[2].Kind)
+		}
+	})
+
+	t.Run("beads isolated by task", func(t *testing.T) {
+		t.Parallel()
+		b := testFabric(t)
+
+		if err := b.AddBead(ctx, Bead{TaskID: "p1", Content: "note for p1", Kind: BeadNote}); err != nil {
+			t.Fatalf("AddBead p1: %v", err)
+		}
+		if err := b.AddBead(ctx, Bead{TaskID: "p2", Content: "note for p2", Kind: BeadNote}); err != nil {
+			t.Fatalf("AddBead p2: %v", err)
+		}
+
+		got, err := b.BeadsFor(ctx, "p1")
+		if err != nil {
+			t.Fatalf("BeadsFor: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("len(beads for p1) = %d, want 1", len(got))
+		}
+		if got[0].Content != "note for p1" {
+			t.Errorf("content = %q, want %q", got[0].Content, "note for p1")
+		}
+	})
+
+	t.Run("empty beads for unknown task", func(t *testing.T) {
+		t.Parallel()
+		b := testFabric(t)
+
+		got, err := b.BeadsFor(ctx, "nonexistent")
+		if err != nil {
+			t.Fatalf("BeadsFor: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("len(beads) = %d, want 0", len(got))
+		}
+	})
 }
 
 // itoa converts an int to its string representation using stdlib strconv.

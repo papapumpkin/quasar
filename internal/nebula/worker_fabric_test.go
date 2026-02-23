@@ -114,7 +114,20 @@ func (m *mockFabric) ClaimsFor(_ context.Context, phaseID string) ([]string, err
 	return result, nil
 }
 
-func (m *mockFabric) Close() error { return nil }
+func (m *mockFabric) PostDiscovery(_ context.Context, _ fabric.Discovery) error    { return nil }
+func (m *mockFabric) Discoveries(_ context.Context, _ string) ([]fabric.Discovery, error) {
+	return nil, nil
+}
+func (m *mockFabric) AllDiscoveries(_ context.Context) ([]fabric.Discovery, error) {
+	return nil, nil
+}
+func (m *mockFabric) ResolveDiscovery(_ context.Context, _ int64) error { return nil }
+func (m *mockFabric) UnresolvedDiscoveries(_ context.Context) ([]fabric.Discovery, error) {
+	return nil, nil
+}
+func (m *mockFabric) AddBead(_ context.Context, _ fabric.Bead) error              { return nil }
+func (m *mockFabric) BeadsFor(_ context.Context, _ string) ([]fabric.Bead, error) { return nil, nil }
+func (m *mockFabric) Close() error                                                { return nil }
 
 // mockPoller satisfies fabric.Poller with canned per-phase responses.
 type mockPoller struct {
