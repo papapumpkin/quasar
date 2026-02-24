@@ -9,11 +9,10 @@ labels = ["quasar", "tui", "cockpit"]
 assignee = ""
 
 [execution]
-max_workers = 1
+max_workers = 5
 max_review_cycles = 5
 max_budget_usd = 80.0
 model = ""
-gate = "review"
 
 [context]
 repo = "github.com/papapumpkin/quasar"

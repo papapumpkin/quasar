@@ -63,6 +63,6 @@ func runRootDefault(cmd *cobra.Command, args []string) error {
 	} else if err != nil {
 		return fmt.Errorf("failed to access %s: %w", nebulaeDir, err)
 	}
-	// Delegate to the tui subcommand.
-	return runTUI(tuiCmd, nil)
+	// Delegate to the cockpit subcommand.
+	return runTUI(cockpitCmd, nil)
 }

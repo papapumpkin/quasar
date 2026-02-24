@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -59,26 +61,73 @@ func NewBranchManager(ctx context.Context, dir, nebulaName string) (*BranchManag
 // CreateOrCheckout checks out the target branch if it already exists,
 // or creates it from the current HEAD and checks it out. This handles
 // both fresh starts and resumptions of previous nebula runs.
+//
+// If checkout fails because untracked working tree files would be
+// overwritten (e.g. a state file left over from a previous run on
+// another branch), the conflicting files are removed and the checkout
+// is retried. The files exist on the target branch and are restored
+// by the checkout.
 func (b *BranchManager) CreateOrCheckout(ctx context.Context) error {
 	if b == nil {
 		return nil
 	}
 
 	if b.branchExists(ctx) {
-		// Branch exists — check it out.
-		cmd := exec.CommandContext(ctx, "git", "-C", b.dir, "checkout", b.branch)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("git checkout %s: %w: %s", b.branch, err, strings.TrimSpace(string(out)))
+		out, err := b.runCheckout(ctx, b.branch)
+		if err == nil {
+			return nil
 		}
-		return nil
+		// If checkout fails due to untracked files that would be
+		// overwritten, remove them and retry once.
+		if conflicts := parseUntrackedConflicts(string(out)); len(conflicts) > 0 {
+			for _, f := range conflicts {
+				os.Remove(filepath.Join(b.dir, f))
+			}
+			if _, retryErr := b.runCheckout(ctx, b.branch); retryErr != nil {
+				return fmt.Errorf("git checkout %s: %w: %s", b.branch, err, strings.TrimSpace(string(out)))
+			}
+			return nil
+		}
+		return fmt.Errorf("git checkout %s: %w: %s", b.branch, err, strings.TrimSpace(string(out)))
 	}
 
 	// Branch does not exist — create from current HEAD.
-	cmd := exec.CommandContext(ctx, "git", "-C", b.dir, "checkout", "-b", b.branch)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if out, err := b.runCheckout(ctx, "-b", b.branch); err != nil {
 		return fmt.Errorf("git checkout -b %s: %w: %s", b.branch, err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// runCheckout executes git checkout with the given arguments.
+func (b *BranchManager) runCheckout(ctx context.Context, args ...string) ([]byte, error) {
+	cmdArgs := append([]string{"-C", b.dir, "checkout"}, args...)
+	cmd := exec.CommandContext(ctx, "git", cmdArgs...)
+	return cmd.CombinedOutput()
+}
+
+// parseUntrackedConflicts extracts file paths from a git checkout error
+// reporting that untracked working tree files would be overwritten.
+// Returns nil if the output does not match this error pattern.
+func parseUntrackedConflicts(output string) []string {
+	if !strings.Contains(output, "untracked working tree files would be overwritten") {
+		return nil
+	}
+	var files []string
+	inFileList := false
+	for _, line := range strings.Split(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(line, "would be overwritten") {
+			inFileList = true
+			continue
+		}
+		if inFileList {
+			if trimmed == "" || strings.HasPrefix(trimmed, "Please") || strings.HasPrefix(trimmed, "Aborting") {
+				break
+			}
+			files = append(files, trimmed)
+		}
+	}
+	return files
 }
 
 // EnsureBranch verifies the current branch matches the expected branch name.

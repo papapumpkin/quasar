@@ -72,6 +72,18 @@ func HomeFooterBindings(km KeyMap) []key.Binding {
 	return []key.Binding{km.Up, km.Down, enter, km.Info, km.Quit}
 }
 
+// CockpitFooterBindings returns footer bindings when the board view is active.
+// Shows tab navigation, board toggle, and cockpit-specific actions.
+func CockpitFooterBindings(km KeyMap) []key.Binding {
+	tab := key.NewBinding(
+		key.WithKeys("tab"),
+		key.WithHelp("tab", "tabs"),
+	)
+	boardToggle := km.BoardToggle
+	boardToggle.SetHelp("v", "table")
+	return []key.Binding{km.Up, km.Down, km.Enter, tab, boardToggle, km.Info, km.Pause, km.Stop, km.Quit}
+}
+
 // GateFooterBindings returns footer bindings during gate prompts.
 // Includes Esc (back/skip) so users know they can dismiss the prompt.
 func GateFooterBindings(km KeyMap) []key.Binding {

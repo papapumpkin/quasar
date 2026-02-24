@@ -1,0 +1,100 @@
+version = 1
+nebula_name = 'cockpit'
+total_cost_usd = 34.646898799999995
+
+[phases]
+[phases.board-view]
+bead_id = 'quasar-7jb'
+status = 'done'
+created_at = 2026-02-23T15:56:11.788154-05:00
+updated_at = 2026-02-23T16:07:13.50685-05:00
+
+[phases.board-view.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented BoardView component with correct width-aware phase remapping, eliminated redundant computation, and accurate documentation — backed by comprehensive 20-test suite.'
+
+[phases.decision-overlay]
+bead_id = 'quasar-ueap'
+status = 'done'
+created_at = 2026-02-23T15:56:13.490806-05:00
+updated_at = 2026-02-23T19:20:16.57316-05:00
+
+[phases.decision-overlay.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented HailOverlay component with comprehensive tests, clean integration into the existing TUI model, proper edge case handling, and adherence to project conventions.'
+
+[phases.entanglement-viewer]
+bead_id = 'quasar-892z'
+status = 'done'
+created_at = 2026-02-23T15:56:14.060611-05:00
+updated_at = 2026-02-23T19:32:24.301031-05:00
+
+[phases.entanglement-viewer.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean implementation of the EntanglementView TUI component with grouped/sorted entanglement cards, proper model integration preserving cursor state, and thorough test coverage across 19 new test functions.'
+
+[phases.model-integration]
+bead_id = 'quasar-t7s4'
+status = 'done'
+created_at = 2026-02-23T15:56:14.97329-05:00
+updated_at = 2026-02-23T20:18:46.043135-05:00
+
+[phases.model-integration.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Two targeted fixes — rebinding board toggle from `b` to `v` to prevent beads key shadowing, and wiring `MsgHail.ResponseCh` through to the hail overlay — both correct, well-tested, and with clean linting.'
+
+[phases.scratchpad-view]
+bead_id = 'quasar-vsch'
+status = 'done'
+created_at = 2026-02-23T15:56:14.48234-05:00
+updated_at = 2026-02-23T19:45:44.173505-05:00
+
+[phases.scratchpad-view.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = "Surgical 2-line fix moves ScratchpadView.SetSize from a throwaway value-receiver View path into Update's WindowSizeMsg handler, correctly fixing viewport initialization and scroll behavior."
+
+[phases.stats-bar-upgrade]
+bead_id = 'quasar-az8'
+status = 'done'
+created_at = 2026-02-23T15:56:13.039133-05:00
+updated_at = 2026-02-23T16:20:23.601017-05:00
+
+[phases.stats-bar-upgrade.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented bottom stats bar with block-character progress, token/cost/elapsed formatting, comprehensive tests, and clean integration — tokens will show 0 until the upstream bridge pipes real data.'
+
+[phases.tab-system]
+bead_id = 'quasar-ziw'
+status = 'done'
+created_at = 2026-02-23T15:56:12.609027-05:00
+updated_at = 2026-02-23T16:13:23.727246-05:00
+
+[phases.tab-system.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Solid implementation of a TabBar component with CockpitTab enum, lateral navigation (Tab/Shift+Tab/1-2-3), placeholder views for unimplemented tabs, and comprehensive test coverage — all following existing project conventions.'
+
+[phases.worker-cards]
+bead_id = 'quasar-9kal'
+status = 'done'
+created_at = 2026-02-23T15:56:12.213158-05:00
+updated_at = 2026-02-23T19:56:32.958974-05:00
+
+[phases.worker-cards.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Fixes quasar ID sort ordering from lexicographic to numeric with a clean helper function and thorough tests — low-risk, well-implemented change.'

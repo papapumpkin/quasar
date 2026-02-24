@@ -6,22 +6,22 @@ import (
 	"testing"
 )
 
-func TestTUICmd_Registered(t *testing.T) {
+func TestCockpitCmd_Registered(t *testing.T) {
 	t.Parallel()
 
 	found := false
 	for _, c := range rootCmd.Commands() {
-		if c.Name() == "tui" {
+		if c.Name() == "cockpit" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("expected 'tui' subcommand to be registered on rootCmd")
+		t.Error("expected 'cockpit' subcommand to be registered on rootCmd")
 	}
 }
 
-func TestTUICmd_Flags(t *testing.T) {
+func TestCockpitCmd_Flags(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -35,24 +35,24 @@ func TestTUICmd_Flags(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			f := tuiCmd.Flags().Lookup(tt.flag)
+			f := cockpitCmd.Flags().Lookup(tt.flag)
 			if f == nil {
-				t.Errorf("expected flag %q to be registered on tui command", tt.flag)
+				t.Errorf("expected flag %q to be registered on cockpit command", tt.flag)
 			}
 		})
 	}
 }
 
-func TestTUICmd_NoNebulasDir(t *testing.T) {
-	// Not parallel: modifies shared tuiCmd flag state.
+func TestCockpitCmd_NoNebulasDir(t *testing.T) {
+	// Not parallel: modifies shared cockpitCmd flag state.
 	dir := t.TempDir()
 
-	if err := tuiCmd.Flags().Set("dir", dir); err != nil {
+	if err := cockpitCmd.Flags().Set("dir", dir); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = tuiCmd.Flags().Set("dir", "") }()
+	defer func() { _ = cockpitCmd.Flags().Set("dir", "") }()
 
-	runErr := runTUI(tuiCmd, nil)
+	runErr := runTUI(cockpitCmd, nil)
 	if runErr == nil {
 		t.Fatal("expected error when .nebulas/ doesn't exist")
 	}
@@ -62,24 +62,24 @@ func TestTUICmd_NoNebulasDir(t *testing.T) {
 	}
 }
 
-func TestTUICmd_RequiresTTY(t *testing.T) {
-	// Not parallel: modifies shared tuiCmd flag state.
+func TestCockpitCmd_RequiresTTY(t *testing.T) {
+	// Not parallel: modifies shared cockpitCmd flag state.
 	dir := t.TempDir()
 	nebulaeDir := filepath.Join(dir, ".nebulas")
 	if err := os.MkdirAll(nebulaeDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := tuiCmd.Flags().Set("dir", dir); err != nil {
+	if err := cockpitCmd.Flags().Set("dir", dir); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = tuiCmd.Flags().Set("dir", "") }()
+	defer func() { _ = cockpitCmd.Flags().Set("dir", "") }()
 
-	runErr := runTUI(tuiCmd, nil)
+	runErr := runTUI(cockpitCmd, nil)
 	if runErr == nil {
 		t.Fatal("expected error when not on a TTY")
 	}
-	if got := runErr.Error(); got != "quasar tui requires a TTY (terminal)" {
+	if got := runErr.Error(); got != "quasar cockpit requires a TTY (terminal)" {
 		t.Errorf("unexpected error: %q", got)
 	}
 }

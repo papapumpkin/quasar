@@ -51,6 +51,41 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("validation failed")
 	}
 
+	if v, _ := cmd.Flags().GetBool("verbose"); v {
+		cfg.Verbose = true
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Resolve workDir and checkout nebula branch BEFORE loading state or
+	// applying bead changes. The state file lives on the feature branch;
+	// writing it before checkout creates an untracked file that blocks
+	// the subsequent git checkout.
+	workDir := cfg.WorkDir
+	if n.Manifest.Context.WorkingDir != "" {
+		workDir = n.Manifest.Context.WorkingDir
+	}
+	if workDir == "." || workDir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get working directory: %w", err)
+		}
+		workDir = wd
+	}
+
+	// Create nebula branch if in a git repo. Non-fatal if git is unavailable.
+	branchMgr, branchErr := nebula.NewBranchManager(ctx, workDir, n.Manifest.Nebula.Name)
+	if branchErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: branch management unavailable: %v\n", branchErr)
+	}
+	if branchMgr != nil {
+		if err := branchMgr.CreateOrCheckout(ctx); err != nil {
+			return fmt.Errorf("failed to create nebula branch: %w", err)
+		}
+	}
+	branchName := branchMgr.Branch() // "" if branchMgr is nil (nil-safe)
+
 	state, err := nebula.LoadState(dir)
 	if err != nil {
 		printer.Error(err.Error())
@@ -58,13 +93,6 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	client := &beads.CLI{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
-
-	if v, _ := cmd.Flags().GetBool("verbose"); v {
-		cfg.Verbose = true
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	plan, err := nebula.BuildPlan(ctx, n, state, client)
 	if err != nil {
@@ -115,31 +143,6 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		printer.Error(fmt.Sprintf("claude not available: %v", err))
 		return err
 	}
-
-	workDir := cfg.WorkDir
-	// Nebula context.working_dir overrides global if set.
-	if n.Manifest.Context.WorkingDir != "" {
-		workDir = n.Manifest.Context.WorkingDir
-	}
-	if workDir == "." || workDir == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("failed to get working directory: %w", err)
-		}
-		workDir = wd
-	}
-
-	// Create nebula branch if in a git repo. Non-fatal if git is unavailable.
-	branchMgr, branchErr := nebula.NewBranchManager(ctx, workDir, n.Manifest.Nebula.Name)
-	if branchErr != nil {
-		fmt.Fprintf(os.Stderr, "warning: branch management unavailable: %v\n", branchErr)
-	}
-	if branchMgr != nil {
-		if err := branchMgr.CreateOrCheckout(ctx); err != nil {
-			return fmt.Errorf("failed to create nebula branch: %w", err)
-		}
-	}
-	branchName := branchMgr.Branch() // "" if branchMgr is nil (nil-safe)
 
 	git := loop.NewCycleCommitterWithBranch(ctx, workDir, branchName)
 	phaseCommitter := nebula.NewGitCommitterWithBranch(ctx, workDir, branchName)

@@ -40,6 +40,7 @@ type MsgAgentDone struct {
 	Role       string
 	CostUSD    float64
 	DurationMs int64
+	Tokens     int
 }
 
 // MsgCycleSummary is sent after each phase with structured summary data.
@@ -120,6 +121,7 @@ type MsgPhaseAgentDone struct {
 	Role       string
 	CostUSD    float64
 	DurationMs int64
+	Tokens     int
 }
 
 // MsgPhaseAgentOutput carries agent output for a specific phase.
@@ -322,9 +324,13 @@ type MsgDiscoveryPosted struct {
 }
 
 // MsgHail surfaces a human-attention-required interrupt from a blocked phase.
+// ResponseCh, when non-nil, carries the user's response back to the worker
+// awaiting a human decision. A nil channel means fire-and-forget (the overlay
+// renders but the response is silently dropped).
 type MsgHail struct {
-	PhaseID   string
-	Discovery fabric.Discovery
+	PhaseID    string
+	Discovery  fabric.Discovery
+	ResponseCh chan<- string
 }
 
 // MsgScratchpadEntry adds a timestamped note to the scratchpad view.

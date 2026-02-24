@@ -48,6 +48,7 @@ type AppModel struct {
 	NebulaView NebulaView
 	Detail     DetailPanel
 	Gate       *GatePrompt
+	Hail       *HailOverlay
 	Overlay    *CompletionOverlay
 	Toasts     []Toast
 	Keys       KeyMap
@@ -60,6 +61,7 @@ type AppModel struct {
 
 	// Nebula navigation state.
 	Depth        ViewDepth            // current navigation depth
+	ActiveTab    CockpitTab           // active cockpit tab (board, entanglements, scratchpad)
 	FocusedPhase string               // phase ID we're drilled into
 	PhaseLoops   map[string]*LoopView // per-phase cycle timelines
 
@@ -79,11 +81,22 @@ type AppModel struct {
 	Stopping  bool   // whether a stop has been requested
 	NebulaDir string // path to nebula directory for intervention files
 
+	// Board view state — columnar board as alternative to the NebulaView table.
+	Board        BoardView // columnar board renderer
+	BoardActive  bool      // true = columnar board, false = table view
+	boardSizedAt bool      // true after the first WindowSizeMsg sets the default
+
+	// Worker card state — live detail cards for active quasars.
+	WorkerCards   map[string]*WorkerCard // phaseID → live worker card
+	nextQuasarNum int                    // counter for assigning quasar IDs (q-1, q-2, ...)
+
 	// Fabric bridge state — stored for later rendering by cockpit components.
-	Entanglements []fabric.Entanglement // latest entanglement snapshot
-	Discoveries   []fabric.Discovery    // posted discoveries
-	Scratchpad    []MsgScratchpadEntry  // timestamped scratchpad notes
-	StaleItems    []tycho.StaleItem     // latest stale warning items
+	Entanglements    []fabric.Entanglement // latest entanglement snapshot
+	EntanglementView EntanglementView      // persistent entanglement viewer with cursor state
+	Discoveries      []fabric.Discovery    // posted discoveries
+	Scratchpad       []MsgScratchpadEntry  // timestamped scratchpad notes
+	ScratchpadView   ScratchpadView        // persistent scratchpad viewer with viewport
+	StaleItems       []tycho.StaleItem     // latest stale warning items
 
 	// Home mode state (landing page).
 	HomeCursor     int            // cursor position in the home nebula list
@@ -115,15 +128,17 @@ type AppModel struct {
 func NewAppModel(mode Mode) AppModel {
 	splash := NewSplash(DefaultSplashConfig())
 	m := AppModel{
-		Mode:       mode,
-		LoopView:   NewLoopView(),
-		NebulaView: NewNebulaView(),
-		Keys:       DefaultKeyMap(),
-		StartTime:  time.Now(),
-		PhaseLoops: make(map[string]*LoopView),
-		PhaseBeads: make(map[string]*BeadInfo),
-		Thresholds: DefaultResourceThresholds(),
-		Splash:     &splash,
+		Mode:        mode,
+		LoopView:    NewLoopView(),
+		NebulaView:  NewNebulaView(),
+		Board:       NewBoardView(),
+		BoardActive: false, // set to true on first WindowSizeMsg if terminal is wide enough
+		Keys:        DefaultKeyMap(),
+		StartTime:   time.Now(),
+		PhaseLoops:  make(map[string]*LoopView),
+		PhaseBeads:  make(map[string]*BeadInfo),
+		Thresholds:  DefaultResourceThresholds(),
+		Splash:      &splash,
 	}
 	m.StatusBar.StartTime = m.StartTime
 	m.StatusBar.Thresholds = m.Thresholds
@@ -183,6 +198,22 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		contentWidth := msg.Width - m.Banner.SidePanelWidth()
 		detailHeight := m.detailHeight()
 		m.Detail.SetSize(contentWidth-2, detailHeight)
+		m.ScratchpadView.SetSize(contentWidth, detailHeight)
+
+		// Pass dimensions to the board view.
+		m.Board.Width = contentWidth
+		m.Board.Height = detailHeight
+		m.EntanglementView.Width = contentWidth
+		m.EntanglementView.Height = detailHeight
+
+		// Board view sizing: on the first resize, default to board if wide enough.
+		// On subsequent resizes, auto-fallback to table if terminal shrinks below threshold.
+		if !m.boardSizedAt {
+			m.boardSizedAt = true
+			m.BoardActive = msg.Width >= BoardMinWidth
+		} else if msg.Width < BoardMinWidth {
+			m.BoardActive = false
+		}
 
 		// Clamp cursors so they remain valid after a resize that may shrink lists.
 		clampCursors(&m)
@@ -234,6 +265,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.LoopView.StartAgent(msg.Role)
 	case MsgAgentDone:
 		m.LoopView.FinishAgent(msg.Role, msg.CostUSD, msg.DurationMs)
+		m.StatusBar.TotalTokens += msg.Tokens
 	case MsgCycleSummary:
 		m.StatusBar.CostUSD = msg.Data.TotalCostUSD
 		m.LoopView.Approved = msg.Data.Approved
@@ -277,27 +309,46 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgPhaseTaskStarted:
 		m.ensurePhaseLoop(msg.PhaseID)
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseWorking)
+		// Create a worker card for this active phase.
+		m.ensureWorkerCard(msg.PhaseID)
 	case MsgPhaseTaskComplete:
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseDone)
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
 			lv.Approved = true
 		}
 		m.NebulaView.SetPhaseCost(msg.PhaseID, msg.TotalCost)
+		// Remove worker card when phase completes.
+		delete(m.WorkerCards, msg.PhaseID)
 	case MsgPhaseCycleStart:
 		lv := m.ensurePhaseLoop(msg.PhaseID)
 		lv.StartCycle(msg.Cycle)
 		m.NebulaView.SetPhaseCycles(msg.PhaseID, msg.Cycle, msg.MaxCycles)
 		// Clear refactored indicator from previous cycle.
 		m.NebulaView.SetPhaseRefactored(msg.PhaseID, false)
+		// Update worker card cycle info.
+		if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
+			wc.Cycle = msg.Cycle
+			wc.MaxCycles = msg.MaxCycles
+		}
 	case MsgPhaseAgentStart:
 		lv := m.ensurePhaseLoop(msg.PhaseID)
 		lv.StartAgent(msg.Role)
+		// Update worker card agent role and activity.
+		if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
+			wc.AgentRole = msg.Role
+			wc.Activity = activityFromRole(msg.Role)
+		}
 	case MsgPhaseAgentDone:
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
 			lv.FinishAgent(msg.Role, msg.CostUSD, msg.DurationMs)
 		}
+		m.StatusBar.TotalTokens += msg.Tokens
 		if m.FocusedPhase == msg.PhaseID {
 			m.updateDetailFromSelection()
+		}
+		// Update worker card token count.
+		if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
+			wc.TokensUsed += msg.Tokens
 		}
 	case MsgPhaseAgentOutput:
 		lv := m.ensurePhaseLoop(msg.PhaseID)
@@ -312,6 +363,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lv.SetAgentDiffFiles(msg.Role, msg.Cycle, msg.Files, msg.BaseRef, msg.HeadRef, msg.WorkDir)
 		if m.FocusedPhase == msg.PhaseID {
 			m.updateDetailFromSelection()
+		}
+		// Update worker card claims from diff file list.
+		if wc := m.WorkerCards[msg.PhaseID]; wc != nil && len(msg.Files) > 0 {
+			claims := make([]string, len(msg.Files))
+			for i, f := range msg.Files {
+				claims[i] = f.Path
+			}
+			wc.Claims = claims
 		}
 	case MsgPhaseCycleSummary:
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
@@ -335,6 +394,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseDone)
 		// Clear refactored indicator on completion.
 		m.NebulaView.SetPhaseRefactored(msg.PhaseID, false)
+		// Remove worker card on approval.
+		delete(m.WorkerCards, msg.PhaseID)
 	case MsgPhaseRefactorPending:
 		m.addMessage("[%s] refactor pending — will apply after current cycle", msg.PhaseID)
 		toast, cmd := NewToast(fmt.Sprintf("[%s] refactor pending", msg.PhaseID), false)
@@ -347,6 +408,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case MsgPhaseError:
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseFailed)
+		// Remove worker card on failure.
+		delete(m.WorkerCards, msg.PhaseID)
 		m.addMessage("[%s] %s", msg.PhaseID, msg.Msg)
 		toast, cmd := NewToast(fmt.Sprintf("[%s] %s", msg.PhaseID, msg.Msg), true)
 		m.Toasts = append(m.Toasts, toast)
@@ -446,6 +509,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// --- Fabric bridge messages ---
 	case MsgEntanglementUpdate:
 		m.Entanglements = msg.Entanglements
+		m.EntanglementView.Entanglements = msg.Entanglements
+		m.EntanglementView.ClampCursor()
 
 	case MsgDiscoveryPosted:
 		m.Discoveries = append(m.Discoveries, msg.Discovery)
@@ -454,12 +519,19 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case MsgHail:
-		toast, cmd := NewToast(fmt.Sprintf("⚠ hail from %s: %s", msg.PhaseID, msg.Discovery.Detail), true)
-		m.Toasts = append(m.Toasts, toast)
-		cmds = append(cmds, cmd)
+		// Show the hail overlay when the board view is active; otherwise fallback to a toast.
+		if m.Mode == ModeNebula && m.BoardActive && m.ActiveTab == TabBoard && m.Depth == DepthPhases {
+			m.Hail = NewHailOverlay(msg, msg.ResponseCh)
+			cmds = append(cmds, m.Hail.Input.Focus())
+		} else {
+			toast, cmd := NewToast(fmt.Sprintf("⚠ hail from %s: %s", msg.PhaseID, msg.Discovery.Detail), true)
+			m.Toasts = append(m.Toasts, toast)
+			cmds = append(cmds, cmd)
+		}
 
 	case MsgScratchpadEntry:
 		m.Scratchpad = append(m.Scratchpad, msg)
+		m.ScratchpadView.AddEntry(msg)
 
 	case MsgStaleWarning:
 		m.StaleItems = msg.Items
@@ -482,6 +554,24 @@ func (m *AppModel) ensurePhaseLoop(phaseID string) *LoopView {
 	lv := NewLoopView()
 	m.PhaseLoops[phaseID] = &lv
 	return &lv
+}
+
+// ensureWorkerCard creates or returns the worker card for the given phase.
+// A new quasar ID is assigned when the card is first created.
+func (m *AppModel) ensureWorkerCard(phaseID string) *WorkerCard {
+	if m.WorkerCards == nil {
+		m.WorkerCards = make(map[string]*WorkerCard)
+	}
+	if wc, ok := m.WorkerCards[phaseID]; ok {
+		return wc
+	}
+	m.nextQuasarNum++
+	wc := &WorkerCard{
+		PhaseID:  phaseID,
+		QuasarID: fmt.Sprintf("q-%d", m.nextQuasarNum),
+	}
+	m.WorkerCards[phaseID] = wc
+	return wc
 }
 
 // clampCursors ensures all cursors remain within valid bounds.
@@ -517,6 +607,18 @@ func clampCursors(m *AppModel) {
 	} else {
 		m.LoopView.Cursor = 0
 	}
+
+	// Clamp BoardView cursor.
+	if max := len(m.Board.Phases) - 1; max >= 0 {
+		if m.Board.Cursor > max {
+			m.Board.Cursor = max
+		}
+	} else {
+		m.Board.Cursor = 0
+	}
+
+	// Clamp EntanglementView cursor.
+	m.EntanglementView.ClampCursor()
 
 	// Clamp per-phase LoopView cursors.
 	for _, lv := range m.PhaseLoops {
@@ -587,6 +689,11 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Gate mode overrides normal keys.
 	if m.Gate != nil {
 		return m.handleGateKey(msg)
+	}
+
+	// Hail overlay overrides normal keys when active.
+	if m.Hail != nil {
+		return m.handleHailKey(msg)
 	}
 
 	// When viewing a single file's diff, route scroll keys to the detail panel.
@@ -681,6 +788,64 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// diff inline instead of drilling down into the loop view.
 	if m.ShowDiff && m.DiffFileList != nil && key.Matches(msg, m.Keys.OpenDiff) {
 		return m.showFileDiff()
+	}
+
+	// Tab navigation and board toggle — only active in nebula mode at DepthPhases.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases {
+		switch msg.String() {
+		case "v":
+			// Toggle between columnar board and table view.
+			// Only allow board if terminal is wide enough.
+			if !m.BoardActive && m.Width >= BoardMinWidth {
+				m.BoardActive = true
+			} else {
+				m.BoardActive = false
+			}
+			return m, nil
+		case "tab":
+			m.ActiveTab = m.ActiveTab.Next()
+			return m, nil
+		case "shift+tab":
+			m.ActiveTab = m.ActiveTab.Prev()
+			return m, nil
+		case "1", "2", "3":
+			n := int(msg.String()[0] - '0')
+			if tab, ok := TabFromNumber(n); ok {
+				m.ActiveTab = tab
+			}
+			return m, nil
+		case "left", "h":
+			// Left/right navigation for board columns.
+			if m.BoardActive && m.ActiveTab == TabBoard {
+				m.Board.MoveLeft()
+				return m, nil
+			}
+		case "right", "l":
+			if m.BoardActive && m.ActiveTab == TabBoard {
+				m.Board.MoveRight()
+				return m, nil
+			}
+		}
+	}
+
+	// Scratchpad viewport scrolling — when the scratchpad tab is active,
+	// route scroll keys to the viewport instead of the phase list.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.ActiveTab == TabScratchpad {
+		switch {
+		case key.Matches(msg, m.Keys.Up),
+			key.Matches(msg, m.Keys.Down),
+			key.Matches(msg, m.Keys.PageUp),
+			key.Matches(msg, m.Keys.PageDown),
+			key.Matches(msg, m.Keys.Home),
+			key.Matches(msg, m.Keys.End):
+			m.ScratchpadView.Update(msg)
+			return m, nil
+		}
+		// Also handle g/G for top/bottom (not in KeyMap but standard viewport keys).
+		if msg.String() == "g" || msg.String() == "G" {
+			m.ScratchpadView.Update(msg)
+			return m, nil
+		}
 	}
 
 	// Home mode: Enter selects a nebula and exits the TUI.
@@ -1047,7 +1212,16 @@ func (m *AppModel) drillDown() {
 			m.DiffFileOpen = false
 			m.ShowBeads = false
 			// Drill into the selected phase's loop view.
-			if p := m.NebulaView.SelectedPhase(); p != nil {
+			// Use board cursor when board is active, table cursor otherwise.
+			var p *PhaseEntry
+			if m.BoardActive && m.ActiveTab == TabBoard {
+				m.Board.Phases = m.NebulaView.Phases
+				p = m.Board.SelectedPhase()
+			}
+			if p == nil {
+				p = m.NebulaView.SelectedPhase()
+			}
+			if p != nil {
 				m.FocusedPhase = p.ID
 				m.Depth = DepthPhaseLoop
 				m.updateDetailFromSelection()
@@ -1135,6 +1309,35 @@ func (m *AppModel) resolveGate(action nebula.GateAction) {
 	}
 }
 
+// handleHailKey routes key events to the hail overlay's text input.
+// Esc dismisses the overlay (empty response), Enter submits the response.
+func (m AppModel) handleHailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.Keys.Back):
+		m.resolveHail("")
+		return m, nil
+	case key.Matches(msg, m.Keys.Enter):
+		response := m.Hail.HandleInput()
+		if response != "" {
+			m.resolveHail(response)
+		}
+		return m, nil
+	default:
+		// Forward the key to the textinput widget.
+		var cmd tea.Cmd
+		m.Hail.Input, cmd = m.Hail.Input.Update(msg)
+		return m, cmd
+	}
+}
+
+// resolveHail sends the response and clears the hail overlay.
+func (m *AppModel) resolveHail(response string) {
+	if m.Hail != nil {
+		m.Hail.Resolve(response)
+		m.Hail = nil
+	}
+}
+
 // moveUp delegates to the active view based on depth.
 // When the diff file list is active, navigation targets it instead of the main list.
 func (m *AppModel) moveUp() {
@@ -1153,7 +1356,13 @@ func (m *AppModel) moveUp() {
 		m.LoopView.MoveUp()
 	case ModeNebula:
 		if m.Depth == DepthPhases {
-			m.NebulaView.MoveUp()
+			if m.ActiveTab == TabEntanglements {
+				m.EntanglementView.MoveUp()
+			} else if m.BoardActive && m.ActiveTab == TabBoard {
+				m.Board.MoveUp()
+			} else {
+				m.NebulaView.MoveUp()
+			}
 		} else if m.Depth >= DepthPhaseLoop {
 			if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
 				lv.MoveUp()
@@ -1185,7 +1394,13 @@ func (m *AppModel) moveDown() {
 		m.LoopView.MoveDown()
 	case ModeNebula:
 		if m.Depth == DepthPhases {
-			m.NebulaView.MoveDown()
+			if m.ActiveTab == TabEntanglements {
+				m.EntanglementView.MoveDown()
+			} else if m.BoardActive && m.ActiveTab == TabBoard {
+				m.Board.MoveDown()
+			} else {
+				m.NebulaView.MoveDown()
+			}
 		} else if m.Depth >= DepthPhaseLoop {
 			if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
 				lv.MoveDown()
@@ -1469,6 +1684,12 @@ func (m AppModel) View() string {
 	sections = append(sections, m.StatusBar.View())
 	sections = append(sections, "") // Spacing between header and content.
 
+	// Tab bar — only in nebula mode at DepthPhases level.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases {
+		tb := TabBar{ActiveTab: m.ActiveTab, Width: contentWidth}
+		sections = append(sections, tb.View())
+	}
+
 	// Top banner (S-A or XS-A modes) — between status bar and content.
 	if bannerView := m.Banner.View(); bannerView != "" {
 		sections = append(sections, bannerView)
@@ -1514,11 +1735,24 @@ func (m AppModel) View() string {
 
 	sections = append(sections, middleStr)
 
+	// Bottom bar — aggregate stats line (tokens, cost, elapsed, progress).
+	if bottomBar := m.StatusBar.BottomBar(); bottomBar != "" {
+		sections = append(sections, bottomBar)
+	}
+
 	// Footer — always full terminal width.
 	footer := m.buildFooter()
 	sections = append(sections, footer.View())
 
 	base := lipgloss.JoinVertical(lipgloss.Left, sections...)
+
+	// Hail overlay — rendered over a dimmed background when a human decision is pending.
+	if m.Hail != nil {
+		dimmed := styleOverlayDimmed.Width(m.Width).Height(m.Height).Render(base)
+		overlayContent := m.Hail.View(m.Width, m.Height)
+		overlayBox := centerOverlay(overlayContent, m.Width, m.Height)
+		return compositeOverlay(dimmed, overlayBox, m.Width, m.Height)
+	}
 
 	// Quit confirmation overlay — rendered over a dimmed background.
 	if m.ShowQuitConfirm {
@@ -1610,8 +1844,36 @@ func (m AppModel) renderMainView() string {
 	case ModeNebula:
 		switch m.Depth {
 		case DepthPhases:
-			m.NebulaView.Width = w
-			return m.NebulaView.View()
+			switch m.ActiveTab {
+			case TabBoard:
+				var boardStr string
+				if m.BoardActive {
+					// Columnar board view — sync phases and render.
+					m.Board.Phases = m.NebulaView.Phases
+					m.Board.Width = w
+					boardStr = m.Board.View()
+				} else {
+					// Table view fallback.
+					m.NebulaView.Width = w
+					boardStr = m.NebulaView.View()
+				}
+				// Append worker cards beneath the board/table for active phases.
+				active := ActiveWorkerCards(m.WorkerCards)
+				if len(active) > 0 {
+					cardsStr := RenderWorkerCards(active, w)
+					boardStr = lipgloss.JoinVertical(lipgloss.Left, boardStr, cardsStr)
+				}
+				return boardStr
+			case TabEntanglements:
+				m.EntanglementView.Width = w
+				m.EntanglementView.Height = m.detailHeight()
+				return m.EntanglementView.View()
+			case TabScratchpad:
+				return m.ScratchpadView.View()
+			default:
+				m.NebulaView.Width = w
+				return m.NebulaView.View()
+			}
 		default:
 			// Show the focused phase's loop view.
 			if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
@@ -1650,6 +1912,11 @@ func (m AppModel) buildFooter() Footer {
 				}
 				f.Bindings = append(f.Bindings, diffBind)
 			}
+			if m.selectedPhaseFailed() {
+				f.Bindings = append(f.Bindings, m.Keys.Retry)
+			}
+		} else if m.BoardActive {
+			f.Bindings = CockpitFooterBindings(m.Keys)
 			if m.selectedPhaseFailed() {
 				f.Bindings = append(f.Bindings, m.Keys.Retry)
 			}

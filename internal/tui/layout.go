@@ -23,6 +23,9 @@ const (
 	SidePanelMinWidth = 120
 	// BannerSMinWidth is the minimum width for the S-A Wide Ellipse top banner.
 	BannerSMinWidth = 90
+	// BoardMinWidth is the minimum terminal width for the columnar board view.
+	// Below this width, the TUI auto-falls back to the table view.
+	BoardMinWidth = 100
 )
 
 // TruncateWithEllipsis truncates s to maxLen runes, appending "..." if truncated.

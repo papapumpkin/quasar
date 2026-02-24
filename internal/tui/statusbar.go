@@ -17,6 +17,7 @@ type StatusBar struct {
 	Completed    int
 	Total        int
 	InProgress   int // phases currently being worked on
+	TotalTokens  int // aggregate token usage across all agents
 	CostUSD      float64
 	BudgetUSD    float64
 	StartTime    time.Time
@@ -447,6 +448,109 @@ func budgetColor(ratio float64) lipgloss.Color {
 	default:
 		return colorMutedLight
 	}
+}
+
+// BottomBar renders the cockpit-style aggregate stats line pinned below the main
+// content area: tokens, cost, elapsed, and a block-character progress bar.
+// Format: " tokens 284.3k | cost $1.42 | elapsed 4m 32s | progress █████░░░ 5/8"
+func (s StatusBar) BottomBar() string {
+	if s.Width <= 0 {
+		return ""
+	}
+
+	label := lipgloss.NewStyle().Foreground(colorMuted)
+	value := lipgloss.NewStyle().Foreground(colorWhite)
+
+	var parts []string
+
+	// Token segment.
+	parts = append(parts, label.Render("tokens ")+value.Render(FormatTokens(s.TotalTokens)))
+
+	// Cost segment.
+	parts = append(parts, label.Render("cost ")+value.Render(fmt.Sprintf("$%.2f", s.CostUSD)))
+
+	// Elapsed segment.
+	var elapsed time.Duration
+	if s.FinalElapsed > 0 {
+		elapsed = s.FinalElapsed
+	} else if !s.StartTime.IsZero() {
+		elapsed = time.Since(s.StartTime).Truncate(time.Second)
+	}
+	parts = append(parts, label.Render("elapsed ")+value.Render(formatElapsedCompact(elapsed)))
+
+	// Progress bar segment.
+	if s.Total > 0 {
+		// Scale bar width: min 5, max 20, proportional to terminal width.
+		barWidth := s.Width / 8
+		if barWidth < 5 {
+			barWidth = 5
+		}
+		if barWidth > 20 {
+			barWidth = 20
+		}
+		bar := renderBottomProgressBar(s.Completed, s.Total, barWidth)
+		counter := value.Render(fmt.Sprintf("%d/%d", s.Completed, s.Total))
+		parts = append(parts, label.Render("progress ")+bar+" "+counter)
+	}
+
+	sep := label.Render(" | ")
+	line := " " + strings.Join(parts, sep)
+
+	// Clamp to terminal width.
+	if lipgloss.Width(line) > s.Width {
+		line = truncateToWidth(line, s.Width)
+	}
+
+	return line
+}
+
+// renderBottomProgressBar creates a filled/empty block-character progress bar
+// using █ (filled, colorSuccess) and ░ (empty, colorMuted).
+func renderBottomProgressBar(completed, total, width int) string {
+	if total <= 0 || width <= 0 {
+		return ""
+	}
+	ratio := float64(completed) / float64(total)
+	if ratio > 1 {
+		ratio = 1
+	}
+	filled := int(ratio * float64(width))
+	empty := width - filled
+
+	filledStyle := lipgloss.NewStyle().Foreground(colorSuccess)
+	emptyStyle := lipgloss.NewStyle().Foreground(colorMuted)
+
+	return filledStyle.Render(strings.Repeat("█", filled)) +
+		emptyStyle.Render(strings.Repeat("░", empty))
+}
+
+// FormatTokens formats a token count with a k suffix for thousands.
+// Values below 1000 are rendered as-is; above as e.g. "284.3k".
+func FormatTokens(tokens int) string {
+	if tokens < 1000 {
+		return fmt.Sprintf("%d", tokens)
+	}
+	k := float64(tokens) / 1000.0
+	return fmt.Sprintf("%.1fk", k)
+}
+
+// formatElapsedCompact formats a duration as "Xm Xs" or "Xh Xm" for longer runs.
+// Zero duration renders as "0s".
+func formatElapsedCompact(d time.Duration) string {
+	if d <= 0 {
+		return "0s"
+	}
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	s := int(d.Seconds()) % 60
+
+	if h > 0 {
+		return fmt.Sprintf("%dh %dm", h, m)
+	}
+	if m > 0 {
+		return fmt.Sprintf("%dm %ds", m, s)
+	}
+	return fmt.Sprintf("%ds", s)
 }
 
 // truncateToWidth hard-truncates a string (which may contain ANSI escape sequences)
