@@ -1,5 +1,6 @@
 version = 1
 nebula_name = 'observatory'
+total_cost_usd = 5.4400027500000006
 
 [phases]
 [phases.cockpit-graph]
@@ -16,15 +17,21 @@ updated_at = 2026-02-23T21:12:27.002498-05:00
 
 [phases.dag-renderer]
 bead_id = 'quasar-sdrp'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-23T21:12:25.563895-05:00
-updated_at = 2026-02-23T21:12:25.563895-05:00
+updated_at = 2026-02-23T21:25:40.154155-05:00
 
 [phases.fabric-activation]
 bead_id = 'quasar-tjzo'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T21:12:22.642393-05:00
-updated_at = 2026-02-23T21:12:27.081379-05:00
+updated_at = 2026-02-23T21:25:40.153395-05:00
+
+[phases.fabric-activation.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Three small, focused fixes — a defer resource leak in the next-nebula loop, a stale test expectation string, and a worker parallelism cap adjustment for fabric mode — all correct and verified with passing build/vet/tests.'
 
 [phases.plan-command]
 bead_id = 'quasar-bnd0'
