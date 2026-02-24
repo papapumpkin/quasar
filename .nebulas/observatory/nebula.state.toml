@@ -1,19 +1,25 @@
 version = 1
 nebula_name = 'observatory'
-total_cost_usd = 21.6201795
+total_cost_usd = 23.4948905
 
 [phases]
 [phases.cockpit-graph]
 bead_id = 'quasar-dlnl'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T21:12:26.291442-05:00
-updated_at = 2026-02-24T09:14:55.195823-05:00
+updated_at = 2026-02-24T09:19:45.834879-05:00
+
+[phases.cockpit-graph.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented Graph tab for the cockpit TUI with comprehensive test coverage, clean DAG rendering (box-drawing + compact modes), live status updates, and full integration into the existing tab/navigation infrastructure.'
 
 [phases.cockpit-plan]
 bead_id = 'quasar-xiwp'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-23T21:12:27.002498-05:00
-updated_at = 2026-02-24T09:02:36.559065-05:00
+updated_at = 2026-02-24T09:19:45.836727-05:00
 
 [phases.dag-renderer]
 bead_id = 'quasar-sdrp'

@@ -102,11 +102,13 @@ type AppModel struct {
 	StaleItems       []tycho.StaleItem     // latest stale warning items
 
 	// Home mode state (landing page).
-	HomeCursor     int            // cursor position in the home nebula list
-	HomeOffset     int            // viewport scroll offset in the home nebula list
-	HomeNebulae    []NebulaChoice // discovered nebulas for the home view
-	HomeDir        string         // the .nebulas/ parent directory
-	SelectedNebula string         // set when user selects a nebula from home; read after Run() returns
+	HomeCursor      int            // cursor position in the home nebula list
+	HomeOffset      int            // viewport scroll offset in the home nebula list
+	HomeNebulae     []NebulaChoice // discovered nebulas for the home view
+	HomeDir         string         // the .nebulas/ parent directory
+	SelectedNebula  string         // set when user selects a nebula from home; read after Run() returns
+	ShowPlanPreview bool           // true when the plan preview is visible (between home and apply)
+	PlanPreview     *PlanView      // plan preview state (non-nil when active)
 
 	// Nebula picker state (post-completion).
 	AvailableNebulae []NebulaChoice // populated on MsgNebulaDone via discovery
@@ -553,6 +555,46 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 
+	// --- Plan preview ---
+	case MsgPlanReady:
+		if m.PlanPreview != nil {
+			m.PlanPreview.SetPlan(msg.Plan, msg.Changes, msg.NebulaDir)
+			w := m.contentWidth()
+			h := m.homeMainHeight()
+			m.PlanPreview.SetSize(w, h)
+		}
+
+	case MsgPlanAction:
+		switch msg.Action {
+		case PlanActionApply:
+			m.SelectedNebula = msg.NebulaDir
+			m.NextNebula = msg.NebulaDir
+			return m, tea.Quit
+		case PlanActionCancel:
+			m.ShowPlanPreview = false
+			m.PlanPreview = nil
+		case PlanActionSave:
+			if msg.Plan != nil {
+				path, err := SavePlan(msg.Plan, msg.NebulaDir)
+				if err != nil {
+					toast, cmd := NewToast("save failed: "+err.Error(), true)
+					m.Toasts = append(m.Toasts, toast)
+					cmds = append(cmds, cmd)
+				} else {
+					toast, cmd := NewToast("Plan saved: "+path, false)
+					m.Toasts = append(m.Toasts, toast)
+					cmds = append(cmds, cmd)
+				}
+			}
+		}
+
+	case MsgPlanError:
+		m.ShowPlanPreview = false
+		m.PlanPreview = nil
+		toast, cmd := NewToast("plan error: "+msg.Err.Error(), true)
+		m.Toasts = append(m.Toasts, toast)
+		cmds = append(cmds, cmd)
+
 	}
 
 	return m, tea.Batch(cmds...)
@@ -885,13 +927,23 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Home mode: Enter selects a nebula and exits the TUI.
+	// Home mode: plan preview key handling.
+	if m.Mode == ModeHome && m.ShowPlanPreview && m.PlanPreview != nil {
+		return m.handlePlanKey(msg)
+	}
+
+	// Home mode: Enter selects a nebula and launches plan preview.
 	if m.Mode == ModeHome && key.Matches(msg, m.Keys.Enter) {
 		if m.HomeCursor >= 0 && m.HomeCursor < len(m.HomeNebulae) {
-			selected := m.HomeNebulae[m.HomeCursor].Path
-			m.SelectedNebula = selected
-			m.NextNebula = selected
-			return m, tea.Quit
+			selected := m.HomeNebulae[m.HomeCursor]
+			pv := NewPlanView()
+			m.PlanPreview = &pv
+			m.ShowPlanPreview = true
+			nebulaDir := selected.Path
+			nebulaName := selected.Name
+			return m, func() tea.Msg {
+				return computePlan(nebulaDir, nebulaName)
+			}
 		}
 		return m, nil
 	}
@@ -941,6 +993,90 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// handlePlanKey processes keyboard input while the plan preview is active.
+func (m AppModel) handlePlanKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.Keys.Quit):
+		return m, tea.Quit
+
+	case key.Matches(msg, m.Keys.Back):
+		// Esc returns to home.
+		m.ShowPlanPreview = false
+		m.PlanPreview = nil
+		return m, nil
+
+	case key.Matches(msg, m.Keys.Enter):
+		action := m.PlanPreview.SelectedAction()
+		return m, func() tea.Msg {
+			return MsgPlanAction{
+				Action:    action,
+				Plan:      m.PlanPreview.Plan,
+				NebulaDir: m.PlanPreview.NebulaDir,
+			}
+		}
+
+	case msg.String() == "left" || msg.String() == "h":
+		m.PlanPreview.MoveLeft()
+		return m, nil
+
+	case msg.String() == "right" || msg.String() == "l":
+		m.PlanPreview.MoveRight()
+		return m, nil
+
+	case key.Matches(msg, m.Keys.Up):
+		m.PlanPreview.ScrollUp()
+		return m, nil
+
+	case key.Matches(msg, m.Keys.Down):
+		m.PlanPreview.ScrollDown()
+		return m, nil
+
+	case key.Matches(msg, m.Keys.PageUp),
+		key.Matches(msg, m.Keys.PageDown),
+		key.Matches(msg, m.Keys.Home),
+		key.Matches(msg, m.Keys.End):
+		m.PlanPreview.Update(msg)
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// computePlan loads and analyzes a nebula, producing an ExecutionPlan message.
+// This runs in a goroutine via tea.Cmd and returns either MsgPlanReady or MsgPlanError.
+func computePlan(nebulaDir, nebulaName string) tea.Msg {
+	n, err := nebula.Load(nebulaDir)
+	if err != nil {
+		return MsgPlanError{Err: fmt.Errorf("loading nebula: %w", err)}
+	}
+
+	errs := nebula.Validate(n)
+	if len(errs) > 0 {
+		return MsgPlanError{Err: fmt.Errorf("validation: %s", errs[0].Error())}
+	}
+
+	pe := &nebula.PlanEngine{
+		Scanner: &fabric.StaticScanner{},
+	}
+	plan, err := pe.Plan(n)
+	if err != nil {
+		return MsgPlanError{Err: fmt.Errorf("plan engine: %w", err)}
+	}
+
+	// Load previous plan for diff comparison.
+	var changes []nebula.PlanChange
+	prev := LoadPreviousPlan(nebulaDir, nebulaName)
+	if prev != nil {
+		changes = nebula.Diff(prev, plan)
+	}
+
+	return MsgPlanReady{
+		Plan:      plan,
+		Changes:   changes,
+		NebulaDir: nebulaDir,
+	}
 }
 
 // handlePauseKey toggles pause state by writing/removing the PAUSE intervention file.
@@ -1704,6 +1840,10 @@ func (m *AppModel) adjustHomeOffset() {
 // showDetailPanel returns whether the detail panel should be visible.
 func (m AppModel) showDetailPanel() bool {
 	if m.Mode == ModeHome {
+		// Hide detail panel when the plan preview is active (it's a full-page view).
+		if m.ShowPlanPreview {
+			return false
+		}
 		// Show the detail panel in home mode when there are nebulas to describe.
 		// When ShowPlan is toggled off, hide the detail panel.
 		return len(m.HomeNebulae) > 0 && m.ShowPlan
@@ -1745,6 +1885,9 @@ func (m AppModel) View() string {
 	if m.Mode == ModeHome {
 		m.StatusBar.HomeMode = true
 		m.StatusBar.HomeNebulaCount = len(m.HomeNebulae)
+		if m.ShowPlanPreview && m.PlanPreview != nil && m.PlanPreview.Plan != nil {
+			m.StatusBar.Name = m.PlanPreview.Plan.Name + " (plan preview)"
+		}
 	}
 	sections = append(sections, m.StatusBar.View())
 	sections = append(sections, "") // Spacing between header and content.
@@ -1893,6 +2036,11 @@ func (m AppModel) renderMainView() string {
 	w := m.contentWidth()
 	switch m.Mode {
 	case ModeHome:
+		// Plan preview takes over the home view when active.
+		if m.ShowPlanPreview && m.PlanPreview != nil {
+			m.PlanPreview.SetSize(w, m.homeMainHeight())
+			return m.PlanPreview.View()
+		}
 		hv := HomeView{
 			Nebulae: m.HomeNebulae,
 			Cursor:  m.HomeCursor,
@@ -1967,7 +2115,11 @@ func (m AppModel) buildFooter() Footer {
 	if m.Gate != nil {
 		f.Bindings = GateFooterBindings(m.Keys)
 	} else if m.Mode == ModeHome {
-		f.Bindings = HomeFooterBindings(m.Keys)
+		if m.ShowPlanPreview && m.PlanPreview != nil {
+			f.Bindings = PlanFooterBindings(m.Keys)
+		} else {
+			f.Bindings = HomeFooterBindings(m.Keys)
+		}
 	} else if m.Mode == ModeNebula {
 		if m.Depth > DepthPhases {
 			f.Bindings = NebulaDetailFooterBindings(m.Keys)
