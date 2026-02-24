@@ -8,6 +8,9 @@ package cmd
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
@@ -156,4 +159,89 @@ func toPhaseRunnerResult(result *loop.TaskResult) *nebula.PhaseRunnerResult {
 		BaseCommitSHA:  result.BaseCommitSHA,
 		FinalCommitSHA: result.FinalCommitSHA,
 	}
+}
+
+// fabricComponents holds initialized fabric infrastructure for passing to
+// WorkerGroup options. When agentmail is disabled, all fields are nil.
+type fabricComponents struct {
+	Fabric    fabric.Fabric
+	Poller    fabric.Poller
+	Publisher *fabric.Publisher
+	closeFn   func() error
+}
+
+// Close releases fabric resources. Safe to call when fc is nil or Fabric is nil.
+func (fc *fabricComponents) Close() error {
+	if fc == nil || fc.Fabric == nil {
+		return nil
+	}
+	return fc.closeFn()
+}
+
+// WorkerGroupOptions returns the WithFabric/WithPoller/WithPublisher options.
+// Returns nil when fabric is not active.
+func (fc *fabricComponents) WorkerGroupOptions() []nebula.Option {
+	if fc == nil || fc.Fabric == nil {
+		return nil
+	}
+	return []nebula.Option{
+		nebula.WithFabric(fc.Fabric),
+		nebula.WithPoller(fc.Poller),
+		nebula.WithPublisher(fc.Publisher),
+	}
+}
+
+// initFabric creates the fabric infrastructure if agentmail is enabled in the
+// manifest. When agentmail is false, it returns a zero-value fabricComponents
+// (all nil fields). The caller must defer fc.Close().
+func initFabric(ctx context.Context, n *nebula.Nebula, dir, workDir string, inv agent.Invoker) (*fabricComponents, error) {
+	if !n.Manifest.Execution.AgentMail {
+		return &fabricComponents{}, nil
+	}
+
+	fabricDir := filepath.Join(dir, ".quasar")
+	if err := os.MkdirAll(fabricDir, 0o755); err != nil {
+		return nil, fmt.Errorf("creating fabric directory: %w", err)
+	}
+	fabricPath := filepath.Join(fabricDir, "fabric.db")
+
+	fab, err := fabric.NewSQLiteFabric(ctx, fabricPath)
+	if err != nil {
+		return nil, fmt.Errorf("creating fabric: %w", err)
+	}
+
+	// Build phase map for the LLM poller.
+	phaseMap := make(map[string]*fabric.PhaseSpec, len(n.Phases))
+	for i := range n.Phases {
+		phaseMap[n.Phases[i].ID] = &fabric.PhaseSpec{
+			ID:   n.Phases[i].ID,
+			Body: n.Phases[i].Body,
+		}
+	}
+
+	poller := &fabric.LLMPoller{
+		Invoker: inv,
+		Phases:  phaseMap,
+	}
+
+	pub := &fabric.Publisher{
+		Fabric:  fab,
+		WorkDir: workDir,
+		Logger:  os.Stderr,
+	}
+
+	// Seed all phases as queued so the fabric has entries from the start.
+	for _, p := range n.Phases {
+		if err := fab.SetPhaseState(ctx, p.ID, fabric.StateQueued); err != nil {
+			fab.Close()
+			return nil, fmt.Errorf("seeding phase state for %s: %w", p.ID, err)
+		}
+	}
+
+	return &fabricComponents{
+		Fabric:    fab,
+		Poller:    poller,
+		Publisher: pub,
+		closeFn:   fab.Close,
+	}, nil
 }

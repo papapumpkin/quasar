@@ -1,0 +1,45 @@
+version = 1
+nebula_name = 'observatory'
+
+[phases]
+[phases.cockpit-graph]
+bead_id = 'quasar-411f'
+status = 'created'
+created_at = 2026-02-23T21:12:26.291442-05:00
+updated_at = 2026-02-23T21:12:26.291442-05:00
+
+[phases.cockpit-plan]
+bead_id = 'quasar-xiwp'
+status = 'created'
+created_at = 2026-02-23T21:12:27.002498-05:00
+updated_at = 2026-02-23T21:12:27.002498-05:00
+
+[phases.dag-renderer]
+bead_id = 'quasar-sdrp'
+status = 'created'
+created_at = 2026-02-23T21:12:25.563895-05:00
+updated_at = 2026-02-23T21:12:25.563895-05:00
+
+[phases.fabric-activation]
+bead_id = 'quasar-tjzo'
+status = 'in_progress'
+created_at = 2026-02-23T21:12:22.642393-05:00
+updated_at = 2026-02-23T21:12:27.081379-05:00
+
+[phases.plan-command]
+bead_id = 'quasar-bnd0'
+status = 'created'
+created_at = 2026-02-23T21:12:24.846693-05:00
+updated_at = 2026-02-23T21:12:24.846693-05:00
+
+[phases.plan-engine]
+bead_id = 'quasar-qonf'
+status = 'created'
+created_at = 2026-02-23T21:12:24.116343-05:00
+updated_at = 2026-02-23T21:12:24.116343-05:00
+
+[phases.static-scanner]
+bead_id = 'quasar-5yf1'
+status = 'created'
+created_at = 2026-02-23T21:12:23.342164-05:00
+updated_at = 2026-02-23T21:12:23.342164-05:00

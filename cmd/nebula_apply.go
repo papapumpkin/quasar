@@ -144,6 +144,13 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Initialize fabric infrastructure when agentmail is enabled.
+	fc, err := initFabric(ctx, n, dir, workDir, claudeInv)
+	if err != nil {
+		return fmt.Errorf("fabric initialization failed: %w", err)
+	}
+	defer fc.Close()
+
 	git := loop.NewCycleCommitterWithBranch(ctx, workDir, branchName)
 	phaseCommitter := nebula.NewGitCommitterWithBranch(ctx, workDir, branchName)
 
@@ -153,14 +160,16 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 
 	// Build the runner and WorkerGroup, branching on TUI vs stderr.
 	var tuiProgram *tui.Program
-	wg := nebula.NewWorkerGroup(n, state,
+	wgOpts := []nebula.Option{
 		nebula.WithMaxWorkers(maxWorkers),
 		nebula.WithBeadsClient(client),
 		nebula.WithGlobalCycles(cfg.MaxReviewCycles),
 		nebula.WithGlobalBudget(cfg.MaxBudgetUSD),
 		nebula.WithGlobalModel(cfg.Model),
 		nebula.WithCommitter(phaseCommitter),
-	)
+	}
+	wgOpts = append(wgOpts, fc.WorkerGroupOptions()...)
+	wg := nebula.NewWorkerGroup(n, state, wgOpts...)
 
 	if useTUI {
 		// Build phase info and pre-populate the model (no Send before Run).
@@ -345,6 +354,15 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				}
 				nextBranchName := nextBranchMgr.Branch()
 
+				// Close previous fabric before creating a new one.
+				fc.Close()
+				nextFC, nextFCErr := initFabric(ctx, nextN, nextDir, nextWorkDir, claudeInv)
+				if nextFCErr != nil {
+					cancel()
+					return fmt.Errorf("fabric initialization failed: %w", nextFCErr)
+				}
+				fc = nextFC // reassign so deferred Close covers the new instance
+
 				phases := make([]tui.PhaseInfo, 0, len(nextN.Phases))
 				for _, p := range nextN.Phases {
 					phases = append(phases, tui.PhaseInfo{
@@ -357,7 +375,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				// Create WorkerGroup first. The Runner is set after the
 				// TUI program is created (it depends on the program).
 				nextPhaseCommitter := nebula.NewGitCommitterWithBranch(ctx, nextWorkDir, nextBranchName)
-				wg = nebula.NewWorkerGroup(nextN, nextState,
+				nextWgOpts := []nebula.Option{
 					nebula.WithMaxWorkers(maxWorkers),
 					nebula.WithBeadsClient(client),
 					nebula.WithGlobalCycles(cfg.MaxReviewCycles),
@@ -365,7 +383,9 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					nebula.WithGlobalModel(cfg.Model),
 					nebula.WithLogger(io.Discard),
 					nebula.WithCommitter(nextPhaseCommitter),
-				)
+				}
+				nextWgOpts = append(nextWgOpts, fc.WorkerGroupOptions()...)
+				wg = nebula.NewWorkerGroup(nextN, nextState, nextWgOpts...)
 				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, noSplash)
 				wg.Runner = &tuiLoopAdapter{
 					program:      tuiProgram,

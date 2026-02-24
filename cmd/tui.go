@@ -22,7 +22,7 @@ import (
 
 // cockpitCmd launches the TUI home screen for browsing and running nebulas.
 var cockpitCmd = &cobra.Command{
-	Use:     "cockpit",
+	Use:   "cockpit",
 	Short: "Launch the interactive cockpit home screen",
 	Long: `Launch the Quasar cockpit home screen that auto-discovers nebulas in
 the .nebulas/ directory of the current (or specified) directory. From the
@@ -230,6 +230,13 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 		return nebulaResult{Err: fmt.Errorf("claude not available: %w", err)}
 	}
 
+	// Initialize fabric infrastructure when agentmail is enabled.
+	fc, fcErr := initFabric(ctx, n, dir, workDir, claudeInv)
+	if fcErr != nil {
+		return nebulaResult{Err: fmt.Errorf("fabric initialization failed: %w", fcErr)}
+	}
+	defer fc.Close()
+
 	git := loop.NewCycleCommitterWithBranch(ctx, workDir, branchName)
 	phaseCommitter := nebula.NewGitCommitterWithBranch(ctx, workDir, branchName)
 
@@ -246,14 +253,16 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 
 	tuiProgram := tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir, noSplash)
 
-	wg := nebula.NewWorkerGroup(n, state,
+	wgOpts := []nebula.Option{
 		nebula.WithMaxWorkers(maxWorkers),
 		nebula.WithBeadsClient(client),
 		nebula.WithGlobalCycles(cfg.MaxReviewCycles),
 		nebula.WithGlobalBudget(cfg.MaxBudgetUSD),
 		nebula.WithGlobalModel(cfg.Model),
 		nebula.WithCommitter(phaseCommitter),
-	)
+	}
+	wgOpts = append(wgOpts, fc.WorkerGroupOptions()...)
+	wg := nebula.NewWorkerGroup(n, state, wgOpts...)
 
 	wg.Runner = &tuiLoopAdapter{
 		program:      tuiProgram,
@@ -267,6 +276,7 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 		coderPrompt:  coderPrompt,
 		reviewPrompt: reviewerPrompt,
 		workDir:      workDir,
+		fabric:       wg.Fabric, // nil-safe — emitFabricEvents checks for nil
 	}
 	wg.Logger = io.Discard
 	wg.Prompter = tui.NewGater(tuiProgram)
