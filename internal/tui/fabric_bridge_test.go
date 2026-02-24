@@ -234,6 +234,89 @@ func TestAppModelEntanglementUpdateReplaces(t *testing.T) {
 	}
 }
 
+func TestAppModelEntanglementUpdateSyncsView(t *testing.T) {
+	t.Parallel()
+
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.Width = 80
+	m.Height = 24
+
+	ents := []fabric.Entanglement{
+		{ID: 1, Producer: "phase-1", Name: "Foo", Status: "pending"},
+		{ID: 2, Producer: "phase-2", Name: "Bar", Status: "fulfilled"},
+	}
+
+	var tm tea.Model = m
+	tm, _ = tm.Update(MsgEntanglementUpdate{Entanglements: ents})
+	am := tm.(AppModel)
+
+	// The EntanglementView field should be synced with Entanglements.
+	if len(am.EntanglementView.Entanglements) != 2 {
+		t.Errorf("EntanglementView.Entanglements = %d, want 2", len(am.EntanglementView.Entanglements))
+	}
+}
+
+func TestAppModelEntanglementCursorClampedOnUpdate(t *testing.T) {
+	t.Parallel()
+
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.Width = 80
+	m.Height = 24
+	m.EntanglementView.Cursor = 5 // out-of-bounds cursor
+
+	ents := []fabric.Entanglement{
+		{ID: 1, Producer: "p", Name: "X", Status: "pending"},
+		{ID: 2, Producer: "p", Name: "Y", Status: "fulfilled"},
+	}
+
+	var tm tea.Model = m
+	tm, _ = tm.Update(MsgEntanglementUpdate{Entanglements: ents})
+	am := tm.(AppModel)
+
+	// Cursor should be clamped to last valid index.
+	if am.EntanglementView.Cursor != 1 {
+		t.Errorf("EntanglementView.Cursor = %d, want 1 (clamped)", am.EntanglementView.Cursor)
+	}
+}
+
+func TestAppModelEntanglementCursorNavigatesOnTab(t *testing.T) {
+	t.Parallel()
+
+	m := NewAppModel(ModeNebula)
+	m.Detail = NewDetailPanel(80, 10)
+	m.Width = 80
+	m.Height = 24
+	m.ActiveTab = TabEntanglements
+	m.EntanglementView.Entanglements = []fabric.Entanglement{
+		{ID: 1, Producer: "p", Name: "A", Status: "pending"},
+		{ID: 2, Producer: "p", Name: "B", Status: "fulfilled"},
+		{ID: 3, Producer: "q", Name: "C", Status: "disputed"},
+	}
+
+	// Move down should increment entanglement cursor, not nebula cursor.
+	m.moveDown()
+	if m.EntanglementView.Cursor != 1 {
+		t.Errorf("after moveDown: EntanglementView.Cursor = %d, want 1", m.EntanglementView.Cursor)
+	}
+	if m.NebulaView.Cursor != 0 {
+		t.Errorf("after moveDown: NebulaView.Cursor = %d, want 0 (should not move)", m.NebulaView.Cursor)
+	}
+
+	// Move down again.
+	m.moveDown()
+	if m.EntanglementView.Cursor != 2 {
+		t.Errorf("after second moveDown: EntanglementView.Cursor = %d, want 2", m.EntanglementView.Cursor)
+	}
+
+	// Move up should decrement entanglement cursor.
+	m.moveUp()
+	if m.EntanglementView.Cursor != 1 {
+		t.Errorf("after moveUp: EntanglementView.Cursor = %d, want 1", m.EntanglementView.Cursor)
+	}
+}
+
 func TestPhaseUIBridgeFabricMethodsDoNotPanic(t *testing.T) {
 	t.Parallel()
 

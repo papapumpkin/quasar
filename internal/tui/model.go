@@ -82,10 +82,11 @@ type AppModel struct {
 	NebulaDir string // path to nebula directory for intervention files
 
 	// Fabric bridge state — stored for later rendering by cockpit components.
-	Entanglements []fabric.Entanglement // latest entanglement snapshot
-	Discoveries   []fabric.Discovery    // posted discoveries
-	Scratchpad    []MsgScratchpadEntry  // timestamped scratchpad notes
-	StaleItems    []tycho.StaleItem     // latest stale warning items
+	Entanglements    []fabric.Entanglement // latest entanglement snapshot
+	EntanglementView EntanglementView      // persistent entanglement viewer with cursor state
+	Discoveries      []fabric.Discovery    // posted discoveries
+	Scratchpad       []MsgScratchpadEntry  // timestamped scratchpad notes
+	StaleItems       []tycho.StaleItem     // latest stale warning items
 
 	// Home mode state (landing page).
 	HomeCursor     int            // cursor position in the home nebula list
@@ -450,6 +451,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// --- Fabric bridge messages ---
 	case MsgEntanglementUpdate:
 		m.Entanglements = msg.Entanglements
+		m.EntanglementView.Entanglements = msg.Entanglements
+		m.EntanglementView.ClampCursor()
 
 	case MsgDiscoveryPosted:
 		m.Discoveries = append(m.Discoveries, msg.Discovery)
@@ -527,6 +530,9 @@ func clampCursors(m *AppModel) {
 	} else {
 		m.LoopView.Cursor = 0
 	}
+
+	// Clamp EntanglementView cursor.
+	m.EntanglementView.ClampCursor()
 
 	// Clamp per-phase LoopView cursors.
 	for _, lv := range m.PhaseLoops {
@@ -1215,7 +1221,11 @@ func (m *AppModel) moveUp() {
 		m.LoopView.MoveUp()
 	case ModeNebula:
 		if m.Depth == DepthPhases {
-			m.NebulaView.MoveUp()
+			if m.ActiveTab == TabEntanglements {
+				m.EntanglementView.MoveUp()
+			} else {
+				m.NebulaView.MoveUp()
+			}
 		} else if m.Depth >= DepthPhaseLoop {
 			if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
 				lv.MoveUp()
@@ -1247,7 +1257,11 @@ func (m *AppModel) moveDown() {
 		m.LoopView.MoveDown()
 	case ModeNebula:
 		if m.Depth == DepthPhases {
-			m.NebulaView.MoveDown()
+			if m.ActiveTab == TabEntanglements {
+				m.EntanglementView.MoveDown()
+			} else {
+				m.NebulaView.MoveDown()
+			}
 		} else if m.Depth >= DepthPhaseLoop {
 			if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
 				lv.MoveDown()
@@ -1696,13 +1710,9 @@ func (m AppModel) renderMainView() string {
 				m.NebulaView.Width = w
 				return m.NebulaView.View()
 			case TabEntanglements:
-				ev := EntanglementView{
-					Entanglements: m.Entanglements,
-					Width:         w,
-					Height:        m.detailHeight(),
-				}
-				ev.ClampCursor()
-				return ev.View()
+				m.EntanglementView.Width = w
+				m.EntanglementView.Height = m.detailHeight()
+				return m.EntanglementView.View()
 			case TabScratchpad:
 				return lipgloss.NewStyle().
 					Foreground(colorMuted).

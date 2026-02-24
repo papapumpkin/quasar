@@ -19,7 +19,6 @@ type EntanglementView struct {
 	Cursor        int
 	Width         int
 	Height        int
-	ScrollOffset  int
 }
 
 // NewEntanglementView creates an empty entanglement view.
@@ -98,8 +97,7 @@ func statusColor(status string) lipgloss.Color {
 	}
 }
 
-// flatIndex returns the overall index for an entanglement given the grouped
-// layout. Returns -1 if the cursor exceeds the total count.
+// flatCount returns the total number of entanglements across all groups.
 func flatCount(groups []entanglementGroup) int {
 	n := 0
 	for _, g := range groups {
