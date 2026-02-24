@@ -1,13 +1,13 @@
 version = 1
 nebula_name = 'observatory'
-total_cost_usd = 8.687580250000002
+total_cost_usd = 11.057061000000001
 
 [phases]
 [phases.cockpit-graph]
 bead_id = 'quasar-411f'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-23T21:12:26.291442-05:00
-updated_at = 2026-02-23T21:12:26.291442-05:00
+updated_at = 2026-02-23T21:47:06.761367-05:00
 
 [phases.cockpit-plan]
 bead_id = 'quasar-xiwp'
@@ -53,6 +53,12 @@ updated_at = 2026-02-23T21:12:24.116343-05:00
 
 [phases.static-scanner]
 bead_id = 'quasar-5yf1'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T21:12:23.342164-05:00
-updated_at = 2026-02-23T21:37:51.742301-05:00
+updated_at = 2026-02-23T21:47:06.759918-05:00
+
+[phases.static-scanner.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, well-tested static entanglement scanner and contract resolver that correctly extracts produces/consumes from phase specs and resolves the dependency graph, with only minor duplication and edge-case nits.'

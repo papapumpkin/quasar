@@ -81,6 +81,9 @@ type AppModel struct {
 	Stopping  bool   // whether a stop has been requested
 	NebulaDir string // path to nebula directory for intervention files
 
+	// Graph view state — live DAG visualization tab.
+	Graph GraphView // DAG graph renderer
+
 	// Board view state — columnar board as alternative to the NebulaView table.
 	Board        BoardView // columnar board renderer
 	BoardActive  bool      // true = columnar board, false = table view
@@ -297,6 +300,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.StatusBar.Name = msg.Name
 		m.StatusBar.Total = len(msg.Phases)
 		m.NebulaView.InitPhases(msg.Phases)
+		m.Graph = NewGraphView(msg.Phases, m.contentWidth(), m.detailHeight())
 
 	// --- Nebula progress ---
 	case MsgNebulaProgress:
@@ -309,10 +313,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgPhaseTaskStarted:
 		m.ensurePhaseLoop(msg.PhaseID)
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseWorking)
+		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseWorking)
 		// Create a worker card for this active phase.
 		m.ensureWorkerCard(msg.PhaseID)
 	case MsgPhaseTaskComplete:
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseDone)
+		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseDone)
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
 			lv.Approved = true
 		}
@@ -408,6 +414,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case MsgPhaseError:
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseFailed)
+		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseFailed)
 		// Remove worker card on failure.
 		delete(m.WorkerCards, msg.PhaseID)
 		m.addMessage("[%s] %s", msg.PhaseID, msg.Msg)
@@ -808,7 +815,7 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "shift+tab":
 			m.ActiveTab = m.ActiveTab.Prev()
 			return m, nil
-		case "1", "2", "3":
+		case "1", "2", "3", "4":
 			n := int(msg.String()[0] - '0')
 			if tab, ok := TabFromNumber(n); ok {
 				m.ActiveTab = tab
@@ -825,6 +832,31 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.Board.MoveRight()
 				return m, nil
 			}
+		}
+	}
+
+	// Graph tab key handling — toggle tracks, critical path, and scroll viewport.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.ActiveTab == TabGraph {
+		switch msg.String() {
+		case "t":
+			m.Graph.ToggleTracks()
+			return m, nil
+		case "c":
+			m.Graph.ToggleCriticalPath()
+			return m, nil
+		}
+		// Route scroll keys to the graph viewport.
+		switch {
+		case key.Matches(msg, m.Keys.PageUp),
+			key.Matches(msg, m.Keys.PageDown),
+			key.Matches(msg, m.Keys.Home),
+			key.Matches(msg, m.Keys.End):
+			m.Graph.Update(msg)
+			return m, nil
+		}
+		if msg.String() == "g" || msg.String() == "G" {
+			m.Graph.Update(msg)
+			return m, nil
 		}
 	}
 
@@ -1212,17 +1244,23 @@ func (m *AppModel) drillDown() {
 			m.DiffFileOpen = false
 			m.ShowBeads = false
 			// Drill into the selected phase's loop view.
-			// Use board cursor when board is active, table cursor otherwise.
-			var p *PhaseEntry
-			if m.BoardActive && m.ActiveTab == TabBoard {
+			// Use the active tab's cursor to determine which phase.
+			var phaseID string
+			if m.ActiveTab == TabGraph {
+				phaseID = m.Graph.SelectedPhaseID()
+			} else if m.BoardActive && m.ActiveTab == TabBoard {
 				m.Board.Phases = m.NebulaView.Phases
-				p = m.Board.SelectedPhase()
+				if p := m.Board.SelectedPhase(); p != nil {
+					phaseID = p.ID
+				}
 			}
-			if p == nil {
-				p = m.NebulaView.SelectedPhase()
+			if phaseID == "" {
+				if p := m.NebulaView.SelectedPhase(); p != nil {
+					phaseID = p.ID
+				}
 			}
-			if p != nil {
-				m.FocusedPhase = p.ID
+			if phaseID != "" {
+				m.FocusedPhase = phaseID
 				m.Depth = DepthPhaseLoop
 				m.updateDetailFromSelection()
 			}
@@ -1358,6 +1396,8 @@ func (m *AppModel) moveUp() {
 		if m.Depth == DepthPhases {
 			if m.ActiveTab == TabEntanglements {
 				m.EntanglementView.MoveUp()
+			} else if m.ActiveTab == TabGraph {
+				m.Graph.MoveUp()
 			} else if m.BoardActive && m.ActiveTab == TabBoard {
 				m.Board.MoveUp()
 			} else {
@@ -1396,6 +1436,8 @@ func (m *AppModel) moveDown() {
 		if m.Depth == DepthPhases {
 			if m.ActiveTab == TabEntanglements {
 				m.EntanglementView.MoveDown()
+			} else if m.ActiveTab == TabGraph {
+				m.Graph.MoveDown()
 			} else if m.BoardActive && m.ActiveTab == TabBoard {
 				m.Board.MoveDown()
 			} else {
@@ -1868,6 +1910,9 @@ func (m AppModel) renderMainView() string {
 				m.EntanglementView.Width = w
 				m.EntanglementView.Height = m.detailHeight()
 				return m.EntanglementView.View()
+			case TabGraph:
+				m.Graph.SetSize(w, m.detailHeight())
+				return m.Graph.View()
 			case TabScratchpad:
 				return m.ScratchpadView.View()
 			default:
