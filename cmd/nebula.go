@@ -28,8 +28,9 @@ var nebulaSubcmds = []nebulaSubcmd{
 	},
 	{
 		use:   "plan <path>",
-		short: "Show what beads changes a nebula would produce",
+		short: "Preview the execution plan for a nebula",
 		args:  cobra.ExactArgs(1),
+		flags: addNebulaPlanFlags,
 		run:   runNebulaPlan,
 	},
 	{
