@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'cockpit'
-total_cost_usd = 23.978270499999997
+total_cost_usd = 34.646898799999995
 
 [phases]
 [phases.board-view]
@@ -41,9 +41,15 @@ summary = 'Clean implementation of the EntanglementView TUI component with group
 
 [phases.model-integration]
 bead_id = 'quasar-t7s4'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T15:56:14.97329-05:00
-updated_at = 2026-02-23T19:56:32.959458-05:00
+updated_at = 2026-02-23T20:18:46.043135-05:00
+
+[phases.model-integration.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Two targeted fixes — rebinding board toggle from `b` to `v` to prevent beads key shadowing, and wiring `MsgHail.ResponseCh` through to the hail overlay — both correct, well-tested, and with clean linting.'
 
 [phases.scratchpad-view]
 bead_id = 'quasar-vsch'
