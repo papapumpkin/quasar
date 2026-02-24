@@ -17,6 +17,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/claude"
 	"github.com/papapumpkin/quasar/internal/config"
 	"github.com/papapumpkin/quasar/internal/loop"
+	"github.com/papapumpkin/quasar/internal/snapshot"
 	"github.com/papapumpkin/quasar/internal/tui"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
@@ -57,15 +58,26 @@ func runRun(cmd *cobra.Command, args []string) error {
 	auto, _ := cmd.Flags().GetBool("auto")
 	noTUI, _ := cmd.Flags().GetBool("no-tui")
 	noSplash, _ := cmd.Flags().GetBool("no-splash")
+	useProjectCtx, _ := cmd.Flags().GetBool("project-context")
 
 	// TUI path: auto mode on a TTY without --no-tui.
 	if auto && !noTUI && isStderrTTY() {
-		return runAutoTUI(cfg, printer, coderPrompt, reviewerPrompt, noSplash, args)
+		return runAutoTUI(cfg, printer, coderPrompt, reviewerPrompt, noSplash, useProjectCtx, args)
 	}
 
 	taskLoop, err := buildLoop(&cfg, printer, coderPrompt, reviewerPrompt)
 	if err != nil {
 		return err
+	}
+
+	// Opt-in project context scanning for prompt caching.
+	if useProjectCtx {
+		s := &snapshot.Scanner{WorkDir: taskLoop.WorkDir}
+		if scanned, scanErr := s.Scan(context.Background()); scanErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: project context scan failed: %v\n", scanErr)
+		} else {
+			taskLoop.ProjectContext = scanned
+		}
 	}
 
 	ctx, cancel := setupSignalContext(printer)
@@ -78,7 +90,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 }
 
 // runAutoTUI launches the BubbleTea TUI for a single auto-mode task.
-func runAutoTUI(cfg config.Config, printer *ui.Printer, coderPrompt, reviewerPrompt string, noSplash bool, args []string) error {
+func runAutoTUI(cfg config.Config, printer *ui.Printer, coderPrompt, reviewerPrompt string, noSplash, useProjectCtx bool, args []string) error {
 	task := strings.Join(args, " ")
 	if task == "" {
 		scanner := bufio.NewScanner(os.Stdin)
@@ -101,6 +113,16 @@ func runAutoTUI(cfg config.Config, printer *ui.Printer, coderPrompt, reviewerPro
 	taskLoop, err := buildLoop(&cfg, bridge, coderPrompt, reviewerPrompt)
 	if err != nil {
 		return err
+	}
+
+	// Opt-in project context scanning for prompt caching.
+	if useProjectCtx {
+		s := &snapshot.Scanner{WorkDir: taskLoop.WorkDir}
+		if scanned, scanErr := s.Scan(context.Background()); scanErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: project context scan failed: %v\n", scanErr)
+		} else {
+			taskLoop.ProjectContext = scanned
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
