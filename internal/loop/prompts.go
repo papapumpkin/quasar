@@ -3,7 +3,6 @@ package loop
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -135,23 +134,23 @@ func PrependFabricContext(desc string, snap fabric.Snapshot) string {
 func (l *Loop) buildFabricSnapshot(ctx context.Context) fabric.Snapshot {
 	entanglements, err := l.Fabric.AllEntanglements(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fabric snapshot: AllEntanglements: %v\n", err)
+		l.UI.Error(fmt.Sprintf("fabric: failed to query entanglements: %v", err))
 	}
 	claims, err := l.Fabric.AllClaims(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fabric snapshot: AllClaims: %v\n", err)
+		l.UI.Error(fmt.Sprintf("fabric: failed to query claims: %v", err))
 	}
 	states, err := l.Fabric.AllPhaseStates(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fabric snapshot: AllPhaseStates: %v\n", err)
+		l.UI.Error(fmt.Sprintf("fabric: failed to query phase states: %v", err))
 	}
 	discoveries, err := l.Fabric.UnresolvedDiscoveries(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fabric snapshot: UnresolvedDiscoveries: %v\n", err)
+		l.UI.Error(fmt.Sprintf("fabric: failed to query unresolved discoveries: %v", err))
 	}
 	pulses, err := l.Fabric.AllPulses(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fabric snapshot: AllPulses: %v\n", err)
+		l.UI.Error(fmt.Sprintf("fabric: failed to query pulses: %v", err))
 	}
 
 	// Partition phases into completed, in-progress, and blocked.
