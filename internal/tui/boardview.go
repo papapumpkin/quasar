@@ -151,9 +151,9 @@ func (bv *BoardView) MoveRight() {
 }
 
 // partition distributes phases into column buckets based on status.
-// It is width-aware: at medium terminal widths where Scanning and Blocked
-// columns are not visible, their entries are remapped into Queued so that
-// no phases are silently dropped from the board.
+// It is width-aware: at medium terminal widths where the Blocked column
+// is not visible, its entries are remapped into Queued so that no phases
+// are silently dropped from the board.
 func (bv BoardView) partition() [colCount][]int {
 	var buckets [colCount][]int
 	visible := bv.visibleColumns()
@@ -163,8 +163,8 @@ func (bv BoardView) partition() [colCount][]int {
 	}
 	for i, p := range bv.Phases {
 		col := statusToColumn(p)
-		// At medium width, Scanning and Blocked columns are not visible.
-		// Remap their entries into Queued so phases are never lost.
+		// At medium width, the Blocked column is not visible.
+		// Remap its entries into Queued so phases are never lost.
 		if !visibleSet[col] {
 			col = ColQueued
 		}
@@ -193,14 +193,14 @@ func statusToColumn(p PhaseEntry) BoardColumn {
 }
 
 // visibleColumns returns the columns to render based on terminal width.
-// On wide terminals (>= 140): all 7 columns.
-// On medium terminals (100-139): merge Scanning→Queued, Blocked→Queued.
+// On wide terminals (>= 140): all 6 columns.
+// On medium terminals (100-139): merge Blocked→Queued.
 // Below 100: should fall back to table view (caller decides).
 func (bv BoardView) visibleColumns() []BoardColumn {
 	if bv.Width >= boardWidthFull {
-		return []BoardColumn{ColQueued, ColScanning, ColRunning, ColReview, ColBlocked, ColDone, ColFailed}
+		return []BoardColumn{ColQueued, ColRunning, ColReview, ColBlocked, ColDone, ColFailed}
 	}
-	// Medium: omit Scanning and Blocked (their entries stay in Queued).
+	// Medium: omit Blocked (its entries stay in Queued).
 	return []BoardColumn{ColQueued, ColRunning, ColReview, ColDone, ColFailed}
 }
 

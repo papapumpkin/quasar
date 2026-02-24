@@ -1806,11 +1806,13 @@ func (m AppModel) detailHeight() int {
 
 // homeMainHeight computes the available lines for the home nebula list.
 func (m AppModel) homeMainHeight() int {
-	// Fixed chrome: status bar (1) + spacing (1) + footer (1).
-	chrome := 3
-	// Banner: estimate height based on size tier.
-	if bv := m.Banner.View(); bv != "" {
-		chrome += lipgloss.Height(bv)
+	// Fixed chrome: status bar (1) + spacing (1) + bottom bar (1) + footer (1).
+	chrome := 4
+	// Banner: only counted when the terminal is tall enough to show it.
+	if m.Height >= BannerCollapseHeight {
+		if bv := m.Banner.View(); bv != "" {
+			chrome += lipgloss.Height(bv)
+		}
 	}
 	// Detail panel.
 	if m.showDetailPanel() && m.Height >= DetailCollapseHeight {
@@ -1902,8 +1904,11 @@ func (m AppModel) View() string {
 	}
 
 	// Top banner (S-A or XS-A modes) — between status bar and content.
-	if bannerView := m.Banner.View(); bannerView != "" {
-		sections = append(sections, bannerView)
+	// Skip when the terminal is too short to avoid pushing content off-screen.
+	if m.Height >= BannerCollapseHeight {
+		if bannerView := m.Banner.View(); bannerView != "" {
+			sections = append(sections, bannerView)
+		}
 	}
 
 	// Build the "middle" section: breadcrumb + main view + detail + gate + toasts.

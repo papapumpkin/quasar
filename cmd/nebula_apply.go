@@ -144,7 +144,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Initialize fabric infrastructure when agentmail is enabled.
+	// Initialize fabric infrastructure when the DAG has inter-phase dependencies.
 	fc, err := initFabric(ctx, n, dir, workDir, claudeInv)
 	if err != nil {
 		return fmt.Errorf("fabric initialization failed: %w", err)

@@ -18,7 +18,10 @@ const (
 	// CompactWidth triggers compact mode for progress bars, footer, etc.
 	CompactWidth = 60
 	// DetailCollapseHeight triggers auto-collapse of the detail panel.
-	DetailCollapseHeight = 20
+	DetailCollapseHeight = 30
+	// BannerCollapseHeight is the minimum terminal height for showing the top banner.
+	// Below this height, the banner is hidden to preserve content space.
+	BannerCollapseHeight = 35
 	// BannerSMinWidth is the minimum width for the S-A Wide Ellipse top banner.
 	BannerSMinWidth = 90
 	// BoardMinWidth is the minimum terminal width for the columnar board view.
