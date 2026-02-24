@@ -1902,7 +1902,6 @@ func (m AppModel) View() string {
 	}
 
 	// Build the "middle" section: breadcrumb + main view + detail + gate + toasts.
-	// In side panel mode, this section sits to the right of the art panel.
 	var middle []string
 
 	// Breadcrumb (nebula drill-down) — hide if too narrow.
