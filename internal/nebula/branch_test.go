@@ -2,7 +2,9 @@ package nebula
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -76,6 +78,81 @@ func TestBranchManager_CreateOrCheckout(t *testing.T) {
 		current := currentBranchHelper(ctx, t, dir)
 		if current != "nebula/resume-test" {
 			t.Errorf("current branch = %q, want %q", current, "nebula/resume-test")
+		}
+	})
+}
+
+func TestBranchManager_CreateOrCheckout_untrackedConflict(t *testing.T) {
+	dir := initTestRepo(t)
+	ctx := context.Background()
+
+	// Create nebula branch with a tracked file.
+	run(ctx, t, dir, "git", "checkout", "-b", "nebula/conflict-test")
+	conflictFile := filepath.Join(dir, "state.toml")
+	if err := os.WriteFile(conflictFile, []byte("version = 1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	run(ctx, t, dir, "git", "add", "state.toml")
+	run(ctx, t, dir, "git", "commit", "-m", "add state file")
+
+	// Switch back to main and create the same file as untracked.
+	run(ctx, t, dir, "git", "checkout", "-")
+	if err := os.WriteFile(conflictFile, []byte("leftover\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// CreateOrCheckout should handle the conflict and succeed.
+	bm, err := NewBranchManager(ctx, dir, "conflict-test")
+	if err != nil {
+		t.Fatalf("NewBranchManager: %v", err)
+	}
+
+	if err := bm.CreateOrCheckout(ctx); err != nil {
+		t.Fatalf("CreateOrCheckout should handle untracked conflict: %v", err)
+	}
+
+	current := currentBranchHelper(ctx, t, dir)
+	if current != "nebula/conflict-test" {
+		t.Errorf("current branch = %q, want %q", current, "nebula/conflict-test")
+	}
+}
+
+func TestParseUntrackedConflicts(t *testing.T) {
+	t.Parallel()
+	t.Run("parses git error output", func(t *testing.T) {
+		t.Parallel()
+		output := `error: The following untracked working tree files would be overwritten by checkout:
+	.nebulas/prompt-caching/nebula.state.toml
+Please move or remove them before you switch branches.
+Aborting`
+		got := parseUntrackedConflicts(output)
+		if len(got) != 1 {
+			t.Fatalf("expected 1 conflict, got %d: %v", len(got), got)
+		}
+		if got[0] != ".nebulas/prompt-caching/nebula.state.toml" {
+			t.Errorf("conflict = %q, want %q", got[0], ".nebulas/prompt-caching/nebula.state.toml")
+		}
+	})
+
+	t.Run("returns nil for unrelated error", func(t *testing.T) {
+		t.Parallel()
+		got := parseUntrackedConflicts("error: pathspec 'foo' did not match any file(s)")
+		if got != nil {
+			t.Errorf("expected nil, got %v", got)
+		}
+	})
+
+	t.Run("handles multiple files", func(t *testing.T) {
+		t.Parallel()
+		output := `error: The following untracked working tree files would be overwritten by checkout:
+	a.txt
+	b.txt
+	c.txt
+Please move or remove them before you switch branches.
+Aborting`
+		got := parseUntrackedConflicts(output)
+		if len(got) != 3 {
+			t.Fatalf("expected 3 conflicts, got %d: %v", len(got), got)
 		}
 	})
 }
