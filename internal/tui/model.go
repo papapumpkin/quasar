@@ -187,6 +187,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		contentWidth := msg.Width - m.Banner.SidePanelWidth()
 		detailHeight := m.detailHeight()
 		m.Detail.SetSize(contentWidth-2, detailHeight)
+		m.ScratchpadView.SetSize(contentWidth, detailHeight)
 
 		// Clamp cursors so they remain valid after a resize that may shrink lists.
 		clampCursors(&m)
@@ -1736,7 +1737,6 @@ func (m AppModel) renderMainView() string {
 				m.EntanglementView.Height = m.detailHeight()
 				return m.EntanglementView.View()
 			case TabScratchpad:
-				m.ScratchpadView.SetSize(w, m.detailHeight())
 				return m.ScratchpadView.View()
 			default:
 				m.NebulaView.Width = w
