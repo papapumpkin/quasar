@@ -1,0 +1,42 @@
+[nebula]
+name = "context-intelligence"
+description = "Build a layered context injection system that makes every agent invocation smarter and cheaper. Three layers: (1) project context scanner for prompt-cache-friendly repo snapshots, (2) fabric context auto-injection so agents see parallel work without manual queries, (3) prior work injection from neutron archives so new nebulas inherit decisions from completed ones."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "context", "cost-optimization"]
+assignee = ""
+
+[execution]
+max_workers = 5
+max_review_cycles = 5
+max_budget_usd = 80.0
+model = ""
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Build a deterministic project context scanner that produces a stable snapshot for prompt caching (90% input token discount)",
+    "Wire fabric context into coder/reviewer prompts automatically — agents should see entanglements, claims, discoveries, and pulses without running CLI commands",
+    "Enable nebulas to reference prior neutron archives for historical context injection",
+    "Make context injection token-budget-aware — cap total injected context to stay within configurable limits",
+    "All context layers compose cleanly: project snapshot + fabric state + prior work = single coherent prompt prefix",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "Use stdlib only for the scanner — no external dependencies for file scanning",
+    "Project context snapshot must be deterministic (same repo state = identical output byte-for-byte)",
+    "Snapshot must work on any repo, not just Go projects — detect go.mod, package.json, Cargo.toml, pyproject.toml",
+    "Context injection must be backward-compatible: disabled by default, opt-in via config or flags",
+    "PrependFabricContext already exists and is tested — wire it in, don't rewrite it",
+    "All new packages must have comprehensive tests using stdlib testing only",
+    "Total injected context must respect a configurable token budget to avoid blowing up prompt size",
+    "The deprecated internal/context/ package must not be used — create internal/snapshot/ instead",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

@@ -1,0 +1,45 @@
+version = 1
+nebula_name = 'context-intelligence'
+
+[phases]
+[phases.cleanup-deprecated]
+bead_id = 'quasar-5r9x'
+status = 'created'
+created_at = 2026-02-24T14:47:09.264229-05:00
+updated_at = 2026-02-24T14:47:09.264229-05:00
+
+[phases.context-budget]
+bead_id = 'quasar-hm5f'
+status = 'created'
+created_at = 2026-02-24T14:47:07.075677-05:00
+updated_at = 2026-02-24T14:47:07.075677-05:00
+
+[phases.enhanced-snapshot]
+bead_id = 'quasar-c5bt'
+status = 'created'
+created_at = 2026-02-24T14:47:08.528392-05:00
+updated_at = 2026-02-24T14:47:08.528392-05:00
+
+[phases.fabric-auto-inject]
+bead_id = 'quasar-z9aj'
+status = 'created'
+created_at = 2026-02-24T14:47:06.315928-05:00
+updated_at = 2026-02-24T14:47:06.315928-05:00
+
+[phases.prior-work]
+bead_id = 'quasar-igi8'
+status = 'created'
+created_at = 2026-02-24T14:47:07.803426-05:00
+updated_at = 2026-02-24T14:47:07.803426-05:00
+
+[phases.project-scanner]
+bead_id = 'quasar-0mzl'
+status = 'in_progress'
+created_at = 2026-02-24T14:47:04.864463-05:00
+updated_at = 2026-02-24T14:47:09.561596-05:00
+
+[phases.scanner-injection]
+bead_id = 'quasar-nv4h'
+status = 'created'
+created_at = 2026-02-24T14:47:05.587979-05:00
+updated_at = 2026-02-24T14:47:05.587979-05:00
