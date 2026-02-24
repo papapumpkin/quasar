@@ -86,6 +86,7 @@ type AppModel struct {
 	EntanglementView EntanglementView      // persistent entanglement viewer with cursor state
 	Discoveries      []fabric.Discovery    // posted discoveries
 	Scratchpad       []MsgScratchpadEntry  // timestamped scratchpad notes
+	ScratchpadView   ScratchpadView        // persistent scratchpad viewer with viewport
 	StaleItems       []tycho.StaleItem     // latest stale warning items
 
 	// Home mode state (landing page).
@@ -473,6 +474,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case MsgScratchpadEntry:
 		m.Scratchpad = append(m.Scratchpad, msg)
+		m.ScratchpadView.AddEntry(msg)
 
 	case MsgStaleWarning:
 		m.StaleItems = msg.Items
@@ -718,6 +720,26 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if tab, ok := TabFromNumber(n); ok {
 				m.ActiveTab = tab
 			}
+			return m, nil
+		}
+	}
+
+	// Scratchpad viewport scrolling — when the scratchpad tab is active,
+	// route scroll keys to the viewport instead of the phase list.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.ActiveTab == TabScratchpad {
+		switch {
+		case key.Matches(msg, m.Keys.Up),
+			key.Matches(msg, m.Keys.Down),
+			key.Matches(msg, m.Keys.PageUp),
+			key.Matches(msg, m.Keys.PageDown),
+			key.Matches(msg, m.Keys.Home),
+			key.Matches(msg, m.Keys.End):
+			m.ScratchpadView.Update(msg)
+			return m, nil
+		}
+		// Also handle g/G for top/bottom (not in KeyMap but standard viewport keys).
+		if msg.String() == "g" || msg.String() == "G" {
+			m.ScratchpadView.Update(msg)
 			return m, nil
 		}
 	}
@@ -1714,10 +1736,8 @@ func (m AppModel) renderMainView() string {
 				m.EntanglementView.Height = m.detailHeight()
 				return m.EntanglementView.View()
 			case TabScratchpad:
-				return lipgloss.NewStyle().
-					Foreground(colorMuted).
-					PaddingLeft(2).
-					Render("(coming soon)")
+				m.ScratchpadView.SetSize(w, m.detailHeight())
+				return m.ScratchpadView.View()
 			default:
 				m.NebulaView.Width = w
 				return m.NebulaView.View()

@@ -317,24 +317,13 @@ func TestTabBarNotRenderedWhenDrilledDown(t *testing.T) {
 	}
 }
 
-func TestPlaceholderRenderedForUnimplementedTabs(t *testing.T) {
+func TestScratchpadTabRendersEmptyState(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name string
-		tab  CockpitTab
-	}{
-		{"scratchpad", TabScratchpad},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			m := nebulaModel()
-			m.ActiveTab = tt.tab
-			view := m.View()
-			if !strings.Contains(view, "(coming soon)") {
-				t.Errorf("expected '(coming soon)' placeholder for %s tab, got:\n%s", tt.name, view)
-			}
-		})
+	m := nebulaModel()
+	m.ActiveTab = TabScratchpad
+	view := m.View()
+	if !strings.Contains(view, "No events yet") {
+		t.Errorf("expected 'No events yet' placeholder for scratchpad tab, got:\n%s", view)
 	}
 }
 
