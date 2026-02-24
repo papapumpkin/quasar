@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // DefaultMaxSize is the default maximum snapshot size in bytes (~8K tokens).
@@ -82,9 +83,23 @@ func (s *Scanner) Scan(ctx context.Context) (string, error) {
 
 	result := b.String()
 	if len(result) > s.MaxSize {
-		result = result[:s.MaxSize]
+		result = truncateUTF8(result, s.MaxSize)
 	}
 	return result, nil
+}
+
+// truncateUTF8 truncates s to at most maxBytes without splitting a multi-byte
+// UTF-8 character. It walks backwards from the cut point to find a valid rune
+// boundary.
+func truncateUTF8(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	// Walk backwards from the cut point to find a valid rune start.
+	for maxBytes > 0 && !utf8.RuneStart(s[maxBytes]) {
+		maxBytes--
+	}
+	return s[:maxBytes]
 }
 
 // applyDefaults fills zero-valued fields with sensible defaults.
@@ -235,7 +250,7 @@ func (s *Scanner) listFiles(ctx context.Context) ([]string, error) {
 	if err == nil {
 		return files, nil
 	}
-	return s.walkFiles()
+	return s.walkFiles(ctx)
 }
 
 // gitListFiles runs git ls-files and returns sorted output lines.
@@ -250,9 +265,14 @@ func (s *Scanner) gitListFiles(ctx context.Context) ([]string, error) {
 }
 
 // walkFiles walks the directory tree using os.ReadDir as a git fallback.
-func (s *Scanner) walkFiles() ([]string, error) {
+// It checks ctx for cancellation periodically during the walk.
+func (s *Scanner) walkFiles(ctx context.Context) ([]string, error) {
 	var files []string
 	err := filepath.Walk(s.WorkDir, func(path string, info os.FileInfo, err error) error {
+		// Check for context cancellation on each entry.
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if err != nil {
 			return nil // skip unreadable entries
 		}
@@ -302,7 +322,11 @@ var conventionsFiles = []string{
 	"claude.md",
 }
 
+// truncationMarker is appended when conventions content exceeds the budget.
+const truncationMarker = "\n[truncated]\n"
+
 // readConventions reads the first matching conventions file, truncated to maxBytes.
+// The truncation marker is included within the maxBytes budget, not on top of it.
 func (s *Scanner) readConventions(maxBytes int) string {
 	if maxBytes <= 0 {
 		return ""
@@ -315,7 +339,12 @@ func (s *Scanner) readConventions(maxBytes int) string {
 		}
 		content := string(data)
 		if len(content) > maxBytes {
-			content = content[:maxBytes] + "\n[truncated]\n"
+			// Reserve space for the marker within the budget.
+			cutPoint := maxBytes - len(truncationMarker)
+			if cutPoint < 0 {
+				cutPoint = 0
+			}
+			content = content[:cutPoint] + truncationMarker
 		}
 		return content
 	}

@@ -317,6 +317,166 @@ func TestScannerConventionsVariants(t *testing.T) {
 	})
 }
 
+func TestTruncateUTF8(t *testing.T) {
+	t.Parallel()
+
+	t.Run("NoTruncation", func(t *testing.T) {
+		t.Parallel()
+		s := "hello"
+		got := truncateUTF8(s, 10)
+		if got != "hello" {
+			t.Errorf("expected %q, got %q", "hello", got)
+		}
+	})
+
+	t.Run("ASCIITruncation", func(t *testing.T) {
+		t.Parallel()
+		s := "hello world"
+		got := truncateUTF8(s, 5)
+		if got != "hello" {
+			t.Errorf("expected %q, got %q", "hello", got)
+		}
+	})
+
+	t.Run("MultiByteRuneBoundary", func(t *testing.T) {
+		t.Parallel()
+		// "café" = c(1) a(1) f(1) é(2) = 5 bytes total.
+		s := "café"
+		// Cutting at 4 would split the 2-byte é. Should back up to 3.
+		got := truncateUTF8(s, 4)
+		if got != "caf" {
+			t.Errorf("expected %q, got %q", "caf", got)
+		}
+	})
+
+	t.Run("ThreeByteRune", func(t *testing.T) {
+		t.Parallel()
+		// "ab€" = a(1) b(1) €(3) = 5 bytes.
+		s := "ab€"
+		// Cutting at 3 would split the 3-byte €. Should back up to 2.
+		got := truncateUTF8(s, 3)
+		if got != "ab" {
+			t.Errorf("expected %q, got %q", "ab", got)
+		}
+	})
+
+	t.Run("FourByteRune", func(t *testing.T) {
+		t.Parallel()
+		// "a𐍈" = a(1) 𐍈(4) = 5 bytes.
+		s := "a𐍈"
+		// Cutting at 4 would split the 4-byte rune. Should back up to 1.
+		got := truncateUTF8(s, 4)
+		if got != "a" {
+			t.Errorf("expected %q, got %q", "a", got)
+		}
+	})
+
+	t.Run("ExactRuneBoundary", func(t *testing.T) {
+		t.Parallel()
+		// "aé" = a(1) é(2) = 3 bytes. Cutting at 3 is exact.
+		s := "aé"
+		got := truncateUTF8(s, 3)
+		if got != "aé" {
+			t.Errorf("expected %q, got %q", "aé", got)
+		}
+	})
+
+	t.Run("ZeroMax", func(t *testing.T) {
+		t.Parallel()
+		got := truncateUTF8("hello", 0)
+		if got != "" {
+			t.Errorf("expected empty string, got %q", got)
+		}
+	})
+}
+
+func TestReadConventionsTruncationBudget(t *testing.T) {
+	t.Parallel()
+
+	t.Run("MarkerFitsWithinBudget", func(t *testing.T) {
+		t.Parallel()
+		dir := setupTestRepo(t, map[string]string{
+			"CLAUDE.md": strings.Repeat("x", 500),
+		})
+		s := &Scanner{WorkDir: dir}
+		// Budget of 100 bytes — content (500) exceeds it.
+		result := s.readConventions(100)
+		if len(result) > 100 {
+			t.Errorf("readConventions exceeded budget: got %d bytes, want <= 100", len(result))
+		}
+		if !strings.Contains(result, "[truncated]") {
+			t.Error("expected '[truncated]' marker")
+		}
+	})
+
+	t.Run("VerySmallBudget", func(t *testing.T) {
+		t.Parallel()
+		dir := setupTestRepo(t, map[string]string{
+			"CLAUDE.md": strings.Repeat("x", 500),
+		})
+		s := &Scanner{WorkDir: dir}
+		// Budget smaller than the marker itself (13 bytes).
+		result := s.readConventions(5)
+		// Should not panic and should contain the marker.
+		if !strings.Contains(result, "[truncated]") {
+			t.Error("expected '[truncated]' marker even with tiny budget")
+		}
+	})
+}
+
+func TestWalkFilesCancellation(t *testing.T) {
+	t.Parallel()
+	dir := setupTestRepo(t, map[string]string{
+		"a.go": "package a\n",
+		"b.go": "package b\n",
+		"c.go": "package c\n",
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	s := &Scanner{WorkDir: dir}
+	s.applyDefaults()
+	_, err := s.walkFiles(ctx)
+	if err == nil {
+		t.Error("expected error from cancelled context, got nil")
+	}
+	if !strings.Contains(err.Error(), "context canceled") {
+		t.Errorf("expected context canceled error, got: %v", err)
+	}
+}
+
+func TestScannerMaxSizeUTF8Safe(t *testing.T) {
+	t.Parallel()
+	// Create a CLAUDE.md with multi-byte characters that could be split.
+	dir := setupTestRepo(t, map[string]string{
+		"go.mod":    "module test\n\ngo 1.21\n",
+		"main.go":   "package main\n",
+		"CLAUDE.md": strings.Repeat("café ", 1000), // lots of 2-byte é chars
+	})
+
+	s := &Scanner{
+		WorkDir: dir,
+		MaxSize: 500,
+	}
+	result, err := s.Scan(context.Background())
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+
+	if len(result) > 500 {
+		t.Errorf("expected result <= 500 bytes, got %d", len(result))
+	}
+
+	// Verify valid UTF-8 — iterate runes and check for replacement character.
+	for i, r := range result {
+		if r == '\uFFFD' {
+			t.Errorf("invalid UTF-8 at byte offset %d", i)
+			break
+		}
+	}
+}
+
 func TestScannerNoManifest(t *testing.T) {
 	t.Parallel()
 	dir := setupTestRepo(t, map[string]string{
