@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'observatory'
-total_cost_usd = 23.4948905
+total_cost_usd = 30.637857750000002
 
 [phases]
 [phases.cockpit-graph]
@@ -17,9 +17,15 @@ summary = 'Well-implemented Graph tab for the cockpit TUI with comprehensive tes
 
 [phases.cockpit-plan]
 bead_id = 'quasar-xiwp'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T21:12:27.002498-05:00
-updated_at = 2026-02-24T09:19:45.836727-05:00
+updated_at = 2026-02-24T09:35:51.403323-05:00
+
+[phases.cockpit-plan.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean implementation of terraform-style plan preview in the cockpit TUI home page, with proper BubbleTea message flow, comprehensive tests, and minor cosmetic issues (unused import hack, unused parameter, single-error reporting).'
 
 [phases.dag-renderer]
 bead_id = 'quasar-sdrp'
