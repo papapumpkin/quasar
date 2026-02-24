@@ -187,7 +187,7 @@ func (g *GatePrompt) detailBody() string {
 				lineInfo = styleGateDetail.Render(fmt.Sprintf(" +%d -%d", fc.LinesAdded, fc.LinesRemoved))
 			}
 			// Reserve space for border (4) + padding (4) + icon+spacing (4) + lineInfo length.
-			maxPathWidth := g.Width - 12 - len(lineInfo)
+			maxPathWidth := g.Width - 12 - lipgloss.Width(lineInfo)
 			if maxPathWidth < 20 {
 				maxPathWidth = 20
 			}
