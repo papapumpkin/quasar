@@ -70,6 +70,51 @@ func TestBuildSystemPrompt(t *testing.T) {
 			t.Error("expected fabric protocol in prompt")
 		}
 	})
+
+	t.Run("project context prepended before base", func(t *testing.T) {
+		t.Parallel()
+		ctx := "# Project: quasar\nLanguage: Go"
+		got := BuildSystemPrompt(base, PromptOpts{ProjectContext: ctx})
+		if !strings.HasPrefix(got, ctx) {
+			t.Errorf("expected prompt to start with project context, got:\n%s", got)
+		}
+		if !strings.Contains(got, "\n\n---\n\n") {
+			t.Error("expected separator between project context and base prompt")
+		}
+		if !strings.Contains(got, base) {
+			t.Error("expected base prompt to be present after project context")
+		}
+	})
+
+	t.Run("project context ordering: context then base then fabric", func(t *testing.T) {
+		t.Parallel()
+		ctx := "# Project Snapshot"
+		got := BuildSystemPrompt(base, PromptOpts{
+			ProjectContext: ctx,
+			FabricEnabled:  true,
+		})
+		ctxIdx := strings.Index(got, ctx)
+		baseIdx := strings.Index(got, base)
+		fabricIdx := strings.Index(got, "## Fabric Protocol")
+		if ctxIdx < 0 || baseIdx < 0 || fabricIdx < 0 {
+			t.Fatalf("missing expected section: ctx=%d base=%d fabric=%d", ctxIdx, baseIdx, fabricIdx)
+		}
+		if ctxIdx >= baseIdx {
+			t.Errorf("project context (at %d) should appear before base prompt (at %d)", ctxIdx, baseIdx)
+		}
+		if baseIdx >= fabricIdx {
+			t.Errorf("base prompt (at %d) should appear before fabric protocol (at %d)", baseIdx, fabricIdx)
+		}
+	})
+
+	t.Run("empty project context produces same output as without it", func(t *testing.T) {
+		t.Parallel()
+		withCtx := BuildSystemPrompt(base, PromptOpts{ProjectContext: ""})
+		without := BuildSystemPrompt(base, PromptOpts{})
+		if withCtx != without {
+			t.Errorf("empty ProjectContext should produce identical output:\nwith: %q\nwithout: %q", withCtx, without)
+		}
+	})
 }
 
 func TestFabricProtocolContent(t *testing.T) {

@@ -1,12 +1,13 @@
 version = 1
 nebula_name = 'context-intelligence'
+total_cost_usd = 3.664925500000001
 
 [phases]
 [phases.cleanup-deprecated]
 bead_id = 'quasar-5r9x'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-24T14:47:09.264229-05:00
-updated_at = 2026-02-24T14:47:09.264229-05:00
+updated_at = 2026-02-24T15:03:55.124648-05:00
 
 [phases.context-budget]
 bead_id = 'quasar-hm5f'
@@ -34,12 +35,18 @@ updated_at = 2026-02-24T14:47:07.803426-05:00
 
 [phases.project-scanner]
 bead_id = 'quasar-0mzl'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T14:47:04.864463-05:00
-updated_at = 2026-02-24T14:47:09.561596-05:00
+updated_at = 2026-02-24T15:03:55.088494-05:00
+
+[phases.project-scanner.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Two surgical bug fixes in readConventions — small-budget overflow guard and UTF-8-safe truncation — both correct with good test coverage.'
 
 [phases.scanner-injection]
 bead_id = 'quasar-nv4h'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-24T14:47:05.587979-05:00
-updated_at = 2026-02-24T14:47:05.587979-05:00
+updated_at = 2026-02-24T15:03:55.124246-05:00

@@ -29,6 +29,7 @@ type Loop struct {
 	CommitSummary  string           // Short label for cycle commit messages. If empty, derived from task title.
 	FabricEnabled  bool             // When true, inject fabric protocol into agent system prompts.
 	TaskID         string           // Task ID for fabric context (QUASAR_TASK_ID).
+	ProjectContext string           // Injected into agent system prompts for prompt caching.
 }
 
 // TaskResult holds the outcome of a completed task loop.
@@ -367,8 +368,9 @@ func (l *Loop) initCycleState(ctx context.Context, beadID, taskDescription strin
 // When FabricEnabled is true, the fabric protocol is appended to the system prompt.
 func (l *Loop) coderAgent(budget float64) agent.Agent {
 	sysPrompt := agent.BuildSystemPrompt(l.CoderPrompt, agent.PromptOpts{
-		FabricEnabled: l.FabricEnabled,
-		TaskID:        l.TaskID,
+		FabricEnabled:  l.FabricEnabled,
+		TaskID:         l.TaskID,
+		ProjectContext: l.ProjectContext,
 	})
 	return agent.Agent{
 		Role:         agent.RoleCoder,
@@ -384,10 +386,17 @@ func (l *Loop) coderAgent(budget float64) agent.Agent {
 }
 
 // reviewerAgent builds the agent configuration for the reviewer role.
+// When ProjectContext or FabricEnabled is set, the system prompt is built
+// through BuildSystemPrompt so both roles benefit from cached context.
 func (l *Loop) reviewerAgent(budget float64) agent.Agent {
+	sysPrompt := agent.BuildSystemPrompt(l.ReviewPrompt, agent.PromptOpts{
+		FabricEnabled:  l.FabricEnabled,
+		TaskID:         l.TaskID,
+		ProjectContext: l.ProjectContext,
+	})
 	return agent.Agent{
 		Role:         agent.RoleReviewer,
-		SystemPrompt: l.ReviewPrompt,
+		SystemPrompt: sysPrompt,
 		Model:        l.Model,
 		MaxBudgetUSD: budget,
 		AllowedTools: []string{
