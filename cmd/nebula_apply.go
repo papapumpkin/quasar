@@ -260,6 +260,8 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			CoderPrompt:    coderPrompt,
 			ReviewPrompt:   reviewerPrompt,
 			WorkDir:        workDir,
+			Fabric:         wg.Fabric,
+			FabricEnabled:  wg.Fabric != nil,
 			ProjectContext: projectCtx,
 		}
 		wg.Runner = &loopAdapter{loop: taskLoop}

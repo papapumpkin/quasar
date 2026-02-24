@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/papapumpkin/quasar/internal/agent"
+	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/filter"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
@@ -27,6 +28,7 @@ type Loop struct {
 	MCP            *agent.MCPConfig // Optional MCP server config passed to agents.
 	RefactorCh     <-chan string    // Optional channel carrying updated task descriptions from phase edits.
 	CommitSummary  string           // Short label for cycle commit messages. If empty, derived from task title.
+	Fabric         fabric.Fabric    // Optional; when set and FabricEnabled, auto-inject fabric state into prompts.
 	FabricEnabled  bool             // When true, inject fabric protocol into agent system prompts.
 	TaskID         string           // Task ID for fabric context (QUASAR_TASK_ID).
 	ProjectContext string           // Injected into agent system prompts for prompt caching.
@@ -419,7 +421,12 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	origDesc := state.OriginalDescription
 	refactorDesc := state.RefactorDescription
 
-	result, err := l.Invoker.Invoke(ctx, l.coderAgent(perAgentBudget), l.buildCoderPrompt(state), l.WorkDir)
+	prompt := l.buildCoderPrompt(state)
+	if l.FabricEnabled && l.Fabric != nil {
+		prompt = PrependFabricContext(prompt, l.buildFabricSnapshot(ctx))
+	}
+
+	result, err := l.Invoker.Invoke(ctx, l.coderAgent(perAgentBudget), prompt, l.WorkDir)
 	if err != nil {
 		state.Phase = PhaseError
 		return fmt.Errorf("coder invocation failed: %w", err)
@@ -470,7 +477,12 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	state.Phase = PhaseReviewing
 	l.UI.AgentStart("reviewer")
 
-	result, err := l.Invoker.Invoke(ctx, l.reviewerAgent(perAgentBudget), l.buildReviewerPrompt(state), l.WorkDir)
+	prompt := l.buildReviewerPrompt(state)
+	if l.FabricEnabled && l.Fabric != nil {
+		prompt = PrependFabricContext(prompt, l.buildFabricSnapshot(ctx))
+	}
+
+	result, err := l.Invoker.Invoke(ctx, l.reviewerAgent(perAgentBudget), prompt, l.WorkDir)
 	if err != nil {
 		state.Phase = PhaseError
 		return fmt.Errorf("reviewer invocation failed: %w", err)

@@ -88,6 +88,8 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 		ReviewPrompt:   a.reviewPrompt,
 		WorkDir:        a.workDir,
 		CommitSummary:  phaseTitle,
+		Fabric:         a.fabric,
+		FabricEnabled:  a.fabric != nil,
 		ProjectContext: a.projectContext,
 	}
 

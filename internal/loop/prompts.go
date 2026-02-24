@@ -1,7 +1,9 @@
 package loop
 
 import (
+	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/papapumpkin/quasar/internal/fabric"
@@ -123,4 +125,43 @@ func PrependFabricContext(desc string, snap fabric.Snapshot) string {
 	b.WriteString("\n\n---\n\n")
 	b.WriteString(desc)
 	return b.String()
+}
+
+// buildFabricSnapshot queries the Fabric store for current state and returns
+// a Snapshot suitable for injection into agent prompts. Errors from individual
+// queries are non-fatal — the snapshot will contain whatever data was available.
+func (l *Loop) buildFabricSnapshot(ctx context.Context) fabric.Snapshot {
+	entanglements, _ := l.Fabric.AllEntanglements(ctx)
+	claims, _ := l.Fabric.AllClaims(ctx)
+	states, _ := l.Fabric.AllPhaseStates(ctx)
+	discoveries, _ := l.Fabric.UnresolvedDiscoveries(ctx)
+	pulses, _ := l.Fabric.AllPulses(ctx)
+
+	// Partition phases into completed and in-progress.
+	var completed, inProgress []string
+	for id, s := range states {
+		switch s {
+		case fabric.StateDone:
+			completed = append(completed, id)
+		case fabric.StateRunning:
+			inProgress = append(inProgress, id)
+		}
+	}
+	sort.Strings(completed)
+	sort.Strings(inProgress)
+
+	// Build claim map from filepath to owning phase.
+	claimMap := make(map[string]string, len(claims))
+	for _, c := range claims {
+		claimMap[c.Filepath] = c.OwnerTask
+	}
+
+	return fabric.Snapshot{
+		Entanglements:         entanglements,
+		FileClaims:            claimMap,
+		Completed:             completed,
+		InProgress:            inProgress,
+		UnresolvedDiscoveries: discoveries,
+		Pulses:                pulses,
+	}
 }

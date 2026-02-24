@@ -1,11 +1,63 @@
 package loop
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
+
+// mockFabric implements fabric.Fabric for testing prompt injection.
+type mockFabric struct {
+	entanglements []fabric.Entanglement
+	claims        []fabric.Claim
+	phaseStates   map[string]string
+	discoveries   []fabric.Discovery
+	pulses        []fabric.Pulse
+}
+
+func (m *mockFabric) SetPhaseState(context.Context, string, string) error     { return nil }
+func (m *mockFabric) GetPhaseState(context.Context, string) (string, error)   { return "", nil }
+func (m *mockFabric) AllPhaseStates(context.Context) (map[string]string, error) {
+	return m.phaseStates, nil
+}
+func (m *mockFabric) PublishEntanglement(context.Context, fabric.Entanglement) error { return nil }
+func (m *mockFabric) PublishEntanglements(context.Context, []fabric.Entanglement) error {
+	return nil
+}
+func (m *mockFabric) EntanglementsFor(context.Context, string) ([]fabric.Entanglement, error) {
+	return nil, nil
+}
+func (m *mockFabric) AllEntanglements(context.Context) ([]fabric.Entanglement, error) {
+	return m.entanglements, nil
+}
+func (m *mockFabric) ClaimFile(context.Context, string, string) error       { return nil }
+func (m *mockFabric) ReleaseClaims(context.Context, string) error           { return nil }
+func (m *mockFabric) ReleaseFileClaim(context.Context, string, string) error { return nil }
+func (m *mockFabric) FileOwner(context.Context, string) (string, error)     { return "", nil }
+func (m *mockFabric) ClaimsFor(context.Context, string) ([]string, error)   { return nil, nil }
+func (m *mockFabric) AllClaims(context.Context) ([]fabric.Claim, error) {
+	return m.claims, nil
+}
+func (m *mockFabric) PostDiscovery(context.Context, fabric.Discovery) (int64, error) { return 0, nil }
+func (m *mockFabric) Discoveries(context.Context, string) ([]fabric.Discovery, error) {
+	return nil, nil
+}
+func (m *mockFabric) AllDiscoveries(context.Context) ([]fabric.Discovery, error) { return nil, nil }
+func (m *mockFabric) ResolveDiscovery(context.Context, int64) error              { return nil }
+func (m *mockFabric) UnresolvedDiscoveries(context.Context) ([]fabric.Discovery, error) {
+	return m.discoveries, nil
+}
+func (m *mockFabric) EmitPulse(context.Context, fabric.Pulse) error { return nil }
+func (m *mockFabric) PulsesFor(context.Context, string) ([]fabric.Pulse, error) {
+	return nil, nil
+}
+func (m *mockFabric) AllPulses(context.Context) ([]fabric.Pulse, error) {
+	return m.pulses, nil
+}
+func (m *mockFabric) PurgeAll(context.Context) error { return nil }
+func (m *mockFabric) Close() error                   { return nil }
 
 func TestPrependFabricContext(t *testing.T) {
 	t.Parallel()
