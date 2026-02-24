@@ -4,21 +4,21 @@ nebula_name = 'scanning-and-gate-fixes'
 [phases]
 [phases.auto-enable-contract-board]
 bead_id = 'quasar-vpfc'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-02-24T12:03:40.443703-05:00
-updated_at = 2026-02-24T12:03:42.835321-05:00
+updated_at = 2026-02-24T12:06:54.793261-05:00
 
 [phases.gate-prompt-overflow]
 bead_id = 'quasar-uhds'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-02-24T12:03:39.042584-05:00
-updated_at = 2026-02-24T12:03:42.814885-05:00
+updated_at = 2026-02-24T12:06:54.725347-05:00
 
 [phases.graph-gate-color-fix]
 bead_id = 'quasar-ozjq'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-02-24T12:03:39.739132-05:00
-updated_at = 2026-02-24T12:03:42.841676-05:00
+updated_at = 2026-02-24T12:06:53.852054-05:00
 
 [phases.graph-legend-and-gate-status]
 bead_id = 'quasar-2qg2'
@@ -28,9 +28,9 @@ updated_at = 2026-02-24T12:06:46.471811-05:00
 
 [phases.homepage-layout-squished]
 bead_id = 'quasar-alqk'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-02-24T12:03:42.530822-05:00
-updated_at = 2026-02-24T12:03:42.850179-05:00
+updated_at = 2026-02-24T12:06:51.098679-05:00
 
 [phases.phase-timer-cumulative]
 bead_id = 'quasar-05os'
