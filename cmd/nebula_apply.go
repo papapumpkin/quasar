@@ -315,9 +315,10 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			go func() {
 				results, runErr := wg.Run(ctx)
 				prog.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
-				// Post-completion git workflow: push branch and checkout main.
+				// Post-completion git workflow: commit+push, checkout main only on success.
 				if br != "" {
-					gitResult := nebula.PostCompletion(context.Background(), wd, br)
+					allSucceeded := runErr == nil
+					gitResult := nebula.PostCompletion(context.Background(), wd, br, allSucceeded)
 					prog.Send(tui.MsgGitPostCompletion{Result: gitResult})
 				}
 			}()
@@ -507,9 +508,9 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 
 	printer.NebulaWorkerResults(results)
 
-	// Post-completion git workflow for stderr path.
+	// Post-completion git workflow for stderr path (only reached on success).
 	if branchName != "" {
-		gitResult := nebula.PostCompletion(context.Background(), workDir, branchName)
+		gitResult := nebula.PostCompletion(context.Background(), workDir, branchName, true)
 		if gitResult.CommitErr != nil {
 			printer.Error(fmt.Sprintf("git commit failed: %v", gitResult.CommitErr))
 		}

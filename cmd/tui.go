@@ -320,7 +320,8 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 		results, runErr := wg.Run(ctx)
 		prog.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
 		if br != "" {
-			gitResult := nebula.PostCompletion(context.Background(), wd, br)
+			allSucceeded := runErr == nil
+			gitResult := nebula.PostCompletion(context.Background(), wd, br, allSucceeded)
 			prog.Send(tui.MsgGitPostCompletion{Result: gitResult})
 		}
 	}()
