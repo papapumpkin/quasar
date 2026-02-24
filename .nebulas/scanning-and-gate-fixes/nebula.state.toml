@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'scanning-and-gate-fixes'
-total_cost_usd = 3.97815
+total_cost_usd = 7.2165202499999985
 
 [phases]
 [phases.auto-enable-contract-board]
@@ -47,9 +47,15 @@ summary = 'Coder correctly verified that both the graph legend gate/review entry
 
 [phases.homepage-layout-squished]
 bead_id = 'quasar-17z7'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T12:03:42.530822-05:00
-updated_at = 2026-02-24T13:22:27.539187-05:00
+updated_at = 2026-02-24T13:31:05.296535-05:00
+
+[phases.homepage-layout-squished.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Correct fix for homepage layout squishing — properly accounts for bottom bar in chrome count, adds banner/detail collapse thresholds for short terminals, and reduces detail panel fraction in home mode with consistent height calculations and good test coverage.'
 
 [phases.phase-timer-cumulative]
 bead_id = 'quasar-n0c7'
