@@ -55,7 +55,7 @@ summary = 'Fabric state auto-injection into coder/reviewer prompts is correctly 
 bead_id = 'quasar-igi8'
 status = 'created'
 created_at = 2026-02-24T14:47:07.803426-05:00
-updated_at = 2026-02-24T18:21:11.626562-05:00
+updated_at = 2026-02-24T18:59:32.199989-05:00
 
 [phases.project-scanner]
 bead_id = 'quasar-0mzl'
