@@ -3,6 +3,7 @@ package loop
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -129,26 +130,45 @@ func PrependFabricContext(desc string, snap fabric.Snapshot) string {
 
 // buildFabricSnapshot queries the Fabric store for current state and returns
 // a Snapshot suitable for injection into agent prompts. Errors from individual
-// queries are non-fatal — the snapshot will contain whatever data was available.
+// queries are non-fatal — the snapshot will contain whatever data was available,
+// but errors are logged to stderr so operators can diagnose degraded snapshots.
 func (l *Loop) buildFabricSnapshot(ctx context.Context) fabric.Snapshot {
-	entanglements, _ := l.Fabric.AllEntanglements(ctx)
-	claims, _ := l.Fabric.AllClaims(ctx)
-	states, _ := l.Fabric.AllPhaseStates(ctx)
-	discoveries, _ := l.Fabric.UnresolvedDiscoveries(ctx)
-	pulses, _ := l.Fabric.AllPulses(ctx)
+	entanglements, err := l.Fabric.AllEntanglements(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fabric snapshot: AllEntanglements: %v\n", err)
+	}
+	claims, err := l.Fabric.AllClaims(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fabric snapshot: AllClaims: %v\n", err)
+	}
+	states, err := l.Fabric.AllPhaseStates(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fabric snapshot: AllPhaseStates: %v\n", err)
+	}
+	discoveries, err := l.Fabric.UnresolvedDiscoveries(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fabric snapshot: UnresolvedDiscoveries: %v\n", err)
+	}
+	pulses, err := l.Fabric.AllPulses(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fabric snapshot: AllPulses: %v\n", err)
+	}
 
-	// Partition phases into completed and in-progress.
-	var completed, inProgress []string
+	// Partition phases into completed, in-progress, and blocked.
+	var completed, inProgress, blocked []string
 	for id, s := range states {
 		switch s {
 		case fabric.StateDone:
 			completed = append(completed, id)
 		case fabric.StateRunning:
 			inProgress = append(inProgress, id)
+		case fabric.StateBlocked:
+			blocked = append(blocked, id)
 		}
 	}
 	sort.Strings(completed)
 	sort.Strings(inProgress)
+	sort.Strings(blocked)
 
 	// Build claim map from filepath to owning phase.
 	claimMap := make(map[string]string, len(claims))
@@ -161,7 +181,11 @@ func (l *Loop) buildFabricSnapshot(ctx context.Context) fabric.Snapshot {
 		FileClaims:            claimMap,
 		Completed:             completed,
 		InProgress:            inProgress,
+		Blocked:               blocked,
 		UnresolvedDiscoveries: discoveries,
 		Pulses:                pulses,
+		PhaseStates:           states,
+		// PhaseCycles is populated by the nebula orchestrator when available;
+		// the fabric store does not track cycle counts directly.
 	}
 }

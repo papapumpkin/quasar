@@ -477,14 +477,18 @@ func TestRenderClaimContext(t *testing.T) {
 	t.Run("cycle only", func(t *testing.T) {
 		t.Parallel()
 		cycles := map[string][2]int{"owner": {3, 5}}
+
+		// nil states map is safe — len(nil)==0 but cycles is non-nil,
+		// so the guard doesn't short-circuit.
 		got := renderClaimContext("owner", nil, cycles)
-		// nil states map means len(states)==0, but cycles is non-nil
-		// However, renderClaimContext checks len(states)==0 && len(cycles)==0
-		// With nil states and non-nil cycles, len(nil map)==0 but cycles is not nil.
-		// Let me check: we need states to be non-nil for the short-circuit to not fire.
+		if got != " (cycle 3/5)" {
+			t.Errorf("nil states: got %q, want %q", got, " (cycle 3/5)")
+		}
+
+		// Empty states map also produces cycle-only context.
 		got = renderClaimContext("owner", map[string]string{}, cycles)
 		if got != " (cycle 3/5)" {
-			t.Errorf("got %q, want %q", got, " (cycle 3/5)")
+			t.Errorf("empty states: got %q, want %q", got, " (cycle 3/5)")
 		}
 	})
 
