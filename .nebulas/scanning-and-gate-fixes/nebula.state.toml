@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'scanning-and-gate-fixes'
-total_cost_usd = 0.34613950000000004
+total_cost_usd = 0.9034680000000002
 
 [phases]
 [phases.auto-enable-contract-board]
@@ -17,9 +17,15 @@ updated_at = 2026-02-24T13:22:27.531699-05:00
 
 [phases.graph-gate-color-fix]
 bead_id = 'quasar-mvii'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T12:03:39.739132-05:00
-updated_at = 2026-02-24T13:22:27.535545-05:00
+updated_at = 2026-02-24T13:24:21.816002-05:00
+
+[phases.graph-gate-color-fix.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Minimal, correct 4-line fix adds missing Graph status updates in resolveGate to match the existing NebulaView updates, fixing purple-instead-of-green display after gate resolution.'
 
 [phases.graph-legend-and-gate-status]
 bead_id = 'quasar-7kh8'
