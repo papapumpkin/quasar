@@ -1,13 +1,13 @@
 version = 1
 nebula_name = 'context-intelligence'
-total_cost_usd = 7.533838750000001
+total_cost_usd = 16.787076500000005
 
 [phases]
 [phases.cleanup-deprecated]
 bead_id = 'quasar-5r9x'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-02-24T14:47:09.264229-05:00
-updated_at = 2026-02-24T15:03:55.124648-05:00
+updated_at = 2026-02-24T15:24:28.645137-05:00
 
 [phases.context-budget]
 bead_id = 'quasar-hm5f'
@@ -17,9 +17,15 @@ updated_at = 2026-02-24T14:47:07.075677-05:00
 
 [phases.enhanced-snapshot]
 bead_id = 'quasar-c5bt'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T14:47:08.528392-05:00
-updated_at = 2026-02-24T15:12:55.25391-05:00
+updated_at = 2026-02-24T15:24:11.436894-05:00
+
+[phases.enhanced-snapshot.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean fix addressing all three prior review issues — error logging, blocked phase handling, and dead test code — with passing tests and clean vet.'
 
 [phases.fabric-auto-inject]
 bead_id = 'quasar-z9aj'

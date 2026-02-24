@@ -130,7 +130,7 @@ func PrependFabricContext(desc string, snap fabric.Snapshot) string {
 // buildFabricSnapshot queries the Fabric store for current state and returns
 // a Snapshot suitable for injection into agent prompts. Errors from individual
 // queries are non-fatal — the snapshot will contain whatever data was available,
-// but errors are logged to stderr so operators can diagnose degraded snapshots.
+// but errors are logged via the UI so operators can diagnose degraded snapshots.
 func (l *Loop) buildFabricSnapshot(ctx context.Context) fabric.Snapshot {
 	entanglements, err := l.Fabric.AllEntanglements(ctx)
 	if err != nil {
