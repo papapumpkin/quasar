@@ -121,6 +121,9 @@ func (nv *NebulaView) AppendPhase(info PhaseInfo) {
 }
 
 // SetPhaseStatus updates the status of a phase by ID.
+// When a phase transitions to a terminal state (Done, Failed, Skipped),
+// dependent phases have their BlockedBy text recalculated so stale
+// "blocked:" indicators are cleared.
 func (nv *NebulaView) SetPhaseStatus(phaseID string, status PhaseStatus) {
 	for i := range nv.Phases {
 		if nv.Phases[i].ID == phaseID {
@@ -128,7 +131,40 @@ func (nv *NebulaView) SetPhaseStatus(phaseID string, status PhaseStatus) {
 				nv.Phases[i].StartedAt = time.Now()
 			}
 			nv.Phases[i].Status = status
-			return
+			break
+		}
+	}
+
+	// Recalculate BlockedBy for phases that depend on the updated phase.
+	if status == PhaseDone || status == PhaseFailed || status == PhaseSkipped {
+		nv.refreshBlockedBy()
+	}
+}
+
+// refreshBlockedBy recalculates BlockedBy for all phases based on
+// which of their DependsOn phases are still incomplete.
+func (nv *NebulaView) refreshBlockedBy() {
+	done := make(map[string]bool)
+	for _, p := range nv.Phases {
+		if p.Status == PhaseDone || p.Status == PhaseFailed || p.Status == PhaseSkipped {
+			done[p.ID] = true
+		}
+	}
+	for i := range nv.Phases {
+		var pending []string
+		for _, dep := range nv.Phases[i].DependsOn {
+			if !done[dep] {
+				pending = append(pending, dep)
+			}
+		}
+		if len(pending) == 0 {
+			nv.Phases[i].BlockedBy = ""
+		} else {
+			blocked := pending[0]
+			if len(pending) > 1 {
+				blocked += fmt.Sprintf(" +%d", len(pending)-1)
+			}
+			nv.Phases[i].BlockedBy = blocked
 		}
 	}
 }

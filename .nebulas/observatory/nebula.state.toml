@@ -4,16 +4,16 @@ total_cost_usd = 11.057061000000001
 
 [phases]
 [phases.cockpit-graph]
-bead_id = 'quasar-411f'
-status = 'failed'
+bead_id = 'quasar-dlnl'
+status = 'created'
 created_at = 2026-02-23T21:12:26.291442-05:00
-updated_at = 2026-02-23T22:00:45.866064-05:00
+updated_at = 2026-02-24T08:40:09.662121-05:00
 
 [phases.cockpit-plan]
 bead_id = 'quasar-xiwp'
 status = 'created'
 created_at = 2026-02-23T21:12:27.002498-05:00
-updated_at = 2026-02-23T21:12:27.002498-05:00
+updated_at = 2026-02-24T08:40:09.662563-05:00
 
 [phases.dag-renderer]
 bead_id = 'quasar-sdrp'
@@ -43,13 +43,13 @@ summary = 'Three small, focused fixes — a defer resource leak in the next-nebu
 bead_id = 'quasar-bnd0'
 status = 'created'
 created_at = 2026-02-23T21:12:24.846693-05:00
-updated_at = 2026-02-23T21:12:24.846693-05:00
+updated_at = 2026-02-24T08:40:08.894159-05:00
 
 [phases.plan-engine]
-bead_id = 'quasar-qonf'
-status = 'failed'
+bead_id = 'quasar-27a2'
+status = 'in_progress'
 created_at = 2026-02-23T21:12:24.116343-05:00
-updated_at = 2026-02-23T22:00:49.51604-05:00
+updated_at = 2026-02-24T08:40:12.940323-05:00
 
 [phases.static-scanner]
 bead_id = 'quasar-5yf1'

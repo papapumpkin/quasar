@@ -251,6 +251,19 @@ var (
 	styleGateNormal = lipgloss.NewStyle().
 			Foreground(colorMuted).
 			Padding(0, 1)
+
+	styleGateLabel = lipgloss.NewStyle().
+			Foreground(colorMutedLight).
+			Bold(true)
+
+	styleGateDetail = lipgloss.NewStyle().
+			Foreground(colorMutedLight)
+
+	styleGateHumanReview = lipgloss.NewStyle().
+				Background(colorDanger).
+				Foreground(colorBrightWhite).
+				Bold(true).
+				Padding(0, 1)
 )
 
 // Footer styles — top border, clear key/desc contrast.

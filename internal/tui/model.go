@@ -457,6 +457,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgGatePrompt:
 		m.Gate = NewGatePrompt(msg.Checkpoint, msg.ResponseCh)
 		m.Gate.Width = m.Width
+		m.Gate.Height = m.Height
 		// Mark the phase as gated if we know which one.
 		if msg.Checkpoint != nil {
 			m.NebulaView.SetPhaseStatus(msg.Checkpoint.PhaseID, PhaseGate)
@@ -1340,15 +1341,32 @@ func (m AppModel) handleGateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.Gate.MoveLeft()
 	case msg.String() == "right", msg.String() == "l":
 		m.Gate.MoveRight()
+	case msg.String() == "up", msg.String() == "k":
+		m.Gate.ScrollUp()
+	case msg.String() == "down", msg.String() == "j":
+		m.Gate.ScrollDown(m.Gate.contentLineCount(), m.Gate.viewportHeight())
 	}
 	return m, nil
 }
 
-// resolveGate sends the action and clears the gate.
+// resolveGate sends the action, updates the phase status, and clears the gate.
 func (m *AppModel) resolveGate(action nebula.GateAction) {
 	if m.Gate != nil {
+		phaseID := m.Gate.PhaseID
 		m.Gate.Resolve(action)
 		m.Gate = nil
+
+		// Transition the phase out of PhaseGate based on the decision.
+		switch action {
+		case nebula.GateActionAccept:
+			m.NebulaView.SetPhaseStatus(phaseID, PhaseDone)
+		case nebula.GateActionReject:
+			m.NebulaView.SetPhaseStatus(phaseID, PhaseFailed)
+		case nebula.GateActionRetry:
+			m.NebulaView.SetPhaseStatus(phaseID, PhaseWorking)
+		case nebula.GateActionSkip:
+			m.NebulaView.SetPhaseStatus(phaseID, PhaseSkipped)
+		}
 	}
 }
 
