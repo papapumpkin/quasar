@@ -1491,15 +1491,20 @@ func (m *AppModel) resolveGate(action nebula.GateAction) {
 		m.Gate = nil
 
 		// Transition the phase out of PhaseGate based on the decision.
+		// Update both NebulaView (board) and Graph (DAG) to keep them in sync.
 		switch action {
 		case nebula.GateActionAccept:
 			m.NebulaView.SetPhaseStatus(phaseID, PhaseDone)
+			m.Graph.SetPhaseStatus(phaseID, PhaseDone)
 		case nebula.GateActionReject:
 			m.NebulaView.SetPhaseStatus(phaseID, PhaseFailed)
+			m.Graph.SetPhaseStatus(phaseID, PhaseFailed)
 		case nebula.GateActionRetry:
 			m.NebulaView.SetPhaseStatus(phaseID, PhaseWorking)
+			m.Graph.SetPhaseStatus(phaseID, PhaseWorking)
 		case nebula.GateActionSkip:
 			m.NebulaView.SetPhaseStatus(phaseID, PhaseSkipped)
+			m.Graph.SetPhaseStatus(phaseID, PhaseSkipped)
 		}
 	}
 }

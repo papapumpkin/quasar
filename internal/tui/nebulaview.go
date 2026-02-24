@@ -324,7 +324,7 @@ func (nv NebulaView) phaseIconAndStyle(p PhaseEntry) (string, lipgloss.Style) {
 func (nv NebulaView) phaseDetail(p PhaseEntry) string {
 	switch p.Status {
 	case PhaseDone:
-		elapsed := formatElapsed(p.StartedAt)
+		elapsed := formatDuration(p.StartedAt, p.CompletedAt)
 		if elapsed != "" {
 			return fmt.Sprintf("$%.2f  %d cycle(s)  %s", p.CostUSD, p.Cycles, elapsed)
 		}

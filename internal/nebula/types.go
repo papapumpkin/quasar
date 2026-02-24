@@ -21,9 +21,7 @@ type Execution struct {
 	MaxReviewCycles int      `toml:"max_review_cycles"`
 	MaxBudgetUSD    float64  `toml:"max_budget_usd"`
 	Model           string   `toml:"model"`
-	Gate            GateMode `toml:"gate"`           // Default gate mode for all phases
-	AgentMail       bool     `toml:"agentmail"`      // Enable agentmail MCP server
-	AgentMailPort   int      `toml:"agentmail_port"` // Override agentmail port
+	Gate            GateMode `toml:"gate"` // Default gate mode for all phases
 }
 
 // Context provides project-level information injected into agent prompts.

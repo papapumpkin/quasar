@@ -180,13 +180,22 @@ func (g *GatePrompt) detailBody() string {
 		b.WriteString("\n")
 		b.WriteString(styleGateLabel.Render("Files:"))
 		b.WriteString("\n")
+		// Reserve space for border (4), padding (4), icon+spacing (4) = 12 chars.
+		maxPathWidth := g.Width - 12
+		if maxPathWidth < 20 {
+			maxPathWidth = 20
+		}
 		for _, fc := range g.FilesChanged {
 			icon := fileChangeIcon(fc.Operation)
 			lineInfo := ""
 			if fc.LinesAdded > 0 || fc.LinesRemoved > 0 {
 				lineInfo = styleGateDetail.Render(fmt.Sprintf(" +%d -%d", fc.LinesAdded, fc.LinesRemoved))
 			}
-			b.WriteString(fmt.Sprintf("  %s %s%s\n", icon, fc.Path, lineInfo))
+			path := fc.Path
+			if len(path) > maxPathWidth && maxPathWidth > 3 {
+				path = "..." + path[len(path)-maxPathWidth+3:]
+			}
+			b.WriteString(fmt.Sprintf("  %s %s%s\n", icon, path, lineInfo))
 		}
 	}
 

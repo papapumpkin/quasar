@@ -11,14 +11,13 @@ import (
 type BoardColumn int
 
 const (
-	ColQueued   BoardColumn = iota // PhaseWaiting — tasks waiting for DAG dependencies
-	ColScanning                    // Phases in the scanning gate (checking fabric for entanglements/claims)
-	ColRunning                     // PhaseWorking — quasar actively coding/reviewing
-	ColReview                      // PhaseGate — awaiting human gate decision
-	ColBlocked                     // Phases blocked by missing entanglements, file conflicts, or discoveries
-	ColDone                        // PhaseDone, PhaseSkipped
-	ColFailed                      // PhaseFailed
-	colCount                       // sentinel for iteration
+	ColQueued  BoardColumn = iota // PhaseWaiting — tasks waiting for DAG dependencies
+	ColRunning                    // PhaseWorking — quasar actively coding/reviewing
+	ColReview                     // PhaseGate — awaiting human gate decision
+	ColBlocked                    // Phases blocked by missing entanglements, file conflicts, or discoveries
+	ColDone                       // PhaseDone, PhaseSkipped
+	ColFailed                     // PhaseFailed
+	colCount                      // sentinel for iteration
 )
 
 // columnMeta holds display metadata for a board column.
@@ -29,19 +28,18 @@ type columnMeta struct {
 
 // columnDefs maps each BoardColumn to its label and color from the galactic palette.
 var columnDefs = [colCount]columnMeta{
-	ColQueued:   {Label: "Queued", Color: colorPrimary},
-	ColScanning: {Label: "Scanning", Color: colorNebula},
-	ColRunning:  {Label: "Running", Color: colorAccent},
-	ColReview:   {Label: "Review", Color: colorBlueshift},
-	ColBlocked:  {Label: "Blocked", Color: colorDanger},
-	ColDone:     {Label: "Done", Color: colorSuccess},
-	ColFailed:   {Label: "Failed", Color: colorDanger},
+	ColQueued:  {Label: "Queued", Color: colorPrimary},
+	ColRunning: {Label: "Running", Color: colorAccent},
+	ColReview:  {Label: "Review", Color: colorBlueshift},
+	ColBlocked: {Label: "Blocked", Color: colorDanger},
+	ColDone:    {Label: "Done", Color: colorSuccess},
+	ColFailed:  {Label: "Failed", Color: colorDanger},
 }
 
-// Wide-terminal threshold: show all 7 columns.
+// Wide-terminal threshold: show all 6 columns including Blocked.
 const boardWidthFull = 140
 
-// Medium-terminal threshold: merge Scanning and Blocked into neighbors.
+// Medium-terminal threshold: merge Blocked into Queued.
 const boardWidthMedium = 100
 
 // BoardView renders phases as a columnar board where tasks flow left-to-right
