@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'observatory'
-total_cost_usd = 5.4400027500000006
+total_cost_usd = 8.687580250000002
 
 [phases]
 [phases.cockpit-graph]
@@ -17,9 +17,15 @@ updated_at = 2026-02-23T21:12:27.002498-05:00
 
 [phases.dag-renderer]
 bead_id = 'quasar-sdrp'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T21:12:25.563895-05:00
-updated_at = 2026-02-23T21:25:40.154155-05:00
+updated_at = 2026-02-23T21:37:51.741398-05:00
+
+[phases.dag-renderer.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Three targeted bug fixes (non-deterministic map iteration, UTF-8 width measurement, hardcoded indentation) in the DAG renderer are correct, well-tested, and low-risk.'
 
 [phases.fabric-activation]
 bead_id = 'quasar-tjzo'
@@ -47,6 +53,6 @@ updated_at = 2026-02-23T21:12:24.116343-05:00
 
 [phases.static-scanner]
 bead_id = 'quasar-5yf1'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-23T21:12:23.342164-05:00
-updated_at = 2026-02-23T21:12:23.342164-05:00
+updated_at = 2026-02-23T21:37:51.742301-05:00
