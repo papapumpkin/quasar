@@ -19,8 +19,6 @@ const (
 	CompactWidth = 60
 	// DetailCollapseHeight triggers auto-collapse of the detail panel.
 	DetailCollapseHeight = 20
-	// SidePanelMinWidth is the minimum terminal width to show the S-B side panel art.
-	SidePanelMinWidth = 120
 	// BannerSMinWidth is the minimum width for the S-A Wide Ellipse top banner.
 	BannerSMinWidth = 90
 	// BoardMinWidth is the minimum terminal width for the columnar board view.

@@ -1,18 +1,25 @@
 version = 1
 nebula_name = 'cockpit-ui-polish'
+total_cost_usd = 1.2966544999999998
 
 [phases]
 [phases.deprecate-beads-view]
 bead_id = 'quasar-1bgm'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T10:55:46.905863-05:00
-updated_at = 2026-02-24T10:55:48.657417-05:00
+updated_at = 2026-02-24T10:59:29.444351-05:00
+
+[phases.deprecate-beads-view.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Straightforward deprecation of a broken UI feature by disabling a keybinding, removing it from footers, and removing the key handler — all changes are minimal, correct, and well-tested.'
 
 [phases.logo-top-not-side]
 bead_id = 'quasar-k6g8'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-24T10:55:48.355176-05:00
-updated_at = 2026-02-24T10:55:48.355176-05:00
+updated_at = 2026-02-24T10:59:29.44597-05:00
 
 [phases.table-mode-toggle-hint]
 bead_id = 'quasar-7q4p'
