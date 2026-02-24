@@ -81,6 +81,10 @@ type AppModel struct {
 	Stopping  bool   // whether a stop has been requested
 	NebulaDir string // path to nebula directory for intervention files
 
+	// Worker card state — live detail cards for active quasars.
+	WorkerCards   map[string]*WorkerCard // phaseID → live worker card
+	nextQuasarNum int                    // counter for assigning quasar IDs (q-1, q-2, ...)
+
 	// Fabric bridge state — stored for later rendering by cockpit components.
 	Entanglements    []fabric.Entanglement // latest entanglement snapshot
 	EntanglementView EntanglementView      // persistent entanglement viewer with cursor state
@@ -283,21 +287,35 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgPhaseTaskStarted:
 		m.ensurePhaseLoop(msg.PhaseID)
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseWorking)
+		// Create a worker card for this active phase.
+		m.ensureWorkerCard(msg.PhaseID)
 	case MsgPhaseTaskComplete:
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseDone)
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
 			lv.Approved = true
 		}
 		m.NebulaView.SetPhaseCost(msg.PhaseID, msg.TotalCost)
+		// Remove worker card when phase completes.
+		delete(m.WorkerCards, msg.PhaseID)
 	case MsgPhaseCycleStart:
 		lv := m.ensurePhaseLoop(msg.PhaseID)
 		lv.StartCycle(msg.Cycle)
 		m.NebulaView.SetPhaseCycles(msg.PhaseID, msg.Cycle, msg.MaxCycles)
 		// Clear refactored indicator from previous cycle.
 		m.NebulaView.SetPhaseRefactored(msg.PhaseID, false)
+		// Update worker card cycle info.
+		if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
+			wc.Cycle = msg.Cycle
+			wc.MaxCycles = msg.MaxCycles
+		}
 	case MsgPhaseAgentStart:
 		lv := m.ensurePhaseLoop(msg.PhaseID)
 		lv.StartAgent(msg.Role)
+		// Update worker card agent role and activity.
+		if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
+			wc.AgentRole = msg.Role
+			wc.Activity = activityFromRole(msg.Role)
+		}
 	case MsgPhaseAgentDone:
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
 			lv.FinishAgent(msg.Role, msg.CostUSD, msg.DurationMs)
@@ -305,6 +323,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.StatusBar.TotalTokens += msg.Tokens
 		if m.FocusedPhase == msg.PhaseID {
 			m.updateDetailFromSelection()
+		}
+		// Update worker card token count.
+		if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
+			wc.TokensUsed += msg.Tokens
 		}
 	case MsgPhaseAgentOutput:
 		lv := m.ensurePhaseLoop(msg.PhaseID)
@@ -319,6 +341,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lv.SetAgentDiffFiles(msg.Role, msg.Cycle, msg.Files, msg.BaseRef, msg.HeadRef, msg.WorkDir)
 		if m.FocusedPhase == msg.PhaseID {
 			m.updateDetailFromSelection()
+		}
+		// Update worker card claims from diff file list.
+		if wc := m.WorkerCards[msg.PhaseID]; wc != nil && len(msg.Files) > 0 {
+			claims := make([]string, len(msg.Files))
+			for i, f := range msg.Files {
+				claims[i] = f.Path
+			}
+			wc.Claims = claims
 		}
 	case MsgPhaseCycleSummary:
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
@@ -342,6 +372,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseDone)
 		// Clear refactored indicator on completion.
 		m.NebulaView.SetPhaseRefactored(msg.PhaseID, false)
+		// Remove worker card on approval.
+		delete(m.WorkerCards, msg.PhaseID)
 	case MsgPhaseRefactorPending:
 		m.addMessage("[%s] refactor pending — will apply after current cycle", msg.PhaseID)
 		toast, cmd := NewToast(fmt.Sprintf("[%s] refactor pending", msg.PhaseID), false)
@@ -354,6 +386,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case MsgPhaseError:
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseFailed)
+		// Remove worker card on failure.
+		delete(m.WorkerCards, msg.PhaseID)
 		m.addMessage("[%s] %s", msg.PhaseID, msg.Msg)
 		toast, cmd := NewToast(fmt.Sprintf("[%s] %s", msg.PhaseID, msg.Msg), true)
 		m.Toasts = append(m.Toasts, toast)
@@ -498,6 +532,24 @@ func (m *AppModel) ensurePhaseLoop(phaseID string) *LoopView {
 	lv := NewLoopView()
 	m.PhaseLoops[phaseID] = &lv
 	return &lv
+}
+
+// ensureWorkerCard creates or returns the worker card for the given phase.
+// A new quasar ID is assigned when the card is first created.
+func (m *AppModel) ensureWorkerCard(phaseID string) *WorkerCard {
+	if m.WorkerCards == nil {
+		m.WorkerCards = make(map[string]*WorkerCard)
+	}
+	if wc, ok := m.WorkerCards[phaseID]; ok {
+		return wc
+	}
+	m.nextQuasarNum++
+	wc := &WorkerCard{
+		PhaseID:  phaseID,
+		QuasarID: fmt.Sprintf("q-%d", m.nextQuasarNum),
+	}
+	m.WorkerCards[phaseID] = wc
+	return wc
 }
 
 // clampCursors ensures all cursors remain within valid bounds.
@@ -1731,7 +1783,14 @@ func (m AppModel) renderMainView() string {
 			switch m.ActiveTab {
 			case TabBoard:
 				m.NebulaView.Width = w
-				return m.NebulaView.View()
+				boardStr := m.NebulaView.View()
+				// Append worker cards beneath the board for active phases.
+				active := ActiveWorkerCards(m.WorkerCards)
+				if len(active) > 0 {
+					cardsStr := RenderWorkerCards(active, w)
+					boardStr = lipgloss.JoinVertical(lipgloss.Left, boardStr, cardsStr)
+				}
+				return boardStr
 			case TabEntanglements:
 				m.EntanglementView.Width = w
 				m.EntanglementView.Height = m.detailHeight()
