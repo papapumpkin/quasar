@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'scanning-and-gate-fixes'
-total_cost_usd = 1.5326482500000003
+total_cost_usd = 2.43951375
 
 [phases]
 [phases.auto-enable-contract-board]
@@ -59,12 +59,18 @@ summary = 'Phase elapsed timer fix was already fully implemented — `CompletedA
 
 [phases.remove-scanning-column]
 bead_id = 'quasar-3jek'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T12:03:37.617952-05:00
-updated_at = 2026-02-24T13:22:27.521557-05:00
+updated_at = 2026-02-24T13:25:01.089071-05:00
+
+[phases.remove-scanning-column.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'ColScanning board column was already correctly removed in a prior commit; coder verified the state and no further changes were needed — code is clean with 6 columns, proper tests, and no stale references.'
 
 [phases.scanning-toast]
 bead_id = 'quasar-opk6'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-24T12:03:38.326562-05:00
-updated_at = 2026-02-24T13:22:22.897614-05:00
+updated_at = 2026-02-24T13:25:01.089615-05:00
