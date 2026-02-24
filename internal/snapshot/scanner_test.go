@@ -417,11 +417,33 @@ func TestReadConventionsTruncationBudget(t *testing.T) {
 		s := &Scanner{WorkDir: dir}
 		// Budget smaller than the marker itself (13 bytes).
 		result := s.readConventions(5)
-		// Should not panic and should contain the marker.
-		if !strings.Contains(result, "[truncated]") {
-			t.Error("expected '[truncated]' marker even with tiny budget")
+		// Should return empty string when budget can't fit the truncation marker.
+		if result != "" {
+			t.Errorf("expected empty string for budget smaller than truncation marker, got %q (%d bytes)", result, len(result))
 		}
 	})
+}
+
+func TestReadConventionsUTF8Safe(t *testing.T) {
+	t.Parallel()
+	// Create content with multi-byte characters where truncation could land mid-rune.
+	// "café " = 6 bytes (c=1, a=1, f=1, é=2, space=1). Repeat to get enough content.
+	dir := setupTestRepo(t, map[string]string{
+		"CLAUDE.md": strings.Repeat("café ", 200),
+	})
+	s := &Scanner{WorkDir: dir}
+	// Choose a budget that would land mid-rune without UTF-8-safe truncation.
+	result := s.readConventions(50)
+	// Verify no invalid UTF-8 in output.
+	for i, r := range result {
+		if r == '\uFFFD' {
+			t.Errorf("invalid UTF-8 at byte offset %d in readConventions output", i)
+			break
+		}
+	}
+	if len(result) > 50 {
+		t.Errorf("readConventions exceeded budget: got %d bytes, want <= 50", len(result))
+	}
 }
 
 func TestWalkFilesCancellation(t *testing.T) {

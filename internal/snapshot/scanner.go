@@ -327,6 +327,7 @@ const truncationMarker = "\n[truncated]\n"
 
 // readConventions reads the first matching conventions file, truncated to maxBytes.
 // The truncation marker is included within the maxBytes budget, not on top of it.
+// If maxBytes is too small to fit even the truncation marker, returns "".
 func (s *Scanner) readConventions(maxBytes int) string {
 	if maxBytes <= 0 {
 		return ""
@@ -339,12 +340,13 @@ func (s *Scanner) readConventions(maxBytes int) string {
 		}
 		content := string(data)
 		if len(content) > maxBytes {
+			// If the budget can't even fit the truncation marker, return nothing.
+			if maxBytes < len(truncationMarker) {
+				return ""
+			}
 			// Reserve space for the marker within the budget.
 			cutPoint := maxBytes - len(truncationMarker)
-			if cutPoint < 0 {
-				cutPoint = 0
-			}
-			content = content[:cutPoint] + truncationMarker
+			content = truncateUTF8(content, cutPoint) + truncationMarker
 		}
 		return content
 	}
