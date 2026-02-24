@@ -185,7 +185,7 @@ func TestBoardViewView_ColumnHeaders(t *testing.T) {
 
 	view := bv.View()
 
-	// All 7 columns should have headers at full width.
+	// All 6 columns should have headers at full width.
 	for col := BoardColumn(0); col < colCount; col++ {
 		label := columnDefs[col].Label
 		if !strings.Contains(view, label) {
@@ -197,7 +197,7 @@ func TestBoardViewView_ColumnHeaders(t *testing.T) {
 func TestBoardViewView_MediumWidth(t *testing.T) {
 	t.Parallel()
 	bv := NewBoardView()
-	bv.Width = 120 // Medium: Scanning and Blocked should be hidden.
+	bv.Width = 120 // Medium: Blocked should be hidden.
 	bv.Phases = []PhaseEntry{
 		{ID: "a", Status: PhaseWaiting},
 		{ID: "b", Status: PhaseWorking},
@@ -205,9 +205,6 @@ func TestBoardViewView_MediumWidth(t *testing.T) {
 
 	view := bv.View()
 
-	if strings.Contains(view, "Scanning") {
-		t.Error("Scanning column should not appear at medium width")
-	}
 	if strings.Contains(view, "Blocked") {
 		t.Error("Blocked column should not appear at medium width")
 	}
