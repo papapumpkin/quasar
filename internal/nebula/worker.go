@@ -277,9 +277,18 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		return nil, err
 	}
 
-	// Determine effective parallelism from independent tracks.
+	// Determine effective parallelism. When the fabric is active, the
+	// Poller handles readiness checks per-phase, so we can use the full
+	// max_workers count even within a single track. Without fabric, fall
+	// back to the conservative track-based cap that prevents same-track
+	// concurrency.
 	tracks := scheduler.Tracks()
-	workerCount := TrackParallelism(tracks, wg.MaxWorkers)
+	var workerCount int
+	if wg.Fabric != nil {
+		workerCount = wg.MaxWorkers
+	} else {
+		workerCount = TrackParallelism(tracks, wg.MaxWorkers)
+	}
 	if workerCount <= 0 {
 		workerCount = 1
 	}

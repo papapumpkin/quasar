@@ -149,7 +149,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("fabric initialization failed: %w", err)
 	}
-	defer fc.Close()
+	defer func() { fc.Close() }()
 
 	git := loop.NewCycleCommitterWithBranch(ctx, workDir, branchName)
 	phaseCommitter := nebula.NewGitCommitterWithBranch(ctx, workDir, branchName)
