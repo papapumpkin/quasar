@@ -268,6 +268,49 @@ func TestSortWorkerCards(t *testing.T) {
 	}
 }
 
+func TestSortWorkerCards_DoubleDigits(t *testing.T) {
+	t.Parallel()
+	cards := []*WorkerCard{
+		{QuasarID: "q-10"},
+		{QuasarID: "q-2"},
+		{QuasarID: "q-9"},
+		{QuasarID: "q-1"},
+		{QuasarID: "q-11"},
+	}
+	sortWorkerCards(cards)
+	want := []string{"q-1", "q-2", "q-9", "q-10", "q-11"}
+	for i, w := range want {
+		if cards[i].QuasarID != w {
+			t.Errorf("cards[%d].QuasarID = %q, want %q", i, cards[i].QuasarID, w)
+		}
+	}
+}
+
+func TestQuasarNum(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		id   string
+		want int
+	}{
+		{"q-1", 1},
+		{"q-10", 10},
+		{"q-99", 99},
+		{"q-0", 0},
+		{"invalid", 0},
+		{"q-", 0},
+		{"q-abc", 0},
+		{"", 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.id, func(t *testing.T) {
+			got := quasarNum(tc.id)
+			if got != tc.want {
+				t.Errorf("quasarNum(%q) = %d, want %d", tc.id, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestWorkerCardView_LongPhaseName(t *testing.T) {
 	t.Parallel()
 	wc := &WorkerCard{

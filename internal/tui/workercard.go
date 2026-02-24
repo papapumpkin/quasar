@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -190,10 +191,26 @@ func ActiveWorkerCards(cards map[string]*WorkerCard) []*WorkerCard {
 	return active
 }
 
-// sortWorkerCards sorts cards by QuasarID lexicographically.
+// quasarNum extracts the numeric suffix from a quasar ID (e.g. "q-12" → 12).
+// Returns 0 if the ID doesn't match the expected "q-N" format.
+func quasarNum(id string) int {
+	after, found := strings.CutPrefix(id, "q-")
+	if !found {
+		return 0
+	}
+	n, err := strconv.Atoi(after)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// sortWorkerCards sorts cards by QuasarID numeric suffix.
+// This ensures correct ordering even when IDs reach double digits
+// (e.g. "q-9" before "q-10"), unlike a lexicographic comparison.
 func sortWorkerCards(cards []*WorkerCard) {
 	for i := 1; i < len(cards); i++ {
-		for j := i; j > 0 && cards[j].QuasarID < cards[j-1].QuasarID; j-- {
+		for j := i; j > 0 && quasarNum(cards[j].QuasarID) < quasarNum(cards[j-1].QuasarID); j-- {
 			cards[j], cards[j-1] = cards[j-1], cards[j]
 		}
 	}
