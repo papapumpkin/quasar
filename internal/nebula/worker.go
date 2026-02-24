@@ -54,6 +54,7 @@ type WorkerGroup struct {
 	OnRefactor   func(phaseID string, pending bool)       // optional callback for refactor notifications
 	OnHotAdd     HotAddFunc                               // optional callback for hot-added phases
 	OnHail       func(phaseID string, d fabric.Discovery) // optional callback for hail surfacing
+	OnScanning   func(phaseID string)                     // optional callback for fabric scanning notifications
 	Metrics      *Metrics                                 // optional; nil = no collection
 	Logger       io.Writer                                // optional; nil = os.Stderr
 

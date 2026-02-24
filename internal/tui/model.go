@@ -202,6 +202,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.StatusBar.Width = msg.Width
 		contentWidth := msg.Width
 		detailHeight := m.detailHeight()
+		if m.Mode == ModeHome {
+			detailHeight = m.homeDetailHeight()
+		}
 		m.Detail.SetSize(contentWidth-2, detailHeight)
 		m.ScratchpadView.SetSize(contentWidth, detailHeight)
 
@@ -438,6 +441,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Graph.AppendPhase(pi)
 		m.StatusBar.Total = len(m.NebulaView.Phases)
 		toast, cmd := NewToast(fmt.Sprintf("+ %s added to nebula", msg.PhaseID), false)
+		m.Toasts = append(m.Toasts, toast)
+		cmds = append(cmds, cmd)
+
+	// --- Fabric scanning ---
+	case MsgPhaseScanning:
+		m.addMessage("[%s] scanning entanglements", msg.PhaseID)
+		toast, cmd := NewToast(fmt.Sprintf("[%s] scanning entanglements", msg.PhaseID), false)
 		m.Toasts = append(m.Toasts, toast)
 		cmds = append(cmds, cmd)
 
@@ -1814,16 +1824,28 @@ func (m AppModel) homeMainHeight() int {
 			chrome += lipgloss.Height(bv)
 		}
 	}
-	// Detail panel.
-	if m.showDetailPanel() && m.Height >= DetailCollapseHeight {
+	// Detail panel — uses a higher collapse threshold and smaller fraction
+	// than other modes because the banner competes for vertical space.
+	if m.showDetailPanel() && m.Height >= HomeDetailCollapseHeight {
 		chrome++ // separator line
-		chrome += m.detailHeight()
+		chrome += m.homeDetailHeight()
 	}
 	h := m.Height - chrome
 	if h < 3 {
 		h = 3
 	}
 	return h
+}
+
+// homeDetailHeight returns the detail panel height for home mode.
+// Uses a smaller fraction (1/4) than the default detailHeight (2/5) to
+// leave more room for the nebula list alongside the banner.
+func (m AppModel) homeDetailHeight() int {
+	mainH := m.Height - 4 // status + spacing + bottom bar + footer
+	if mainH < 4 {
+		return 0
+	}
+	return mainH / 4
 }
 
 // adjustHomeOffset updates HomeOffset so the cursor is visible within the
@@ -1923,7 +1945,12 @@ func (m AppModel) View() string {
 	middle = append(middle, m.renderMainView())
 
 	// Detail panel (when drilled into agent output) — auto-collapse on short terminals.
-	if m.showDetailPanel() && m.Height >= DetailCollapseHeight {
+	// Home mode uses a higher threshold because the banner also consumes vertical space.
+	detailThreshold := DetailCollapseHeight
+	if m.Mode == ModeHome {
+		detailThreshold = HomeDetailCollapseHeight
+	}
+	if m.showDetailPanel() && m.Height >= detailThreshold {
 		sep := styleSectionBorder.Width(contentWidth).Render("")
 		middle = append(middle, sep)
 		middle = append(middle, m.Detail.View())

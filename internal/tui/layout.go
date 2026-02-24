@@ -19,6 +19,9 @@ const (
 	CompactWidth = 60
 	// DetailCollapseHeight triggers auto-collapse of the detail panel.
 	DetailCollapseHeight = 30
+	// HomeDetailCollapseHeight triggers auto-collapse of the detail panel in home mode.
+	// Higher than DetailCollapseHeight because the banner competes for vertical space.
+	HomeDetailCollapseHeight = 40
 	// BannerCollapseHeight is the minimum terminal height for showing the top banner.
 	// Below this height, the banner is hidden to preserve content space.
 	BannerCollapseHeight = 35
