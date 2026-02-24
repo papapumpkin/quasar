@@ -70,8 +70,10 @@ func (p *Printer) ExecutionPlanDiff(planName string, changes []nebula.PlanChange
 }
 
 // ExecutionPlanSaved prints a confirmation that a plan file was written.
-func (p *Printer) ExecutionPlanSaved(path string) {
-	fmt.Fprintf(os.Stderr, "\n"+green+"Plan saved to %s"+reset+"\n", path)
+// It respects the noColor flag to suppress ANSI escape codes.
+func (p *Printer) ExecutionPlanSaved(path string, noColor bool) {
+	c := planColors(noColor)
+	fmt.Fprintf(os.Stderr, "\n%sPlan saved to %s%s\n", c.green, path, c.reset)
 }
 
 // planClr holds an optional ANSI color palette that can be disabled.

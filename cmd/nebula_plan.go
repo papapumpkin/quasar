@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -77,7 +78,13 @@ func runNebulaPlan(cmd *cobra.Command, args []string) error {
 
 	// Handle --json: emit structured JSON to stdout.
 	if jsonFlag {
-		return writePlanJSON(os.Stdout, ep)
+		if err := writePlanJSON(os.Stdout, ep); err != nil {
+			return err
+		}
+		if hasErrorRisks(ep.Risks) {
+			return nebula.ErrPlanHasErrors
+		}
+		return nil
 	}
 
 	// Default: human-readable output to stderr.
@@ -90,7 +97,7 @@ func runNebulaPlan(cmd *cobra.Command, args []string) error {
 			printer.Error(err.Error())
 			return err
 		}
-		printer.ExecutionPlanSaved(planPath)
+		printer.ExecutionPlanSaved(planPath, noColor)
 	}
 
 	// Non-zero exit if error-severity risks detected.
@@ -102,7 +109,7 @@ func runNebulaPlan(cmd *cobra.Command, args []string) error {
 }
 
 // writePlanJSON encodes the execution plan as indented JSON to the given writer.
-func writePlanJSON(w *os.File, ep *nebula.ExecutionPlan) error {
+func writePlanJSON(w io.Writer, ep *nebula.ExecutionPlan) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(ep); err != nil {
