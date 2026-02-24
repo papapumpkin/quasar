@@ -418,8 +418,8 @@ func TestBoardViewVisibleColumns_FullWidth(t *testing.T) {
 	bv := BoardView{Width: 150}
 	cols := bv.visibleColumns()
 
-	if len(cols) != 7 {
-		t.Errorf("expected 7 columns at full width, got %d", len(cols))
+	if len(cols) != 6 {
+		t.Errorf("expected 6 columns at full width, got %d", len(cols))
 	}
 }
 
@@ -432,11 +432,8 @@ func TestBoardViewVisibleColumns_MediumWidth(t *testing.T) {
 		t.Errorf("expected 5 columns at medium width, got %d", len(cols))
 	}
 
-	// Scanning and Blocked should not be in the list.
+	// Blocked should not be in the list at medium width.
 	for _, col := range cols {
-		if col == ColScanning {
-			t.Error("Scanning should not appear at medium width")
-		}
 		if col == ColBlocked {
 			t.Error("Blocked should not appear at medium width")
 		}
