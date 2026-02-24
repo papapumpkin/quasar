@@ -207,14 +207,14 @@ func initFabric(ctx context.Context, n *nebula.Nebula, dir, workDir string, inv 
 		return &fabricComponents{}, nil
 	}
 
-	fabricDir := filepath.Join(dir, ".quasar")
+	fabricDir := filepath.Join(workDir, ".quasar")
 	if err := os.MkdirAll(fabricDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating fabric directory: %w", err)
 	}
 
 	// Ensure the telemetry directory and file exist so that TelemetryBridge
 	// can start tailing immediately when the scratchpad is opened.
-	telemetryDir := filepath.Join(dir, ".quasar", "telemetry")
+	telemetryDir := filepath.Join(workDir, ".quasar", "telemetry")
 	if err := os.MkdirAll(telemetryDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating telemetry directory: %w", err)
 	}
