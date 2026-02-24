@@ -17,13 +17,26 @@ type workerEligibleResolver struct {
 	scheduler *Scheduler // nebula's impact-aware DAG scheduler
 }
 
-// ResolveEligible returns task IDs sorted by impact score that have all
-// DAG dependencies satisfied and pass tracker filtering. Must be called
-// with wg.mu held.
+// ResolveEligible returns task IDs sorted by impact score that pass
+// tracker filtering. When fabric is active (soft DAG), all non-done
+// phases are candidates — the wave scanner and contract poller handle
+// DAG-aware ordering and safety. Without fabric (hard DAG), only phases
+// with all dependencies satisfied are candidates. Must be called with
+// wg.mu held.
 func (r *workerEligibleResolver) ResolveEligible() []string {
 	done := r.wg.tracker.Done()
-	ready := r.scheduler.ReadyTasks(done)
-	return r.wg.tracker.FilterEligible(ready, r.scheduler.Analyzer().DAG())
+
+	var candidates []string
+	if r.wg.Fabric != nil {
+		// Soft DAG: all non-done phases are candidates. The wave
+		// scanner and contract poller handle ordering and safety.
+		candidates = r.scheduler.AllPending(done)
+	} else {
+		// Hard DAG: only phases with all deps satisfied (legacy).
+		candidates = r.scheduler.ReadyTasks(done)
+	}
+
+	return r.wg.tracker.FilterEligible(candidates, r.scheduler.Analyzer().DAG())
 }
 
 // AnyInFlight reports whether any tasks are currently executing. Must be

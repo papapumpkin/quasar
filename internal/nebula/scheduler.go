@@ -72,6 +72,26 @@ func (s *Scheduler) ReadyTasks(done map[string]bool) []string {
 	return ready
 }
 
+// AllPending returns all phase IDs that are not in the done set,
+// sorted by impact score (highest first). Unlike ReadyTasks, this
+// does not filter by DAG dependency satisfaction — all non-complete
+// phases are candidates. This enables soft-DAG dispatch when the
+// fabric's wave scanner and contract poller handle ordering and safety.
+func (s *Scheduler) AllPending(done map[string]bool) []string {
+	var pending []string
+	for _, id := range s.analyzer.DAG().Nodes() {
+		if !done[id] {
+			pending = append(pending, id)
+		}
+	}
+	// Sort by impact score descending.
+	scores := s.scores
+	sort.Slice(pending, func(i, j int) bool {
+		return scores[pending[i]] > scores[pending[j]]
+	})
+	return pending
+}
+
 // Tracks returns the independent parallel tracks. Each track can be
 // assigned to a separate worker without risk of dependency conflict.
 func (s *Scheduler) Tracks() []dag.Track {

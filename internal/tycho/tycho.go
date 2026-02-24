@@ -10,6 +10,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/papapumpkin/quasar/internal/dag"
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
@@ -54,6 +55,19 @@ type Scheduler struct {
 	Pushback *fabric.PushbackHandler
 	Logger   io.Writer
 	Resolver EligibleResolver // provides DAG + tracker resolution
+
+	// WaveScanner enables wave-aware scanning. When non-nil, Scan()
+	// delegates to ScanWaves() for topology-aware pruning instead of
+	// iterating a flat eligible list.
+	WaveScanner *WaveScanner
+
+	// Waves holds the pre-computed wave ordering from the DAG. Used
+	// by WaveScanner to walk phases layer-by-layer.
+	Waves []dag.Wave
+
+	// DAG provides the dependency graph for Descendants() lookups
+	// during wave pruning. Passed through to WaveScanner.
+	DAG *dag.DAG
 
 	// OnHail is called when a blocked task requires human intervention.
 	// If nil, escalations are logged but not surfaced.
@@ -105,6 +119,19 @@ func (s *Scheduler) Scan(ctx context.Context, eligible []string, sb SnapshotBuil
 		return eligible, nil // proceed without filtering
 	}
 
+	// Delegate to wave-aware scanning when WaveScanner is configured.
+	if s.WaveScanner != nil && len(s.Waves) > 0 {
+		proceed, _ := s.WaveScanner.ScanWaves(ctx, s.Waves, toSet(eligible), snap)
+		return proceed, nil
+	}
+
+	// Flat scan fallback: iterate eligible phases without wave awareness.
+	return s.flatScan(ctx, eligible, snap)
+}
+
+// flatScan iterates eligible phases in order, polling each independently.
+// This is the legacy code path used when no WaveScanner is configured.
+func (s *Scheduler) flatScan(ctx context.Context, eligible []string, snap fabric.FabricSnapshot) ([]string, error) {
 	var proceed []string
 	for _, id := range eligible {
 		// Skip already-blocked phases — they wait for re-evaluation.
@@ -137,6 +164,15 @@ func (s *Scheduler) Scan(ctx context.Context, eligible []string, sb SnapshotBuil
 		}
 	}
 	return proceed, nil
+}
+
+// toSet converts a string slice to a set (map[string]bool).
+func toSet(ids []string) map[string]bool {
+	m := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		m[id] = true
+	}
+	return m
 }
 
 // Reevaluate re-polls all blocked tasks against current fabric state.
@@ -305,6 +341,14 @@ func (s *Scheduler) HandlePollBlock(ctx context.Context, phaseID string, result 
 		s.Blocked.Unblock(phaseID)
 		s.Blocked.Override(phaseID)
 	}
+}
+
+// HandleEscalation is the exported entry point for escalation from external
+// callers like the WaveScanner's OnEscalate callback. It delegates to
+// escalatePhase with no markFailed handler, since wave-scanned phases are
+// not yet in-flight and have no phase tracker entry to mark.
+func (s *Scheduler) HandleEscalation(ctx context.Context, phaseID string, bp *fabric.BlockedPhase) {
+	s.escalatePhase(ctx, phaseID, bp, nil)
 }
 
 // escalatePhase transitions a blocked phase to HUMAN_DECISION_REQUIRED.

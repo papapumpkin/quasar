@@ -772,4 +772,110 @@ func TestWorkerEligibleResolver(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("soft DAG returns all non-done phases when fabric is active", func(t *testing.T) {
+		t.Parallel()
+		// a -> b -> c chain. Without fabric, only "a" is eligible.
+		// With fabric (soft DAG), all three are candidates.
+		phases := []PhaseSpec{
+			{ID: "a"},
+			{ID: "b", DependsOn: []string{"a"}},
+			{ID: "c", DependsOn: []string{"b"}},
+		}
+		wg, _, _, _ := newFabricTestWorkerGroup(phases)
+
+		scheduler, err := NewScheduler(phases)
+		if err != nil {
+			t.Fatalf("NewScheduler: %v", err)
+		}
+		resolver := &workerEligibleResolver{wg: wg, scheduler: scheduler}
+
+		eligible := resolver.ResolveEligible()
+		got := make(map[string]bool)
+		for _, id := range eligible {
+			got[id] = true
+		}
+		// All three should be eligible with soft DAG.
+		if !got["a"] || !got["b"] || !got["c"] {
+			t.Errorf("expected all phases eligible with soft DAG, got %v", eligible)
+		}
+	})
+
+	t.Run("hard DAG only returns DAG-ready phases when fabric is nil", func(t *testing.T) {
+		t.Parallel()
+		// Same chain, but no fabric.
+		phases := []PhaseSpec{
+			{ID: "a"},
+			{ID: "b", DependsOn: []string{"a"}},
+			{ID: "c", DependsOn: []string{"b"}},
+		}
+		state := &State{Version: 1, Phases: make(map[string]*PhaseState)}
+		neb := &Nebula{Phases: phases}
+		// No WithFabric — Fabric is nil.
+		wg := NewWorkerGroup(neb, state, WithLogger(&bytes.Buffer{}))
+		wg.tracker = NewPhaseTracker(phases, state)
+
+		scheduler, err := NewScheduler(phases)
+		if err != nil {
+			t.Fatalf("NewScheduler: %v", err)
+		}
+		resolver := &workerEligibleResolver{wg: wg, scheduler: scheduler}
+
+		eligible := resolver.ResolveEligible()
+		if len(eligible) != 1 || eligible[0] != "a" {
+			t.Errorf("expected only [a] eligible with hard DAG, got %v", eligible)
+		}
+	})
+
+	t.Run("soft DAG still filters scope conflicts", func(t *testing.T) {
+		t.Parallel()
+		// Two independent phases with overlapping scope.
+		phases := []PhaseSpec{
+			{ID: "a", Scope: []string{"src/**"}},
+			{ID: "b", Scope: []string{"src/**"}},
+		}
+		wg, _, _, _ := newFabricTestWorkerGroup(phases)
+
+		scheduler, err := NewScheduler(phases)
+		if err != nil {
+			t.Fatalf("NewScheduler: %v", err)
+		}
+		resolver := &workerEligibleResolver{wg: wg, scheduler: scheduler}
+
+		// Mark "a" as in-flight so "b" would have a scope conflict.
+		wg.tracker.InFlight()["a"] = true
+
+		eligible := resolver.ResolveEligible()
+		for _, id := range eligible {
+			if id == "b" {
+				t.Error("expected b to be excluded due to scope conflict with in-flight a")
+			}
+		}
+	})
+
+	t.Run("soft DAG excludes failed-dependency phases", func(t *testing.T) {
+		t.Parallel()
+		phases := []PhaseSpec{
+			{ID: "a"},
+			{ID: "b", DependsOn: []string{"a"}},
+		}
+		wg, _, _, _ := newFabricTestWorkerGroup(phases)
+
+		scheduler, err := NewScheduler(phases)
+		if err != nil {
+			t.Fatalf("NewScheduler: %v", err)
+		}
+		resolver := &workerEligibleResolver{wg: wg, scheduler: scheduler}
+
+		// Mark "a" as done and failed.
+		wg.tracker.Done()["a"] = true
+		wg.tracker.Failed()["a"] = true
+
+		eligible := resolver.ResolveEligible()
+		for _, id := range eligible {
+			if id == "b" {
+				t.Error("expected b to be excluded (failed dependency a) even with soft DAG")
+			}
+		}
+	})
 }
