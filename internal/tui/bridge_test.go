@@ -571,18 +571,18 @@ func TestFooterBindings(t *testing.T) {
 	km := DefaultKeyMap()
 
 	loop := LoopFooterBindings(km)
-	if len(loop) != 5 {
-		t.Errorf("LoopFooterBindings = %d bindings, want 5", len(loop))
+	if len(loop) != 4 {
+		t.Errorf("LoopFooterBindings = %d bindings, want 4", len(loop))
 	}
 
 	neb := NebulaFooterBindings(km)
-	if len(neb) != 8 {
-		t.Errorf("NebulaFooterBindings = %d bindings, want 8", len(neb))
+	if len(neb) != 7 {
+		t.Errorf("NebulaFooterBindings = %d bindings, want 7", len(neb))
 	}
 
 	detail := NebulaDetailFooterBindings(km)
-	if len(detail) != 7 {
-		t.Errorf("NebulaDetailFooterBindings = %d bindings, want 7", len(detail))
+	if len(detail) != 6 {
+		t.Errorf("NebulaDetailFooterBindings = %d bindings, want 6", len(detail))
 	}
 
 	gate := GateFooterBindings(km)

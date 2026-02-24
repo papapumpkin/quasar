@@ -988,8 +988,6 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.Keys.Diff):
 		m.handleDiffKey()
 
-	case key.Matches(msg, m.Keys.Beads):
-		m.handleBeadsKey()
 	}
 
 	return m, nil

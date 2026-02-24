@@ -1,0 +1,35 @@
+[nebula]
+name = "cockpit-ui-polish"
+description = "Refine the cockpit TUI: deprecate broken beads view, add board/table toggle hint in table mode footer, and move the logo from side panel to top banner to avoid truncating phase names"
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["quasar", "tui"]
+assignee = ""
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 40.0
+model = ""
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Deprecate the broken beads view (b key) so users don't hit a dead-end UI",
+    "Make the board/table toggle discoverable from both directions (v key hint in footer)",
+    "Move the logo from the side panel to the top so phase names aren't truncated by the 48-col side panel",
+]
+constraints = [
+    "All existing tests must pass after changes",
+    "No external dependencies added",
+    "Maintain existing color scheme and visual identity",
+    "Changes scoped to internal/tui/ package only",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

@@ -42,17 +42,17 @@ func (f Footer) View() string {
 
 // LoopFooterBindings returns footer bindings for loop mode.
 func LoopFooterBindings(km KeyMap) []key.Binding {
-	return []key.Binding{km.Up, km.Down, km.Enter, km.Beads, km.Quit}
+	return []key.Binding{km.Up, km.Down, km.Enter, km.Quit}
 }
 
 // NebulaFooterBindings returns footer bindings for nebula mode.
 func NebulaFooterBindings(km KeyMap) []key.Binding {
-	return []key.Binding{km.Up, km.Down, km.Enter, km.Info, km.Beads, km.Pause, km.Stop, km.Quit}
+	return []key.Binding{km.Up, km.Down, km.Enter, km.Info, km.Pause, km.Stop, km.Quit}
 }
 
 // NebulaDetailFooterBindings returns footer bindings when drilled into a phase.
 func NebulaDetailFooterBindings(km KeyMap) []key.Binding {
-	return []key.Binding{km.Up, km.Down, km.Enter, km.Info, km.Beads, km.Back, km.Quit}
+	return []key.Binding{km.Up, km.Down, km.Enter, km.Info, km.Back, km.Quit}
 }
 
 // DiffFileListFooterBindings returns footer bindings when the diff file list is active.
