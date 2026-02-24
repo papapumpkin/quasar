@@ -17,8 +17,8 @@ type mockFabric struct {
 	pulses        []fabric.Pulse
 }
 
-func (m *mockFabric) SetPhaseState(context.Context, string, string) error     { return nil }
-func (m *mockFabric) GetPhaseState(context.Context, string) (string, error)   { return "", nil }
+func (m *mockFabric) SetPhaseState(context.Context, string, string) error   { return nil }
+func (m *mockFabric) GetPhaseState(context.Context, string) (string, error) { return "", nil }
 func (m *mockFabric) AllPhaseStates(context.Context) (map[string]string, error) {
 	return m.phaseStates, nil
 }
@@ -32,11 +32,11 @@ func (m *mockFabric) EntanglementsFor(context.Context, string) ([]fabric.Entangl
 func (m *mockFabric) AllEntanglements(context.Context) ([]fabric.Entanglement, error) {
 	return m.entanglements, nil
 }
-func (m *mockFabric) ClaimFile(context.Context, string, string) error       { return nil }
-func (m *mockFabric) ReleaseClaims(context.Context, string) error           { return nil }
+func (m *mockFabric) ClaimFile(context.Context, string, string) error        { return nil }
+func (m *mockFabric) ReleaseClaims(context.Context, string) error            { return nil }
 func (m *mockFabric) ReleaseFileClaim(context.Context, string, string) error { return nil }
-func (m *mockFabric) FileOwner(context.Context, string) (string, error)     { return "", nil }
-func (m *mockFabric) ClaimsFor(context.Context, string) ([]string, error)   { return nil, nil }
+func (m *mockFabric) FileOwner(context.Context, string) (string, error)      { return "", nil }
+func (m *mockFabric) ClaimsFor(context.Context, string) ([]string, error)    { return nil, nil }
 func (m *mockFabric) AllClaims(context.Context) ([]fabric.Claim, error) {
 	return m.claims, nil
 }
