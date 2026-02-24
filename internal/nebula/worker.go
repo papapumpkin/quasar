@@ -359,6 +359,15 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		anyInFlight := wg.tychoScheduler.AnyInFlight()
 		wg.mu.Unlock()
 
+		// Notify the TUI that eligible phases are entering the fabric scan gate.
+		// Only fires when fabric is configured (OnScanning is wired) so legacy
+		// mode never produces scanning toasts.
+		if wg.OnScanning != nil && wg.Fabric != nil {
+			for _, id := range eligible {
+				wg.OnScanning(id)
+			}
+		}
+
 		// Delegate fabric-aware scanning to Tycho. When fabric is not
 		// configured, Scan returns eligible unchanged (no-op).
 		if len(eligible) > 0 {

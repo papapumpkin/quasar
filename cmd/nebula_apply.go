@@ -222,6 +222,11 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		wg.OnHail = func(phaseID string, d fabric.Discovery) {
 			tuiProgram.Send(tui.MsgHail{PhaseID: phaseID, Discovery: d})
 		}
+		// Wire fabric scanning notification to surface a toast when phases
+		// enter the scanning gate (blocked → scanning → running).
+		wg.OnScanning = func(phaseID string) {
+			tuiProgram.Send(tui.MsgPhaseScanning{PhaseID: phaseID})
+		}
 		// Start telemetry bridge if a telemetry file exists.
 		telemetryPath := filepath.Join(".quasar", "telemetry", "current.jsonl")
 		if _, statErr := os.Stat(telemetryPath); statErr == nil {
@@ -413,6 +418,9 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				// Re-wire OnHail for the next nebula's TUI program.
 				wg.OnHail = func(phaseID string, d fabric.Discovery) {
 					tuiProgram.Send(tui.MsgHail{PhaseID: phaseID, Discovery: d})
+				}
+				wg.OnScanning = func(phaseID string) {
+					tuiProgram.Send(tui.MsgPhaseScanning{PhaseID: phaseID})
 				}
 				wg.OnProgress = func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
 					tuiProgram.Send(tui.MsgNebulaProgress{

@@ -223,6 +223,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.BoardActive = false
 		}
 
+		// Update gate overlay dimensions if it's currently visible.
+		if m.Gate != nil {
+			m.Gate.Width = m.contentWidth()
+			m.Gate.Height = m.Height
+		}
+
 		// Clamp cursors so they remain valid after a resize that may shrink lists.
 		clampCursors(&m)
 

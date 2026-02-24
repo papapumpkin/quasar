@@ -180,16 +180,16 @@ func (g *GatePrompt) detailBody() string {
 		b.WriteString("\n")
 		b.WriteString(styleGateLabel.Render("Files:"))
 		b.WriteString("\n")
-		// Reserve space for border (4), padding (4), icon+spacing (4) = 12 chars.
-		maxPathWidth := g.Width - 12
-		if maxPathWidth < 20 {
-			maxPathWidth = 20
-		}
 		for _, fc := range g.FilesChanged {
 			icon := fileChangeIcon(fc.Operation)
 			lineInfo := ""
 			if fc.LinesAdded > 0 || fc.LinesRemoved > 0 {
 				lineInfo = styleGateDetail.Render(fmt.Sprintf(" +%d -%d", fc.LinesAdded, fc.LinesRemoved))
+			}
+			// Reserve space for border (4) + padding (4) + icon+spacing (4) + lineInfo length.
+			maxPathWidth := g.Width - 12 - len(lineInfo)
+			if maxPathWidth < 20 {
+				maxPathWidth = 20
 			}
 			path := fc.Path
 			if len(path) > maxPathWidth && maxPathWidth > 3 {
@@ -205,8 +205,8 @@ func (g *GatePrompt) detailBody() string {
 		b.WriteString(styleGateLabel.Render("Reviewer:"))
 		b.WriteString("\n")
 		maxWidth := g.Width - 8
-		if maxWidth < 40 {
-			maxWidth = 60
+		if maxWidth < 20 {
+			maxWidth = 20
 		}
 		b.WriteString("  " + wrapText(g.ReviewSummary, maxWidth))
 		b.WriteString("\n")
