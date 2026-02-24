@@ -486,9 +486,9 @@ func TestHomeFilter_FilterNebulae(t *testing.T) {
 		want   int
 	}{
 		{HomeFilterAll, 4},
-		{HomeFilterReady, 3},        // ready + in_progress
-		{HomeFilterInProgress, 1},   // in_progress only
-		{HomeFilterDone, 1},         // done only
+		{HomeFilterReady, 3},      // ready + in_progress
+		{HomeFilterInProgress, 1}, // in_progress only
+		{HomeFilterDone, 1},       // done only
 	}
 
 	for _, tc := range tests {

@@ -71,7 +71,7 @@ type HomeView struct {
 	Cursor  int
 	Offset  int // first visible item index for viewport scrolling
 	Width   int
-	Height  int // available lines for the list (0 = no constraint)
+	Height  int        // available lines for the list (0 = no constraint)
 	Filter  HomeFilter // active filter
 }
 
