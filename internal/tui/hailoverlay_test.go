@@ -374,6 +374,7 @@ func TestAppModelMsgHailShowsOverlay(t *testing.T) {
 		m.Width = 120
 		m.Height = 40
 		m.ActiveTab = TabBoard
+		m.BoardActive = true
 		m.Depth = DepthPhases
 
 		msg := MsgHail{

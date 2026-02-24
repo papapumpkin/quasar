@@ -25,6 +25,9 @@ type KeyMap struct {
 
 	// Diff file list keys.
 	OpenDiff key.Binding
+
+	// Board/table view toggle.
+	BoardToggle key.Binding
 }
 
 // DefaultKeyMap returns the default keybinding configuration.
@@ -105,6 +108,10 @@ func DefaultKeyMap() KeyMap {
 		OpenDiff: key.NewBinding(
 			key.WithKeys("enter"),
 			key.WithHelp("⏎", "open diff"),
+		),
+		BoardToggle: key.NewBinding(
+			key.WithKeys("b"),
+			key.WithHelp("b", "board"),
 		),
 	}
 }

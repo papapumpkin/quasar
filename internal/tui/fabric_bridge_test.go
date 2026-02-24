@@ -80,9 +80,10 @@ func TestAppModelHandlesMsgHail(t *testing.T) {
 		t.Parallel()
 		m := NewAppModel(ModeNebula)
 		m.Detail = NewDetailPanel(80, 10)
-		m.Width = 80
+		m.Width = 120
 		m.Height = 24
 		m.ActiveTab = TabBoard
+		m.BoardActive = true
 		m.Depth = DepthPhases
 
 		var tm tea.Model = m

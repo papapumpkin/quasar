@@ -81,6 +81,11 @@ type AppModel struct {
 	Stopping  bool   // whether a stop has been requested
 	NebulaDir string // path to nebula directory for intervention files
 
+	// Board view state — columnar board as alternative to the NebulaView table.
+	Board        BoardView // columnar board renderer
+	BoardActive  bool      // true = columnar board, false = table view
+	boardSizedAt bool      // true after the first WindowSizeMsg sets the default
+
 	// Worker card state — live detail cards for active quasars.
 	WorkerCards   map[string]*WorkerCard // phaseID → live worker card
 	nextQuasarNum int                    // counter for assigning quasar IDs (q-1, q-2, ...)
@@ -123,15 +128,17 @@ type AppModel struct {
 func NewAppModel(mode Mode) AppModel {
 	splash := NewSplash(DefaultSplashConfig())
 	m := AppModel{
-		Mode:       mode,
-		LoopView:   NewLoopView(),
-		NebulaView: NewNebulaView(),
-		Keys:       DefaultKeyMap(),
-		StartTime:  time.Now(),
-		PhaseLoops: make(map[string]*LoopView),
-		PhaseBeads: make(map[string]*BeadInfo),
-		Thresholds: DefaultResourceThresholds(),
-		Splash:     &splash,
+		Mode:        mode,
+		LoopView:    NewLoopView(),
+		NebulaView:  NewNebulaView(),
+		Board:       NewBoardView(),
+		BoardActive: false, // set to true on first WindowSizeMsg if terminal is wide enough
+		Keys:        DefaultKeyMap(),
+		StartTime:   time.Now(),
+		PhaseLoops:  make(map[string]*LoopView),
+		PhaseBeads:  make(map[string]*BeadInfo),
+		Thresholds:  DefaultResourceThresholds(),
+		Splash:      &splash,
 	}
 	m.StatusBar.StartTime = m.StartTime
 	m.StatusBar.Thresholds = m.Thresholds
@@ -192,6 +199,21 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		detailHeight := m.detailHeight()
 		m.Detail.SetSize(contentWidth-2, detailHeight)
 		m.ScratchpadView.SetSize(contentWidth, detailHeight)
+
+		// Pass dimensions to the board view.
+		m.Board.Width = contentWidth
+		m.Board.Height = detailHeight
+		m.EntanglementView.Width = contentWidth
+		m.EntanglementView.Height = detailHeight
+
+		// Board view sizing: on the first resize, default to board if wide enough.
+		// On subsequent resizes, auto-fallback to table if terminal shrinks below threshold.
+		if !m.boardSizedAt {
+			m.boardSizedAt = true
+			m.BoardActive = msg.Width >= BoardMinWidth
+		} else if msg.Width < BoardMinWidth {
+			m.BoardActive = false
+		}
 
 		// Clamp cursors so they remain valid after a resize that may shrink lists.
 		clampCursors(&m)
@@ -498,7 +520,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case MsgHail:
 		// Show the hail overlay when the board view is active; otherwise fallback to a toast.
-		if m.Mode == ModeNebula && m.ActiveTab == TabBoard && m.Depth == DepthPhases {
+		if m.Mode == ModeNebula && m.BoardActive && m.ActiveTab == TabBoard && m.Depth == DepthPhases {
 			m.Hail = NewHailOverlay(msg, nil)
 			cmds = append(cmds, m.Hail.Input.Focus())
 		} else {
@@ -584,6 +606,15 @@ func clampCursors(m *AppModel) {
 		}
 	} else {
 		m.LoopView.Cursor = 0
+	}
+
+	// Clamp BoardView cursor.
+	if max := len(m.Board.Phases) - 1; max >= 0 {
+		if m.Board.Cursor > max {
+			m.Board.Cursor = max
+		}
+	} else {
+		m.Board.Cursor = 0
 	}
 
 	// Clamp EntanglementView cursor.
@@ -759,9 +790,18 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.showFileDiff()
 	}
 
-	// Tab navigation — only active in nebula mode at DepthPhases.
+	// Tab navigation and board toggle — only active in nebula mode at DepthPhases.
 	if m.Mode == ModeNebula && m.Depth == DepthPhases {
 		switch msg.String() {
+		case "b":
+			// Toggle between columnar board and table view.
+			// Only allow board if terminal is wide enough.
+			if !m.BoardActive && m.Width >= BoardMinWidth {
+				m.BoardActive = true
+			} else {
+				m.BoardActive = false
+			}
+			return m, nil
 		case "tab":
 			m.ActiveTab = m.ActiveTab.Next()
 			return m, nil
@@ -774,6 +814,17 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.ActiveTab = tab
 			}
 			return m, nil
+		case "left", "h":
+			// Left/right navigation for board columns.
+			if m.BoardActive && m.ActiveTab == TabBoard {
+				m.Board.MoveLeft()
+				return m, nil
+			}
+		case "right", "l":
+			if m.BoardActive && m.ActiveTab == TabBoard {
+				m.Board.MoveRight()
+				return m, nil
+			}
 		}
 	}
 
@@ -1161,7 +1212,16 @@ func (m *AppModel) drillDown() {
 			m.DiffFileOpen = false
 			m.ShowBeads = false
 			// Drill into the selected phase's loop view.
-			if p := m.NebulaView.SelectedPhase(); p != nil {
+			// Use board cursor when board is active, table cursor otherwise.
+			var p *PhaseEntry
+			if m.BoardActive && m.ActiveTab == TabBoard {
+				m.Board.Phases = m.NebulaView.Phases
+				p = m.Board.SelectedPhase()
+			}
+			if p == nil {
+				p = m.NebulaView.SelectedPhase()
+			}
+			if p != nil {
 				m.FocusedPhase = p.ID
 				m.Depth = DepthPhaseLoop
 				m.updateDetailFromSelection()
@@ -1298,6 +1358,8 @@ func (m *AppModel) moveUp() {
 		if m.Depth == DepthPhases {
 			if m.ActiveTab == TabEntanglements {
 				m.EntanglementView.MoveUp()
+			} else if m.BoardActive && m.ActiveTab == TabBoard {
+				m.Board.MoveUp()
 			} else {
 				m.NebulaView.MoveUp()
 			}
@@ -1334,6 +1396,8 @@ func (m *AppModel) moveDown() {
 		if m.Depth == DepthPhases {
 			if m.ActiveTab == TabEntanglements {
 				m.EntanglementView.MoveDown()
+			} else if m.BoardActive && m.ActiveTab == TabBoard {
+				m.Board.MoveDown()
 			} else {
 				m.NebulaView.MoveDown()
 			}
@@ -1782,9 +1846,18 @@ func (m AppModel) renderMainView() string {
 		case DepthPhases:
 			switch m.ActiveTab {
 			case TabBoard:
-				m.NebulaView.Width = w
-				boardStr := m.NebulaView.View()
-				// Append worker cards beneath the board for active phases.
+				var boardStr string
+				if m.BoardActive {
+					// Columnar board view — sync phases and render.
+					m.Board.Phases = m.NebulaView.Phases
+					m.Board.Width = w
+					boardStr = m.Board.View()
+				} else {
+					// Table view fallback.
+					m.NebulaView.Width = w
+					boardStr = m.NebulaView.View()
+				}
+				// Append worker cards beneath the board/table for active phases.
 				active := ActiveWorkerCards(m.WorkerCards)
 				if len(active) > 0 {
 					cardsStr := RenderWorkerCards(active, w)
@@ -1839,6 +1912,11 @@ func (m AppModel) buildFooter() Footer {
 				}
 				f.Bindings = append(f.Bindings, diffBind)
 			}
+			if m.selectedPhaseFailed() {
+				f.Bindings = append(f.Bindings, m.Keys.Retry)
+			}
+		} else if m.BoardActive {
+			f.Bindings = CockpitFooterBindings(m.Keys)
 			if m.selectedPhaseFailed() {
 				f.Bindings = append(f.Bindings, m.Keys.Retry)
 			}
