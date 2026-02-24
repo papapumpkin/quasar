@@ -14,11 +14,11 @@ import (
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
-// SnapshotBuilder constructs a FabricSnapshot from the current system state.
+// SnapshotBuilder constructs a fabric.Snapshot from the current system state.
 // It abstracts the WorkerGroup's internal bookkeeping (tracker, mutex, Fabric
 // I/O) so that Tycho can request snapshots without coupling to WorkerGroup.
 type SnapshotBuilder interface {
-	BuildSnapshot(ctx context.Context) (fabric.FabricSnapshot, error)
+	BuildSnapshot(ctx context.Context) (fabric.Snapshot, error)
 }
 
 // EligibleResolver provides DAG-aware eligible task resolution. It combines
@@ -131,7 +131,7 @@ func (s *Scheduler) Scan(ctx context.Context, eligible []string, sb SnapshotBuil
 
 // flatScan iterates eligible phases in order, polling each independently.
 // This is the legacy code path used when no WaveScanner is configured.
-func (s *Scheduler) flatScan(ctx context.Context, eligible []string, snap fabric.FabricSnapshot) ([]string, error) {
+func (s *Scheduler) flatScan(ctx context.Context, eligible []string, snap fabric.Snapshot) ([]string, error) {
 	var proceed []string
 	for _, id := range eligible {
 		// Skip already-blocked phases — they wait for re-evaluation.
@@ -319,7 +319,7 @@ func (s *Scheduler) PhaseComplete(ctx context.Context, phaseID string, publisher
 // HandlePollBlock processes a phase that did not poll PROCEED. It records the
 // phase in the blocked tracker, sets the fabric state, and runs the pushback
 // handler to decide whether to retry or escalate.
-func (s *Scheduler) HandlePollBlock(ctx context.Context, phaseID string, result fabric.PollResult, snap fabric.FabricSnapshot) {
+func (s *Scheduler) HandlePollBlock(ctx context.Context, phaseID string, result fabric.PollResult, snap fabric.Snapshot) {
 	s.Blocked.Block(phaseID, result)
 	bp := s.Blocked.Get(phaseID)
 

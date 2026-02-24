@@ -1838,7 +1838,7 @@ func TestRunFilterChecks(t *testing.T) {
 
 	t.Run("FilterInfraError", func(t *testing.T) {
 		t.Parallel()
-		ff := &fakeFilter{err: errors.New("context cancelled")}
+		ff := &fakeFilter{err: errors.New("context canceled")}
 		l := &Loop{UI: &noopUI{}, Filter: ff, WorkDir: "/tmp"}
 		state := &CycleState{Cycle: 1}
 

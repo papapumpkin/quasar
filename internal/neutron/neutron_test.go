@@ -28,7 +28,7 @@ func testFabric(t *testing.T) *fabric.SQLiteFabric {
 }
 
 // seedFabric populates a fabric with sample data for archival tests.
-func seedFabric(t *testing.T, ctx context.Context, f *fabric.SQLiteFabric) {
+func seedFabric(ctx context.Context, t *testing.T, f *fabric.SQLiteFabric) {
 	t.Helper()
 
 	// Phase states.
@@ -85,7 +85,7 @@ func TestArchive(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
 		f := testFabric(t)
-		seedFabric(t, ctx, f)
+		seedFabric(ctx, t, f)
 
 		// Resolve the discovery so archival can proceed.
 		discoveries, err := f.AllDiscoveries(ctx)
@@ -191,7 +191,7 @@ func TestArchive(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
 		f := testFabric(t)
-		seedFabric(t, ctx, f)
+		seedFabric(ctx, t, f)
 
 		// Add a claim.
 		if err := f.ClaimFile(ctx, "main.go", "task-1"); err != nil {
@@ -216,7 +216,7 @@ func TestArchive(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
 		f := testFabric(t)
-		seedFabric(t, ctx, f)
+		seedFabric(ctx, t, f)
 
 		dir := t.TempDir()
 		outputPath := filepath.Join(dir, "epoch-1.db")
@@ -277,7 +277,7 @@ func TestPurge(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	f := testFabric(t)
-	seedFabric(t, ctx, f)
+	seedFabric(ctx, t, f)
 
 	// Add a claim to verify it gets purged too.
 	if err := f.ClaimFile(ctx, "main.go", "task-1"); err != nil {

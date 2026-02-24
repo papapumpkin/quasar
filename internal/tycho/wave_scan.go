@@ -38,7 +38,7 @@ func (ws *WaveScanner) ScanWaves(
 	ctx context.Context,
 	waves []dag.Wave,
 	eligible map[string]bool,
-	snap fabric.FabricSnapshot,
+	snap fabric.Snapshot,
 ) (proceed []string, pruned map[string]string) {
 	pruned = make(map[string]string)
 
@@ -89,7 +89,7 @@ func (ws *WaveScanner) ScanWaves(
 }
 
 // handleBlock records a blocked phase and runs the pushback handler.
-func (ws *WaveScanner) handleBlock(ctx context.Context, phaseID string, result fabric.PollResult, snap fabric.FabricSnapshot) {
+func (ws *WaveScanner) handleBlock(ctx context.Context, phaseID string, result fabric.PollResult, snap fabric.Snapshot) {
 	if ws.Blocked == nil {
 		return
 	}

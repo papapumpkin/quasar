@@ -36,7 +36,7 @@ type ContractPoller struct {
 // contract. It returns PollProceed when all consumed entanglements are
 // present, PollNeedInfo when entanglements are missing, or PollConflict
 // when scope files are claimed by another phase.
-func (p *ContractPoller) Poll(_ context.Context, phaseID string, snap FabricSnapshot) (PollResult, error) {
+func (p *ContractPoller) Poll(_ context.Context, phaseID string, snap Snapshot) (PollResult, error) {
 	contract, ok := p.Contracts[phaseID]
 	if !ok {
 		// No contract info — proceed optimistically (fail-open,

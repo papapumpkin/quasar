@@ -273,7 +273,7 @@ func (l *Loop) runFilterChecks(ctx context.Context, state *CycleState) (failed b
 
 	result, err := l.Filter.Run(ctx, l.WorkDir)
 	if err != nil {
-		// Infrastructure error (e.g. context cancelled) is fatal.
+		// Infrastructure error (e.g. context canceled) is fatal.
 		return false, fmt.Errorf("filter execution failed: %w", err)
 	}
 

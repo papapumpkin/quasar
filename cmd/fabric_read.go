@@ -74,7 +74,7 @@ func runFabricRead(cmd *cobra.Command, _ []string) error {
 	sort.Strings(inProgress)
 
 	// Build snapshot for rendering.
-	snap := fabric.FabricSnapshot{
+	snap := fabric.Snapshot{
 		Entanglements:         entanglements,
 		FileClaims:            fileClaims,
 		Completed:             completed,

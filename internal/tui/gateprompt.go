@@ -195,7 +195,7 @@ func (g *GatePrompt) detailBody() string {
 			if len(path) > maxPathWidth && maxPathWidth > 3 {
 				path = "..." + path[len(path)-maxPathWidth+3:]
 			}
-			b.WriteString(fmt.Sprintf("  %s %s%s\n", icon, path, lineInfo))
+			fmt.Fprintf(&b, "  %s %s%s\n", icon, path, lineInfo)
 		}
 	}
 

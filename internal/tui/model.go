@@ -105,6 +105,7 @@ type AppModel struct {
 	HomeCursor      int            // cursor position in the home nebula list
 	HomeOffset      int            // viewport scroll offset in the home nebula list
 	HomeNebulae     []NebulaChoice // discovered nebulas for the home view
+	HomeFilter      HomeFilter     // active filter for the home nebula list
 	HomeDir         string         // the .nebulas/ parent directory
 	SelectedNebula  string         // set when user selects a nebula from home; read after Run() returns
 	ShowPlanPreview bool           // true when the plan preview is visible (between home and apply)
@@ -647,8 +648,8 @@ func (m *AppModel) ensureWorkerCard(phaseID string) *WorkerCard {
 // clampCursors ensures all cursors remain within valid bounds.
 // This prevents panics after a resize or data change that shrinks a list.
 func clampCursors(m *AppModel) {
-	// Clamp HomeCursor and HomeOffset.
-	if max := len(m.HomeNebulae) - 1; max >= 0 {
+	// Clamp HomeCursor and HomeOffset against the filtered list.
+	if max := len(m.filteredHomeNebulae()) - 1; max >= 0 {
 		if m.HomeCursor > max {
 			m.HomeCursor = max
 		}
@@ -948,10 +949,20 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handlePlanKey(msg)
 	}
 
+	// Home mode: Tab cycles through status filters.
+	if m.Mode == ModeHome && !m.ShowPlanPreview && msg.String() == "tab" {
+		m.HomeFilter = m.HomeFilter.Next()
+		m.HomeCursor = 0
+		m.HomeOffset = 0
+		m.updateHomeDetail()
+		return m, nil
+	}
+
 	// Home mode: Enter selects a nebula and launches plan preview.
 	if m.Mode == ModeHome && key.Matches(msg, m.Keys.Enter) {
-		if m.HomeCursor >= 0 && m.HomeCursor < len(m.HomeNebulae) {
-			selected := m.HomeNebulae[m.HomeCursor]
+		filtered := m.filteredHomeNebulae()
+		if m.HomeCursor >= 0 && m.HomeCursor < len(filtered) {
+			selected := filtered[m.HomeCursor]
 			pv := NewPlanView()
 			m.PlanPreview = &pv
 			m.ShowPlanPreview = true
@@ -1568,6 +1579,7 @@ func (m *AppModel) moveUp() {
 			m.HomeCursor--
 		}
 		m.adjustHomeOffset()
+		m.updateHomeDetail()
 	case ModeLoop:
 		m.LoopView.MoveUp()
 	case ModeNebula:
@@ -1600,7 +1612,7 @@ func (m *AppModel) moveDown() {
 	}
 	switch m.Mode {
 	case ModeHome:
-		max := len(m.HomeNebulae) - 1
+		max := len(m.filteredHomeNebulae()) - 1
 		if max < 0 {
 			max = 0
 		}
@@ -1608,6 +1620,7 @@ func (m *AppModel) moveDown() {
 			m.HomeCursor++
 		}
 		m.adjustHomeOffset()
+		m.updateHomeDetail()
 	case ModeLoop:
 		m.LoopView.MoveDown()
 	case ModeNebula:
@@ -1692,11 +1705,12 @@ func (m *AppModel) updateDetailFromSelection() {
 // updateHomeDetail populates the detail panel with the selected nebula's
 // description, phase count, and status breakdown.
 func (m *AppModel) updateHomeDetail() {
-	if m.HomeCursor < 0 || m.HomeCursor >= len(m.HomeNebulae) {
+	filtered := m.filteredHomeNebulae()
+	if m.HomeCursor < 0 || m.HomeCursor >= len(filtered) {
 		m.Detail.SetEmpty("No nebulas found")
 		return
 	}
-	nc := m.HomeNebulae[m.HomeCursor]
+	nc := filtered[m.HomeCursor]
 
 	var b strings.Builder
 	if nc.Description != "" {
@@ -1854,18 +1868,25 @@ func (m AppModel) homeDetailHeight() int {
 	return mainH / 4
 }
 
+// filteredHomeNebulae returns the subset of HomeNebulae matching the active filter.
+func (m *AppModel) filteredHomeNebulae() []NebulaChoice {
+	return m.HomeFilter.FilterNebulae(m.HomeNebulae)
+}
+
 // adjustHomeOffset updates HomeOffset so the cursor is visible within the
 // approximate viewport height. Called after cursor changes in moveUp/moveDown.
 func (m *AppModel) adjustHomeOffset() {
-	if len(m.HomeNebulae) == 0 {
+	filtered := m.filteredHomeNebulae()
+	if len(filtered) == 0 {
 		m.HomeOffset = 0
 		return
 	}
 	hv := HomeView{
-		Nebulae: m.HomeNebulae,
+		Nebulae: filtered,
 		Cursor:  m.HomeCursor,
 		Offset:  m.HomeOffset,
 		Height:  m.homeMainHeight(),
+		Filter:  m.HomeFilter,
 	}
 	m.HomeOffset = hv.ensureCursorVisible()
 }
@@ -1879,7 +1900,7 @@ func (m AppModel) showDetailPanel() bool {
 		}
 		// Show the detail panel in home mode when there are nebulas to describe.
 		// When ShowPlan is toggled off, hide the detail panel.
-		return len(m.HomeNebulae) > 0 && m.ShowPlan
+		return len(m.filteredHomeNebulae()) > 0 && m.ShowPlan
 	}
 	if m.Mode == ModeLoop {
 		return m.Depth == DepthAgentOutput || m.ShowBeads
@@ -1917,7 +1938,7 @@ func (m AppModel) View() string {
 	m.StatusBar.Stopping = m.Stopping
 	if m.Mode == ModeHome {
 		m.StatusBar.HomeMode = true
-		m.StatusBar.HomeNebulaCount = len(m.HomeNebulae)
+		m.StatusBar.HomeNebulaCount = len(m.filteredHomeNebulae())
 		if m.ShowPlanPreview && m.PlanPreview != nil && m.PlanPreview.Plan != nil {
 			m.StatusBar.Name = m.PlanPreview.Plan.Name + " (plan preview)"
 		}
@@ -2074,11 +2095,12 @@ func (m AppModel) renderMainView() string {
 			return m.PlanPreview.View()
 		}
 		hv := HomeView{
-			Nebulae: m.HomeNebulae,
+			Nebulae: m.filteredHomeNebulae(),
 			Cursor:  m.HomeCursor,
 			Offset:  m.HomeOffset,
 			Width:   w,
 			Height:  m.homeMainHeight(),
+			Filter:  m.HomeFilter,
 		}
 		return hv.View()
 

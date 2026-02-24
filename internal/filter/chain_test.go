@@ -102,7 +102,7 @@ func TestChainRun(t *testing.T) {
 	t.Run("CancelledContext", func(t *testing.T) {
 		t.Parallel()
 		ctx, cancel := context.WithCancel(context.Background())
-		cancel() // immediately cancelled
+		cancel() // immediately canceled
 
 		chain := &Chain{
 			Checks: []Check{
@@ -114,10 +114,10 @@ func TestChainRun(t *testing.T) {
 
 		_, err := chain.Run(ctx, "/tmp")
 		if err == nil {
-			t.Fatal("expected error for cancelled context")
+			t.Fatal("expected error for canceled context")
 		}
-		if !strings.Contains(err.Error(), "filter chain cancelled") {
-			t.Errorf("error = %q, want to contain 'filter chain cancelled'", err.Error())
+		if !strings.Contains(err.Error(), "filter chain canceled") {
+			t.Errorf("error = %q, want to contain 'filter chain canceled'", err.Error())
 		}
 	})
 

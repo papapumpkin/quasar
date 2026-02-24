@@ -34,7 +34,7 @@ type PhaseSpec struct {
 // Poll checks whether phaseID has enough context from the fabric to proceed.
 // It constructs a prompt with the phase body and fabric snapshot, invokes the
 // LLM, and parses the response into a PollResult.
-func (p *LLMPoller) Poll(ctx context.Context, phaseID string, snap FabricSnapshot) (PollResult, error) {
+func (p *LLMPoller) Poll(ctx context.Context, phaseID string, snap Snapshot) (PollResult, error) {
 	spec, ok := p.Phases[phaseID]
 	if !ok {
 		return PollResult{}, fmt.Errorf("unknown phase %q", phaseID)
@@ -56,7 +56,7 @@ func (p *LLMPoller) Poll(ctx context.Context, phaseID string, snap FabricSnapsho
 }
 
 // buildPollPrompt constructs the LLM prompt for evaluating fabric readiness.
-func buildPollPrompt(phaseBody string, snap FabricSnapshot) string {
+func buildPollPrompt(phaseBody string, snap Snapshot) string {
 	var b strings.Builder
 
 	b.WriteString("You are evaluating whether a coding task has sufficient context to begin.\n\n")

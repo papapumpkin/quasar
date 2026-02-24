@@ -116,7 +116,7 @@ func (l *Loop) buildReviewerPrompt(state *CycleState) string {
 // PrependFabricContext adds current entanglements, claims, and pulses to the
 // task description so the agent starts with full coordination context rather
 // than needing to query fabric state as its first action.
-func PrependFabricContext(desc string, snap fabric.FabricSnapshot) string {
+func PrependFabricContext(desc string, snap fabric.Snapshot) string {
 	var b strings.Builder
 	b.WriteString("## Current Fabric State\n\n")
 	b.WriteString(fabric.RenderSnapshot(snap))

@@ -278,7 +278,6 @@ func (r *DAGRenderer) drawRow(sb *strings.Builder, row []*nodeBox, width int) {
 			}
 			if startCol > cursor {
 				lineBuf.WriteString(strings.Repeat(" ", startCol-cursor))
-				cursor = startCol
 			}
 			lineBuf.WriteString(b.lines[lineIdx])
 			cursor = startCol + r.visibleLen(b.lines[lineIdx])
@@ -357,10 +356,6 @@ func (r *DAGRenderer) drawConnectors(sb *strings.Builder, prevWave, currWave dag
 	}
 
 	// Group connections by source to detect fan-out.
-	type connGroup struct {
-		from int
-		tos  []int
-	}
 	fromMap := make(map[int][]int)
 	for _, c := range conns {
 		fromMap[c.fromCenter] = append(fromMap[c.fromCenter], c.toCenter)
@@ -420,11 +415,12 @@ func (r *DAGRenderer) drawConnectors(sb *strings.Builder, prevWave, currWave dag
 		// Target junctions.
 		for _, to := range tos {
 			if to >= 0 && to < width {
-				if to == lo {
+				switch to {
+				case lo:
 					line2[to] = '├'
-				} else if to == hi {
+				case hi:
 					line2[to] = '┤'
-				} else {
+				default:
 					line2[to] = '┬'
 				}
 			}

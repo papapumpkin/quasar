@@ -53,10 +53,10 @@ type workerSnapshotBuilder struct {
 	wg *WorkerGroup
 }
 
-// BuildSnapshot constructs a FabricSnapshot from the worker group's
+// BuildSnapshot constructs a fabric.Snapshot from the worker group's
 // tracker and fabric state. The WorkerGroup mutex is acquired during
 // in-memory reads and temporarily released during Fabric I/O.
-func (b *workerSnapshotBuilder) BuildSnapshot(ctx context.Context) (fabric.FabricSnapshot, error) {
+func (b *workerSnapshotBuilder) BuildSnapshot(ctx context.Context) (fabric.Snapshot, error) {
 	wg := b.wg
 	wg.mu.Lock()
 	snap, err := wg.buildFabricSnapshot(ctx)
@@ -76,12 +76,12 @@ func (wg *WorkerGroup) fabricBlocked() int {
 	return wg.tychoScheduler.BlockedCount()
 }
 
-// buildFabricSnapshot constructs a FabricSnapshot from the fabric and tracker
+// buildFabricSnapshot constructs a Snapshot from the fabric and tracker
 // state. Must be called with wg.mu held. The lock is temporarily released
 // during Fabric I/O (SQLite queries) to avoid blocking worker goroutines
 // that need the mutex for recordResult calls.
-func (wg *WorkerGroup) buildFabricSnapshot(ctx context.Context) (fabric.FabricSnapshot, error) {
-	snap := fabric.FabricSnapshot{
+func (wg *WorkerGroup) buildFabricSnapshot(ctx context.Context) (fabric.Snapshot, error) {
+	snap := fabric.Snapshot{
 		FileClaims: make(map[string]string),
 	}
 

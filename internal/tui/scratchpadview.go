@@ -175,10 +175,10 @@ func (sv ScratchpadView) formatEntry(entry MsgScratchpadEntry) string {
 	var sb strings.Builder
 	for i, line := range lines {
 		if i == 0 {
-			sb.WriteString(fmt.Sprintf("%s %s  %s", ts, pid, textStyle.Render(line)))
+			fmt.Fprintf(&sb, "%s %s  %s", ts, pid, textStyle.Render(line))
 		} else {
 			indent := strings.Repeat(" ", prefixWidth)
-			sb.WriteString(fmt.Sprintf("\n%s%s", indent, textStyle.Render(line)))
+			fmt.Fprintf(&sb, "\n%s%s", indent, textStyle.Render(line))
 		}
 	}
 	return sb.String()

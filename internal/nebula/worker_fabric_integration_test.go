@@ -48,13 +48,7 @@ func (p *integrationPoller) setDecision(phaseID string, r fabric.PollResult) {
 	p.decisions[phaseID] = r
 }
 
-func (p *integrationPoller) getPollCount(phaseID string) int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.pollCount[phaseID]
-}
-
-func (p *integrationPoller) Poll(_ context.Context, phaseID string, _ fabric.FabricSnapshot) (fabric.PollResult, error) {
+func (p *integrationPoller) Poll(_ context.Context, phaseID string, _ fabric.Snapshot) (fabric.PollResult, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.pollCount[phaseID]++

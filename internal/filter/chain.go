@@ -31,13 +31,13 @@ type Chain struct {
 // Run executes each check in sequence. It stops on the first failure and
 // returns a Result with Passed=false. If all checks pass, Passed=true.
 // A non-nil error is only returned for infrastructure failures (e.g. context
-// cancelled), not for check failures which are captured in CheckResult.
+// canceled), not for check failures which are captured in CheckResult.
 func (c *Chain) Run(ctx context.Context, workDir string) (*Result, error) {
 	result := &Result{Passed: true}
 
 	for _, check := range c.Checks {
 		if err := ctx.Err(); err != nil {
-			return nil, fmt.Errorf("filter chain cancelled: %w", err)
+			return nil, fmt.Errorf("filter chain canceled: %w", err)
 		}
 
 		start := time.Now()

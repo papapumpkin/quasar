@@ -302,7 +302,7 @@ type mockPoller struct {
 	err      error
 }
 
-func (m *mockPoller) Poll(_ context.Context, _ string, _ FabricSnapshot) (PollResult, error) {
+func (m *mockPoller) Poll(_ context.Context, _ string, _ Snapshot) (PollResult, error) {
 	if m.err != nil {
 		return PollResult{}, m.err
 	}
@@ -317,7 +317,7 @@ func (m *mockPoller) Poll(_ context.Context, _ string, _ FabricSnapshot) (PollRe
 func TestPollerInterface(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	snap := FabricSnapshot{}
+	snap := Snapshot{}
 
 	t.Run("proceed decision", func(t *testing.T) {
 		t.Parallel()

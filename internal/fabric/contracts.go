@@ -16,7 +16,7 @@ type ContractEntry struct {
 	Entanglement Entanglement // the entanglement being consumed or produced
 }
 
-// ContractReport summarises the resolution of all contracts.
+// ContractReport summarizes the resolution of all contracts.
 type ContractReport struct {
 	Fulfilled []ContractEntry // consumer expects X, producer provides X
 	Missing   []ContractEntry // consumer expects X, no producer found

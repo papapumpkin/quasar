@@ -6,11 +6,11 @@ import (
 	"strings"
 )
 
-// FabricSnapshot is the full fabric state injected into a scanning phase's context.
+// Snapshot is the full fabric state injected into a scanning phase's context.
 // It aggregates all fulfilled entanglements, file claims, phase progress, and
 // unresolved discoveries so that a dependent phase can understand the interface
 // surface and outstanding issues.
-type FabricSnapshot struct {
+type Snapshot struct {
 	// Entanglements holds all fulfilled entanglements published by completed phases.
 	Entanglements []Entanglement
 
@@ -30,10 +30,10 @@ type FabricSnapshot struct {
 	Pulses []Pulse
 }
 
-// RenderSnapshot formats a FabricSnapshot into a human-readable string suitable
+// RenderSnapshot formats a Snapshot into a human-readable string suitable
 // for injection into an LLM prompt. Entanglements are grouped by package and
 // annotated with their producing phase.
-func RenderSnapshot(snap FabricSnapshot) string {
+func RenderSnapshot(snap Snapshot) string {
 	var b strings.Builder
 
 	b.WriteString("## Fabric State\n")
@@ -116,7 +116,7 @@ func RenderSnapshot(snap FabricSnapshot) string {
 	return b.String()
 }
 
-// groupEntanglementsByPackage organises entanglements by their Package field.
+// groupEntanglementsByPackage organizes entanglements by their Package field.
 func groupEntanglementsByPackage(entanglements []Entanglement) map[string][]Entanglement {
 	m := make(map[string][]Entanglement)
 	for _, e := range entanglements {

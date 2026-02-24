@@ -189,7 +189,7 @@ func (p *mockPoller) getPollCount(phaseID string) int {
 	return p.pollCount[phaseID]
 }
 
-func (p *mockPoller) Poll(_ context.Context, phaseID string, _ fabric.FabricSnapshot) (fabric.PollResult, error) {
+func (p *mockPoller) Poll(_ context.Context, phaseID string, _ fabric.Snapshot) (fabric.PollResult, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.pollCount[phaseID]++
@@ -366,7 +366,7 @@ func TestTychoHandlePollBlock(t *testing.T) {
 			Decision: fabric.PollNeedInfo,
 			Reason:   "missing interface Foo",
 		}
-		snap := fabric.FabricSnapshot{
+		snap := fabric.Snapshot{
 			InProgress: []string{"producer-phase"},
 		}
 
@@ -397,7 +397,7 @@ func TestTychoHandlePollBlock(t *testing.T) {
 			Decision: fabric.PollNeedInfo,
 			Reason:   "missing dep",
 		}
-		snap := fabric.FabricSnapshot{}
+		snap := fabric.Snapshot{}
 
 		// First call: retry count=0, should retry.
 		wg.tychoScheduler.HandlePollBlock(context.Background(), "a", result, snap)
@@ -432,7 +432,7 @@ func TestTychoHandlePollBlock(t *testing.T) {
 			Decision: fabric.PollDecision("UNKNOWN"),
 			Reason:   "something odd",
 		}
-		snap := fabric.FabricSnapshot{}
+		snap := fabric.Snapshot{}
 
 		wg.tychoScheduler.HandlePollBlock(context.Background(), "a", result, snap)
 

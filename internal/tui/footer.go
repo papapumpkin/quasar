@@ -71,7 +71,11 @@ func HomeFooterBindings(km KeyMap) []key.Binding {
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "run"),
 	)
-	return []key.Binding{km.Up, km.Down, enter, km.Info, km.Quit}
+	filter := key.NewBinding(
+		key.WithKeys("tab"),
+		key.WithHelp("tab", "filter"),
+	)
+	return []key.Binding{km.Up, km.Down, enter, filter, km.Info, km.Quit}
 }
 
 // CockpitFooterBindings returns footer bindings when the board view is active.

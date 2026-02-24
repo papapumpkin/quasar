@@ -22,7 +22,7 @@ func TestPushbackHandler_NeedInfo_PlausibleProducer(t *testing.T) {
 		},
 	}
 	inProgress := []string{"phase-producer"}
-	snap := FabricSnapshot{}
+	snap := Snapshot{}
 
 	action := h.Handle(context.Background(), bp, inProgress, snap)
 	if action != ActionRetry {
@@ -45,7 +45,7 @@ func TestPushbackHandler_NeedInfo_PlausibleProducer_HardCap(t *testing.T) {
 		},
 	}
 	inProgress := []string{"phase-producer"}
-	snap := FabricSnapshot{}
+	snap := Snapshot{}
 
 	action := h.Handle(context.Background(), bp, inProgress, snap)
 	if action != ActionEscalate {
@@ -68,7 +68,7 @@ func TestPushbackHandler_NeedInfo_PlausibleProducer_BelowHardCap(t *testing.T) {
 		},
 	}
 	inProgress := []string{"phase-producer"}
-	snap := FabricSnapshot{}
+	snap := Snapshot{}
 
 	action := h.Handle(context.Background(), bp, inProgress, snap)
 	if action != ActionRetry {
@@ -91,7 +91,7 @@ func TestPushbackHandler_NeedInfo_NoProducer_Escalates(t *testing.T) {
 		},
 	}
 	inProgress := []string{"phase-unrelated"}
-	snap := FabricSnapshot{}
+	snap := Snapshot{}
 
 	action := h.Handle(context.Background(), bp, inProgress, snap)
 	if action != ActionEscalate {
@@ -114,7 +114,7 @@ func TestPushbackHandler_NeedInfo_NoProducer_RetryBeforeMax(t *testing.T) {
 		},
 	}
 	inProgress := []string{"phase-unrelated"}
-	snap := FabricSnapshot{}
+	snap := Snapshot{}
 
 	action := h.Handle(context.Background(), bp, inProgress, snap)
 	if action != ActionRetry {
@@ -137,7 +137,7 @@ func TestPushbackHandler_Conflict_FileClaim_Retries(t *testing.T) {
 		},
 	}
 	inProgress := []string{"phase-owner"}
-	snap := FabricSnapshot{
+	snap := Snapshot{
 		FileClaims: map[string]string{
 			"internal/foo/bar.go": "phase-owner",
 		},
@@ -164,7 +164,7 @@ func TestPushbackHandler_Conflict_Interface_Escalates(t *testing.T) {
 		},
 	}
 	inProgress := []string{"phase-other"}
-	snap := FabricSnapshot{
+	snap := Snapshot{
 		FileClaims: map[string]string{}, // no file claims for the conflicting phase
 	}
 
@@ -238,7 +238,7 @@ func TestPushbackHandler_ProceedOnUnknownDecision(t *testing.T) {
 			Reason:   "all good",
 		},
 	}
-	snap := FabricSnapshot{}
+	snap := Snapshot{}
 
 	action := h.Handle(context.Background(), bp, nil, snap)
 	if action != ActionProceed {
@@ -450,7 +450,7 @@ func TestIsFileClaimConflict(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			snap := FabricSnapshot{FileClaims: tt.fileClaims}
+			snap := Snapshot{FileClaims: tt.fileClaims}
 			got := isFileClaimConflict(tt.conflictWith, snap)
 			if got != tt.want {
 				t.Errorf("isFileClaimConflict(%q, snap) = %v, want %v",

@@ -31,7 +31,7 @@ type deterministicPoller struct {
 	decisions map[string]PollResult
 	pollCount map[string]int
 	// responseFn is called if non-nil and takes precedence over decisions map.
-	responseFn func(phaseID string, snap FabricSnapshot) PollResult
+	responseFn func(phaseID string, snap Snapshot) PollResult
 }
 
 func newDeterministicPoller() *deterministicPoller {
@@ -47,13 +47,7 @@ func (p *deterministicPoller) setDecision(phaseID string, r PollResult) {
 	p.decisions[phaseID] = r
 }
 
-func (p *deterministicPoller) getPollCount(phaseID string) int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.pollCount[phaseID]
-}
-
-func (p *deterministicPoller) Poll(_ context.Context, phaseID string, snap FabricSnapshot) (PollResult, error) {
+func (p *deterministicPoller) Poll(_ context.Context, phaseID string, snap Snapshot) (PollResult, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.pollCount[phaseID]++
@@ -98,14 +92,14 @@ func TestIntegration_LinearDependencyChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AllEntanglements: %v", err)
 	}
-	snap := FabricSnapshot{
+	snap := Snapshot{
 		Entanglements: allEntanglements,
 		Completed:     []string{"phase-a"},
 	}
 
 	// Phase B polls — poller sees A's entanglements and returns PROCEED.
 	poller := newDeterministicPoller()
-	poller.responseFn = func(phaseID string, s FabricSnapshot) PollResult {
+	poller.responseFn = func(phaseID string, s Snapshot) PollResult {
 		if phaseID == "phase-b" && len(s.Entanglements) > 0 {
 			return PollResult{Decision: PollProceed, Reason: "all deps satisfied"}
 		}
@@ -172,7 +166,7 @@ func TestIntegration_ParallelRootsPostToFabric(t *testing.T) {
 	// C polls after A completes but before B completes.
 	// Poller checks that both phase-a and phase-b have entanglements.
 	poller := newDeterministicPoller()
-	poller.responseFn = func(phaseID string, s FabricSnapshot) PollResult {
+	poller.responseFn = func(phaseID string, s Snapshot) PollResult {
 		if phaseID != "phase-c" {
 			return PollResult{Decision: PollProceed}
 		}
@@ -201,7 +195,7 @@ func TestIntegration_ParallelRootsPostToFabric(t *testing.T) {
 
 	// First poll: only A's entanglements available.
 	snap1Entanglements, _ := b.AllEntanglements(ctx)
-	snap1 := FabricSnapshot{
+	snap1 := Snapshot{
 		Entanglements: snap1Entanglements,
 		Completed:     []string{"phase-a"},
 		InProgress:    []string{"phase-b"},
@@ -231,7 +225,7 @@ func TestIntegration_ParallelRootsPostToFabric(t *testing.T) {
 
 	// Second poll: both A and B entanglements available.
 	snap2Entanglements, _ := b.AllEntanglements(ctx)
-	snap2 := FabricSnapshot{
+	snap2 := Snapshot{
 		Entanglements: snap2Entanglements,
 		Completed:     []string{"phase-a", "phase-b"},
 	}
@@ -284,7 +278,7 @@ func TestIntegration_PushbackAutoRetry(t *testing.T) {
 	}
 
 	// Run pushback handler — A is in-progress, plausible producer found.
-	snap1 := FabricSnapshot{InProgress: []string{"phase-a"}}
+	snap1 := Snapshot{InProgress: []string{"phase-a"}}
 	action := handler.Handle(ctx, bp, snap1.InProgress, snap1)
 	if action != ActionRetry {
 		t.Fatalf("expected ActionRetry, got %s", action)
@@ -310,13 +304,13 @@ func TestIntegration_PushbackAutoRetry(t *testing.T) {
 
 	// Re-poll: now entanglements are available -> PROCEED.
 	allEntanglements, _ := b.AllEntanglements(ctx)
-	snap2 := FabricSnapshot{
+	snap2 := Snapshot{
 		Entanglements: allEntanglements,
 		Completed:     []string{"phase-a"},
 	}
 
 	poller := newDeterministicPoller()
-	poller.responseFn = func(phaseID string, s FabricSnapshot) PollResult {
+	poller.responseFn = func(phaseID string, s Snapshot) PollResult {
 		if phaseID == "phase-b" && len(s.Entanglements) > 0 {
 			return PollResult{Decision: PollProceed}
 		}
@@ -355,7 +349,7 @@ func TestIntegration_PushbackEscalation(t *testing.T) {
 	}
 
 	// No in-progress phases — no plausible producer.
-	snap := FabricSnapshot{InProgress: []string{}}
+	snap := Snapshot{InProgress: []string{}}
 
 	// Retry loop until escalation.
 	for i := range 3 {
@@ -432,7 +426,7 @@ func TestIntegration_FileClaimConflict(t *testing.T) {
 	}
 
 	// Build snapshot with file claims.
-	snap := FabricSnapshot{
+	snap := Snapshot{
 		FileClaims: map[string]string{"internal/api/routes.go": "phase-a"},
 		InProgress: []string{"phase-a"},
 	}
@@ -470,7 +464,7 @@ func TestIntegration_FileClaimConflict(t *testing.T) {
 
 	// Re-poll returns PROCEED.
 	tracker.Unblock("phase-b")
-	snap2 := FabricSnapshot{
+	snap2 := Snapshot{
 		FileClaims: map[string]string{"internal/api/routes.go": "phase-b"},
 		Completed:  []string{"phase-a"},
 	}
@@ -526,7 +520,7 @@ func TestIntegration_ContradictoryEntanglements(t *testing.T) {
 	handler := &PushbackHandler{Fabric: b, MaxRetries: 3}
 
 	// Build snapshot — no file claims for the conflicting phase.
-	snap := FabricSnapshot{
+	snap := Snapshot{
 		Completed: []string{"phase-a", "phase-b"},
 		// No file claims for phase-a -> not a file-claim conflict.
 		FileClaims: map[string]string{},
@@ -654,7 +648,7 @@ func TestIntegration_CascadingUnblocks(t *testing.T) {
 	tracker := NewBlockedTracker()
 	handler := &PushbackHandler{Fabric: b, MaxRetries: 3}
 
-	snap := FabricSnapshot{
+	snap := Snapshot{
 		FileClaims: map[string]string{
 			"file1.go": "phase-a",
 			"file2.go": "phase-a",
@@ -689,7 +683,7 @@ func TestIntegration_CascadingUnblocks(t *testing.T) {
 	poller.setDecision("phase-b", PollResult{Decision: PollProceed})
 	poller.setDecision("phase-c", PollResult{Decision: PollProceed})
 
-	snap2 := FabricSnapshot{
+	snap2 := Snapshot{
 		Completed:  []string{"phase-a"},
 		FileClaims: map[string]string{},
 	}

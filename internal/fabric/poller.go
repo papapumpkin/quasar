@@ -53,7 +53,7 @@ type Poller interface {
 	// It returns a PollResult indicating the decision and any details about
 	// what's missing or conflicting. The snap parameter provides a read-only
 	// view of the current fabric state.
-	Poll(ctx context.Context, phaseID string, snap FabricSnapshot) (PollResult, error)
+	Poll(ctx context.Context, phaseID string, snap Snapshot) (PollResult, error)
 }
 
 // BlockedPhase tracks a phase that is waiting for more fabric context before

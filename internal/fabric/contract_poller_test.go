@@ -25,7 +25,7 @@ func TestContractPollerPoll(t *testing.T) {
 		contracts    map[string]*PhaseContract
 		matchMode    MatchMode
 		phaseID      string
-		snap         FabricSnapshot
+		snap         Snapshot
 		wantDecision PollDecision
 		wantReason   string // substring match
 		wantMissing  int    // expected len(MissingInfo)
@@ -35,7 +35,7 @@ func TestContractPollerPoll(t *testing.T) {
 			name:         "no contract registered — fail open",
 			contracts:    map[string]*PhaseContract{},
 			phaseID:      "phase-1",
-			snap:         FabricSnapshot{},
+			snap:         Snapshot{},
 			wantDecision: PollProceed,
 			wantReason:   "no contract registered",
 		},
@@ -45,7 +45,7 @@ func TestContractPollerPoll(t *testing.T) {
 				"phase-1": {PhaseID: "phase-1", Consumes: nil, Produces: []Entanglement{entFoo}},
 			},
 			phaseID:      "phase-1",
-			snap:         FabricSnapshot{},
+			snap:         Snapshot{},
 			wantDecision: PollProceed,
 			wantReason:   "no consumed entanglements",
 		},
@@ -56,7 +56,7 @@ func TestContractPollerPoll(t *testing.T) {
 			},
 			matchMode: MatchExact,
 			phaseID:   "phase-2",
-			snap: FabricSnapshot{
+			snap: Snapshot{
 				Entanglements: []Entanglement{entFoo, entBar, entBaz},
 			},
 			wantDecision: PollProceed,
@@ -69,7 +69,7 @@ func TestContractPollerPoll(t *testing.T) {
 			},
 			matchMode: MatchExact,
 			phaseID:   "phase-3",
-			snap: FabricSnapshot{
+			snap: Snapshot{
 				Entanglements: []Entanglement{entFoo}, // only Foo published
 			},
 			wantDecision: PollNeedInfo,
@@ -83,7 +83,7 @@ func TestContractPollerPoll(t *testing.T) {
 			},
 			matchMode:    MatchExact,
 			phaseID:      "phase-4",
-			snap:         FabricSnapshot{},
+			snap:         Snapshot{},
 			wantDecision: PollNeedInfo,
 			wantReason:   "3/3 consumed entanglements missing",
 			wantMissing:  3,
@@ -98,7 +98,7 @@ func TestContractPollerPoll(t *testing.T) {
 				},
 			},
 			phaseID: "phase-5",
-			snap: FabricSnapshot{
+			snap: Snapshot{
 				Entanglements: []Entanglement{entFoo},
 				FileClaims:    map[string]string{"pkg/a/foo.go": "phase-other"},
 			},
@@ -118,7 +118,7 @@ func TestContractPollerPoll(t *testing.T) {
 			},
 			matchMode: MatchName,
 			phaseID:   "phase-6",
-			snap: FabricSnapshot{
+			snap: Snapshot{
 				Entanglements: []Entanglement{entFoo}, // pkg/a, not pkg/different
 			},
 			wantDecision: PollProceed,
@@ -136,7 +136,7 @@ func TestContractPollerPoll(t *testing.T) {
 			},
 			matchMode: MatchExact,
 			phaseID:   "phase-7",
-			snap: FabricSnapshot{
+			snap: Snapshot{
 				Entanglements: []Entanglement{entFoo}, // pkg/a, not pkg/different
 			},
 			wantDecision: PollNeedInfo,
@@ -153,7 +153,7 @@ func TestContractPollerPoll(t *testing.T) {
 				},
 			},
 			phaseID: "phase-8",
-			snap: FabricSnapshot{
+			snap: Snapshot{
 				Entanglements: []Entanglement{entFoo},
 				FileClaims:    map[string]string{}, // empty claims
 			},

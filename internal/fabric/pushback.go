@@ -66,7 +66,7 @@ func (h *PushbackHandler) maxRetries() int {
 // that are currently executing — used to determine if a missing dependency
 // might appear soon. The snap parameter provides a read-only view of the
 // current fabric state for conflict classification.
-func (h *PushbackHandler) Handle(ctx context.Context, bp *BlockedPhase, inProgress []string, snap FabricSnapshot) PushbackAction {
+func (h *PushbackHandler) Handle(ctx context.Context, bp *BlockedPhase, inProgress []string, snap Snapshot) PushbackAction {
 	switch bp.LastResult.Decision {
 	case PollNeedInfo:
 		return h.handleNeedInfo(ctx, bp, inProgress)
@@ -101,7 +101,7 @@ func (h *PushbackHandler) handleNeedInfo(_ context.Context, bp *BlockedPhase, in
 // handleConflict processes CONFLICT pushback. File-claim conflicts are
 // transient (the owning phase will release claims on completion) so we retry.
 // Interface/entanglement conflicts are structural and escalate immediately.
-func (h *PushbackHandler) handleConflict(_ context.Context, bp *BlockedPhase, snap FabricSnapshot) PushbackAction {
+func (h *PushbackHandler) handleConflict(_ context.Context, bp *BlockedPhase, snap Snapshot) PushbackAction {
 	if isFileClaimConflict(bp.LastResult.ConflictWith, snap) {
 		return ActionRetry
 	}
@@ -138,7 +138,7 @@ func hasPlausibleProducer(missingInfo []string, inProgress []string) bool {
 // isFileClaimConflict returns true if the conflicting phase holds any file
 // claims in the snapshot. File-claim conflicts are transient because the
 // claiming phase will release files when it completes.
-func isFileClaimConflict(conflictWith string, snap FabricSnapshot) bool {
+func isFileClaimConflict(conflictWith string, snap Snapshot) bool {
 	if conflictWith == "" {
 		return false
 	}

@@ -40,7 +40,7 @@ func TestLLMPollerPoll(t *testing.T) {
 		"phase-db": {ID: "phase-db", Body: "Implement database layer"},
 	}
 
-	snap := FabricSnapshot{
+	snap := Snapshot{
 		Entanglements: []Entanglement{
 			{ID: 1, Producer: "phase-auth", Kind: KindInterface, Name: "Authenticator", Package: "auth"},
 		},
@@ -261,7 +261,7 @@ func TestBuildPollPrompt(t *testing.T) {
 	t.Parallel()
 
 	body := "Implement the user authentication service."
-	snap := FabricSnapshot{
+	snap := Snapshot{
 		Entanglements: []Entanglement{
 			{ID: 1, Producer: "phase-core", Kind: KindType, Name: "User", Package: "models"},
 		},

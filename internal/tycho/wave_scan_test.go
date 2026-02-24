@@ -73,7 +73,7 @@ func TestScanWaves(t *testing.T) {
 		ws, _, _, _ := newTestWaveScanner(d)
 
 		eligible := map[string]bool{"A": true, "B": true, "C": true}
-		snap := fabric.FabricSnapshot{}
+		snap := fabric.Snapshot{}
 
 		proceed, pruned := ws.ScanWaves(context.Background(), waves, eligible, snap)
 
@@ -112,7 +112,7 @@ func TestScanWaves(t *testing.T) {
 		})
 
 		eligible := map[string]bool{"A": true, "B": true, "C": true}
-		snap := fabric.FabricSnapshot{}
+		snap := fabric.Snapshot{}
 
 		proceed, pruned := ws.ScanWaves(context.Background(), waves, eligible, snap)
 
@@ -160,7 +160,7 @@ func TestScanWaves(t *testing.T) {
 		})
 
 		eligible := map[string]bool{"A": true, "B": true, "C": true, "D": true}
-		snap := fabric.FabricSnapshot{}
+		snap := fabric.Snapshot{}
 
 		proceed, pruned := ws.ScanWaves(context.Background(), waves, eligible, snap)
 
@@ -212,7 +212,7 @@ func TestScanWaves(t *testing.T) {
 		})
 
 		eligible := map[string]bool{"A": true, "B": true, "C": true, "D": true}
-		snap := fabric.FabricSnapshot{}
+		snap := fabric.Snapshot{}
 
 		proceed, pruned := ws.ScanWaves(context.Background(), waves, eligible, snap)
 
@@ -250,7 +250,7 @@ func TestScanWaves(t *testing.T) {
 
 		// Only B is eligible — A and C are done/in-flight.
 		eligible := map[string]bool{"B": true}
-		snap := fabric.FabricSnapshot{}
+		snap := fabric.Snapshot{}
 
 		proceed, _ := ws.ScanWaves(context.Background(), waves, eligible, snap)
 
@@ -274,7 +274,7 @@ func TestScanWaves(t *testing.T) {
 		ws.Blocked.Block("A", fabric.PollResult{Decision: fabric.PollNeedInfo})
 
 		eligible := map[string]bool{"A": true, "B": true}
-		snap := fabric.FabricSnapshot{}
+		snap := fabric.Snapshot{}
 
 		proceed, _ := ws.ScanWaves(context.Background(), waves, eligible, snap)
 
@@ -302,7 +302,7 @@ func TestScanWaves(t *testing.T) {
 		ws.Blocked.Override("A")
 
 		eligible := map[string]bool{"A": true, "B": true}
-		snap := fabric.FabricSnapshot{}
+		snap := fabric.Snapshot{}
 
 		proceed, _ := ws.ScanWaves(context.Background(), waves, eligible, snap)
 
@@ -328,7 +328,7 @@ func TestScanWaves(t *testing.T) {
 			Blocked: fabric.NewBlockedTracker(),
 		}
 
-		proceed, pruned := ws.ScanWaves(context.Background(), nil, nil, fabric.FabricSnapshot{})
+		proceed, pruned := ws.ScanWaves(context.Background(), nil, nil, fabric.Snapshot{})
 		if len(proceed) != 0 {
 			t.Errorf("expected 0 proceed, got %d", len(proceed))
 		}
@@ -352,7 +352,7 @@ func TestScanWaves(t *testing.T) {
 		}
 
 		eligible := map[string]bool{"A": true}
-		proceed, _ := ws.ScanWaves(context.Background(), waves, eligible, fabric.FabricSnapshot{})
+		proceed, _ := ws.ScanWaves(context.Background(), waves, eligible, fabric.Snapshot{})
 
 		if len(proceed) != 1 || proceed[0] != "A" {
 			t.Errorf("expected A to proceed on poll error, got %v", proceed)
@@ -373,7 +373,7 @@ func TestScanWaves(t *testing.T) {
 		})
 
 		eligible := map[string]bool{"A": true, "B": true}
-		proceed, pruned := ws.ScanWaves(context.Background(), waves, eligible, fabric.FabricSnapshot{})
+		proceed, pruned := ws.ScanWaves(context.Background(), waves, eligible, fabric.Snapshot{})
 
 		if len(proceed) != 0 {
 			t.Errorf("expected 0 proceed, got %v", proceed)
@@ -424,7 +424,7 @@ func TestScanWaves(t *testing.T) {
 		}
 
 		eligible := map[string]bool{"A": true}
-		proceed, _ := ws.ScanWaves(context.Background(), waves, eligible, fabric.FabricSnapshot{})
+		proceed, _ := ws.ScanWaves(context.Background(), waves, eligible, fabric.Snapshot{})
 
 		if len(proceed) != 0 {
 			t.Errorf("expected 0 proceed when escalated, got %v", proceed)
@@ -467,7 +467,7 @@ func TestScanWaves(t *testing.T) {
 		}
 
 		eligible := map[string]bool{"A": true}
-		proceed, _ := ws.ScanWaves(context.Background(), waves, eligible, fabric.FabricSnapshot{})
+		proceed, _ := ws.ScanWaves(context.Background(), waves, eligible, fabric.Snapshot{})
 
 		if len(proceed) != 0 {
 			t.Errorf("expected 0 proceed when escalated, got %v", proceed)
@@ -520,7 +520,7 @@ func TestScanDelegatesWaveScanner(t *testing.T) {
 			DAG:         d,
 		}
 
-		sb := &mockSnapshotBuilder{snap: fabric.FabricSnapshot{}}
+		sb := &mockSnapshotBuilder{snap: fabric.Snapshot{}}
 		proceed, err := s.Scan(context.Background(), []string{"A", "B", "C"}, sb)
 		if err != nil {
 			t.Fatalf("Scan error: %v", err)
@@ -549,7 +549,7 @@ func TestScanDelegatesWaveScanner(t *testing.T) {
 			Reason:   "missing",
 		})
 
-		sb := &mockSnapshotBuilder{snap: fabric.FabricSnapshot{}}
+		sb := &mockSnapshotBuilder{snap: fabric.Snapshot{}}
 		proceed, err := s.Scan(context.Background(), []string{"A", "B", "C"}, sb)
 		if err != nil {
 			t.Fatalf("Scan error: %v", err)
@@ -590,7 +590,7 @@ func TestScanDelegatesWaveScanner(t *testing.T) {
 			Waves:       nil, // empty waves triggers flat fallback
 		}
 
-		sb := &mockSnapshotBuilder{snap: fabric.FabricSnapshot{}}
+		sb := &mockSnapshotBuilder{snap: fabric.Snapshot{}}
 		proceed, err := s.Scan(context.Background(), []string{"A", "B"}, sb)
 		if err != nil {
 			t.Fatalf("Scan error: %v", err)
@@ -604,6 +604,6 @@ func TestScanDelegatesWaveScanner(t *testing.T) {
 // errorPoller always returns an error.
 type errorPoller struct{}
 
-func (p *errorPoller) Poll(_ context.Context, _ string, _ fabric.FabricSnapshot) (fabric.PollResult, error) {
+func (p *errorPoller) Poll(_ context.Context, _ string, _ fabric.Snapshot) (fabric.PollResult, error) {
 	return fabric.PollResult{}, context.DeadlineExceeded
 }

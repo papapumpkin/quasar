@@ -369,13 +369,13 @@ func (b *PhaseUIBridge) DiscoveryPosted(d fabric.Discovery) {
 // Hail sends MsgHail when a phase requires human attention.
 // The ResponseCh is nil here (fire-and-forget). Callers that need to block on
 // the user's response should use HailAndWait instead, which creates a channel
-// and blocks until the overlay resolves or the context is cancelled.
+// and blocks until the overlay resolves or the context is canceled.
 func (b *PhaseUIBridge) Hail(phaseID string, d fabric.Discovery) {
 	b.program.Send(MsgHail{PhaseID: phaseID, Discovery: d})
 }
 
 // HailAndWait sends MsgHail and blocks until the user responds or the context
-// is cancelled. Returns the user's free-text response.
+// is canceled. Returns the user's free-text response.
 func (b *PhaseUIBridge) HailAndWait(ctx context.Context, phaseID string, d fabric.Discovery) (string, error) {
 	responseCh := make(chan string, 1)
 	b.program.Send(MsgHail{PhaseID: phaseID, Discovery: d, ResponseCh: responseCh})

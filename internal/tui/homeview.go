@@ -7,6 +7,64 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// HomeFilter selects which nebulas are shown on the home landing page.
+type HomeFilter int
+
+const (
+	HomeFilterAll        HomeFilter = iota // show all nebulas
+	HomeFilterReady                        // show ready and in-progress
+	HomeFilterInProgress                   // show in-progress only
+	HomeFilterDone                         // show done only
+	homeFilterCount                        // sentinel for cycling
+)
+
+// String returns a human-readable label for the filter.
+func (f HomeFilter) String() string {
+	switch f {
+	case HomeFilterReady:
+		return "active"
+	case HomeFilterInProgress:
+		return "in progress"
+	case HomeFilterDone:
+		return "done"
+	default:
+		return "all"
+	}
+}
+
+// Next returns the next filter in the cycle.
+func (f HomeFilter) Next() HomeFilter {
+	return (f + 1) % homeFilterCount
+}
+
+// Matches returns whether a nebula choice passes this filter.
+func (f HomeFilter) Matches(nc NebulaChoice) bool {
+	switch f {
+	case HomeFilterReady:
+		return nc.Status == "ready" || nc.Status == "in_progress"
+	case HomeFilterInProgress:
+		return nc.Status == "in_progress"
+	case HomeFilterDone:
+		return nc.Status == "done"
+	default:
+		return true
+	}
+}
+
+// FilterNebulae returns the subset of choices that match the filter.
+func (f HomeFilter) FilterNebulae(all []NebulaChoice) []NebulaChoice {
+	if f == HomeFilterAll {
+		return all
+	}
+	var out []NebulaChoice
+	for _, nc := range all {
+		if f.Matches(nc) {
+			out = append(out, nc)
+		}
+	}
+	return out
+}
+
 // HomeView renders the landing page list of discovered nebulas.
 type HomeView struct {
 	Nebulae []NebulaChoice
@@ -14,6 +72,7 @@ type HomeView struct {
 	Offset  int // first visible item index for viewport scrolling
 	Width   int
 	Height  int // available lines for the list (0 = no constraint)
+	Filter  HomeFilter // active filter
 }
 
 // View renders the home landing page with a scrollable list of nebulas.
@@ -21,13 +80,25 @@ type HomeView struct {
 // An empty state is shown when no nebulas are found.
 // When Height is set and items overflow, a viewport window follows the cursor.
 func (hv HomeView) View() string {
+	var b strings.Builder
+
+	// Filter bar — always shown so the user knows which filter is active.
+	b.WriteString(hv.renderFilterBar())
+	b.WriteString("\n")
+
 	if len(hv.Nebulae) == 0 {
-		return hv.renderEmpty()
+		b.WriteString(hv.renderEmpty())
+		return b.String()
+	}
+
+	// Adjust available height for the filter bar line.
+	listHeight := hv.Height - 1
+	if listHeight < 0 {
+		listHeight = 0
 	}
 
 	// Check if all items fit without scrolling.
-	if hv.Height <= 0 || hv.totalLines() <= hv.Height {
-		var b strings.Builder
+	if listHeight <= 0 || hv.totalLines() <= listHeight {
 		for i, nc := range hv.Nebulae {
 			b.WriteString(hv.renderNebulaRow(i, nc))
 			b.WriteString("\n")
@@ -36,8 +107,17 @@ func (hv HomeView) View() string {
 	}
 
 	// Items overflow — render a windowed view with scroll indicators.
-	offset := hv.ensureCursorVisible()
-	return hv.renderWindow(offset)
+	listView := HomeView{
+		Nebulae: hv.Nebulae,
+		Cursor:  hv.Cursor,
+		Offset:  hv.Offset,
+		Width:   hv.Width,
+		Height:  listHeight,
+		Filter:  hv.Filter,
+	}
+	offset := listView.ensureCursorVisible()
+	b.WriteString(listView.renderWindow(offset))
+	return b.String()
 }
 
 // totalLines returns the total number of visible lines for all nebula rows.
@@ -153,8 +233,27 @@ func (hv HomeView) renderWindow(offset int) string {
 	return b.String()
 }
 
+// renderFilterBar renders the filter chips (all / active / in progress / done).
+func (hv HomeView) renderFilterBar() string {
+	filters := []HomeFilter{HomeFilterAll, HomeFilterReady, HomeFilterInProgress, HomeFilterDone}
+	var parts []string
+	for _, f := range filters {
+		label := f.String()
+		if f == hv.Filter {
+			parts = append(parts, styleRowSelected.Render("["+label+"]"))
+		} else {
+			parts = append(parts, styleDetailDim.Render(" "+label+" "))
+		}
+	}
+	return "  " + strings.Join(parts, " ")
+}
+
 // renderEmpty renders the empty state when no nebulas are discovered.
 func (hv HomeView) renderEmpty() string {
+	if hv.Filter != HomeFilterAll {
+		msg := fmt.Sprintf("No nebulas matching filter %q", hv.Filter.String())
+		return "  " + styleDetailDim.Render(msg) + "\n"
+	}
 	msg := "No nebulas found in .nebulas/"
 	return "  " + styleDetailDim.Render(msg) + "\n"
 }

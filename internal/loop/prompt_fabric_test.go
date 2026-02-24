@@ -13,7 +13,7 @@ func TestPrependFabricContext(t *testing.T) {
 	t.Run("prepends snapshot before description", func(t *testing.T) {
 		t.Parallel()
 		desc := "Implement feature X."
-		snap := fabric.FabricSnapshot{
+		snap := fabric.Snapshot{
 			Entanglements: []fabric.Entanglement{
 				{Producer: "phase-a", Kind: "interface", Name: "Foo", Package: "pkg/foo"},
 			},
@@ -54,7 +54,7 @@ func TestPrependFabricContext(t *testing.T) {
 	t.Run("empty snapshot still prepends header", func(t *testing.T) {
 		t.Parallel()
 		desc := "Do something."
-		snap := fabric.FabricSnapshot{}
+		snap := fabric.Snapshot{}
 		got := PrependFabricContext(desc, snap)
 
 		if !strings.HasPrefix(got, "## Current Fabric State") {

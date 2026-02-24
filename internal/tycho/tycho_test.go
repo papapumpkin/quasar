@@ -209,7 +209,7 @@ func (p *mockPoller) getPollCount(phaseID string) int {
 	return p.pollCount[phaseID]
 }
 
-func (p *mockPoller) Poll(_ context.Context, phaseID string, _ fabric.FabricSnapshot) (fabric.PollResult, error) {
+func (p *mockPoller) Poll(_ context.Context, phaseID string, _ fabric.Snapshot) (fabric.PollResult, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.pollCount[phaseID]++
@@ -221,11 +221,11 @@ func (p *mockPoller) Poll(_ context.Context, phaseID string, _ fabric.FabricSnap
 
 // mockSnapshotBuilder returns a fixed snapshot.
 type mockSnapshotBuilder struct {
-	snap fabric.FabricSnapshot
+	snap fabric.Snapshot
 	err  error
 }
 
-func (b *mockSnapshotBuilder) BuildSnapshot(_ context.Context) (fabric.FabricSnapshot, error) {
+func (b *mockSnapshotBuilder) BuildSnapshot(_ context.Context) (fabric.Snapshot, error) {
 	return b.snap, b.err
 }
 
@@ -260,7 +260,7 @@ func TestScan(t *testing.T) {
 			Reason:   "missing type X",
 		})
 
-		sb := &mockSnapshotBuilder{snap: fabric.FabricSnapshot{}}
+		sb := &mockSnapshotBuilder{snap: fabric.Snapshot{}}
 		proceed, err := s.Scan(context.Background(), []string{"a", "b", "c"}, sb)
 		if err != nil {
 			t.Fatalf("Scan error: %v", err)
@@ -285,7 +285,7 @@ func TestScan(t *testing.T) {
 		// Pre-block "a".
 		s.Blocked.Block("a", fabric.PollResult{Decision: fabric.PollNeedInfo})
 
-		sb := &mockSnapshotBuilder{snap: fabric.FabricSnapshot{}}
+		sb := &mockSnapshotBuilder{snap: fabric.Snapshot{}}
 		proceed, err := s.Scan(context.Background(), []string{"a", "b"}, sb)
 		if err != nil {
 			t.Fatalf("Scan error: %v", err)
@@ -312,7 +312,7 @@ func TestScan(t *testing.T) {
 
 		s.Blocked.Override("a")
 
-		sb := &mockSnapshotBuilder{snap: fabric.FabricSnapshot{}}
+		sb := &mockSnapshotBuilder{snap: fabric.Snapshot{}}
 		proceed, err := s.Scan(context.Background(), []string{"a"}, sb)
 		if err != nil {
 			t.Fatalf("Scan error: %v", err)
@@ -358,7 +358,7 @@ func TestHandlePollBlock(t *testing.T) {
 			Decision: fabric.PollNeedInfo,
 			Reason:   "missing interface Foo",
 		}
-		snap := fabric.FabricSnapshot{
+		snap := fabric.Snapshot{
 			InProgress: []string{"producer-phase"},
 		}
 
@@ -387,7 +387,7 @@ func TestHandlePollBlock(t *testing.T) {
 			Decision: fabric.PollNeedInfo,
 			Reason:   "missing dep",
 		}
-		snap := fabric.FabricSnapshot{}
+		snap := fabric.Snapshot{}
 
 		// First call: retry count=0, should retry.
 		s.HandlePollBlock(context.Background(), "a", result, snap)
@@ -418,7 +418,7 @@ func TestHandlePollBlock(t *testing.T) {
 			Decision: fabric.PollDecision("UNKNOWN"),
 			Reason:   "something odd",
 		}
-		snap := fabric.FabricSnapshot{}
+		snap := fabric.Snapshot{}
 
 		s.HandlePollBlock(context.Background(), "a", result, snap)
 
@@ -451,7 +451,7 @@ func TestReevaluate(t *testing.T) {
 	t.Run("empty tracker returns nil", func(t *testing.T) {
 		t.Parallel()
 		s, _, mp, _ := newTestScheduler()
-		sb := &mockSnapshotBuilder{snap: fabric.FabricSnapshot{}}
+		sb := &mockSnapshotBuilder{snap: fabric.Snapshot{}}
 
 		unblocked, err := s.Reevaluate(context.Background(), sb)
 		if err != nil {
@@ -477,7 +477,7 @@ func TestReevaluate(t *testing.T) {
 		mp.setDecision("a", fabric.PollResult{Decision: fabric.PollProceed})
 		mp.setDecision("b", fabric.PollResult{Decision: fabric.PollNeedInfo, Reason: "still need Y"})
 
-		sb := &mockSnapshotBuilder{snap: fabric.FabricSnapshot{}}
+		sb := &mockSnapshotBuilder{snap: fabric.Snapshot{}}
 		unblocked, err := s.Reevaluate(context.Background(), sb)
 		if err != nil {
 			t.Fatalf("Reevaluate error: %v", err)
@@ -512,7 +512,7 @@ func TestReevaluate(t *testing.T) {
 		s.Blocked.Block("a", fabric.PollResult{Decision: fabric.PollNeedInfo, Reason: "need X"})
 		mp.setDecision("a", fabric.PollResult{Decision: fabric.PollNeedInfo, Reason: "still need X"})
 
-		sb := &mockSnapshotBuilder{snap: fabric.FabricSnapshot{}}
+		sb := &mockSnapshotBuilder{snap: fabric.Snapshot{}}
 		_, err := s.Reevaluate(context.Background(), sb)
 		if err != nil {
 			t.Fatalf("Reevaluate error: %v", err)
@@ -946,7 +946,7 @@ func TestScan_NilFabricComponents(t *testing.T) {
 		s := &Scheduler{
 			Blocked: fabric.NewBlockedTracker(),
 		}
-		sb := &mockSnapshotBuilder{snap: fabric.FabricSnapshot{}}
+		sb := &mockSnapshotBuilder{snap: fabric.Snapshot{}}
 		proceed, err := s.Scan(context.Background(), []string{"a", "b"}, sb)
 		if err != nil {
 			t.Fatalf("Scan error: %v", err)
@@ -961,7 +961,7 @@ func TestScan_NilFabricComponents(t *testing.T) {
 		s := &Scheduler{
 			Poller: newMockPoller(),
 		}
-		sb := &mockSnapshotBuilder{snap: fabric.FabricSnapshot{}}
+		sb := &mockSnapshotBuilder{snap: fabric.Snapshot{}}
 		proceed, err := s.Scan(context.Background(), []string{"a", "b"}, sb)
 		if err != nil {
 			t.Fatalf("Scan error: %v", err)
