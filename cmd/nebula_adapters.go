@@ -162,7 +162,7 @@ func toPhaseRunnerResult(result *loop.TaskResult) *nebula.PhaseRunnerResult {
 }
 
 // fabricComponents holds initialized fabric infrastructure for passing to
-// WorkerGroup options. When agentmail is disabled, all fields are nil.
+// WorkerGroup options. When there are no inter-phase dependencies, all fields are nil.
 type fabricComponents struct {
 	Fabric    fabric.Fabric
 	Poller    fabric.Poller
@@ -191,9 +191,9 @@ func (fc *fabricComponents) WorkerGroupOptions() []nebula.Option {
 	}
 }
 
-// initFabric creates the fabric infrastructure if agentmail is enabled in the
-// manifest. When agentmail is false, it returns a zero-value fabricComponents
-// (all nil fields). The caller must defer fc.Close().
+// initFabric creates the fabric infrastructure when the DAG has inter-phase
+// dependencies. When no phases have dependencies, it returns a zero-value
+// fabricComponents (all nil fields). The caller must defer fc.Close().
 func initFabric(ctx context.Context, n *nebula.Nebula, dir, workDir string, inv agent.Invoker) (*fabricComponents, error) {
 	if !n.HasDependencies() {
 		return &fabricComponents{}, nil

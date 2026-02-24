@@ -230,7 +230,7 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 		return nebulaResult{Err: fmt.Errorf("claude not available: %w", err)}
 	}
 
-	// Initialize fabric infrastructure when agentmail is enabled.
+	// Initialize fabric infrastructure when the DAG has inter-phase dependencies.
 	fc, fcErr := initFabric(ctx, n, dir, workDir, claudeInv)
 	if fcErr != nil {
 		return nebulaResult{Err: fmt.Errorf("fabric initialization failed: %w", fcErr)}
