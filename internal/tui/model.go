@@ -1696,10 +1696,13 @@ func (m AppModel) renderMainView() string {
 				m.NebulaView.Width = w
 				return m.NebulaView.View()
 			case TabEntanglements:
-				return lipgloss.NewStyle().
-					Foreground(colorMuted).
-					PaddingLeft(2).
-					Render("(coming soon)")
+				ev := EntanglementView{
+					Entanglements: m.Entanglements,
+					Width:         w,
+					Height:        m.detailHeight(),
+				}
+				ev.ClampCursor()
+				return ev.View()
 			case TabScratchpad:
 				return lipgloss.NewStyle().
 					Foreground(colorMuted).

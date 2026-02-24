@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'cockpit'
-total_cost_usd = 8.832676
+total_cost_usd = 10.29868175
 
 [phases]
 [phases.board-view]
@@ -17,15 +17,21 @@ summary = 'Well-implemented BoardView component with correct width-aware phase r
 
 [phases.decision-overlay]
 bead_id = 'quasar-ueap'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-23T15:56:13.490806-05:00
-updated_at = 2026-02-23T19:09:29.441567-05:00
+updated_at = 2026-02-23T19:20:16.57316-05:00
+
+[phases.decision-overlay.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented HailOverlay component with comprehensive tests, clean integration into the existing TUI model, proper edge case handling, and adherence to project conventions.'
 
 [phases.entanglement-viewer]
 bead_id = 'quasar-892z'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-23T15:56:14.060611-05:00
-updated_at = 2026-02-23T19:09:28.601144-05:00
+updated_at = 2026-02-23T19:20:16.573612-05:00
 
 [phases.model-integration]
 bead_id = 'quasar-t7s4'

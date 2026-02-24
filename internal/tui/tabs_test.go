@@ -323,7 +323,6 @@ func TestPlaceholderRenderedForUnimplementedTabs(t *testing.T) {
 		name string
 		tab  CockpitTab
 	}{
-		{"entanglements", TabEntanglements},
 		{"scratchpad", TabScratchpad},
 	}
 	for _, tt := range tests {
@@ -336,5 +335,17 @@ func TestPlaceholderRenderedForUnimplementedTabs(t *testing.T) {
 				t.Errorf("expected '(coming soon)' placeholder for %s tab, got:\n%s", tt.name, view)
 			}
 		})
+	}
+}
+
+// TestEntanglementTabRendersEmptyState verifies that the entanglements tab
+// shows the "No entanglements" placeholder when no entanglement data exists.
+func TestEntanglementTabRendersEmptyState(t *testing.T) {
+	t.Parallel()
+	m := nebulaModel()
+	m.ActiveTab = TabEntanglements
+	view := m.View()
+	if !strings.Contains(view, "No entanglements") {
+		t.Errorf("expected 'No entanglements' for empty entanglement tab, got:\n%s", view)
 	}
 }
