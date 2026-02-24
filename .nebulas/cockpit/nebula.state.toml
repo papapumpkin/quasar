@@ -16,28 +16,28 @@ needs_human_review = false
 summary = 'Well-implemented BoardView component with correct width-aware phase remapping, eliminated redundant computation, and accurate documentation — backed by comprehensive 20-test suite.'
 
 [phases.decision-overlay]
-bead_id = 'quasar-xlz'
-status = 'failed'
+bead_id = 'quasar-ueap'
+status = 'in_progress'
 created_at = 2026-02-23T15:56:13.490806-05:00
-updated_at = 2026-02-23T16:26:27.730553-05:00
+updated_at = 2026-02-23T19:09:29.441567-05:00
 
 [phases.entanglement-viewer]
-bead_id = 'quasar-qfv3'
-status = 'failed'
+bead_id = 'quasar-892z'
+status = 'created'
 created_at = 2026-02-23T15:56:14.060611-05:00
-updated_at = 2026-02-23T16:26:31.363927-05:00
+updated_at = 2026-02-23T19:09:28.601144-05:00
 
 [phases.model-integration]
 bead_id = 'quasar-t7s4'
 status = 'created'
 created_at = 2026-02-23T15:56:14.97329-05:00
-updated_at = 2026-02-23T15:56:14.97329-05:00
+updated_at = 2026-02-23T19:09:29.063755-05:00
 
 [phases.scratchpad-view]
-bead_id = 'quasar-a3t8'
-status = 'failed'
+bead_id = 'quasar-vsch'
+status = 'created'
 created_at = 2026-02-23T15:56:14.48234-05:00
-updated_at = 2026-02-23T16:26:34.960533-05:00
+updated_at = 2026-02-23T19:09:29.06057-05:00
 
 [phases.stats-bar-upgrade]
 bead_id = 'quasar-az8'
@@ -64,7 +64,7 @@ needs_human_review = false
 summary = 'Solid implementation of a TabBar component with CockpitTab enum, lateral navigation (Tab/Shift+Tab/1-2-3), placeholder views for unimplemented tabs, and comprehensive test coverage — all following existing project conventions.'
 
 [phases.worker-cards]
-bead_id = 'quasar-5cj'
-status = 'failed'
+bead_id = 'quasar-9kal'
+status = 'created'
 created_at = 2026-02-23T15:56:12.213158-05:00
-updated_at = 2026-02-23T16:26:38.668824-05:00
+updated_at = 2026-02-23T19:09:27.663673-05:00
