@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'context-intelligence'
-total_cost_usd = 16.787076500000005
+total_cost_usd = 22.064084000000005
 
 [phases]
 [phases.cleanup-deprecated]
@@ -11,9 +11,9 @@ updated_at = 2026-02-24T15:24:28.645137-05:00
 
 [phases.context-budget]
 bead_id = 'quasar-hm5f'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-24T14:47:07.075677-05:00
-updated_at = 2026-02-24T14:47:07.075677-05:00
+updated_at = 2026-02-24T15:26:32.135487-05:00
 
 [phases.enhanced-snapshot]
 bead_id = 'quasar-c5bt'
@@ -29,9 +29,15 @@ summary = 'Clean fix addressing all three prior review issues — error logging,
 
 [phases.fabric-auto-inject]
 bead_id = 'quasar-z9aj'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T14:47:06.315928-05:00
-updated_at = 2026-02-24T15:12:55.254294-05:00
+updated_at = 2026-02-24T15:26:32.109247-05:00
+
+[phases.fabric-auto-inject.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Fabric state auto-injection into coder/reviewer prompts is correctly wired through `PrependFabricContext` with proper nil guards, error logging via UI, and comprehensive tests; only missing error-path test coverage for `buildFabricSnapshot`.'
 
 [phases.prior-work]
 bead_id = 'quasar-igi8'

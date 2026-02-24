@@ -12,26 +12,27 @@ import (
 
 // Loop orchestrates the coder-reviewer cycle for a single task.
 type Loop struct {
-	Invoker        agent.Invoker
-	UI             ui.UI
-	Git            CycleCommitter // Optional; nil disables per-cycle commits.
-	Hooks          []Hook         // Lifecycle hooks (e.g., BeadHook for tracking).
-	Linter         Linter         // Optional; nil disables lint checks between coder and reviewer.
-	Filter         filter.Filter  // Optional; nil skips pre-reviewer filtering and goes straight to reviewer.
-	MaxCycles      int
-	MaxLintRetries int // Max times coder is asked to fix lint issues per cycle. 0 uses DefaultMaxLintRetries.
-	MaxBudgetUSD   float64
-	Model          string
-	CoderPrompt    string
-	ReviewPrompt   string
-	WorkDir        string
-	MCP            *agent.MCPConfig // Optional MCP server config passed to agents.
-	RefactorCh     <-chan string    // Optional channel carrying updated task descriptions from phase edits.
-	CommitSummary  string           // Short label for cycle commit messages. If empty, derived from task title.
-	Fabric         fabric.Fabric    // Optional; when set and FabricEnabled, auto-inject fabric state into prompts.
-	FabricEnabled  bool             // When true, inject fabric protocol into agent system prompts.
-	TaskID         string           // Task ID for fabric context (QUASAR_TASK_ID).
-	ProjectContext string           // Injected into agent system prompts for prompt caching.
+	Invoker          agent.Invoker
+	UI               ui.UI
+	Git              CycleCommitter // Optional; nil disables per-cycle commits.
+	Hooks            []Hook         // Lifecycle hooks (e.g., BeadHook for tracking).
+	Linter           Linter         // Optional; nil disables lint checks between coder and reviewer.
+	Filter           filter.Filter  // Optional; nil skips pre-reviewer filtering and goes straight to reviewer.
+	MaxCycles        int
+	MaxLintRetries   int // Max times coder is asked to fix lint issues per cycle. 0 uses DefaultMaxLintRetries.
+	MaxBudgetUSD     float64
+	Model            string
+	CoderPrompt      string
+	ReviewPrompt     string
+	WorkDir          string
+	MCP              *agent.MCPConfig // Optional MCP server config passed to agents.
+	RefactorCh       <-chan string    // Optional channel carrying updated task descriptions from phase edits.
+	CommitSummary    string           // Short label for cycle commit messages. If empty, derived from task title.
+	Fabric           fabric.Fabric    // Optional; when set and FabricEnabled, auto-inject fabric state into prompts.
+	FabricEnabled    bool             // When true, inject fabric protocol into agent system prompts.
+	TaskID           string           // Task ID for fabric context (QUASAR_TASK_ID).
+	ProjectContext   string           // Injected into agent system prompts for prompt caching.
+	MaxContextTokens int              // Token budget for context injection. 0 = use default.
 }
 
 // TaskResult holds the outcome of a completed task loop.
@@ -422,9 +423,7 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	refactorDesc := state.RefactorDescription
 
 	prompt := l.buildCoderPrompt(state)
-	if l.FabricEnabled && l.Fabric != nil {
-		prompt = PrependFabricContext(prompt, l.buildFabricSnapshot(ctx))
-	}
+	prompt = l.composeContextPrefix(ctx, prompt)
 
 	result, err := l.Invoker.Invoke(ctx, l.coderAgent(perAgentBudget), prompt, l.WorkDir)
 	if err != nil {
@@ -478,9 +477,7 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	l.UI.AgentStart("reviewer")
 
 	prompt := l.buildReviewerPrompt(state)
-	if l.FabricEnabled && l.Fabric != nil {
-		prompt = PrependFabricContext(prompt, l.buildFabricSnapshot(ctx))
-	}
+	prompt = l.composeContextPrefix(ctx, prompt)
 
 	result, err := l.Invoker.Invoke(ctx, l.reviewerAgent(perAgentBudget), prompt, l.WorkDir)
 	if err != nil {

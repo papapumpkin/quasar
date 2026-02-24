@@ -17,11 +17,12 @@ type Manifest struct {
 
 // Execution holds default execution parameters for the nebula.
 type Execution struct {
-	MaxWorkers      int      `toml:"max_workers"`
-	MaxReviewCycles int      `toml:"max_review_cycles"`
-	MaxBudgetUSD    float64  `toml:"max_budget_usd"`
-	Model           string   `toml:"model"`
-	Gate            GateMode `toml:"gate"` // Default gate mode for all phases
+	MaxWorkers       int      `toml:"max_workers"`
+	MaxReviewCycles  int      `toml:"max_review_cycles"`
+	MaxBudgetUSD     float64  `toml:"max_budget_usd"`
+	MaxContextTokens int      `toml:"max_context_tokens"` // Token budget for context injection. 0 = disabled.
+	Model            string   `toml:"model"`
+	Gate             GateMode `toml:"gate"` // Default gate mode for all phases
 }
 
 // Context provides project-level information injected into agent prompts.
