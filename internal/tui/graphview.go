@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -53,10 +55,15 @@ func NewGraphView(phases []PhaseInfo, width, height int) GraphView {
 	}
 	for _, p := range phases {
 		for _, dep := range p.DependsOn {
-			_ = d.AddEdge(p.ID, dep) // errors already validated upstream
+			if err := d.AddEdge(p.ID, dep); err != nil {
+				fmt.Fprintf(os.Stderr, "graphview: AddEdge(%s, %s): %v\n", p.ID, dep, err)
+			}
 		}
 	}
-	waves, _ := d.ComputeWaves() // errors already validated upstream
+	waves, err := d.ComputeWaves()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "graphview: ComputeWaves: %v\n", err)
+	}
 
 	// Reorder nodeIDs to follow wave order for intuitive cursor navigation.
 	ordered := make([]string, 0, len(nodeIDs))
@@ -112,6 +119,52 @@ func (gv *GraphView) SetPhaseStatus(phaseID string, status PhaseStatus) {
 	}
 	gv.statuses[phaseID] = status
 	gv.viewport.SetContent(gv.renderDAG())
+}
+
+// AppendPhase adds a hot-added phase to the graph and rebuilds the DAG layout.
+func (gv *GraphView) AppendPhase(p PhaseInfo) {
+	if gv.statuses == nil {
+		gv.statuses = make(map[string]PhaseStatus)
+		gv.deps = make(map[string][]string)
+		gv.titles = make(map[string]string)
+	}
+
+	gv.deps[p.ID] = p.DependsOn
+	gv.titles[p.ID] = p.Title
+	gv.statuses[p.ID] = PhaseWaiting
+	gv.nodeIDs = append(gv.nodeIDs, p.ID)
+
+	// Rebuild the DAG to recompute waves with the new phase.
+	d := dag.New()
+	for id := range gv.statuses {
+		d.AddNodeIdempotent(id, 0)
+	}
+	for id, depList := range gv.deps {
+		for _, dep := range depList {
+			if err := d.AddEdge(id, dep); err != nil {
+				fmt.Fprintf(os.Stderr, "graphview: AppendPhase AddEdge(%s, %s): %v\n", id, dep, err)
+			}
+		}
+	}
+	waves, err := d.ComputeWaves()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "graphview: AppendPhase ComputeWaves: %v\n", err)
+	}
+	gv.waves = waves
+
+	// Reorder nodeIDs to follow wave order.
+	ordered := make([]string, 0, len(gv.nodeIDs))
+	for _, w := range waves {
+		ordered = append(ordered, w.NodeIDs...)
+	}
+	if len(ordered) > 0 {
+		gv.nodeIDs = ordered
+	}
+
+	// Re-render the viewport.
+	if gv.renderer != nil {
+		gv.viewport.SetContent(gv.renderDAG())
+	}
 }
 
 // SelectedPhaseID returns the phase ID at the current cursor position,

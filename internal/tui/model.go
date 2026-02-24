@@ -398,6 +398,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			lv.Approved = true
 		}
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseDone)
+		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseDone)
 		// Clear refactored indicator on completion.
 		m.NebulaView.SetPhaseRefactored(msg.PhaseID, false)
 		// Remove worker card on approval.
@@ -426,11 +427,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// --- Hot-added phase ---
 	case MsgPhaseHotAdded:
-		m.NebulaView.AppendPhase(PhaseInfo{
+		pi := PhaseInfo{
 			ID:        msg.PhaseID,
 			Title:     msg.Title,
 			DependsOn: msg.DependsOn,
-		})
+		}
+		m.NebulaView.AppendPhase(pi)
+		m.Graph.AppendPhase(pi)
 		m.StatusBar.Total = len(m.NebulaView.Phases)
 		toast, cmd := NewToast(fmt.Sprintf("+ %s added to nebula", msg.PhaseID), false)
 		m.Toasts = append(m.Toasts, toast)
@@ -457,6 +460,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Mark the phase as gated if we know which one.
 		if msg.Checkpoint != nil {
 			m.NebulaView.SetPhaseStatus(msg.Checkpoint.PhaseID, PhaseGate)
+			m.Graph.SetPhaseStatus(msg.Checkpoint.PhaseID, PhaseGate)
 		}
 
 	// --- Done signals ---
@@ -1025,6 +1029,7 @@ func (m *AppModel) handleRetryKey() {
 
 	// Reset the TUI's visual state so it starts fresh.
 	m.NebulaView.SetPhaseStatus(phaseID, PhaseWaiting)
+	m.Graph.SetPhaseStatus(phaseID, PhaseWaiting)
 	// Clear the per-phase loop view so it starts fresh.
 	delete(m.PhaseLoops, phaseID)
 	m.addMessage("retrying phase %s", phaseID)
