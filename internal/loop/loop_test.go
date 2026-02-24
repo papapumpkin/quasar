@@ -490,6 +490,51 @@ func TestCoderAgentWithMCP(t *testing.T) {
 	}
 }
 
+func TestCoderAgentWithProjectContext(t *testing.T) {
+	t.Parallel()
+
+	l := &Loop{
+		CoderPrompt:    "You are a coder.",
+		ProjectContext: "# Project: quasar",
+	}
+	a := l.coderAgent(1.0)
+	if !strings.HasPrefix(a.SystemPrompt, "# Project: quasar") {
+		t.Errorf("expected system prompt to start with project context, got:\n%s", a.SystemPrompt)
+	}
+	if !strings.Contains(a.SystemPrompt, "You are a coder.") {
+		t.Error("expected base prompt to be present after project context")
+	}
+}
+
+func TestReviewerAgentWithProjectContext(t *testing.T) {
+	t.Parallel()
+
+	l := &Loop{
+		ReviewPrompt:   "You are a reviewer.",
+		ProjectContext: "# Project: quasar",
+	}
+	a := l.reviewerAgent(1.0)
+	if !strings.HasPrefix(a.SystemPrompt, "# Project: quasar") {
+		t.Errorf("expected system prompt to start with project context, got:\n%s", a.SystemPrompt)
+	}
+	if !strings.Contains(a.SystemPrompt, "You are a reviewer.") {
+		t.Error("expected base prompt to be present after project context")
+	}
+}
+
+func TestReviewerAgentWithFabric(t *testing.T) {
+	t.Parallel()
+
+	l := &Loop{
+		ReviewPrompt:  "You are a reviewer.",
+		FabricEnabled: true,
+	}
+	a := l.reviewerAgent(1.0)
+	if !strings.Contains(a.SystemPrompt, "## Fabric Protocol") {
+		t.Error("expected fabric protocol in reviewer system prompt when FabricEnabled")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // TestRunCoderPhase
 // ---------------------------------------------------------------------------

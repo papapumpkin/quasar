@@ -35,6 +35,7 @@ func init() {
 	runCmd.Flags().Bool("auto", false, "run a single task from stdin and exit (non-interactive)")
 	runCmd.Flags().Bool("no-tui", false, "disable TUI even on a TTY (use stderr printer)")
 	runCmd.Flags().Bool("no-splash", false, "skip the startup splash animation")
+	runCmd.Flags().Bool("project-context", false, "scan and inject project context into agent prompts for caching")
 
 	rootCmd.AddCommand(runCmd)
 }

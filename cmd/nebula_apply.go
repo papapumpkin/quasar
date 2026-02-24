@@ -19,6 +19,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/loop"
 	"github.com/papapumpkin/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/snapshot"
 	"github.com/papapumpkin/quasar/internal/tui"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
@@ -151,6 +152,15 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 	defer func() { fc.Close() }()
 
+	// Scan project context once for prompt caching. Non-fatal if scanning fails.
+	var projectCtx string
+	scanner := &snapshot.Scanner{WorkDir: workDir}
+	if scanned, scanErr := scanner.Scan(ctx); scanErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: project context scan failed: %v\n", scanErr)
+	} else {
+		projectCtx = scanned
+	}
+
 	git := loop.NewCycleCommitterWithBranch(ctx, workDir, branchName)
 	phaseCommitter := nebula.NewGitCommitterWithBranch(ctx, workDir, branchName)
 
@@ -189,18 +199,19 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		tuiProgram = tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir, noSplash)
 		// Per-phase loops with PhaseUIBridge for hierarchical TUI tracking.
 		wg.Runner = &tuiLoopAdapter{
-			program:      tuiProgram,
-			invoker:      claudeInv,
-			beads:        client,
-			git:          git,
-			linter:       loop.NewLinter(cfg.LintCommands, workDir),
-			maxCycles:    cfg.MaxReviewCycles,
-			maxBudget:    cfg.MaxBudgetUSD,
-			model:        cfg.Model,
-			coderPrompt:  coderPrompt,
-			reviewPrompt: reviewerPrompt,
-			workDir:      workDir,
-			fabric:       wg.Fabric, // nil-safe — emitFabricEvents checks for nil
+			program:        tuiProgram,
+			invoker:        claudeInv,
+			beads:          client,
+			git:            git,
+			linter:         loop.NewLinter(cfg.LintCommands, workDir),
+			maxCycles:      cfg.MaxReviewCycles,
+			maxBudget:      cfg.MaxBudgetUSD,
+			model:          cfg.Model,
+			coderPrompt:    coderPrompt,
+			reviewPrompt:   reviewerPrompt,
+			workDir:        workDir,
+			fabric:         wg.Fabric, // nil-safe — emitFabricEvents checks for nil
+			projectContext: projectCtx,
 		}
 		wg.Logger = io.Discard
 		wg.Prompter = tui.NewGater(tuiProgram)
@@ -238,17 +249,18 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	} else {
 		// Stderr path: single shared loop with Printer UI.
 		taskLoop := &loop.Loop{
-			Invoker:      claudeInv,
-			UI:           printer,
-			Git:          git,
-			Hooks:        []loop.Hook{&loop.BeadHook{Beads: client, UI: printer}},
-			Linter:       loop.NewLinter(cfg.LintCommands, workDir),
-			MaxCycles:    cfg.MaxReviewCycles,
-			MaxBudgetUSD: cfg.MaxBudgetUSD,
-			Model:        cfg.Model,
-			CoderPrompt:  coderPrompt,
-			ReviewPrompt: reviewerPrompt,
-			WorkDir:      workDir,
+			Invoker:        claudeInv,
+			UI:             printer,
+			Git:            git,
+			Hooks:          []loop.Hook{&loop.BeadHook{Beads: client, UI: printer}},
+			Linter:         loop.NewLinter(cfg.LintCommands, workDir),
+			MaxCycles:      cfg.MaxReviewCycles,
+			MaxBudgetUSD:   cfg.MaxBudgetUSD,
+			Model:          cfg.Model,
+			CoderPrompt:    coderPrompt,
+			ReviewPrompt:   reviewerPrompt,
+			WorkDir:        workDir,
+			ProjectContext: projectCtx,
 		}
 		wg.Runner = &loopAdapter{loop: taskLoop}
 		// Stderr path: use dashboard and terminal gater.
@@ -401,18 +413,19 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				wg = nebula.NewWorkerGroup(nextN, nextState, nextWgOpts...)
 				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, noSplash)
 				wg.Runner = &tuiLoopAdapter{
-					program:      tuiProgram,
-					invoker:      claudeInv,
-					beads:        client,
-					git:          loop.NewCycleCommitterWithBranch(ctx, nextWorkDir, nextBranchName),
-					linter:       loop.NewLinter(cfg.LintCommands, nextWorkDir),
-					maxCycles:    cfg.MaxReviewCycles,
-					maxBudget:    cfg.MaxBudgetUSD,
-					model:        cfg.Model,
-					coderPrompt:  coderPrompt,
-					reviewPrompt: reviewerPrompt,
-					workDir:      nextWorkDir,
-					fabric:       wg.Fabric, // nil-safe
+					program:        tuiProgram,
+					invoker:        claudeInv,
+					beads:          client,
+					git:            loop.NewCycleCommitterWithBranch(ctx, nextWorkDir, nextBranchName),
+					linter:         loop.NewLinter(cfg.LintCommands, nextWorkDir),
+					maxCycles:      cfg.MaxReviewCycles,
+					maxBudget:      cfg.MaxBudgetUSD,
+					model:          cfg.Model,
+					coderPrompt:    coderPrompt,
+					reviewPrompt:   reviewerPrompt,
+					workDir:        nextWorkDir,
+					fabric:         wg.Fabric, // nil-safe
+					projectContext: projectCtx,
 				}
 				wg.Prompter = tui.NewGater(tuiProgram)
 				// Re-wire OnHail for the next nebula's TUI program.
