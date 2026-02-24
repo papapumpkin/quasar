@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Snapshot is the full fabric state injected into a scanning phase's context.

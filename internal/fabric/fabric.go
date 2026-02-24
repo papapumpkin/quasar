@@ -82,6 +82,7 @@ type Entanglement struct {
 	Name      string    `json:"name"`
 	Signature string    `json:"signature"`
 	Package   string    `json:"package"`
+	File      string    `json:"file,omitempty"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 }
