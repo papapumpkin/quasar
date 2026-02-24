@@ -389,6 +389,96 @@ func TestScanWaves(t *testing.T) {
 			t.Errorf("expected prune reason to include original reason, got: %s", reason)
 		}
 	})
+
+	t.Run("escalate fires OnEscalate callback", func(t *testing.T) {
+		t.Parallel()
+		d := dag.New()
+		_ = d.AddNode("A", 0)
+		waves, _ := d.ComputeWaves()
+
+		mf := newMockFabric()
+		mp := newMockPoller()
+		var logBuf bytes.Buffer
+
+		// PollConflict with no matching file claim → handleConflict → ActionEscalate.
+		mp.setDecision("A", fabric.PollResult{
+			Decision:     fabric.PollConflict,
+			Reason:       "interface conflict",
+			ConflictWith: "nonexistent-phase",
+		})
+
+		var escalatedPhase string
+		var escalatedBP *fabric.BlockedPhase
+
+		ws := &WaveScanner{
+			Poller:   mp,
+			Blocked:  fabric.NewBlockedTracker(),
+			Pushback: &fabric.PushbackHandler{Fabric: mf},
+			Fabric:   mf,
+			DAG:      d,
+			Logger:   &logBuf,
+			OnEscalate: func(_ context.Context, phaseID string, bp *fabric.BlockedPhase) {
+				escalatedPhase = phaseID
+				escalatedBP = bp
+			},
+		}
+
+		eligible := map[string]bool{"A": true}
+		proceed, _ := ws.ScanWaves(context.Background(), waves, eligible, fabric.FabricSnapshot{})
+
+		if len(proceed) != 0 {
+			t.Errorf("expected 0 proceed when escalated, got %v", proceed)
+		}
+		if escalatedPhase != "A" {
+			t.Errorf("expected OnEscalate called with phase A, got %q", escalatedPhase)
+		}
+		if escalatedBP == nil {
+			t.Fatal("expected OnEscalate to receive non-nil BlockedPhase")
+		}
+		if escalatedBP.PhaseID != "A" {
+			t.Errorf("expected BlockedPhase.PhaseID = A, got %q", escalatedBP.PhaseID)
+		}
+	})
+
+	t.Run("escalate without OnEscalate logs message", func(t *testing.T) {
+		t.Parallel()
+		d := dag.New()
+		_ = d.AddNode("A", 0)
+		waves, _ := d.ComputeWaves()
+
+		mf := newMockFabric()
+		mp := newMockPoller()
+		var logBuf bytes.Buffer
+
+		mp.setDecision("A", fabric.PollResult{
+			Decision:     fabric.PollConflict,
+			Reason:       "interface conflict",
+			ConflictWith: "nonexistent-phase",
+		})
+
+		ws := &WaveScanner{
+			Poller:   mp,
+			Blocked:  fabric.NewBlockedTracker(),
+			Pushback: &fabric.PushbackHandler{Fabric: mf},
+			Fabric:   mf,
+			DAG:      d,
+			Logger:   &logBuf,
+			// OnEscalate intentionally nil.
+		}
+
+		eligible := map[string]bool{"A": true}
+		proceed, _ := ws.ScanWaves(context.Background(), waves, eligible, fabric.FabricSnapshot{})
+
+		if len(proceed) != 0 {
+			t.Errorf("expected 0 proceed when escalated, got %v", proceed)
+		}
+		if !strings.Contains(logBuf.String(), "escalated") {
+			t.Errorf("expected log to mention 'escalated', got: %s", logBuf.String())
+		}
+		if !strings.Contains(logBuf.String(), "interface conflict") {
+			t.Errorf("expected log to include reason, got: %s", logBuf.String())
+		}
+	})
 }
 
 // TestScanDelegatesWaveScanner verifies that Scheduler.Scan() delegates

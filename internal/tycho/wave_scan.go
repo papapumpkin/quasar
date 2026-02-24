@@ -20,6 +20,12 @@ type WaveScanner struct {
 	Fabric   fabric.Fabric
 	DAG      *dag.DAG
 	Logger   io.Writer
+
+	// OnEscalate is called when the pushback handler returns ActionEscalate
+	// for a blocked phase. The Scheduler wires this to its own escalatePhase
+	// method so that escalation logic (state transition, logging, OnHail) is
+	// not duplicated. If nil, escalations are logged but not surfaced.
+	OnEscalate func(ctx context.Context, phaseID string, bp *fabric.BlockedPhase)
 }
 
 // ScanWaves evaluates phases wave-by-wave. Returns the set of phases that
@@ -102,6 +108,13 @@ func (ws *WaveScanner) handleBlock(ctx context.Context, phaseID string, result f
 		case fabric.ActionRetry:
 			fmt.Fprintf(ws.logger(), "  Phase %q blocked: %s (retry %d)\n",
 				phaseID, result.Reason, bp.RetryCount)
+		case fabric.ActionEscalate:
+			if ws.OnEscalate != nil {
+				ws.OnEscalate(ctx, phaseID, bp)
+			} else {
+				fmt.Fprintf(ws.logger(), "  Phase %q escalated: %s\n",
+					phaseID, result.Reason)
+			}
 		case fabric.ActionProceed:
 			ws.Blocked.Unblock(phaseID)
 			ws.Blocked.Override(phaseID)
