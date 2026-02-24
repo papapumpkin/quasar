@@ -51,6 +51,7 @@ func NewNebulaProgram(name string, phases []PhaseInfo, nebulaDir string, noSplas
 	model.StatusBar.Name = name
 	model.StatusBar.Total = len(phases)
 	model.NebulaView.InitPhases(phases)
+	model.Graph = NewGraphView(phases, 80, 20)
 	// Seed the completed count from phases that are already done in saved state.
 	for _, p := range phases {
 		if p.Status == PhaseDone {

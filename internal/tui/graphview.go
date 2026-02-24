@@ -44,7 +44,11 @@ func NewGraphView(phases []PhaseInfo, width, height int) GraphView {
 	for _, p := range phases {
 		deps[p.ID] = p.DependsOn
 		titles[p.ID] = p.Title
-		statuses[p.ID] = PhaseWaiting
+		if p.Status != 0 {
+			statuses[p.ID] = p.Status
+		} else {
+			statuses[p.ID] = PhaseWaiting
+		}
 		nodeIDs = append(nodeIDs, p.ID)
 	}
 

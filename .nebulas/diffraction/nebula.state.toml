@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'diffraction'
-total_cost_usd = 1.2272205
+total_cost_usd = 5.20885075
 
 [phases]
 [phases.contract-poller]
@@ -23,12 +23,18 @@ updated_at = 2026-02-24T09:38:52.244001-05:00
 
 [phases.soft-dag]
 bead_id = 'quasar-gtqg'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-24T09:38:51.471329-05:00
-updated_at = 2026-02-24T09:38:51.471329-05:00
+updated_at = 2026-02-24T09:53:37.026718-05:00
 
 [phases.wave-scanner]
 bead_id = 'quasar-my9s'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T09:38:50.775997-05:00
-updated_at = 2026-02-24T09:42:40.776625-05:00
+updated_at = 2026-02-24T09:53:37.026209-05:00
+
+[phases.wave-scanner.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Adds missing ActionEscalate handling to WaveScanner with callback delegation and proper test coverage — clean, well-scoped bug fix.'
