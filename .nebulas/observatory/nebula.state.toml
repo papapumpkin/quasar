@@ -5,9 +5,9 @@ total_cost_usd = 11.057061000000001
 [phases]
 [phases.cockpit-graph]
 bead_id = 'quasar-411f'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-02-23T21:12:26.291442-05:00
-updated_at = 2026-02-23T21:47:06.761367-05:00
+updated_at = 2026-02-23T22:00:45.866064-05:00
 
 [phases.cockpit-plan]
 bead_id = 'quasar-xiwp'
@@ -47,9 +47,9 @@ updated_at = 2026-02-23T21:12:24.846693-05:00
 
 [phases.plan-engine]
 bead_id = 'quasar-qonf'
-status = 'created'
+status = 'failed'
 created_at = 2026-02-23T21:12:24.116343-05:00
-updated_at = 2026-02-23T21:12:24.116343-05:00
+updated_at = 2026-02-23T22:00:49.51604-05:00
 
 [phases.static-scanner]
 bead_id = 'quasar-5yf1'
