@@ -110,8 +110,8 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("⏎", "open diff"),
 		),
 		BoardToggle: key.NewBinding(
-			key.WithKeys("b"),
-			key.WithHelp("b", "board"),
+			key.WithKeys("v"),
+			key.WithHelp("v", "board"),
 		),
 	}
 }

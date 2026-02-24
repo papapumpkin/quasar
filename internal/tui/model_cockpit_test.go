@@ -15,7 +15,7 @@ import (
 func TestBoardToggle(t *testing.T) {
 	t.Parallel()
 
-	t.Run("b key enables board when terminal is wide enough", func(t *testing.T) {
+	t.Run("v key enables board when terminal is wide enough", func(t *testing.T) {
 		t.Parallel()
 		m := newNebulaModelWithPhases("", []PhaseEntry{
 			{ID: "p1", Title: "Phase 1"},
@@ -25,16 +25,16 @@ func TestBoardToggle(t *testing.T) {
 		m.Height = 40
 		m.BoardActive = false
 
-		bMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}}
-		result, _ := m.handleKey(bMsg)
+		vMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}}
+		result, _ := m.handleKey(vMsg)
 		updated := result.(AppModel)
 
 		if !updated.BoardActive {
-			t.Error("expected BoardActive to be true after pressing b on wide terminal")
+			t.Error("expected BoardActive to be true after pressing v on wide terminal")
 		}
 	})
 
-	t.Run("b key disables board when already active", func(t *testing.T) {
+	t.Run("v key disables board when already active", func(t *testing.T) {
 		t.Parallel()
 		m := newNebulaModelWithPhases("", []PhaseEntry{
 			{ID: "p1", Title: "Phase 1"},
@@ -44,16 +44,16 @@ func TestBoardToggle(t *testing.T) {
 		m.Height = 40
 		m.BoardActive = true
 
-		bMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}}
-		result, _ := m.handleKey(bMsg)
+		vMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}}
+		result, _ := m.handleKey(vMsg)
 		updated := result.(AppModel)
 
 		if updated.BoardActive {
-			t.Error("expected BoardActive to be false after pressing b when already active")
+			t.Error("expected BoardActive to be false after pressing v when already active")
 		}
 	})
 
-	t.Run("b key does not enable board on narrow terminal", func(t *testing.T) {
+	t.Run("v key does not enable board on narrow terminal", func(t *testing.T) {
 		t.Parallel()
 		m := newNebulaModelWithPhases("", []PhaseEntry{
 			{ID: "p1", Title: "Phase 1"},
@@ -63,8 +63,8 @@ func TestBoardToggle(t *testing.T) {
 		m.Height = 40
 		m.BoardActive = false
 
-		bMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}}
-		result, _ := m.handleKey(bMsg)
+		vMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}}
+		result, _ := m.handleKey(vMsg)
 		updated := result.(AppModel)
 
 		if updated.BoardActive {
@@ -72,7 +72,7 @@ func TestBoardToggle(t *testing.T) {
 		}
 	})
 
-	t.Run("b key has no board effect at DepthPhaseLoop", func(t *testing.T) {
+	t.Run("v key has no board effect at DepthPhaseLoop", func(t *testing.T) {
 		t.Parallel()
 		m := newNebulaModelWithPhases("", []PhaseEntry{
 			{ID: "p1", Title: "Phase 1"},
@@ -84,13 +84,36 @@ func TestBoardToggle(t *testing.T) {
 		m.FocusedPhase = "p1"
 		m.BoardActive = false
 
+		vMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}}
+		result, _ := m.handleKey(vMsg)
+		updated := result.(AppModel)
+
+		// At DepthPhaseLoop, v should not toggle board (only works at DepthPhases).
+		if updated.BoardActive {
+			t.Error("expected BoardActive to remain false at DepthPhaseLoop")
+		}
+	})
+
+	t.Run("b key triggers beads at DepthPhases when board is not active", func(t *testing.T) {
+		t.Parallel()
+		m := newNebulaModelWithPhases("", []PhaseEntry{
+			{ID: "p1", Title: "Phase 1"},
+		})
+		m.DisableSplash()
+		m.Width = 120
+		m.Height = 40
+		m.BoardActive = false
+		m.ShowBeads = false
+
 		bMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}}
 		result, _ := m.handleKey(bMsg)
 		updated := result.(AppModel)
 
-		// At DepthPhaseLoop, b should trigger beads, not board toggle.
 		if updated.BoardActive {
-			t.Error("expected BoardActive to remain false at DepthPhaseLoop")
+			t.Error("expected BoardActive to remain false — b should trigger beads, not board")
+		}
+		if !updated.ShowBeads {
+			t.Error("expected ShowBeads to be true after pressing b when board is not active")
 		}
 	})
 }
@@ -417,13 +440,13 @@ func TestCockpitFooterBindings(t *testing.T) {
 	// Should include the board toggle binding.
 	found := false
 	for _, b := range bindings {
-		if b.Help().Key == "b" {
+		if b.Help().Key == "v" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("expected cockpit footer to include 'b' board toggle binding")
+		t.Error("expected cockpit footer to include 'v' board toggle binding")
 	}
 }
 
@@ -438,16 +461,16 @@ func TestFooterShowsCockpitBindingsWhenBoardActive(t *testing.T) {
 	m.BoardActive = true
 
 	footer := m.buildFooter()
-	// Should use cockpit bindings (has "b:table" toggle).
+	// Should use cockpit bindings (has "v:table" toggle).
 	found := false
 	for _, b := range footer.Bindings {
-		if b.Help().Key == "b" && b.Help().Desc == "table" {
+		if b.Help().Key == "v" && b.Help().Desc == "table" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("expected footer to show 'b:table' binding when board is active")
+		t.Error("expected footer to show 'v:table' binding when board is active")
 	}
 }
 

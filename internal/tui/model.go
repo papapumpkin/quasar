@@ -521,7 +521,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgHail:
 		// Show the hail overlay when the board view is active; otherwise fallback to a toast.
 		if m.Mode == ModeNebula && m.BoardActive && m.ActiveTab == TabBoard && m.Depth == DepthPhases {
-			m.Hail = NewHailOverlay(msg, nil)
+			m.Hail = NewHailOverlay(msg, msg.ResponseCh)
 			cmds = append(cmds, m.Hail.Input.Focus())
 		} else {
 			toast, cmd := NewToast(fmt.Sprintf("⚠ hail from %s: %s", msg.PhaseID, msg.Discovery.Detail), true)
@@ -793,7 +793,7 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Tab navigation and board toggle — only active in nebula mode at DepthPhases.
 	if m.Mode == ModeNebula && m.Depth == DepthPhases {
 		switch msg.String() {
-		case "b":
+		case "v":
 			// Toggle between columnar board and table view.
 			// Only allow board if terminal is wide enough.
 			if !m.BoardActive && m.Width >= BoardMinWidth {

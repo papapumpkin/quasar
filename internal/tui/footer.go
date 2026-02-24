@@ -80,7 +80,7 @@ func CockpitFooterBindings(km KeyMap) []key.Binding {
 		key.WithHelp("tab", "tabs"),
 	)
 	boardToggle := km.BoardToggle
-	boardToggle.SetHelp("b", "table")
+	boardToggle.SetHelp("v", "table")
 	return []key.Binding{km.Up, km.Down, km.Enter, tab, boardToggle, km.Info, km.Pause, km.Stop, km.Quit}
 }
 
