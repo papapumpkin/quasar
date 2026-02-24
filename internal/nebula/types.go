@@ -79,6 +79,18 @@ type Nebula struct {
 	Phases   []PhaseSpec
 }
 
+// HasDependencies reports whether any phase in the nebula has explicit
+// dependency edges. When true, the contract board is required for correct
+// concurrent scheduling.
+func (n *Nebula) HasDependencies() bool {
+	for _, p := range n.Phases {
+		if len(p.DependsOn) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // PhasesByID returns a map from phase ID to phase pointer for quick lookup.
 func PhasesByID(phases []PhaseSpec) map[string]*PhaseSpec {
 	m := make(map[string]*PhaseSpec, len(phases))

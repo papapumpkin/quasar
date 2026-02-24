@@ -43,7 +43,7 @@ const boardWidthFull = 140
 const boardWidthMedium = 100
 
 // BoardView renders phases as a columnar board where tasks flow left-to-right
-// through canonical states: Queued → Scanning → Running → Review → Blocked → Done → Failed.
+// through canonical states: Queued → Running → Review → Blocked → Done → Failed.
 type BoardView struct {
 	Phases []PhaseEntry
 	Cursor int

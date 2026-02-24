@@ -42,19 +42,19 @@ func PhaseStatusFromString(s string) PhaseStatus {
 
 // PhaseEntry represents one phase in the nebula view.
 type PhaseEntry struct {
-	ID         string
-	Title      string
-	Status     PhaseStatus
-	Wave       int
-	CostUSD    float64
-	Cycles     int
-	MaxCycles  int
-	BlockedBy  string
-	DependsOn  []string // original dependency IDs from the phase spec
+	ID          string
+	Title       string
+	Status      PhaseStatus
+	Wave        int
+	CostUSD     float64
+	Cycles      int
+	MaxCycles   int
+	BlockedBy   string
+	DependsOn   []string // original dependency IDs from the phase spec
 	StartedAt   time.Time
 	CompletedAt time.Time // set when phase reaches a terminal state
 	PlanBody    string    // markdown content from the phase file
-	Refactored bool   // true when a mid-run refactor was applied this cycle
+	Refactored  bool      // true when a mid-run refactor was applied this cycle
 }
 
 // NebulaView renders the phase table for multi-task orchestration.

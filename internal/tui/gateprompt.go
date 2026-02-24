@@ -263,6 +263,11 @@ func (g GatePrompt) View() string {
 	}
 	out.WriteString(strings.Join(optParts, "  "))
 
+	// Clamp overlay width to prevent spilling past the terminal edge.
+	// Subtract 4 for the double border (2 chars each side).
+	if g.Width > 0 {
+		return styleGateOverlay.Width(g.Width - 4).Render(out.String())
+	}
 	return styleGateOverlay.Render(out.String())
 }
 

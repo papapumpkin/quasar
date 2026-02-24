@@ -458,7 +458,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// --- Gate ---
 	case MsgGatePrompt:
 		m.Gate = NewGatePrompt(msg.Checkpoint, msg.ResponseCh)
-		m.Gate.Width = m.Width
+		m.Gate.Width = m.contentWidth()
 		m.Gate.Height = m.Height
 		// Mark the phase as gated if we know which one.
 		if msg.Checkpoint != nil {
