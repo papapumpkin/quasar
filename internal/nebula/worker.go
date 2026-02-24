@@ -283,12 +283,13 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	// waves were computed successfully.
 	if wg.Fabric != nil && wg.Poller != nil && len(waves) > 0 {
 		wg.tychoScheduler.WaveScanner = &tycho.WaveScanner{
-			Poller:   wg.Poller,
-			Blocked:  wg.blockedTracker,
-			Pushback: wg.pushbackHandler,
-			Fabric:   wg.Fabric,
-			DAG:      dagGraph,
-			Logger:   wg.logger(),
+			Poller:     wg.Poller,
+			Blocked:    wg.blockedTracker,
+			Pushback:   wg.pushbackHandler,
+			Fabric:     wg.Fabric,
+			DAG:        dagGraph,
+			Logger:     wg.logger(),
+			OnEscalate: wg.tychoScheduler.HandleEscalation,
 		}
 	}
 

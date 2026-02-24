@@ -343,6 +343,14 @@ func (s *Scheduler) HandlePollBlock(ctx context.Context, phaseID string, result 
 	}
 }
 
+// HandleEscalation is the exported entry point for escalation from external
+// callers like the WaveScanner's OnEscalate callback. It delegates to
+// escalatePhase with no markFailed handler, since wave-scanned phases are
+// not yet in-flight and have no phase tracker entry to mark.
+func (s *Scheduler) HandleEscalation(ctx context.Context, phaseID string, bp *fabric.BlockedPhase) {
+	s.escalatePhase(ctx, phaseID, bp, nil)
+}
+
 // escalatePhase transitions a blocked phase to HUMAN_DECISION_REQUIRED.
 // It unblocks the phase, updates the fabric state, logs the escalation
 // message, and optionally calls markFailed to update the phase tracker.
