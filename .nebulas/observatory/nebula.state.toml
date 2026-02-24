@@ -1,0 +1,88 @@
+version = 1
+nebula_name = 'observatory'
+total_cost_usd = 30.637857750000002
+
+[phases]
+[phases.cockpit-graph]
+bead_id = 'quasar-dlnl'
+status = 'done'
+created_at = 2026-02-23T21:12:26.291442-05:00
+updated_at = 2026-02-24T09:19:45.834879-05:00
+
+[phases.cockpit-graph.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented Graph tab for the cockpit TUI with comprehensive test coverage, clean DAG rendering (box-drawing + compact modes), live status updates, and full integration into the existing tab/navigation infrastructure.'
+
+[phases.cockpit-plan]
+bead_id = 'quasar-xiwp'
+status = 'done'
+created_at = 2026-02-23T21:12:27.002498-05:00
+updated_at = 2026-02-24T09:35:51.403323-05:00
+
+[phases.cockpit-plan.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean implementation of terraform-style plan preview in the cockpit TUI home page, with proper BubbleTea message flow, comprehensive tests, and minor cosmetic issues (unused import hack, unused parameter, single-error reporting).'
+
+[phases.dag-renderer]
+bead_id = 'quasar-sdrp'
+status = 'done'
+created_at = 2026-02-23T21:12:25.563895-05:00
+updated_at = 2026-02-23T21:37:51.741398-05:00
+
+[phases.dag-renderer.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Three targeted bug fixes (non-deterministic map iteration, UTF-8 width measurement, hardcoded indentation) in the DAG renderer are correct, well-tested, and low-risk.'
+
+[phases.fabric-activation]
+bead_id = 'quasar-tjzo'
+status = 'done'
+created_at = 2026-02-23T21:12:22.642393-05:00
+updated_at = 2026-02-23T21:25:40.153395-05:00
+
+[phases.fabric-activation.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Three small, focused fixes — a defer resource leak in the next-nebula loop, a stale test expectation string, and a worker parallelism cap adjustment for fabric mode — all correct and verified with passing build/vet/tests.'
+
+[phases.plan-command]
+bead_id = 'quasar-bnd0'
+status = 'done'
+created_at = 2026-02-23T21:12:24.846693-05:00
+updated_at = 2026-02-24T09:14:55.193849-05:00
+
+[phases.plan-command.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Three clean, well-scoped fixes to the nebula plan command — a correctness bug in `--json` exit codes, an idiomatic interface improvement, and consistent `--no-color` propagation — all verified with passing build and tests.'
+
+[phases.plan-engine]
+bead_id = 'quasar-27a2'
+status = 'done'
+created_at = 2026-02-23T21:12:24.116343-05:00
+updated_at = 2026-02-24T08:55:34.480322-05:00
+
+[phases.plan-engine.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Three targeted bug fixes to plan engine (isolated node detection, phaseSet source, test assertion gap) — all correct with clean tests passing.'
+
+[phases.static-scanner]
+bead_id = 'quasar-5yf1'
+status = 'done'
+created_at = 2026-02-23T21:12:23.342164-05:00
+updated_at = 2026-02-23T21:47:06.759918-05:00
+
+[phases.static-scanner.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, well-tested static entanglement scanner and contract resolver that correctly extracts produces/consumes from phase specs and resolves the dependency graph, with only minor duplication and edge-case nits.'

@@ -206,7 +206,7 @@ func TestHomeKey_EnterSelectsNebula(t *testing.T) {
 		{Name: "Beta", Path: "/path/beta", Status: "ready", Phases: 3},
 	}
 
-	t.Run("enter sets SelectedNebula and quits", func(t *testing.T) {
+	t.Run("enter launches plan preview", func(t *testing.T) {
 		t.Parallel()
 		m := newHomeModel(choices)
 		m.HomeCursor = 1
@@ -214,15 +214,23 @@ func TestHomeKey_EnterSelectsNebula(t *testing.T) {
 		result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 		rm := result.(AppModel)
 
-		if rm.SelectedNebula != "/path/beta" {
-			t.Errorf("expected SelectedNebula '/path/beta', got %q", rm.SelectedNebula)
+		// Enter should activate the plan preview, not immediately select.
+		if !rm.ShowPlanPreview {
+			t.Error("expected ShowPlanPreview to be true")
 		}
-		if rm.NextNebula != "/path/beta" {
-			t.Errorf("expected NextNebula '/path/beta', got %q", rm.NextNebula)
+		if rm.PlanPreview == nil {
+			t.Error("expected PlanPreview to be non-nil")
 		}
-		// cmd should be tea.Quit.
+		// cmd should be non-nil (goroutine to compute plan).
 		if cmd == nil {
-			t.Fatal("expected non-nil cmd (tea.Quit)")
+			t.Fatal("expected non-nil cmd for plan computation")
+		}
+		// SelectedNebula and NextNebula should NOT be set yet.
+		if rm.SelectedNebula != "" {
+			t.Errorf("expected empty SelectedNebula before apply, got %q", rm.SelectedNebula)
+		}
+		if rm.NextNebula != "" {
+			t.Errorf("expected empty NextNebula before apply, got %q", rm.NextNebula)
 		}
 	})
 

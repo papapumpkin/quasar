@@ -15,6 +15,7 @@ func TestCockpitTabLabel(t *testing.T) {
 	}{
 		{TabBoard, "board"},
 		{TabEntanglements, "entanglements"},
+		{TabGraph, "graph"},
 		{TabScratchpad, "scratchpad"},
 		{CockpitTab(99), "unknown"},
 	}
@@ -35,7 +36,8 @@ func TestCockpitTabNext(t *testing.T) {
 		want  CockpitTab
 	}{
 		{TabBoard, TabEntanglements},
-		{TabEntanglements, TabScratchpad},
+		{TabEntanglements, TabGraph},
+		{TabGraph, TabScratchpad},
 		{TabScratchpad, TabBoard}, // wraps around
 	}
 	for _, tt := range tests {
@@ -56,7 +58,8 @@ func TestCockpitTabPrev(t *testing.T) {
 	}{
 		{TabBoard, TabScratchpad}, // wraps around
 		{TabEntanglements, TabBoard},
-		{TabScratchpad, TabEntanglements},
+		{TabGraph, TabEntanglements},
+		{TabScratchpad, TabGraph},
 	}
 	for _, tt := range tests {
 		t.Run(tt.start.Label()+"->prev", func(t *testing.T) {
@@ -77,9 +80,10 @@ func TestTabFromNumber(t *testing.T) {
 	}{
 		{1, TabBoard, true},
 		{2, TabEntanglements, true},
-		{3, TabScratchpad, true},
+		{3, TabGraph, true},
+		{4, TabScratchpad, true},
 		{0, TabBoard, false},
-		{4, TabBoard, false},
+		{5, TabBoard, false},
 		{-1, TabBoard, false},
 	}
 	for _, tt := range tests {
@@ -104,17 +108,22 @@ func TestTabBarView(t *testing.T) {
 		{
 			name:      "board active",
 			activeTab: TabBoard,
-			wantParts: []string{"[1] board", "[2] entanglements", "[3] scratchpad"},
+			wantParts: []string{"[1] board", "[2] entanglements", "[3] graph", "[4] scratchpad"},
 		},
 		{
 			name:      "entanglements active",
 			activeTab: TabEntanglements,
-			wantParts: []string{"[1] board", "[2] entanglements", "[3] scratchpad"},
+			wantParts: []string{"[1] board", "[2] entanglements", "[3] graph", "[4] scratchpad"},
+		},
+		{
+			name:      "graph active",
+			activeTab: TabGraph,
+			wantParts: []string{"[1] board", "[2] entanglements", "[3] graph", "[4] scratchpad"},
 		},
 		{
 			name:      "scratchpad active",
 			activeTab: TabScratchpad,
-			wantParts: []string{"[1] board", "[2] entanglements", "[3] scratchpad"},
+			wantParts: []string{"[1] board", "[2] entanglements", "[3] graph", "[4] scratchpad"},
 		},
 	}
 	for _, tt := range tests {
@@ -136,7 +145,7 @@ func TestTabBarAllTabsPresent(t *testing.T) {
 	tb := TabBar{ActiveTab: TabBoard, Width: 100}
 	got := tb.View()
 
-	// Verify all three tab labels appear in the output.
+	// Verify all four tab labels appear in the output.
 	for i := 0; i < cockpitTabCount; i++ {
 		label := CockpitTab(i).Label()
 		if !strings.Contains(got, label) {
@@ -203,14 +212,20 @@ func TestTabKeyTabCyclesForward(t *testing.T) {
 
 	updated, _ = m.Update(msg)
 	m = updated.(AppModel)
+	if m.ActiveTab != TabGraph {
+		t.Errorf("after 2x Tab: ActiveTab = %d, want TabGraph(%d)", m.ActiveTab, TabGraph)
+	}
+
+	updated, _ = m.Update(msg)
+	m = updated.(AppModel)
 	if m.ActiveTab != TabScratchpad {
-		t.Errorf("after 2x Tab: ActiveTab = %d, want TabScratchpad(%d)", m.ActiveTab, TabScratchpad)
+		t.Errorf("after 3x Tab: ActiveTab = %d, want TabScratchpad(%d)", m.ActiveTab, TabScratchpad)
 	}
 
 	updated, _ = m.Update(msg)
 	m = updated.(AppModel)
 	if m.ActiveTab != TabBoard {
-		t.Errorf("after 3x Tab (wrap): ActiveTab = %d, want TabBoard(%d)", m.ActiveTab, TabBoard)
+		t.Errorf("after 4x Tab (wrap): ActiveTab = %d, want TabBoard(%d)", m.ActiveTab, TabBoard)
 	}
 }
 
@@ -234,7 +249,8 @@ func TestTabKeyNumberDirectJump(t *testing.T) {
 	}{
 		{"1", TabBoard},
 		{"2", TabEntanglements},
-		{"3", TabScratchpad},
+		{"3", TabGraph},
+		{"4", TabScratchpad},
 	}
 	for _, tt := range tests {
 		t.Run("key-"+tt.key, func(t *testing.T) {
@@ -290,7 +306,10 @@ func TestTabBarRenderedInNebulaView(t *testing.T) {
 	if !strings.Contains(view, "[2] entanglements") {
 		t.Error("tab bar missing entanglements label")
 	}
-	if !strings.Contains(view, "[3] scratchpad") {
+	if !strings.Contains(view, "[3] graph") {
+		t.Error("tab bar missing graph label")
+	}
+	if !strings.Contains(view, "[4] scratchpad") {
 		t.Error("tab bar missing scratchpad label")
 	}
 }
@@ -336,5 +355,17 @@ func TestEntanglementTabRendersEmptyState(t *testing.T) {
 	view := m.View()
 	if !strings.Contains(view, "No entanglements") {
 		t.Errorf("expected 'No entanglements' for empty entanglement tab, got:\n%s", view)
+	}
+}
+
+// TestGraphTabRendersEmptyState verifies that the graph tab shows the
+// "No graph data" placeholder when no graph data exists.
+func TestGraphTabRendersEmptyState(t *testing.T) {
+	t.Parallel()
+	m := nebulaModel()
+	m.ActiveTab = TabGraph
+	view := m.View()
+	if !strings.Contains(view, "No graph data") {
+		t.Errorf("expected 'No graph data' placeholder for graph tab, got:\n%s", view)
 	}
 }

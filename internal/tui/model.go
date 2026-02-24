@@ -81,6 +81,9 @@ type AppModel struct {
 	Stopping  bool   // whether a stop has been requested
 	NebulaDir string // path to nebula directory for intervention files
 
+	// Graph view state — live DAG visualization tab.
+	Graph GraphView // DAG graph renderer
+
 	// Board view state — columnar board as alternative to the NebulaView table.
 	Board        BoardView // columnar board renderer
 	BoardActive  bool      // true = columnar board, false = table view
@@ -99,11 +102,13 @@ type AppModel struct {
 	StaleItems       []tycho.StaleItem     // latest stale warning items
 
 	// Home mode state (landing page).
-	HomeCursor     int            // cursor position in the home nebula list
-	HomeOffset     int            // viewport scroll offset in the home nebula list
-	HomeNebulae    []NebulaChoice // discovered nebulas for the home view
-	HomeDir        string         // the .nebulas/ parent directory
-	SelectedNebula string         // set when user selects a nebula from home; read after Run() returns
+	HomeCursor      int            // cursor position in the home nebula list
+	HomeOffset      int            // viewport scroll offset in the home nebula list
+	HomeNebulae     []NebulaChoice // discovered nebulas for the home view
+	HomeDir         string         // the .nebulas/ parent directory
+	SelectedNebula  string         // set when user selects a nebula from home; read after Run() returns
+	ShowPlanPreview bool           // true when the plan preview is visible (between home and apply)
+	PlanPreview     *PlanView      // plan preview state (non-nil when active)
 
 	// Nebula picker state (post-completion).
 	AvailableNebulae []NebulaChoice // populated on MsgNebulaDone via discovery
@@ -297,6 +302,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.StatusBar.Name = msg.Name
 		m.StatusBar.Total = len(msg.Phases)
 		m.NebulaView.InitPhases(msg.Phases)
+		m.Graph = NewGraphView(msg.Phases, m.contentWidth(), m.detailHeight())
 
 	// --- Nebula progress ---
 	case MsgNebulaProgress:
@@ -309,10 +315,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgPhaseTaskStarted:
 		m.ensurePhaseLoop(msg.PhaseID)
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseWorking)
+		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseWorking)
 		// Create a worker card for this active phase.
 		m.ensureWorkerCard(msg.PhaseID)
 	case MsgPhaseTaskComplete:
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseDone)
+		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseDone)
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
 			lv.Approved = true
 		}
@@ -392,6 +400,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			lv.Approved = true
 		}
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseDone)
+		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseDone)
 		// Clear refactored indicator on completion.
 		m.NebulaView.SetPhaseRefactored(msg.PhaseID, false)
 		// Remove worker card on approval.
@@ -408,6 +417,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case MsgPhaseError:
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseFailed)
+		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseFailed)
 		// Remove worker card on failure.
 		delete(m.WorkerCards, msg.PhaseID)
 		m.addMessage("[%s] %s", msg.PhaseID, msg.Msg)
@@ -419,11 +429,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// --- Hot-added phase ---
 	case MsgPhaseHotAdded:
-		m.NebulaView.AppendPhase(PhaseInfo{
+		pi := PhaseInfo{
 			ID:        msg.PhaseID,
 			Title:     msg.Title,
 			DependsOn: msg.DependsOn,
-		})
+		}
+		m.NebulaView.AppendPhase(pi)
+		m.Graph.AppendPhase(pi)
 		m.StatusBar.Total = len(m.NebulaView.Phases)
 		toast, cmd := NewToast(fmt.Sprintf("+ %s added to nebula", msg.PhaseID), false)
 		m.Toasts = append(m.Toasts, toast)
@@ -447,9 +459,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgGatePrompt:
 		m.Gate = NewGatePrompt(msg.Checkpoint, msg.ResponseCh)
 		m.Gate.Width = m.Width
+		m.Gate.Height = m.Height
 		// Mark the phase as gated if we know which one.
 		if msg.Checkpoint != nil {
 			m.NebulaView.SetPhaseStatus(msg.Checkpoint.PhaseID, PhaseGate)
+			m.Graph.SetPhaseStatus(msg.Checkpoint.PhaseID, PhaseGate)
 		}
 
 	// --- Done signals ---
@@ -540,6 +554,46 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Toasts = append(m.Toasts, toast)
 			cmds = append(cmds, cmd)
 		}
+
+	// --- Plan preview ---
+	case MsgPlanReady:
+		if m.PlanPreview != nil {
+			m.PlanPreview.SetPlan(msg.Plan, msg.Changes, msg.NebulaDir)
+			w := m.contentWidth()
+			h := m.homeMainHeight()
+			m.PlanPreview.SetSize(w, h)
+		}
+
+	case MsgPlanAction:
+		switch msg.Action {
+		case PlanActionApply:
+			m.SelectedNebula = msg.NebulaDir
+			m.NextNebula = msg.NebulaDir
+			return m, tea.Quit
+		case PlanActionCancel:
+			m.ShowPlanPreview = false
+			m.PlanPreview = nil
+		case PlanActionSave:
+			if msg.Plan != nil {
+				path, err := SavePlan(msg.Plan, msg.NebulaDir)
+				if err != nil {
+					toast, cmd := NewToast("save failed: "+err.Error(), true)
+					m.Toasts = append(m.Toasts, toast)
+					cmds = append(cmds, cmd)
+				} else {
+					toast, cmd := NewToast("Plan saved: "+path, false)
+					m.Toasts = append(m.Toasts, toast)
+					cmds = append(cmds, cmd)
+				}
+			}
+		}
+
+	case MsgPlanError:
+		m.ShowPlanPreview = false
+		m.PlanPreview = nil
+		toast, cmd := NewToast("plan error: "+msg.Err.Error(), true)
+		m.Toasts = append(m.Toasts, toast)
+		cmds = append(cmds, cmd)
 
 	}
 
@@ -808,7 +862,7 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "shift+tab":
 			m.ActiveTab = m.ActiveTab.Prev()
 			return m, nil
-		case "1", "2", "3":
+		case "1", "2", "3", "4":
 			n := int(msg.String()[0] - '0')
 			if tab, ok := TabFromNumber(n); ok {
 				m.ActiveTab = tab
@@ -825,6 +879,31 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.Board.MoveRight()
 				return m, nil
 			}
+		}
+	}
+
+	// Graph tab key handling — toggle tracks, critical path, and scroll viewport.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.ActiveTab == TabGraph {
+		switch msg.String() {
+		case "t":
+			m.Graph.ToggleTracks()
+			return m, nil
+		case "c":
+			m.Graph.ToggleCriticalPath()
+			return m, nil
+		}
+		// Route scroll keys to the graph viewport.
+		switch {
+		case key.Matches(msg, m.Keys.PageUp),
+			key.Matches(msg, m.Keys.PageDown),
+			key.Matches(msg, m.Keys.Home),
+			key.Matches(msg, m.Keys.End):
+			m.Graph.Update(msg)
+			return m, nil
+		}
+		if msg.String() == "g" || msg.String() == "G" {
+			m.Graph.Update(msg)
+			return m, nil
 		}
 	}
 
@@ -848,13 +927,23 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Home mode: Enter selects a nebula and exits the TUI.
+	// Home mode: plan preview key handling.
+	if m.Mode == ModeHome && m.ShowPlanPreview && m.PlanPreview != nil {
+		return m.handlePlanKey(msg)
+	}
+
+	// Home mode: Enter selects a nebula and launches plan preview.
 	if m.Mode == ModeHome && key.Matches(msg, m.Keys.Enter) {
 		if m.HomeCursor >= 0 && m.HomeCursor < len(m.HomeNebulae) {
-			selected := m.HomeNebulae[m.HomeCursor].Path
-			m.SelectedNebula = selected
-			m.NextNebula = selected
-			return m, tea.Quit
+			selected := m.HomeNebulae[m.HomeCursor]
+			pv := NewPlanView()
+			m.PlanPreview = &pv
+			m.ShowPlanPreview = true
+			nebulaDir := selected.Path
+			nebulaName := selected.Name
+			return m, func() tea.Msg {
+				return computePlan(nebulaDir, nebulaName)
+			}
 		}
 		return m, nil
 	}
@@ -904,6 +993,90 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// handlePlanKey processes keyboard input while the plan preview is active.
+func (m AppModel) handlePlanKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.Keys.Quit):
+		return m, tea.Quit
+
+	case key.Matches(msg, m.Keys.Back):
+		// Esc returns to home.
+		m.ShowPlanPreview = false
+		m.PlanPreview = nil
+		return m, nil
+
+	case key.Matches(msg, m.Keys.Enter):
+		action := m.PlanPreview.SelectedAction()
+		return m, func() tea.Msg {
+			return MsgPlanAction{
+				Action:    action,
+				Plan:      m.PlanPreview.Plan,
+				NebulaDir: m.PlanPreview.NebulaDir,
+			}
+		}
+
+	case msg.String() == "left" || msg.String() == "h":
+		m.PlanPreview.MoveLeft()
+		return m, nil
+
+	case msg.String() == "right" || msg.String() == "l":
+		m.PlanPreview.MoveRight()
+		return m, nil
+
+	case key.Matches(msg, m.Keys.Up):
+		m.PlanPreview.ScrollUp()
+		return m, nil
+
+	case key.Matches(msg, m.Keys.Down):
+		m.PlanPreview.ScrollDown()
+		return m, nil
+
+	case key.Matches(msg, m.Keys.PageUp),
+		key.Matches(msg, m.Keys.PageDown),
+		key.Matches(msg, m.Keys.Home),
+		key.Matches(msg, m.Keys.End):
+		m.PlanPreview.Update(msg)
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// computePlan loads and analyzes a nebula, producing an ExecutionPlan message.
+// This runs in a goroutine via tea.Cmd and returns either MsgPlanReady or MsgPlanError.
+func computePlan(nebulaDir, nebulaName string) tea.Msg {
+	n, err := nebula.Load(nebulaDir)
+	if err != nil {
+		return MsgPlanError{Err: fmt.Errorf("loading nebula: %w", err)}
+	}
+
+	errs := nebula.Validate(n)
+	if len(errs) > 0 {
+		return MsgPlanError{Err: fmt.Errorf("validation: %s", errs[0].Error())}
+	}
+
+	pe := &nebula.PlanEngine{
+		Scanner: &fabric.StaticScanner{},
+	}
+	plan, err := pe.Plan(n)
+	if err != nil {
+		return MsgPlanError{Err: fmt.Errorf("plan engine: %w", err)}
+	}
+
+	// Load previous plan for diff comparison.
+	var changes []nebula.PlanChange
+	prev := LoadPreviousPlan(nebulaDir, nebulaName)
+	if prev != nil {
+		changes = nebula.Diff(prev, plan)
+	}
+
+	return MsgPlanReady{
+		Plan:      plan,
+		Changes:   changes,
+		NebulaDir: nebulaDir,
+	}
 }
 
 // handlePauseKey toggles pause state by writing/removing the PAUSE intervention file.
@@ -993,6 +1166,7 @@ func (m *AppModel) handleRetryKey() {
 
 	// Reset the TUI's visual state so it starts fresh.
 	m.NebulaView.SetPhaseStatus(phaseID, PhaseWaiting)
+	m.Graph.SetPhaseStatus(phaseID, PhaseWaiting)
 	// Clear the per-phase loop view so it starts fresh.
 	delete(m.PhaseLoops, phaseID)
 	m.addMessage("retrying phase %s", phaseID)
@@ -1212,17 +1386,23 @@ func (m *AppModel) drillDown() {
 			m.DiffFileOpen = false
 			m.ShowBeads = false
 			// Drill into the selected phase's loop view.
-			// Use board cursor when board is active, table cursor otherwise.
-			var p *PhaseEntry
-			if m.BoardActive && m.ActiveTab == TabBoard {
+			// Use the active tab's cursor to determine which phase.
+			var phaseID string
+			if m.ActiveTab == TabGraph {
+				phaseID = m.Graph.SelectedPhaseID()
+			} else if m.BoardActive && m.ActiveTab == TabBoard {
 				m.Board.Phases = m.NebulaView.Phases
-				p = m.Board.SelectedPhase()
+				if p := m.Board.SelectedPhase(); p != nil {
+					phaseID = p.ID
+				}
 			}
-			if p == nil {
-				p = m.NebulaView.SelectedPhase()
+			if phaseID == "" {
+				if p := m.NebulaView.SelectedPhase(); p != nil {
+					phaseID = p.ID
+				}
 			}
-			if p != nil {
-				m.FocusedPhase = p.ID
+			if phaseID != "" {
+				m.FocusedPhase = phaseID
 				m.Depth = DepthPhaseLoop
 				m.updateDetailFromSelection()
 			}
@@ -1297,15 +1477,32 @@ func (m AppModel) handleGateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.Gate.MoveLeft()
 	case msg.String() == "right", msg.String() == "l":
 		m.Gate.MoveRight()
+	case msg.String() == "up", msg.String() == "k":
+		m.Gate.ScrollUp()
+	case msg.String() == "down", msg.String() == "j":
+		m.Gate.ScrollDown(m.Gate.contentLineCount(), m.Gate.viewportHeight())
 	}
 	return m, nil
 }
 
-// resolveGate sends the action and clears the gate.
+// resolveGate sends the action, updates the phase status, and clears the gate.
 func (m *AppModel) resolveGate(action nebula.GateAction) {
 	if m.Gate != nil {
+		phaseID := m.Gate.PhaseID
 		m.Gate.Resolve(action)
 		m.Gate = nil
+
+		// Transition the phase out of PhaseGate based on the decision.
+		switch action {
+		case nebula.GateActionAccept:
+			m.NebulaView.SetPhaseStatus(phaseID, PhaseDone)
+		case nebula.GateActionReject:
+			m.NebulaView.SetPhaseStatus(phaseID, PhaseFailed)
+		case nebula.GateActionRetry:
+			m.NebulaView.SetPhaseStatus(phaseID, PhaseWorking)
+		case nebula.GateActionSkip:
+			m.NebulaView.SetPhaseStatus(phaseID, PhaseSkipped)
+		}
 	}
 }
 
@@ -1358,6 +1555,8 @@ func (m *AppModel) moveUp() {
 		if m.Depth == DepthPhases {
 			if m.ActiveTab == TabEntanglements {
 				m.EntanglementView.MoveUp()
+			} else if m.ActiveTab == TabGraph {
+				m.Graph.MoveUp()
 			} else if m.BoardActive && m.ActiveTab == TabBoard {
 				m.Board.MoveUp()
 			} else {
@@ -1396,6 +1595,8 @@ func (m *AppModel) moveDown() {
 		if m.Depth == DepthPhases {
 			if m.ActiveTab == TabEntanglements {
 				m.EntanglementView.MoveDown()
+			} else if m.ActiveTab == TabGraph {
+				m.Graph.MoveDown()
 			} else if m.BoardActive && m.ActiveTab == TabBoard {
 				m.Board.MoveDown()
 			} else {
@@ -1639,6 +1840,10 @@ func (m *AppModel) adjustHomeOffset() {
 // showDetailPanel returns whether the detail panel should be visible.
 func (m AppModel) showDetailPanel() bool {
 	if m.Mode == ModeHome {
+		// Hide detail panel when the plan preview is active (it's a full-page view).
+		if m.ShowPlanPreview {
+			return false
+		}
 		// Show the detail panel in home mode when there are nebulas to describe.
 		// When ShowPlan is toggled off, hide the detail panel.
 		return len(m.HomeNebulae) > 0 && m.ShowPlan
@@ -1680,6 +1885,9 @@ func (m AppModel) View() string {
 	if m.Mode == ModeHome {
 		m.StatusBar.HomeMode = true
 		m.StatusBar.HomeNebulaCount = len(m.HomeNebulae)
+		if m.ShowPlanPreview && m.PlanPreview != nil && m.PlanPreview.Plan != nil {
+			m.StatusBar.Name = m.PlanPreview.Plan.Name + " (plan preview)"
+		}
 	}
 	sections = append(sections, m.StatusBar.View())
 	sections = append(sections, "") // Spacing between header and content.
@@ -1828,6 +2036,11 @@ func (m AppModel) renderMainView() string {
 	w := m.contentWidth()
 	switch m.Mode {
 	case ModeHome:
+		// Plan preview takes over the home view when active.
+		if m.ShowPlanPreview && m.PlanPreview != nil {
+			m.PlanPreview.SetSize(w, m.homeMainHeight())
+			return m.PlanPreview.View()
+		}
 		hv := HomeView{
 			Nebulae: m.HomeNebulae,
 			Cursor:  m.HomeCursor,
@@ -1868,6 +2081,9 @@ func (m AppModel) renderMainView() string {
 				m.EntanglementView.Width = w
 				m.EntanglementView.Height = m.detailHeight()
 				return m.EntanglementView.View()
+			case TabGraph:
+				m.Graph.SetSize(w, m.detailHeight())
+				return m.Graph.View()
 			case TabScratchpad:
 				return m.ScratchpadView.View()
 			default:
@@ -1899,7 +2115,11 @@ func (m AppModel) buildFooter() Footer {
 	if m.Gate != nil {
 		f.Bindings = GateFooterBindings(m.Keys)
 	} else if m.Mode == ModeHome {
-		f.Bindings = HomeFooterBindings(m.Keys)
+		if m.ShowPlanPreview && m.PlanPreview != nil {
+			f.Bindings = PlanFooterBindings(m.Keys)
+		} else {
+			f.Bindings = HomeFooterBindings(m.Keys)
+		}
 	} else if m.Mode == ModeNebula {
 		if m.Depth > DepthPhases {
 			f.Bindings = NebulaDetailFooterBindings(m.Keys)

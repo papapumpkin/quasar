@@ -15,17 +15,20 @@ const PlanPhaseID = "_plan"
 
 // Checkpoint captures the outcome of a completed phase for human review.
 type Checkpoint struct {
-	PhaseID        string
-	PhaseTitle     string
-	NebulaName     string
-	Status         PhaseStatus
-	ReviewCycles   int
-	CostUSD        float64
-	ReviewSummary  string       // From ReviewReport.Summary
-	Diff           string       // Output of git diff (the phase's commit vs prior)
-	FilesChanged   []FileChange // Parsed summary of changed files
-	BaseCommitSHA  string       // HEAD at start of the phase (empty if unavailable)
-	FinalCommitSHA string       // Last cycle's sealed SHA (empty if unavailable)
+	PhaseID          string
+	PhaseTitle       string
+	NebulaName       string
+	Status           PhaseStatus
+	ReviewCycles     int
+	CostUSD          float64
+	ReviewSummary    string       // From ReviewReport.Summary
+	NeedsHumanReview bool         // Reviewer flagged requirements-level issues
+	Satisfaction     string       // Reviewer satisfaction level (high, medium, low)
+	Risk             string       // Reviewer risk assessment (high, medium, low)
+	Diff             string       // Output of git diff (the phase's commit vs prior)
+	FilesChanged     []FileChange // Parsed summary of changed files
+	BaseCommitSHA    string       // HEAD at start of the phase (empty if unavailable)
+	FinalCommitSHA   string       // Last cycle's sealed SHA (empty if unavailable)
 }
 
 // FileChange summarizes a single file's changes within a phase commit.
@@ -56,9 +59,12 @@ func BuildCheckpoint(ctx context.Context, git GitCommitter, phaseID string, resu
 		cp.PhaseTitle = p.Title
 	}
 
-	// Populate review summary from the report.
+	// Populate review fields from the report.
 	if result.Report != nil {
 		cp.ReviewSummary = result.Report.Summary
+		cp.NeedsHumanReview = result.Report.NeedsHumanReview
+		cp.Satisfaction = result.Report.Satisfaction
+		cp.Risk = result.Report.Risk
 	}
 
 	// Retrieve the diff and stat for the phase.

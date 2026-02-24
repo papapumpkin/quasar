@@ -15,17 +15,20 @@ const (
 	TabBoard CockpitTab = iota
 	// TabEntanglements shows interface agreements from the fabric.
 	TabEntanglements
+	// TabGraph shows the DAG dependency graph.
+	TabGraph
 	// TabScratchpad shows telemetry-fed shared notes.
 	TabScratchpad
 )
 
 // cockpitTabCount is the total number of cockpit tabs.
-const cockpitTabCount = 3
+const cockpitTabCount = 4
 
 // tabLabels maps each tab to its display label.
 var tabLabels = [cockpitTabCount]string{
 	TabBoard:         "board",
 	TabEntanglements: "entanglements",
+	TabGraph:         "graph",
 	TabScratchpad:    "scratchpad",
 }
 

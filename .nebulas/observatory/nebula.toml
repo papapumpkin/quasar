@@ -1,0 +1,37 @@
+[nebula]
+name = "observatory"
+description = "Activate the entanglement fabric in nebula apply, add a terraform-style plan mode that statically resolves contracts before execution, and surface the dependency graph in the cockpit TUI."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "fabric", "plan", "cockpit"]
+
+[execution]
+max_workers = 2
+max_review_cycles = 5
+max_budget_usd = 80.0
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Wire the existing fabric infrastructure (SQLiteFabric, LLMPoller, Publisher) into nebula apply so entanglements are published and polled at runtime",
+    "Build a static analysis pass that extracts expected entanglements from phase specs without executing anything",
+    "Add a terraform-style `nebula plan` command that shows the contract graph and surfaces conflicts before apply",
+    "Add a Graph tab to the cockpit TUI that renders the live DAG with status colors and entanglement annotations",
+    "Let the cockpit home page run plan previews before launching apply",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "Use stdlib only — no third-party TUI or graph libraries beyond existing BubbleTea + lipgloss",
+    "Fabric activation must be opt-in via manifest field (agentmail = true) to preserve legacy behavior",
+    "DAG renderer must work in both TUI (lipgloss-styled) and stderr (plain ANSI) contexts",
+    "All existing tests must pass; new code needs test coverage",
+    "Plan output should be parseable — structured enough for agents to consume",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

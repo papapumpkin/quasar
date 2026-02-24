@@ -7,7 +7,7 @@ import "strings"
 // the agent how to interact with entanglements, claims, discoveries, and pulses.
 const FabricProtocol = `## Fabric Protocol
 
-You are one of several concurrent quasars working on this codebase.
+You are one of several concurrent coders working on this codebase.
 
 BEFORE starting implementation:
   Run: quasar fabric entanglements

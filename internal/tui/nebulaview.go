@@ -21,6 +21,23 @@ const (
 	PhaseSkipped
 )
 
+// PhaseStatusFromString maps a nebula state status string to a TUI PhaseStatus.
+// This is used when initializing the TUI from saved state.
+func PhaseStatusFromString(s string) PhaseStatus {
+	switch s {
+	case "done":
+		return PhaseDone
+	case "failed":
+		return PhaseFailed
+	case "in_progress":
+		return PhaseWorking
+	case "skipped":
+		return PhaseSkipped
+	default:
+		return PhaseWaiting
+	}
+}
+
 // PhaseEntry represents one phase in the nebula view.
 type PhaseEntry struct {
 	ID         string
@@ -80,6 +97,8 @@ func (nv *NebulaView) MoveDown() {
 }
 
 // InitPhases populates the phase table from a MsgNebulaInit.
+// When PhaseInfo carries a non-zero Status (from saved state), that status
+// is used instead of the default PhaseWaiting.
 func (nv *NebulaView) InitPhases(phases []PhaseInfo) {
 	nv.Phases = make([]PhaseEntry, len(phases))
 	for i, p := range phases {
@@ -90,15 +109,21 @@ func (nv *NebulaView) InitPhases(phases []PhaseInfo) {
 				blocked += fmt.Sprintf(" +%d", len(p.DependsOn)-1)
 			}
 		}
+		status := p.Status
+		if status == 0 {
+			status = PhaseWaiting
+		}
 		nv.Phases[i] = PhaseEntry{
 			ID:        p.ID,
 			Title:     p.Title,
-			Status:    PhaseWaiting,
+			Status:    status,
 			BlockedBy: blocked,
 			DependsOn: p.DependsOn,
 			PlanBody:  p.PlanBody,
 		}
 	}
+	// Recalculate blocked-by so phases with completed deps show correctly.
+	nv.refreshBlockedBy()
 }
 
 // AppendPhase adds a hot-added phase to the end of the phase table.
@@ -121,6 +146,9 @@ func (nv *NebulaView) AppendPhase(info PhaseInfo) {
 }
 
 // SetPhaseStatus updates the status of a phase by ID.
+// When a phase transitions to a terminal state (Done, Failed, Skipped),
+// dependent phases have their BlockedBy text recalculated so stale
+// "blocked:" indicators are cleared.
 func (nv *NebulaView) SetPhaseStatus(phaseID string, status PhaseStatus) {
 	for i := range nv.Phases {
 		if nv.Phases[i].ID == phaseID {
@@ -128,7 +156,40 @@ func (nv *NebulaView) SetPhaseStatus(phaseID string, status PhaseStatus) {
 				nv.Phases[i].StartedAt = time.Now()
 			}
 			nv.Phases[i].Status = status
-			return
+			break
+		}
+	}
+
+	// Recalculate BlockedBy for phases that depend on the updated phase.
+	if status == PhaseDone || status == PhaseFailed || status == PhaseSkipped {
+		nv.refreshBlockedBy()
+	}
+}
+
+// refreshBlockedBy recalculates BlockedBy for all phases based on
+// which of their DependsOn phases are still incomplete.
+func (nv *NebulaView) refreshBlockedBy() {
+	done := make(map[string]bool)
+	for _, p := range nv.Phases {
+		if p.Status == PhaseDone || p.Status == PhaseFailed || p.Status == PhaseSkipped {
+			done[p.ID] = true
+		}
+	}
+	for i := range nv.Phases {
+		var pending []string
+		for _, dep := range nv.Phases[i].DependsOn {
+			if !done[dep] {
+				pending = append(pending, dep)
+			}
+		}
+		if len(pending) == 0 {
+			nv.Phases[i].BlockedBy = ""
+		} else {
+			blocked := pending[0]
+			if len(pending) > 1 {
+				blocked += fmt.Sprintf(" +%d", len(pending)-1)
+			}
+			nv.Phases[i].BlockedBy = blocked
 		}
 	}
 }

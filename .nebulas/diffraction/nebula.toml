@@ -1,0 +1,35 @@
+[nebula]
+name = "diffraction"
+description = "Replace the LLM-based dispatch poller with a deterministic contract gater that walks execution waves layer-by-layer, checks produces/consumes contracts against the fabric board, and prunes downstream subtrees on failure. Execution waves diffract through the contract lattice — only phases with fulfilled contracts pass through."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "fabric", "dispatch", "scheduler"]
+
+[execution]
+max_workers = 9
+max_review_cycles = 5
+max_budget_usd = 40.0
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Replace LLMPoller dispatch with a deterministic ContractPoller that uses set-intersection checks",
+    "Walk execution waves layer-by-layer so downstream phases are never polled if an upstream can't proceed",
+    "Soften the hard DAG gate so phases can launch when contracts are fulfilled regardless of formal depends_on completion",
+    "Preserve the LLMPoller for cases where deterministic resolution is ambiguous (fallback, not primary)",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "ContractPoller must implement the existing fabric.Poller interface — no interface changes",
+    "The deterministic gate must be O(phases) map lookups, not O(phases) LLM calls",
+    "Wave pruning must be correct: if phase X cannot proceed, nothing that transitively depends on X should be polled",
+    "All existing tests must pass; new code needs test coverage",
+    "LLMPoller remains available as an optional fallback, not deleted",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = ["observatory"]

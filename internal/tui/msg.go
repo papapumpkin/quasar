@@ -191,7 +191,8 @@ type PhaseInfo struct {
 	ID        string
 	Title     string
 	DependsOn []string
-	PlanBody  string // markdown content from the phase file
+	PlanBody  string      // markdown content from the phase file
+	Status    PhaseStatus // initial status from saved state (default PhaseWaiting)
 }
 
 // MsgNebulaInit is sent at TUI startup to populate the phase table.
@@ -343,4 +344,36 @@ type MsgScratchpadEntry struct {
 // MsgStaleWarning alerts the operator to stale state detected by the Tycho scheduler.
 type MsgStaleWarning struct {
 	Items []tycho.StaleItem
+}
+
+// PlanAction represents the user's chosen action from the plan preview.
+type PlanAction int
+
+const (
+	// PlanActionApply proceeds with nebula execution.
+	PlanActionApply PlanAction = iota
+	// PlanActionCancel returns to the home page.
+	PlanActionCancel
+	// PlanActionSave writes the plan to disk as JSON.
+	PlanActionSave
+)
+
+// MsgPlanReady is sent when the execution plan has been computed for a
+// selected nebula, transitioning the home view into the plan preview.
+type MsgPlanReady struct {
+	Plan      *nebula.ExecutionPlan
+	Changes   []nebula.PlanChange // diff vs. previous plan (nil if no prior plan)
+	NebulaDir string
+}
+
+// MsgPlanAction is sent when the user makes a choice in the plan preview.
+type MsgPlanAction struct {
+	Action    PlanAction
+	Plan      *nebula.ExecutionPlan
+	NebulaDir string
+}
+
+// MsgPlanError is sent when plan computation fails.
+type MsgPlanError struct {
+	Err error
 }

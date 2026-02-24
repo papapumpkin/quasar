@@ -76,7 +76,7 @@ func TestFabricProtocolContent(t *testing.T) {
 	t.Parallel()
 
 	requiredPhrases := []string{
-		"You are one of several concurrent quasars",
+		"You are one of several concurrent coders",
 		"quasar fabric entanglements",
 		"quasar fabric claim --file",
 		"quasar fabric post --from-file",
