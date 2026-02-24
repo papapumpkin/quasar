@@ -33,6 +33,8 @@ func PhaseStatusFromString(s string) PhaseStatus {
 		return PhaseWorking
 	case "skipped":
 		return PhaseSkipped
+	case "gate":
+		return PhaseGate
 	default:
 		return PhaseWaiting
 	}
@@ -40,18 +42,19 @@ func PhaseStatusFromString(s string) PhaseStatus {
 
 // PhaseEntry represents one phase in the nebula view.
 type PhaseEntry struct {
-	ID         string
-	Title      string
-	Status     PhaseStatus
-	Wave       int
-	CostUSD    float64
-	Cycles     int
-	MaxCycles  int
-	BlockedBy  string
-	DependsOn  []string // original dependency IDs from the phase spec
-	StartedAt  time.Time
-	PlanBody   string // markdown content from the phase file
-	Refactored bool   // true when a mid-run refactor was applied this cycle
+	ID          string
+	Title       string
+	Status      PhaseStatus
+	Wave        int
+	CostUSD     float64
+	Cycles      int
+	MaxCycles   int
+	BlockedBy   string
+	DependsOn   []string // original dependency IDs from the phase spec
+	StartedAt   time.Time
+	CompletedAt time.Time // set when phase reaches a terminal state
+	PlanBody    string    // markdown content from the phase file
+	Refactored  bool      // true when a mid-run refactor was applied this cycle
 }
 
 // NebulaView renders the phase table for multi-task orchestration.
@@ -154,6 +157,9 @@ func (nv *NebulaView) SetPhaseStatus(phaseID string, status PhaseStatus) {
 		if nv.Phases[i].ID == phaseID {
 			if status == PhaseWorking && nv.Phases[i].StartedAt.IsZero() {
 				nv.Phases[i].StartedAt = time.Now()
+			}
+			if (status == PhaseDone || status == PhaseFailed || status == PhaseSkipped) && nv.Phases[i].CompletedAt.IsZero() {
+				nv.Phases[i].CompletedAt = time.Now()
 			}
 			nv.Phases[i].Status = status
 			break
@@ -318,7 +324,7 @@ func (nv NebulaView) phaseIconAndStyle(p PhaseEntry) (string, lipgloss.Style) {
 func (nv NebulaView) phaseDetail(p PhaseEntry) string {
 	switch p.Status {
 	case PhaseDone:
-		elapsed := formatElapsed(p.StartedAt)
+		elapsed := formatDuration(p.StartedAt, p.CompletedAt)
 		if elapsed != "" {
 			return fmt.Sprintf("$%.2f  %d cycle(s)  %s", p.CostUSD, p.Cycles, elapsed)
 		}

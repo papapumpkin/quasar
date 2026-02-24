@@ -202,6 +202,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.StatusBar.Width = msg.Width
 		contentWidth := msg.Width
 		detailHeight := m.detailHeight()
+		if m.Mode == ModeHome {
+			detailHeight = m.homeDetailHeight()
+		}
 		m.Detail.SetSize(contentWidth-2, detailHeight)
 		m.ScratchpadView.SetSize(contentWidth, detailHeight)
 
@@ -218,6 +221,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.BoardActive = msg.Width >= BoardMinWidth
 		} else if msg.Width < BoardMinWidth {
 			m.BoardActive = false
+		}
+
+		// Update gate overlay dimensions if it's currently visible.
+		if m.Gate != nil {
+			m.Gate.Width = m.contentWidth()
+			m.Gate.Height = m.Height
 		}
 
 		// Clamp cursors so they remain valid after a resize that may shrink lists.
@@ -441,6 +450,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Toasts = append(m.Toasts, toast)
 		cmds = append(cmds, cmd)
 
+	// --- Fabric scanning ---
+	case MsgPhaseScanning:
+		m.addMessage("[%s] scanning entanglements", msg.PhaseID)
+		toast, cmd := NewToast(fmt.Sprintf("[%s] scanning entanglements", msg.PhaseID), false)
+		m.Toasts = append(m.Toasts, toast)
+		cmds = append(cmds, cmd)
+
 	// --- Bead hierarchy ---
 	case MsgBeadUpdate:
 		root := msg.Root
@@ -458,7 +474,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// --- Gate ---
 	case MsgGatePrompt:
 		m.Gate = NewGatePrompt(msg.Checkpoint, msg.ResponseCh)
-		m.Gate.Width = m.Width
+		m.Gate.Width = m.contentWidth()
 		m.Gate.Height = m.Height
 		// Mark the phase as gated if we know which one.
 		if msg.Checkpoint != nil {
@@ -1491,15 +1507,20 @@ func (m *AppModel) resolveGate(action nebula.GateAction) {
 		m.Gate = nil
 
 		// Transition the phase out of PhaseGate based on the decision.
+		// Update both NebulaView (board) and Graph (DAG) to keep them in sync.
 		switch action {
 		case nebula.GateActionAccept:
 			m.NebulaView.SetPhaseStatus(phaseID, PhaseDone)
+			m.Graph.SetPhaseStatus(phaseID, PhaseDone)
 		case nebula.GateActionReject:
 			m.NebulaView.SetPhaseStatus(phaseID, PhaseFailed)
+			m.Graph.SetPhaseStatus(phaseID, PhaseFailed)
 		case nebula.GateActionRetry:
 			m.NebulaView.SetPhaseStatus(phaseID, PhaseWorking)
+			m.Graph.SetPhaseStatus(phaseID, PhaseWorking)
 		case nebula.GateActionSkip:
 			m.NebulaView.SetPhaseStatus(phaseID, PhaseSkipped)
+			m.Graph.SetPhaseStatus(phaseID, PhaseSkipped)
 		}
 	}
 }
@@ -1801,22 +1822,36 @@ func (m AppModel) detailHeight() int {
 
 // homeMainHeight computes the available lines for the home nebula list.
 func (m AppModel) homeMainHeight() int {
-	// Fixed chrome: status bar (1) + spacing (1) + footer (1).
-	chrome := 3
-	// Banner: estimate height based on size tier.
-	if bv := m.Banner.View(); bv != "" {
-		chrome += lipgloss.Height(bv)
+	// Fixed chrome: status bar (1) + spacing (1) + bottom bar (1) + footer (1).
+	chrome := 4
+	// Banner: only counted when the terminal is tall enough to show it.
+	if m.Height >= BannerCollapseHeight {
+		if bv := m.Banner.View(); bv != "" {
+			chrome += lipgloss.Height(bv)
+		}
 	}
-	// Detail panel.
-	if m.showDetailPanel() && m.Height >= DetailCollapseHeight {
+	// Detail panel — uses a higher collapse threshold and smaller fraction
+	// than other modes because the banner competes for vertical space.
+	if m.showDetailPanel() && m.Height >= HomeDetailCollapseHeight {
 		chrome++ // separator line
-		chrome += m.detailHeight()
+		chrome += m.homeDetailHeight()
 	}
 	h := m.Height - chrome
 	if h < 3 {
 		h = 3
 	}
 	return h
+}
+
+// homeDetailHeight returns the detail panel height for home mode.
+// Uses a smaller fraction (1/4) than the default detailHeight (2/5) to
+// leave more room for the nebula list alongside the banner.
+func (m AppModel) homeDetailHeight() int {
+	mainH := m.Height - 4 // status + spacing + bottom bar + footer
+	if mainH < 4 {
+		return 0
+	}
+	return mainH / 4
 }
 
 // adjustHomeOffset updates HomeOffset so the cursor is visible within the
@@ -1897,8 +1932,11 @@ func (m AppModel) View() string {
 	}
 
 	// Top banner (S-A or XS-A modes) — between status bar and content.
-	if bannerView := m.Banner.View(); bannerView != "" {
-		sections = append(sections, bannerView)
+	// Skip when the terminal is too short to avoid pushing content off-screen.
+	if m.Height >= BannerCollapseHeight {
+		if bannerView := m.Banner.View(); bannerView != "" {
+			sections = append(sections, bannerView)
+		}
 	}
 
 	// Build the "middle" section: breadcrumb + main view + detail + gate + toasts.
@@ -1913,7 +1951,12 @@ func (m AppModel) View() string {
 	middle = append(middle, m.renderMainView())
 
 	// Detail panel (when drilled into agent output) — auto-collapse on short terminals.
-	if m.showDetailPanel() && m.Height >= DetailCollapseHeight {
+	// Home mode uses a higher threshold because the banner also consumes vertical space.
+	detailThreshold := DetailCollapseHeight
+	if m.Mode == ModeHome {
+		detailThreshold = HomeDetailCollapseHeight
+	}
+	if m.showDetailPanel() && m.Height >= detailThreshold {
 		sep := styleSectionBorder.Width(contentWidth).Render("")
 		middle = append(middle, sep)
 		middle = append(middle, m.Detail.View())

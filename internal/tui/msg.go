@@ -244,6 +244,12 @@ type MsgPhaseHotAdded struct {
 	DependsOn []string
 }
 
+// MsgPhaseScanning is sent when a phase enters the fabric scanning gate,
+// allowing the TUI to surface a brief toast before the phase starts running.
+type MsgPhaseScanning struct {
+	PhaseID string
+}
+
 // Internal TUI messages.
 
 // MsgTick drives the elapsed-time timer.

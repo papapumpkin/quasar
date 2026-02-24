@@ -162,7 +162,7 @@ func toPhaseRunnerResult(result *loop.TaskResult) *nebula.PhaseRunnerResult {
 }
 
 // fabricComponents holds initialized fabric infrastructure for passing to
-// WorkerGroup options. When agentmail is disabled, all fields are nil.
+// WorkerGroup options. When there are no inter-phase dependencies, all fields are nil.
 type fabricComponents struct {
 	Fabric    fabric.Fabric
 	Poller    fabric.Poller
@@ -191,11 +191,11 @@ func (fc *fabricComponents) WorkerGroupOptions() []nebula.Option {
 	}
 }
 
-// initFabric creates the fabric infrastructure if agentmail is enabled in the
-// manifest. When agentmail is false, it returns a zero-value fabricComponents
-// (all nil fields). The caller must defer fc.Close().
+// initFabric creates the fabric infrastructure when the DAG has inter-phase
+// dependencies. When no phases have dependencies, it returns a zero-value
+// fabricComponents (all nil fields). The caller must defer fc.Close().
 func initFabric(ctx context.Context, n *nebula.Nebula, dir, workDir string, inv agent.Invoker) (*fabricComponents, error) {
-	if !n.Manifest.Execution.AgentMail {
+	if !n.HasDependencies() {
 		return &fabricComponents{}, nil
 	}
 
@@ -203,6 +203,20 @@ func initFabric(ctx context.Context, n *nebula.Nebula, dir, workDir string, inv 
 	if err := os.MkdirAll(fabricDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating fabric directory: %w", err)
 	}
+
+	// Ensure the telemetry directory and file exist so that TelemetryBridge
+	// can start tailing immediately when the scratchpad is opened.
+	telemetryDir := filepath.Join(dir, ".quasar", "telemetry")
+	if err := os.MkdirAll(telemetryDir, 0o755); err != nil {
+		return nil, fmt.Errorf("creating telemetry directory: %w", err)
+	}
+	telemetryFile := filepath.Join(telemetryDir, "current.jsonl")
+	if _, err := os.Stat(telemetryFile); os.IsNotExist(err) {
+		if f, err := os.Create(telemetryFile); err == nil {
+			f.Close()
+		}
+	}
+
 	fabricPath := filepath.Join(fabricDir, "fabric.db")
 
 	fab, err := fabric.NewSQLiteFabric(ctx, fabricPath)

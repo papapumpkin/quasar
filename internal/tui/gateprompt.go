@@ -186,7 +186,16 @@ func (g *GatePrompt) detailBody() string {
 			if fc.LinesAdded > 0 || fc.LinesRemoved > 0 {
 				lineInfo = styleGateDetail.Render(fmt.Sprintf(" +%d -%d", fc.LinesAdded, fc.LinesRemoved))
 			}
-			b.WriteString(fmt.Sprintf("  %s %s%s\n", icon, fc.Path, lineInfo))
+			// Reserve space for border (4) + padding (4) + icon+spacing (4) + lineInfo visual width.
+			maxPathWidth := g.Width - 12 - lipgloss.Width(lineInfo)
+			if maxPathWidth < 20 {
+				maxPathWidth = 20
+			}
+			path := fc.Path
+			if len(path) > maxPathWidth && maxPathWidth > 3 {
+				path = "..." + path[len(path)-maxPathWidth+3:]
+			}
+			b.WriteString(fmt.Sprintf("  %s %s%s\n", icon, path, lineInfo))
 		}
 	}
 
@@ -196,8 +205,8 @@ func (g *GatePrompt) detailBody() string {
 		b.WriteString(styleGateLabel.Render("Reviewer:"))
 		b.WriteString("\n")
 		maxWidth := g.Width - 8
-		if maxWidth < 40 {
-			maxWidth = 60
+		if maxWidth < 20 {
+			maxWidth = 20
 		}
 		b.WriteString("  " + wrapText(g.ReviewSummary, maxWidth))
 		b.WriteString("\n")
@@ -254,6 +263,11 @@ func (g GatePrompt) View() string {
 	}
 	out.WriteString(strings.Join(optParts, "  "))
 
+	// Clamp overlay width to prevent spilling past the terminal edge.
+	// Subtract 4 for the double border (2 chars each side).
+	if g.Width > 0 {
+		return styleGateOverlay.Width(g.Width - 4).Render(out.String())
+	}
 	return styleGateOverlay.Render(out.String())
 }
 

@@ -8,7 +8,7 @@ import (
 func TestBoardViewPartition_CorrectColumns(t *testing.T) {
 	t.Parallel()
 	bv := NewBoardView()
-	bv.Width = 150 // Full width: all 7 columns visible, no remapping.
+	bv.Width = 150 // Full width: all 6 columns visible, no remapping.
 	bv.Phases = []PhaseEntry{
 		{ID: "queued", Status: PhaseWaiting},
 		{ID: "running", Status: PhaseWorking},
@@ -31,7 +31,6 @@ func TestBoardViewPartition_CorrectColumns(t *testing.T) {
 		{ColFailed, []string{"failed"}},
 		{ColReview, []string{"gate"}},
 		{ColBlocked, []string{"blocked"}},
-		{ColScanning, nil},
 	}
 
 	for _, tc := range tests {
@@ -60,7 +59,7 @@ func TestBoardViewPartition_CorrectColumns(t *testing.T) {
 func TestBoardViewPartition_MediumWidthRemapping(t *testing.T) {
 	t.Parallel()
 	bv := NewBoardView()
-	bv.Width = 120 // Medium width: Scanning and Blocked columns merge into Queued.
+	bv.Width = 120 // Medium width: Blocked column merges into Queued.
 	bv.Phases = []PhaseEntry{
 		{ID: "queued", Status: PhaseWaiting},
 		{ID: "blocked", Status: PhaseWaiting, BlockedBy: "other"},
@@ -76,10 +75,6 @@ func TestBoardViewPartition_MediumWidthRemapping(t *testing.T) {
 	// Blocked column should be empty at medium width.
 	if len(buckets[ColBlocked]) != 0 {
 		t.Errorf("expected 0 entries in Blocked at medium width, got %d", len(buckets[ColBlocked]))
-	}
-	// Scanning column should also be empty.
-	if len(buckets[ColScanning]) != 0 {
-		t.Errorf("expected 0 entries in Scanning at medium width, got %d", len(buckets[ColScanning]))
 	}
 	// Running should be unaffected.
 	if len(buckets[ColRunning]) != 1 {
@@ -190,7 +185,7 @@ func TestBoardViewView_ColumnHeaders(t *testing.T) {
 
 	view := bv.View()
 
-	// All 7 columns should have headers at full width.
+	// All 6 columns should have headers at full width.
 	for col := BoardColumn(0); col < colCount; col++ {
 		label := columnDefs[col].Label
 		if !strings.Contains(view, label) {
@@ -202,7 +197,7 @@ func TestBoardViewView_ColumnHeaders(t *testing.T) {
 func TestBoardViewView_MediumWidth(t *testing.T) {
 	t.Parallel()
 	bv := NewBoardView()
-	bv.Width = 120 // Medium: Scanning and Blocked should be hidden.
+	bv.Width = 120 // Medium: Blocked should be hidden.
 	bv.Phases = []PhaseEntry{
 		{ID: "a", Status: PhaseWaiting},
 		{ID: "b", Status: PhaseWorking},
@@ -210,9 +205,6 @@ func TestBoardViewView_MediumWidth(t *testing.T) {
 
 	view := bv.View()
 
-	if strings.Contains(view, "Scanning") {
-		t.Error("Scanning column should not appear at medium width")
-	}
 	if strings.Contains(view, "Blocked") {
 		t.Error("Blocked column should not appear at medium width")
 	}
@@ -426,8 +418,8 @@ func TestBoardViewVisibleColumns_FullWidth(t *testing.T) {
 	bv := BoardView{Width: 150}
 	cols := bv.visibleColumns()
 
-	if len(cols) != 7 {
-		t.Errorf("expected 7 columns at full width, got %d", len(cols))
+	if len(cols) != 6 {
+		t.Errorf("expected 6 columns at full width, got %d", len(cols))
 	}
 }
 
@@ -440,11 +432,8 @@ func TestBoardViewVisibleColumns_MediumWidth(t *testing.T) {
 		t.Errorf("expected 5 columns at medium width, got %d", len(cols))
 	}
 
-	// Scanning and Blocked should not be in the list.
+	// Blocked should not be in the list at medium width.
 	for _, col := range cols {
-		if col == ColScanning {
-			t.Error("Scanning should not appear at medium width")
-		}
 		if col == ColBlocked {
 			t.Error("Blocked should not appear at medium width")
 		}

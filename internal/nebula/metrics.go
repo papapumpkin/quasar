@@ -29,7 +29,7 @@ type WaveMetrics struct {
 	TotalDuration        time.Duration // wall-clock time for the wave
 	Conflicts            int
 
-	// Agentmail coordination signals (populated when agentmail is configured).
+	// Contract board coordination signals (populated when inter-phase dependencies exist).
 	ChangeVolume int           // changes announced during this wave
 	ActiveClaims int           // file claims held at wave end
 	AvgClaimAge  time.Duration // mean age of active claims at wave end

@@ -54,6 +54,7 @@ type WorkerGroup struct {
 	OnRefactor   func(phaseID string, pending bool)       // optional callback for refactor notifications
 	OnHotAdd     HotAddFunc                               // optional callback for hot-added phases
 	OnHail       func(phaseID string, d fabric.Discovery) // optional callback for hail surfacing
+	OnScanning   func(phaseID string)                     // optional callback for fabric scanning notifications
 	Metrics      *Metrics                                 // optional; nil = no collection
 	Logger       io.Writer                                // optional; nil = os.Stderr
 
@@ -357,6 +358,15 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		eligible, _ := wg.tychoScheduler.Eligible(ctx)
 		anyInFlight := wg.tychoScheduler.AnyInFlight()
 		wg.mu.Unlock()
+
+		// Notify the TUI that eligible phases are entering the fabric scan gate.
+		// Only fires when fabric is configured (OnScanning is wired) so legacy
+		// mode never produces scanning toasts.
+		if wg.OnScanning != nil && wg.Fabric != nil {
+			for _, id := range eligible {
+				wg.OnScanning(id)
+			}
+		}
 
 		// Delegate fabric-aware scanning to Tycho. When fabric is not
 		// configured, Scan returns eligible unchanged (no-op).

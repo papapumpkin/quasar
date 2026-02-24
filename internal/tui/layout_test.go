@@ -230,6 +230,50 @@ func TestDetailShownOnTallTerminal(t *testing.T) {
 	}
 }
 
+func TestHomeDetailCollapseOnModerateTerminal(t *testing.T) {
+	t.Parallel()
+	m := NewAppModel(ModeHome)
+	m.Splash = nil
+	m.Width = 80
+	m.Height = HomeDetailCollapseHeight - 1 // below home threshold but above general
+	m.ShowPlan = true
+	m.HomeNebulae = []NebulaChoice{{Name: "test-nebula", Path: "/tmp/test"}}
+
+	view := m.View()
+	// The detail panel should NOT appear on a moderately-sized terminal in home mode.
+	if strings.Contains(view, "Terminal too small") {
+		t.Error("should not show too-small message at this height")
+	}
+}
+
+func TestHomeMainHeightSufficientAtCommonSizes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		height int
+		minH   int
+	}{
+		{"80x24 no banner no detail", 24, 15},
+		{"120x40 with banner", 40, 10},
+		{"200x50 full chrome", 50, 15},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			m := NewAppModel(ModeHome)
+			m.Width = 120
+			m.Height = tt.height
+			m.ShowPlan = true
+			m.HomeNebulae = []NebulaChoice{{Name: "test", Path: "/tmp"}}
+
+			h := m.homeMainHeight()
+			if h < tt.minH {
+				t.Errorf("homeMainHeight() = %d at height %d, want >= %d", h, tt.height, tt.minH)
+			}
+		})
+	}
+}
+
 func TestFooterCompactMode(t *testing.T) {
 	t.Parallel()
 	km := DefaultKeyMap()

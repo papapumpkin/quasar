@@ -144,7 +144,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Initialize fabric infrastructure when agentmail is enabled.
+	// Initialize fabric infrastructure when the DAG has inter-phase dependencies.
 	fc, err := initFabric(ctx, n, dir, workDir, claudeInv)
 	if err != nil {
 		return fmt.Errorf("fabric initialization failed: %w", err)
@@ -221,6 +221,11 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		// Wire Tycho OnHail callback to emit MsgHail via the TUI program.
 		wg.OnHail = func(phaseID string, d fabric.Discovery) {
 			tuiProgram.Send(tui.MsgHail{PhaseID: phaseID, Discovery: d})
+		}
+		// Wire fabric scanning notification to surface a toast when phases
+		// enter the scanning gate (blocked → scanning → running).
+		wg.OnScanning = func(phaseID string) {
+			tuiProgram.Send(tui.MsgPhaseScanning{PhaseID: phaseID})
 		}
 		// Start telemetry bridge if a telemetry file exists.
 		telemetryPath := filepath.Join(".quasar", "telemetry", "current.jsonl")
@@ -413,6 +418,9 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				// Re-wire OnHail for the next nebula's TUI program.
 				wg.OnHail = func(phaseID string, d fabric.Discovery) {
 					tuiProgram.Send(tui.MsgHail{PhaseID: phaseID, Discovery: d})
+				}
+				wg.OnScanning = func(phaseID string) {
+					tuiProgram.Send(tui.MsgPhaseScanning{PhaseID: phaseID})
 				}
 				wg.OnProgress = func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
 					tuiProgram.Send(tui.MsgNebulaProgress{

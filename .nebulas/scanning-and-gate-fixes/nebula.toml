@@ -1,0 +1,39 @@
+[nebula]
+name = "scanning-and-gate-fixes"
+description = "Fix board, gate, graph, timer, and homepage layout issues; auto-enable contract board from DAG structure"
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["quasar", "tui"]
+assignee = ""
+
+[execution]
+max_workers = 9
+max_review_cycles = 5
+max_budget_usd = 40.0
+model = ""
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Remove the dead Scanning board column that nothing ever populates",
+    "Surface fabric scanning state transitions as toast notifications in the TUI",
+    "Prevent the gate review overlay from overflowing the right edge of the terminal",
+    "Fix completed phases showing purple instead of green in graph view after gate resolution",
+    "Auto-enable the contract board when the DAG has inter-phase dependencies",
+    "Add gate/review state to graph legend and fix PhaseStatusFromString for gate",
+    "Fix phase elapsed timers showing cumulative time instead of actual phase duration",
+    "Fix homepage layout: logo cut off at top, everything squished",
+]
+constraints = [
+    "All existing tests must pass after changes",
+    "No external dependencies added",
+    "Toast notifications must be brief and non-blocking",
+    "Gate prompt must remain fully readable at all terminal widths >= MinWidth",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

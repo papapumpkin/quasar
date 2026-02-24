@@ -315,6 +315,7 @@ func graphLegend() string {
 	}{
 		{"queued", colorPrimary},
 		{"running", colorStarYellow},
+		{"review", colorAccent},
 		{"done", colorSuccess},
 		{"failed", colorDanger},
 	}
