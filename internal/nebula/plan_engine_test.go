@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/papapumpkin/quasar/internal/dag"
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
@@ -71,6 +72,7 @@ func TestPlanEngine_Plan(t *testing.T) {
 				{ID: "track2-b", Title: "T2B", Priority: 2, DependsOn: []string{"track2-a"}, Body: "## Problem\nTrack 2 end"},
 			}),
 			wantWaves:    2,
+			wantTracks:   2,
 			wantPhases:   4,
 			wantParallel: 2,
 			checkRisks: func(t *testing.T, risks []PlanRisk) {
@@ -340,10 +342,12 @@ func TestDiff(t *testing.T) {
 		{
 			name: "no changes",
 			old: &ExecutionPlan{
+				Waves:     []dag.Wave{{Number: 1, NodeIDs: []string{"a"}}},
 				Contracts: []fabric.PhaseContract{{PhaseID: "a"}},
 				Stats:     PlanStats{TotalWaves: 1, TotalTracks: 1},
 			},
 			new: &ExecutionPlan{
+				Waves:     []dag.Wave{{Number: 1, NodeIDs: []string{"a"}}},
 				Contracts: []fabric.PhaseContract{{PhaseID: "a"}},
 				Stats:     PlanStats{TotalWaves: 1, TotalTracks: 1},
 			},
@@ -352,10 +356,12 @@ func TestDiff(t *testing.T) {
 		{
 			name: "phase added",
 			old: &ExecutionPlan{
+				Waves:     []dag.Wave{{Number: 1, NodeIDs: []string{"a"}}},
 				Contracts: []fabric.PhaseContract{{PhaseID: "a"}},
 				Stats:     PlanStats{TotalWaves: 1, TotalTracks: 1},
 			},
 			new: &ExecutionPlan{
+				Waves:     []dag.Wave{{Number: 1, NodeIDs: []string{"a", "b"}}},
 				Contracts: []fabric.PhaseContract{{PhaseID: "a"}, {PhaseID: "b"}},
 				Stats:     PlanStats{TotalWaves: 1, TotalTracks: 1},
 			},
@@ -376,10 +382,12 @@ func TestDiff(t *testing.T) {
 		{
 			name: "phase removed",
 			old: &ExecutionPlan{
+				Waves:     []dag.Wave{{Number: 1, NodeIDs: []string{"a"}}, {Number: 2, NodeIDs: []string{"b"}}},
 				Contracts: []fabric.PhaseContract{{PhaseID: "a"}, {PhaseID: "b"}},
 				Stats:     PlanStats{TotalWaves: 2, TotalTracks: 1},
 			},
 			new: &ExecutionPlan{
+				Waves:     []dag.Wave{{Number: 1, NodeIDs: []string{"a"}}},
 				Contracts: []fabric.PhaseContract{{PhaseID: "a"}},
 				Stats:     PlanStats{TotalWaves: 1, TotalTracks: 1},
 			},
@@ -400,10 +408,12 @@ func TestDiff(t *testing.T) {
 		{
 			name: "stats changed",
 			old: &ExecutionPlan{
+				Waves:     []dag.Wave{{Number: 1, NodeIDs: []string{"a"}}},
 				Contracts: []fabric.PhaseContract{{PhaseID: "a"}},
 				Stats:     PlanStats{TotalWaves: 1, TotalTracks: 1, FulfilledContracts: 2, Conflicts: 0},
 			},
 			new: &ExecutionPlan{
+				Waves:     []dag.Wave{{Number: 1, NodeIDs: []string{"a"}}},
 				Contracts: []fabric.PhaseContract{{PhaseID: "a"}},
 				Stats:     PlanStats{TotalWaves: 2, TotalTracks: 2, FulfilledContracts: 3, Conflicts: 1},
 			},
@@ -423,11 +433,13 @@ func TestDiff(t *testing.T) {
 		{
 			name: "risk severity changes",
 			old: &ExecutionPlan{
+				Waves:     []dag.Wave{{Number: 1, NodeIDs: []string{"a"}}},
 				Contracts: []fabric.PhaseContract{{PhaseID: "a"}},
 				Risks:     []PlanRisk{{Severity: "error", PhaseID: "a", Message: "bad"}},
 				Stats:     PlanStats{TotalWaves: 1, TotalTracks: 1},
 			},
 			new: &ExecutionPlan{
+				Waves:     []dag.Wave{{Number: 1, NodeIDs: []string{"a"}}},
 				Contracts: []fabric.PhaseContract{{PhaseID: "a"}},
 				Risks:     []PlanRisk{},
 				Stats:     PlanStats{TotalWaves: 1, TotalTracks: 1},

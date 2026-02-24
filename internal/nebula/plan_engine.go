@@ -90,7 +90,7 @@ func (pe *PlanEngine) Plan(n *Nebula) (*ExecutionPlan, error) {
 	report := fabric.ResolveContracts(contracts, deps)
 
 	// Step 5: Aggregate risks.
-	risks := aggregateRisks(n, report, waves, tracks)
+	risks := aggregateRisks(n, report, tracks)
 
 	// Step 6: Compute stats.
 	stats := computeStats(n, waves, tracks, report)
@@ -271,7 +271,7 @@ func buildDepsMap(phases []PhaseSpec) map[string][]string {
 }
 
 // aggregateRisks builds the risk list from contract report and structural analysis.
-func aggregateRisks(n *Nebula, report *fabric.ContractReport, waves []dag.Wave, tracks []dag.Track) []PlanRisk {
+func aggregateRisks(n *Nebula, report *fabric.ContractReport, tracks []dag.Track) []PlanRisk {
 	var risks []PlanRisk
 
 	// Missing contracts → error.
@@ -284,7 +284,6 @@ func aggregateRisks(n *Nebula, report *fabric.ContractReport, waves []dag.Wave, 
 	}
 
 	// Scope overlaps without allow_scope_overlap → error.
-	specByID := PhasesByID(n.Phases)
 	for i := 0; i < len(n.Phases); i++ {
 		for j := i + 1; j < len(n.Phases); j++ {
 			a, b := n.Phases[i], n.Phases[j]
@@ -333,17 +332,21 @@ func aggregateRisks(n *Nebula, report *fabric.ContractReport, waves []dag.Wave, 
 		phaseHasContracts[entry.Producer] = true
 	}
 
-	// Check each leaf wave for isolated phases.
-	if len(waves) > 0 {
-		lastWave := waves[len(waves)-1]
-		for _, id := range lastWave.NodeIDs {
-			if !phaseHasContracts[id] && len(specByID[id].DependsOn) == 0 {
-				risks = append(risks, PlanRisk{
-					Severity: "info",
-					PhaseID:  id,
-					Message:  "phase has no produces and no consumes (isolated leaf node)",
-				})
-			}
+	// Check all phases for truly isolated nodes: no contracts, no deps,
+	// and no dependents (nothing in any other phase's DependsOn list).
+	hasDependents := make(map[string]bool, len(n.Phases))
+	for _, p := range n.Phases {
+		for _, dep := range p.DependsOn {
+			hasDependents[dep] = true
+		}
+	}
+	for _, p := range n.Phases {
+		if !phaseHasContracts[p.ID] && len(p.DependsOn) == 0 && !hasDependents[p.ID] {
+			risks = append(risks, PlanRisk{
+				Severity: "info",
+				PhaseID:  p.ID,
+				Message:  "phase has no produces and no consumes (isolated leaf node)",
+			})
 		}
 	}
 
@@ -383,11 +386,14 @@ func computeStats(n *Nebula, waves []dag.Wave, tracks []dag.Track, report *fabri
 	}
 }
 
-// phaseSet builds a set of phase IDs from the plan's contracts.
+// phaseSet builds a set of phase IDs from the plan's waves, which are
+// guaranteed to include all DAG nodes regardless of contract coverage.
 func phaseSet(ep *ExecutionPlan) map[string]bool {
-	set := make(map[string]bool, len(ep.Contracts))
-	for _, c := range ep.Contracts {
-		set[c.PhaseID] = true
+	set := make(map[string]bool)
+	for _, w := range ep.Waves {
+		for _, id := range w.NodeIDs {
+			set[id] = true
+		}
 	}
 	return set
 }

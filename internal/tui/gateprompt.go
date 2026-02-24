@@ -268,5 +268,3 @@ func fileChangeIcon(operation string) string {
 		return lipgloss.NewStyle().Foreground(colorAccent).Render("M")
 	}
 }
-
-
