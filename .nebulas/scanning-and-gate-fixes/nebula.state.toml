@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'scanning-and-gate-fixes'
-total_cost_usd = 9.986843749999998
+total_cost_usd = 13.220393249999997
 
 [phases]
 [phases.auto-enable-contract-board]
@@ -89,6 +89,12 @@ summary = 'ColScanning board column was already correctly removed in a prior com
 
 [phases.scanning-toast]
 bead_id = 'quasar-opk6'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T12:03:38.326562-05:00
-updated_at = 2026-02-24T13:25:01.089615-05:00
+updated_at = 2026-02-24T13:34:20.235609-05:00
+
+[phases.scanning-toast.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean implementation of fabric scanning toast notifications via OnScanning callback, following established patterns with proper nil guards and legacy-mode protection.'
