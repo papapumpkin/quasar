@@ -576,8 +576,8 @@ func TestFooterBindings(t *testing.T) {
 	}
 
 	neb := NebulaFooterBindings(km)
-	if len(neb) != 7 {
-		t.Errorf("NebulaFooterBindings = %d bindings, want 7", len(neb))
+	if len(neb) != 8 {
+		t.Errorf("NebulaFooterBindings = %d bindings, want 8", len(neb))
 	}
 
 	detail := NebulaDetailFooterBindings(km)
