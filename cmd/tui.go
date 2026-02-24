@@ -240,15 +240,19 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 	git := loop.NewCycleCommitterWithBranch(ctx, workDir, branchName)
 	phaseCommitter := nebula.NewGitCommitterWithBranch(ctx, workDir, branchName)
 
-	// Build TUI phase info.
+	// Build TUI phase info, seeding status from saved state.
 	phases := make([]tui.PhaseInfo, 0, len(n.Phases))
 	for _, p := range n.Phases {
-		phases = append(phases, tui.PhaseInfo{
+		pi := tui.PhaseInfo{
 			ID:        p.ID,
 			Title:     p.Title,
 			DependsOn: p.DependsOn,
 			PlanBody:  p.Body,
-		})
+		}
+		if ps := state.Phases[p.ID]; ps != nil {
+			pi.Status = tui.PhaseStatusFromString(string(ps.Status))
+		}
+		phases = append(phases, pi)
 	}
 
 	tuiProgram := tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir, noSplash)

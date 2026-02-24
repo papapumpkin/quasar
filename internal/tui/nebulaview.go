@@ -21,6 +21,23 @@ const (
 	PhaseSkipped
 )
 
+// PhaseStatusFromString maps a nebula state status string to a TUI PhaseStatus.
+// This is used when initializing the TUI from saved state.
+func PhaseStatusFromString(s string) PhaseStatus {
+	switch s {
+	case "done":
+		return PhaseDone
+	case "failed":
+		return PhaseFailed
+	case "in_progress":
+		return PhaseWorking
+	case "skipped":
+		return PhaseSkipped
+	default:
+		return PhaseWaiting
+	}
+}
+
 // PhaseEntry represents one phase in the nebula view.
 type PhaseEntry struct {
 	ID         string
@@ -80,6 +97,8 @@ func (nv *NebulaView) MoveDown() {
 }
 
 // InitPhases populates the phase table from a MsgNebulaInit.
+// When PhaseInfo carries a non-zero Status (from saved state), that status
+// is used instead of the default PhaseWaiting.
 func (nv *NebulaView) InitPhases(phases []PhaseInfo) {
 	nv.Phases = make([]PhaseEntry, len(phases))
 	for i, p := range phases {
@@ -90,15 +109,21 @@ func (nv *NebulaView) InitPhases(phases []PhaseInfo) {
 				blocked += fmt.Sprintf(" +%d", len(p.DependsOn)-1)
 			}
 		}
+		status := p.Status
+		if status == 0 {
+			status = PhaseWaiting
+		}
 		nv.Phases[i] = PhaseEntry{
 			ID:        p.ID,
 			Title:     p.Title,
-			Status:    PhaseWaiting,
+			Status:    status,
 			BlockedBy: blocked,
 			DependsOn: p.DependsOn,
 			PlanBody:  p.PlanBody,
 		}
 	}
+	// Recalculate blocked-by so phases with completed deps show correctly.
+	nv.refreshBlockedBy()
 }
 
 // AppendPhase adds a hot-added phase to the end of the phase table.

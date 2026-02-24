@@ -191,7 +191,8 @@ type PhaseInfo struct {
 	ID        string
 	Title     string
 	DependsOn []string
-	PlanBody  string // markdown content from the phase file
+	PlanBody  string      // markdown content from the phase file
+	Status    PhaseStatus // initial status from saved state (default PhaseWaiting)
 }
 
 // MsgNebulaInit is sent at TUI startup to populate the phase table.

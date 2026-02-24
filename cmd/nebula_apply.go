@@ -175,12 +175,16 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		// Build phase info and pre-populate the model (no Send before Run).
 		phases := make([]tui.PhaseInfo, 0, len(n.Phases))
 		for _, p := range n.Phases {
-			phases = append(phases, tui.PhaseInfo{
+			pi := tui.PhaseInfo{
 				ID:        p.ID,
 				Title:     p.Title,
 				DependsOn: p.DependsOn,
 				PlanBody:  p.Body,
-			})
+			}
+			if ps := state.Phases[p.ID]; ps != nil {
+				pi.Status = tui.PhaseStatusFromString(string(ps.Status))
+			}
+			phases = append(phases, pi)
 		}
 		tuiProgram = tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir, noSplash)
 		// Per-phase loops with PhaseUIBridge for hierarchical TUI tracking.
@@ -365,12 +369,16 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 
 				phases := make([]tui.PhaseInfo, 0, len(nextN.Phases))
 				for _, p := range nextN.Phases {
-					phases = append(phases, tui.PhaseInfo{
+					pi := tui.PhaseInfo{
 						ID:        p.ID,
 						Title:     p.Title,
 						DependsOn: p.DependsOn,
 						PlanBody:  p.Body,
-					})
+					}
+					if ps := nextState.Phases[p.ID]; ps != nil {
+						pi.Status = tui.PhaseStatusFromString(string(ps.Status))
+					}
+					phases = append(phases, pi)
 				}
 				// Create WorkerGroup first. The Runner is set after the
 				// TUI program is created (it depends on the program).
