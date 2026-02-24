@@ -131,10 +131,10 @@ type bannerCacheKey struct {
 }
 
 // Size returns the appropriate BannerSize for the current dimensions.
+// Wide terminals (>= BannerSMinWidth) get the S-A top banner instead of a
+// side panel, giving phase names the full terminal width.
 func (b Banner) Size() BannerSize {
 	switch {
-	case b.Width >= SidePanelMinWidth:
-		return BannerSB
 	case b.Width >= BannerSMinWidth:
 		return BannerS
 	case b.Width >= CompactWidth:
@@ -145,10 +145,10 @@ func (b Banner) Size() BannerSize {
 }
 
 // View returns the styled ASCII art as a top banner, centered horizontally.
-// Returns "" for BannerSB (use SidePanelView instead) and BannerNone.
+// Returns "" for BannerNone.
 func (b Banner) View() string {
 	size := b.Size()
-	if size == BannerNone || size == BannerSB {
+	if size == BannerNone {
 		return ""
 	}
 

@@ -1,0 +1,40 @@
+version = 1
+nebula_name = 'cockpit-ui-polish'
+total_cost_usd = 3.4713605
+
+[phases]
+[phases.deprecate-beads-view]
+bead_id = 'quasar-1bgm'
+status = 'done'
+created_at = 2026-02-24T10:55:46.905863-05:00
+updated_at = 2026-02-24T10:59:29.444351-05:00
+
+[phases.deprecate-beads-view.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Straightforward deprecation of a broken UI feature by disabling a keybinding, removing it from footers, and removing the key handler — all changes are minimal, correct, and well-tested.'
+
+[phases.logo-top-not-side]
+bead_id = 'quasar-k6g8'
+status = 'done'
+created_at = 2026-02-24T10:55:48.355176-05:00
+updated_at = 2026-02-24T11:07:51.944996-05:00
+
+[phases.logo-top-not-side.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Correctly removed the BannerSB side panel mode so wide terminals use a full-width top banner, with thorough test updates and clean builds; only minor dead code cleanup remains.'
+
+[phases.table-mode-toggle-hint]
+bead_id = 'quasar-7q4p'
+status = 'done'
+created_at = 2026-02-24T10:55:47.600094-05:00
+updated_at = 2026-02-24T11:10:54.596208-05:00
+
+[phases.table-mode-toggle-hint.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Adds `v:board` hint to the nebula table-mode footer, making the board toggle bidirectionally discoverable — a clean, minimal, well-tested 3-line change.'

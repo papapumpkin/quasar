@@ -200,7 +200,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Banner.Width = msg.Width
 		m.Banner.Height = msg.Height
 		m.StatusBar.Width = msg.Width
-		contentWidth := msg.Width - m.Banner.SidePanelWidth()
+		contentWidth := msg.Width
 		detailHeight := m.detailHeight()
 		m.Detail.SetSize(contentWidth-2, detailHeight)
 		m.ScratchpadView.SetSize(contentWidth, detailHeight)
@@ -988,8 +988,6 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.Keys.Diff):
 		m.handleDiffKey()
 
-	case key.Matches(msg, m.Keys.Beads):
-		m.handleBeadsKey()
 	}
 
 	return m, nil
@@ -1874,8 +1872,8 @@ func (m AppModel) View() string {
 		return m.renderSplash()
 	}
 
-	// Compute content width: reduced by side panel in S-B mode.
-	contentWidth := m.Width - m.Banner.SidePanelWidth()
+	// Content uses full terminal width (side panel mode removed).
+	contentWidth := m.Width
 
 	var sections []string
 
@@ -1904,7 +1902,6 @@ func (m AppModel) View() string {
 	}
 
 	// Build the "middle" section: breadcrumb + main view + detail + gate + toasts.
-	// In side panel mode, this section sits to the right of the art panel.
 	var middle []string
 
 	// Breadcrumb (nebula drill-down) — hide if too narrow.
@@ -1933,13 +1930,6 @@ func (m AppModel) View() string {
 	}
 
 	middleStr := lipgloss.JoinVertical(lipgloss.Left, middle...)
-
-	// Side panel mode (S-B): join art panel horizontally with middle content.
-	if m.Banner.Size() == BannerSB {
-		middleHeight := lipgloss.Height(middleStr)
-		artPanel := m.Banner.SidePanelView(middleHeight)
-		middleStr = lipgloss.JoinHorizontal(lipgloss.Top, artPanel, middleStr)
-	}
 
 	sections = append(sections, middleStr)
 
@@ -1998,10 +1988,9 @@ func (m AppModel) renderSplash() string {
 	return lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center, m.Splash.View())
 }
 
-// contentWidth returns the available width for main content, accounting for the
-// side panel when in S-B mode.
+// contentWidth returns the available width for main content.
 func (m AppModel) contentWidth() int {
-	return m.Width - m.Banner.SidePanelWidth()
+	return m.Width
 }
 
 // renderBreadcrumb renders the navigation path for drill-down.

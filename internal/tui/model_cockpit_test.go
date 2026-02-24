@@ -94,7 +94,7 @@ func TestBoardToggle(t *testing.T) {
 		}
 	})
 
-	t.Run("b key triggers beads at DepthPhases when board is not active", func(t *testing.T) {
+	t.Run("b key does nothing when beads binding is disabled", func(t *testing.T) {
 		t.Parallel()
 		m := newNebulaModelWithPhases("", []PhaseEntry{
 			{ID: "p1", Title: "Phase 1"},
@@ -110,10 +110,10 @@ func TestBoardToggle(t *testing.T) {
 		updated := result.(AppModel)
 
 		if updated.BoardActive {
-			t.Error("expected BoardActive to remain false — b should trigger beads, not board")
+			t.Error("expected BoardActive to remain false after pressing b")
 		}
-		if !updated.ShowBeads {
-			t.Error("expected ShowBeads to be true after pressing b when board is not active")
+		if updated.ShowBeads {
+			t.Error("expected ShowBeads to remain false — beads binding is disabled")
 		}
 	})
 }
@@ -485,16 +485,11 @@ func TestFooterShowsNebulaBindingsWhenBoardNotActive(t *testing.T) {
 	m.BoardActive = false
 
 	footer := m.buildFooter()
-	// Should use standard nebula bindings (has "b:beads").
-	found := false
+	// Beads binding is deprecated — it should NOT appear in the footer.
 	for _, b := range footer.Bindings {
 		if b.Help().Key == "b" && b.Help().Desc == "beads" {
-			found = true
-			break
+			t.Error("expected footer NOT to show 'b:beads' binding — beads view is deprecated")
 		}
-	}
-	if !found {
-		t.Error("expected footer to show 'b:beads' binding when board is not active")
 	}
 }
 

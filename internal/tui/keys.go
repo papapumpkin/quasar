@@ -88,6 +88,7 @@ func DefaultKeyMap() KeyMap {
 		Beads: key.NewBinding(
 			key.WithKeys("b"),
 			key.WithHelp("b", "beads"),
+			key.WithDisabled(),
 		),
 		PageUp: key.NewBinding(
 			key.WithKeys("pgup"),
