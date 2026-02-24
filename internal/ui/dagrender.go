@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/papapumpkin/quasar/internal/ansi"
 	"github.com/papapumpkin/quasar/internal/dag"
@@ -137,11 +138,11 @@ func (r *DAGRenderer) buildBox(id, title string) *nodeBox {
 		contentLines = append(contentLines, detail)
 	}
 
-	// Determine inner width (widest content line).
+	// Determine inner width (widest content line in runes, not bytes).
 	inner := 0
 	for _, line := range contentLines {
-		if len(line) > inner {
-			inner = len(line)
+		if w := utf8.RuneCountInString(line); w > inner {
+			inner = w
 		}
 	}
 	// Minimum inner width of 6 to avoid tiny boxes.
@@ -158,7 +159,7 @@ func (r *DAGRenderer) buildBox(id, title string) *nodeBox {
 	lines = append(lines, r.colorize(topBorder, id, status.State))
 
 	for _, cl := range contentLines {
-		padded := cl + strings.Repeat(" ", inner-len(cl))
+		padded := cl + strings.Repeat(" ", inner-utf8.RuneCountInString(cl))
 		line := string(vert) + " " + padded + " " + string(vert)
 		lines = append(lines, r.colorize(line, id, status.State))
 	}
@@ -365,7 +366,15 @@ func (r *DAGRenderer) drawConnectors(sb *strings.Builder, prevWave, currWave dag
 		fromMap[c.fromCenter] = append(fromMap[c.fromCenter], c.toCenter)
 	}
 
-	for from, tos := range fromMap {
+	// Sort fromMap keys for deterministic iteration order.
+	fromKeys := make([]int, 0, len(fromMap))
+	for k := range fromMap {
+		fromKeys = append(fromKeys, k)
+	}
+	sort.Ints(fromKeys)
+
+	for _, from := range fromKeys {
+		tos := fromMap[from]
 		if len(tos) == 1 && tos[0] == from {
 			// Straight drop.
 			if from >= 0 && from < width {
@@ -427,7 +436,15 @@ func (r *DAGRenderer) drawConnectors(sb *strings.Builder, prevWave, currWave dag
 	for _, c := range conns {
 		toMap[c.toCenter] = append(toMap[c.toCenter], c.fromCenter)
 	}
-	for to, froms := range toMap {
+	// Sort toMap keys for deterministic iteration order.
+	toKeys := make([]int, 0, len(toMap))
+	for k := range toMap {
+		toKeys = append(toKeys, k)
+	}
+	sort.Ints(toKeys)
+
+	for _, to := range toKeys {
+		froms := toMap[to]
 		if len(froms) <= 1 {
 			continue
 		}
@@ -491,7 +508,7 @@ func (r *DAGRenderer) renderCompact(waves []dag.Wave, deps map[string][]string, 
 
 		for ni, id := range w.NodeIDs {
 			if ni > 0 {
-				sb.WriteString("        ") // indent to align
+				sb.WriteString(strings.Repeat(" ", len(waveLabel)))
 			}
 			title := titles[id]
 			if title == "" {
