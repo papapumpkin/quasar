@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'diffraction'
-total_cost_usd = 5.20885075
+total_cost_usd = 6.957720999999999
 
 [phases]
 [phases.contract-poller]
@@ -17,15 +17,21 @@ summary = 'Well-structured deterministic ContractPoller replacing LLM-based disp
 
 [phases.poller-wiring]
 bead_id = 'quasar-r9d1'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-24T09:38:52.244001-05:00
-updated_at = 2026-02-24T09:38:52.244001-05:00
+updated_at = 2026-02-24T09:57:58.945963-05:00
 
 [phases.soft-dag]
 bead_id = 'quasar-gtqg'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T09:38:51.471329-05:00
-updated_at = 2026-02-24T09:53:37.026718-05:00
+updated_at = 2026-02-24T09:57:58.941098-05:00
+
+[phases.soft-dag.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Soft-DAG dispatch correctly implemented via AllPending + fabric-nil branching in ResolveEligible, with comprehensive test coverage and all safety filters preserved.'
 
 [phases.wave-scanner]
 bead_id = 'quasar-my9s'

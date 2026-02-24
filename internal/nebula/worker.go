@@ -253,6 +253,14 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		wg.pushbackHandler = &fabric.PushbackHandler{Fabric: wg.Fabric}
 	}
 
+	// Pre-compute waves for wave-aware scanning. Used by the WaveScanner
+	// to walk phases layer-by-layer, pruning descendants of blocked phases.
+	dagGraph := scheduler.Analyzer().DAG()
+	waves, wavesErr := dagGraph.ComputeWaves()
+	if wavesErr != nil {
+		fmt.Fprintf(wg.logger(), "warning: failed to compute waves: %v\n", wavesErr)
+	}
+
 	// Always create the Tycho scheduler for DAG resolution. When fabric
 	// components are nil, Scan/Reevaluate/etc. become no-ops, preserving
 	// legacy (no-fabric) behavior.
@@ -267,6 +275,21 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 			scheduler: scheduler,
 		},
 		OnHail: wg.OnHail, // may be nil — surfaced via cockpit TUI when set
+		Waves:  waves,     // may be nil if ComputeWaves failed
+		DAG:    dagGraph,
+	}
+
+	// Wire wave-aware scanner when fabric components are available and
+	// waves were computed successfully.
+	if wg.Fabric != nil && wg.Poller != nil && len(waves) > 0 {
+		wg.tychoScheduler.WaveScanner = &tycho.WaveScanner{
+			Poller:   wg.Poller,
+			Blocked:  wg.blockedTracker,
+			Pushback: wg.pushbackHandler,
+			Fabric:   wg.Fabric,
+			DAG:      dagGraph,
+			Logger:   wg.logger(),
+		}
 	}
 
 	wg.mu.Lock()
