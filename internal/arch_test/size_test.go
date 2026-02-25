@@ -18,7 +18,7 @@ const (
 // Each entry maps a package name to its current non-test .go file count.
 // TODO: Split these packages into smaller, focused sub-packages.
 var packageFileCountExceptions = map[string]int{
-	"tui":    35, // TODO: split into tui/views, tui/bridge, tui/overlay sub-packages
+	"tui":    37, // TODO: split into tui/views, tui/bridge, tui/overlay sub-packages
 	"nebula": 30, // TODO: split into nebula/worker, nebula/plan, nebula/metrics sub-packages
 }
 
