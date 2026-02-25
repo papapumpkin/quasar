@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'docs-onboarding'
-total_cost_usd = 2.36033225
+total_cost_usd = 4.3126435
 
 [phases]
 [phases.add-architecture-section]
@@ -11,9 +11,15 @@ updated_at = 2026-02-24T21:18:11.16938-05:00
 
 [phases.add-cockpit-section]
 bead_id = 'quasar-r2za'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T21:13:39.093873-05:00
-updated_at = 2026-02-24T21:18:11.169004-05:00
+updated_at = 2026-02-24T21:22:33.034608-05:00
+
+[phases.add-cockpit-section.report]
+satisfaction = 'medium'
+risk = 'low'
+needs_human_review = false
+summary = "Cockpit TUI section exists and is accurate in README, but was added by a different concurrent phase — this coder's actual change only adds a minor \"State File\" subsection with misleading commit attribution."
 
 [phases.update-commands-and-flags]
 bead_id = 'quasar-0u1j'
