@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'docs-onboarding'
-total_cost_usd = 1.13073975
+total_cost_usd = 2.36033225
 
 [phases]
 [phases.add-architecture-section]
@@ -41,9 +41,15 @@ updated_at = 2026-02-24T21:18:11.171833-05:00
 
 [phases.update-project-structure]
 bead_id = 'quasar-8f9x'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T21:13:36.865113-05:00
-updated_at = 2026-02-24T21:14:47.229068-05:00
+updated_at = 2026-02-24T21:18:28.965338-05:00
+
+[phases.update-project-structure.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, accurate addition of a comprehensive Project Structure section to the README covering all 16 active internal packages and current CLI commands.'
 
 [phases.update-quickstart]
 bead_id = 'quasar-d3s3'

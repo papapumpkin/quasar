@@ -76,27 +76,67 @@ go install .
 
 ## Commands
 
+### Core
+
 | Command              | Description                                    |
 |----------------------|------------------------------------------------|
 | `run`                | Start the interactive coder-reviewer REPL      |
+| `cockpit`            | Launch the interactive TUI home screen         |
 | `validate`           | Check that `claude` and `beads` CLIs are found |
 | `version`            | Print the version number                       |
-| `nebula validate`    | Validate a nebula blueprint directory          |
-| `nebula plan`        | Preview bead changes for a nebula              |
-| `nebula apply`       | Create/update beads and optionally run workers |
-| `nebula show`        | Display current nebula state                   |
+
+Running `quasar` with no subcommand auto-launches the cockpit when a `.nebulas/` directory exists in the working directory.
+
+### Nebula
+
+| Command              | Description                                      |
+|----------------------|--------------------------------------------------|
+| `nebula validate`    | Validate a nebula blueprint directory             |
+| `nebula plan`        | Preview the execution plan for a nebula           |
+| `nebula apply`       | Create/update beads and optionally run workers    |
+| `nebula show`        | Display current nebula state                      |
+| `nebula status`      | Display metrics and run history for a nebula      |
+
+### Coordination (Fabric)
+
+These commands interact with the shared coordination database used by concurrent agents. See individual `--help` output for full flag details.
+
+| Command                 | Description                                         |
+|-------------------------|-----------------------------------------------------|
+| `fabric claim`          | Acquire exclusive ownership of a file path          |
+| `fabric release`        | Release file claims (single file or all)            |
+| `fabric read`           | Read fabric state for the current task              |
+| `fabric post`           | Post entanglements (exported interfaces) to fabric  |
+| `fabric diff`           | Show changes since last fabric snapshot             |
+| `fabric entanglements`  | List all entanglements across phases                |
+| `fabric archive`        | Snapshot and purge fabric state for an epoch        |
+| `fabric purge`          | Discard all fabric state without archiving          |
+| `discovery`             | Post an agent discovery (conflict, ambiguity, etc.) |
+| `pulse emit`            | Emit a pulse (note, decision, failure, feedback)    |
+| `pulse list`            | List pulses from the fabric                         |
+| `archive`               | Top-level alias for `fabric archive`                |
+
+### Observability
+
+| Command              | Description                                       |
+|----------------------|---------------------------------------------------|
+| `telemetry`          | View JSONL telemetry events for a nebula epoch    |
 
 ### `run` Flags
 
-| Flag                     | Description                                 | Default        |
-|--------------------------|---------------------------------------------|----------------|
-| `--max-cycles N`         | Maximum coder-reviewer cycles               | 3              |
-| `--max-budget N`         | Maximum total spend in USD                  | 5.00           |
-| `--coder-prompt-file F`  | File containing a custom coder system prompt| (built-in)     |
-| `--reviewer-prompt-file F`| File containing a custom reviewer system prompt| (built-in)  |
-| `--auto`                 | Run a single task non-interactively and exit | false          |
-| `-v, --verbose`          | Show debug output (CLI commands, versions)  | false          |
-| `--config FILE`          | Path to config file                         | `.quasar.yaml` |
+| Flag                      | Description                                          | Default        |
+|---------------------------|------------------------------------------------------|----------------|
+| `--max-cycles N`          | Maximum coder-reviewer cycles                        | 3              |
+| `--max-budget N`          | Maximum total spend in USD                           | 5.00           |
+| `--coder-prompt-file F`   | File containing a custom coder system prompt         | (built-in)     |
+| `--reviewer-prompt-file F`| File containing a custom reviewer system prompt      | (built-in)     |
+| `--auto`                  | Run a single task non-interactively and exit         | false          |
+| `--no-tui`                | Disable TUI even on a TTY (use stderr printer)       | false          |
+| `--no-splash`             | Skip the startup splash animation                    | false          |
+| `--project-context`       | Scan and inject project context into agent prompts   | false          |
+| `--max-context-tokens N`  | Token budget for injected context                    | 10000          |
+| `-v, --verbose`           | Show debug output (CLI commands, versions)           | false          |
+| `--config FILE`           | Path to config file                                  | `.quasar.yaml` |
 
 ### Interactive Commands
 
@@ -361,17 +401,30 @@ The `[dependencies]` section declares prerequisites that must be met before `neb
 | Command                      | Description                                      |
 |------------------------------|--------------------------------------------------|
 | `nebula validate <path>`     | Validate structure, frontmatter, and dependencies |
-| `nebula plan <path>`         | Preview what bead changes would be made          |
+| `nebula plan <path>`         | Preview the execution plan for a nebula          |
 | `nebula apply <path>`        | Create/update beads from the blueprint           |
 | `nebula show <path>`         | Display current nebula state                     |
+| `nebula status <path>`       | Display metrics and run history                  |
+
+### `nebula plan` Flags
+
+| Flag             | Description                                        | Default |
+|------------------|----------------------------------------------------|---------|
+| `--json`         | Output the plan as JSON to stdout                  | false   |
+| `--save`         | Save the plan to `<nebula-dir>/<name>.plan.json`   | false   |
+| `--diff`         | Diff against a previously saved plan               | false   |
+| `--no-color`     | Disable ANSI colors in output                      | false   |
 
 ### `nebula apply` Flags
 
-| Flag             | Description                                                  | Default |
-|------------------|--------------------------------------------------------------|---------|
-| `--auto`         | Start workers to execute ready tasks after applying          | false   |
-| `--watch`        | Watch for task file changes during execution (with `--auto`) | false   |
-| `--max-workers N`| Maximum concurrent workers (with `--auto`)                   | 1       |
+| Flag                    | Description                                                  | Default |
+|-------------------------|--------------------------------------------------------------|---------|
+| `--auto`                | Start workers to execute ready tasks after applying          | false   |
+| `--watch`               | Watch for task file changes during execution (with `--auto`) | false   |
+| `--max-workers N`       | Maximum concurrent workers (with `--auto`)                   | 1       |
+| `--no-tui`              | Disable TUI even on a TTY (use stderr output)                | false   |
+| `--no-splash`           | Skip the startup splash animation                            | false   |
+| `--max-context-tokens N`| Token budget for injected context                            | 10000   |
 
 ### In-Flight Editing
 
