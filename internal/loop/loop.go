@@ -3,6 +3,7 @@ package loop
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/fabric"
@@ -33,6 +34,8 @@ type Loop struct {
 	TaskID           string           // Task ID for fabric context (QUASAR_TASK_ID).
 	ProjectContext   string           // Injected into agent system prompts for prompt caching.
 	MaxContextTokens int              // Token budget for context injection. 0 = use default.
+	HailQueue        HailQueue        // Optional; when set, hails extracted during execution are posted here.
+	HailTimeout      time.Duration    // Auto-resolve timeout for hails. 0 disables auto-resolution.
 }
 
 // TaskResult holds the outcome of a completed task loop.
@@ -147,6 +150,9 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 		if err := l.checkBudget(ctx, state); err != nil {
 			return nil, err
 		}
+
+		// Extract hails from the reviewer's report and any fabric discoveries.
+		l.extractAndPostHails(ctx, state)
 
 		if isApproved(state.ReviewOutput) {
 			return l.handleApproval(ctx, state)
@@ -423,6 +429,10 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	refactorDesc := state.RefactorDescription
 
 	prompt := l.buildCoderPrompt(state)
+	relayBlock, relayIDs := l.pendingHailRelay()
+	if relayBlock != "" {
+		prompt = relayBlock + "\n" + prompt
+	}
 	prompt = l.composeContextPrefix(ctx, prompt)
 
 	result, err := l.Invoker.Invoke(ctx, l.coderAgent(perAgentBudget), prompt, l.WorkDir)
@@ -437,6 +447,7 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	l.UI.AgentOutput("coder", state.Cycle, result.ResultText)
 	l.UI.AgentDone("coder", result.CostUSD, result.DurationMs)
 	l.emitCycleSummary(state, PhaseCodeComplete, result)
+	l.markHailsRelayed(relayIDs)
 
 	// Commit the coder's changes for this cycle.
 	// The SHA is stored in lastCycleSHA and sealed into CycleCommits at cycle end.
@@ -477,6 +488,10 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	l.UI.AgentStart("reviewer")
 
 	prompt := l.buildReviewerPrompt(state)
+	relayBlock, relayIDs := l.pendingHailRelay()
+	if relayBlock != "" {
+		prompt = relayBlock + "\n" + prompt
+	}
 	prompt = l.composeContextPrefix(ctx, prompt)
 
 	result, err := l.Invoker.Invoke(ctx, l.reviewerAgent(perAgentBudget), prompt, l.WorkDir)
@@ -490,6 +505,7 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	state.Phase = PhaseReviewComplete
 	l.UI.AgentOutput("reviewer", state.Cycle, result.ResultText)
 	l.UI.AgentDone("reviewer", result.CostUSD, result.DurationMs)
+	l.markHailsRelayed(relayIDs)
 	l.emit(ctx, Event{
 		Kind:    EventAgentDone,
 		BeadID:  state.TaskBeadID,
@@ -501,6 +517,69 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	state.Findings = ParseReviewFindings(result.ResultText)
 	l.emitCycleSummary(state, PhaseReviewComplete, result)
 	return nil
+}
+
+// extractAndPostHails parses the reviewer's report and queries fabric
+// discoveries, converting them into Hail objects posted to l.HailQueue.
+// A nil HailQueue makes this a no-op.
+func (l *Loop) extractAndPostHails(ctx context.Context, state *CycleState) {
+	if l.HailQueue == nil {
+		return
+	}
+
+	phaseID := l.TaskID
+
+	// 1. Extract hails from the reviewer's report.
+	report := ParseReviewReport(state.ReviewOutput)
+	for _, h := range extractReviewerHails(report, state, phaseID) {
+		if err := l.HailQueue.Post(h); err != nil {
+			l.UI.Error(fmt.Sprintf("failed to post reviewer hail: %v", err))
+		}
+	}
+
+	// 2. Bridge fabric discoveries to hails.
+	if l.FabricEnabled && l.Fabric != nil {
+		discoveries, err := l.Fabric.UnresolvedDiscoveries(ctx)
+		if err != nil {
+			l.UI.Error(fmt.Sprintf("failed to fetch fabric discoveries: %v", err))
+			return
+		}
+		for _, h := range bridgeDiscoveryHails(discoveries, phaseID, state.Cycle) {
+			if err := l.HailQueue.Post(h); err != nil {
+				l.UI.Error(fmt.Sprintf("failed to post discovery hail: %v", err))
+			}
+		}
+	}
+}
+
+// pendingHailRelay queries the HailQueue for resolved-but-unrelayed hails,
+// formats them into a prompt block, and returns both the block and the IDs
+// that should be marked as relayed after the agent processes them. When no
+// HailQueue is configured or no hails are pending, both return values are empty.
+func (l *Loop) pendingHailRelay() (block string, ids []string) {
+	if l.HailQueue == nil {
+		return "", nil
+	}
+	hails := l.HailQueue.UnrelayedResolved()
+	if len(hails) == 0 {
+		return "", nil
+	}
+	ids = make([]string, len(hails))
+	for i, h := range hails {
+		ids[i] = h.ID
+	}
+	return formatHailRelay(hails), ids
+}
+
+// markHailsRelayed marks the given hail IDs as relayed. Errors are logged
+// via the UI but do not interrupt the loop — relay is best-effort.
+func (l *Loop) markHailsRelayed(ids []string) {
+	if l.HailQueue == nil || len(ids) == 0 {
+		return
+	}
+	if err := l.HailQueue.MarkRelayed(ids); err != nil {
+		l.UI.Error(fmt.Sprintf("failed to mark hails as relayed: %v", err))
+	}
 }
 
 // emitCycleSummary sends a cycle summary to the UI for the given phase.

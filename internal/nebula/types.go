@@ -22,7 +22,28 @@ type Execution struct {
 	MaxBudgetUSD     float64  `toml:"max_budget_usd"`
 	MaxContextTokens int      `toml:"max_context_tokens"` // Token budget for context injection. 0 = disabled.
 	Model            string   `toml:"model"`
-	Gate             GateMode `toml:"gate"` // Default gate mode for all phases
+	Gate             GateMode `toml:"gate"`         // Default gate mode for all phases
+	HailTimeout      string   `toml:"hail_timeout"` // Duration string for hail auto-resolve timeout (e.g. "5m"). Empty = default (5m). "0" = disabled.
+}
+
+// DefaultHailTimeout is the built-in fallback for hail auto-resolution timeout.
+const DefaultHailTimeout = 5 * time.Minute
+
+// ParsedHailTimeout returns the hail timeout as a time.Duration.
+// Empty string returns DefaultHailTimeout. "0" returns 0 (disabled).
+// Invalid strings return DefaultHailTimeout.
+func (e Execution) ParsedHailTimeout() time.Duration {
+	if e.HailTimeout == "" {
+		return DefaultHailTimeout
+	}
+	if e.HailTimeout == "0" {
+		return 0
+	}
+	d, err := time.ParseDuration(e.HailTimeout)
+	if err != nil {
+		return DefaultHailTimeout
+	}
+	return d
 }
 
 // Context provides project-level information injected into agent prompts.
