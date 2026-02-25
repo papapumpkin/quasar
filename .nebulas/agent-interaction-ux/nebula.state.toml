@@ -4,22 +4,22 @@ total_cost_usd = 5.408376250000001
 
 [phases]
 [phases.hail-extraction]
-bead_id = 'quasar-xiuc'
-status = 'failed'
+bead_id = 'quasar-uxsk'
+status = 'in_progress'
 created_at = 2026-02-24T22:16:39.618155-05:00
-updated_at = 2026-02-24T22:31:06.332138-05:00
+updated_at = 2026-02-25T09:01:09.528871-05:00
 
 [phases.hail-relay]
-bead_id = 'quasar-aqi2'
-status = 'failed'
+bead_id = 'quasar-wvqy'
+status = 'in_progress'
 created_at = 2026-02-24T22:16:41.874621-05:00
-updated_at = 2026-02-24T22:31:08.167664-05:00
+updated_at = 2026-02-25T09:01:09.52265-05:00
 
 [phases.hail-timeout]
-bead_id = 'quasar-aonr'
-status = 'failed'
+bead_id = 'quasar-1sd6'
+status = 'in_progress'
 created_at = 2026-02-24T22:16:42.606046-05:00
-updated_at = 2026-02-24T22:31:11.05145-05:00
+updated_at = 2026-02-25T09:01:09.521287-05:00
 
 [phases.hail-types]
 bead_id = 'quasar-zxtb'
@@ -34,16 +34,16 @@ needs_human_review = false
 summary = 'Solid implementation of Hail types, HailQueue interface, and in-memory queue with comprehensive tests; one minor defensive-copy gap in Post().'
 
 [phases.reviewer-escalation]
-bead_id = 'quasar-vcsj'
-status = 'failed'
+bead_id = 'quasar-bbv5'
+status = 'in_progress'
 created_at = 2026-02-24T22:16:43.390547-05:00
-updated_at = 2026-02-24T22:31:10.242993-05:00
+updated_at = 2026-02-25T09:01:09.534414-05:00
 
 [phases.tui-hail-overlay]
-bead_id = 'quasar-xo77'
-status = 'failed'
+bead_id = 'quasar-afxw'
+status = 'in_progress'
 created_at = 2026-02-24T22:16:41.126118-05:00
-updated_at = 2026-02-24T22:31:06.068424-05:00
+updated_at = 2026-02-25T09:01:09.542113-05:00
 
 [phases.ui-hail-interface]
 bead_id = 'quasar-9dwr'
