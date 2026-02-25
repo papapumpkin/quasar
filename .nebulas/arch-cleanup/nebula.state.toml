@@ -1,5 +1,6 @@
 version = 1
 nebula_name = 'arch-cleanup'
+total_cost_usd = 1.05258325
 
 [phases]
 [phases.split-bridge]
@@ -28,9 +29,15 @@ updated_at = 2026-02-25T10:54:38.669972-05:00
 
 [phases.split-hail-relay-test]
 bead_id = 'quasar-hf58'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-25T10:54:05.976697-05:00
-updated_at = 2026-02-25T10:54:38.645037-05:00
+updated_at = 2026-02-25T10:57:32.472855-05:00
+
+[phases.split-hail-relay-test.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean mechanical split of an oversized test file into two well-scoped files with no behavioral changes; all tests preserved and both files under the 400-line limit.'
 
 [phases.split-msg]
 bead_id = 'quasar-0pa9'
@@ -40,6 +47,6 @@ updated_at = 2026-02-25T10:54:38.640176-05:00
 
 [phases.update-exceptions]
 bead_id = 'quasar-6ad4'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-25T10:54:06.71338-05:00
-updated_at = 2026-02-25T10:54:38.570508-05:00
+updated_at = 2026-02-25T10:57:32.493659-05:00
