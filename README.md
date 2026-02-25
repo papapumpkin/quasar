@@ -540,6 +540,10 @@ SUMMARY: One-sentence assessment of the work.
 
 Reports are stored in the nebula state file and posted as bead comments. Use `nebula show` to view reports for completed tasks.
 
+### State File
+
+When `nebula apply` runs, Quasar writes a `nebula.state.toml` file inside the nebula directory. This file tracks the execution state of each phase — its status, associated bead ID, cost, and reviewer reports. Both `nebula show` and `nebula status` read from this file to display current progress. The state file is updated as phases complete and should not be edited by hand.
+
 ### Example
 
 The `examples/dogfood-nebula/` directory contains a working nebula that tests Quasar on its own codebase:
