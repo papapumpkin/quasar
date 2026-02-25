@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'arch-tests'
-total_cost_usd = 3.27075025
+total_cost_usd = 5.512482
 
 [phases]
 [phases.arch-foundation]
@@ -47,6 +47,12 @@ updated_at = 2026-02-24T21:42:32.744275-05:00
 
 [phases.size-guards]
 bead_id = 'quasar-my5j'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T21:35:17.363271-05:00
-updated_at = 2026-02-24T21:42:32.752866-05:00
+updated_at = 2026-02-24T21:49:20.315119-05:00
+
+[phases.size-guards.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'New size guardrail tests correctly enforce per-package (20 files) and per-file (400 lines) limits with accurate, well-documented exception lists for current violations.'
