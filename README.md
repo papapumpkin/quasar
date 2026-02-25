@@ -132,6 +132,11 @@ model: ""
 coder_system_prompt: ""
 reviewer_system_prompt: ""
 
+# Lint commands run after each coder pass
+lint_commands:
+  - "go vet ./..."
+  - "go fmt ./..."
+
 # Debug output
 verbose: false
 ```
@@ -144,6 +149,16 @@ Settings are resolved in this order (highest priority first):
 2. **Environment variables** — prefixed with `QUASAR_` (e.g., `QUASAR_MAX_BUDGET_USD=10`)
 3. **Config file** — `.quasar.yaml` in the current directory or home directory
 4. **Defaults** — built-in values shown above
+
+### Runtime Directory
+
+Quasar creates a `.quasar/` directory in your project root for runtime state. This includes:
+
+- `fabric.db` — coordination database used during multi-task (nebula) execution
+- `neutrons/` — archived fabric snapshots
+- `telemetry/` — execution telemetry logs
+
+This directory is created automatically when needed. You may want to add `.quasar/` to your `.gitignore`.
 
 ## How It Works
 

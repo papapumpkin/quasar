@@ -1,0 +1,45 @@
+version = 1
+nebula_name = 'docs-onboarding'
+
+[phases]
+[phases.add-architecture-section]
+bead_id = 'quasar-el6k'
+status = 'created'
+created_at = 2026-02-24T21:13:39.848008-05:00
+updated_at = 2026-02-24T21:14:47.166681-05:00
+
+[phases.add-cockpit-section]
+bead_id = 'quasar-r2za'
+status = 'created'
+created_at = 2026-02-24T21:13:39.093873-05:00
+updated_at = 2026-02-24T21:14:47.166487-05:00
+
+[phases.update-commands-and-flags]
+bead_id = 'quasar-0u1j'
+status = 'in_progress'
+created_at = 2026-02-24T21:13:37.611425-05:00
+updated_at = 2026-02-24T21:14:47.234209-05:00
+
+[phases.update-config-section]
+bead_id = 'quasar-ei79'
+status = 'in_progress'
+created_at = 2026-02-24T21:13:40.621002-05:00
+updated_at = 2026-02-24T21:14:47.240494-05:00
+
+[phases.update-nebula-section]
+bead_id = 'quasar-ygwm'
+status = 'created'
+created_at = 2026-02-24T21:13:41.357917-05:00
+updated_at = 2026-02-24T21:14:47.167061-05:00
+
+[phases.update-project-structure]
+bead_id = 'quasar-8f9x'
+status = 'in_progress'
+created_at = 2026-02-24T21:13:36.865113-05:00
+updated_at = 2026-02-24T21:14:47.229068-05:00
+
+[phases.update-quickstart]
+bead_id = 'quasar-d3s3'
+status = 'created'
+created_at = 2026-02-24T21:13:38.378428-05:00
+updated_at = 2026-02-24T21:14:47.166249-05:00

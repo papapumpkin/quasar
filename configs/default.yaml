@@ -23,5 +23,10 @@ model: ""
 coder_system_prompt: ""
 reviewer_system_prompt: ""
 
+# Lint commands run after each coder pass (default: go vet, go fmt)
+lint_commands:
+  - "go vet ./..."
+  - "go fmt ./..."
+
 # Verbose output
 verbose: false
