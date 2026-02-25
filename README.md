@@ -445,12 +445,31 @@ model = "claude-opus-4-6" # Override: use a specific model
 Implement JWT-based authentication for all API endpoints...
 ```
 
+### Frontmatter Fields
+
+| Field                 | Required | Description                                              |
+|-----------------------|----------|----------------------------------------------------------|
+| `id`                  | yes      | Unique identifier within the nebula                      |
+| `title`               | yes      | Short description                                        |
+| `type`                | no       | `task`, `bug`, `feature` (inherits from `[defaults]`)    |
+| `priority`            | no       | Integer, 1=highest (inherits from `[defaults]`)          |
+| `depends_on`          | no       | Array of phase IDs this phase depends on                 |
+| `labels`              | no       | Array of string labels                                   |
+| `assignee`            | no       | Assignee override                                        |
+| `max_review_cycles`   | no       | Override per-phase cycle limit                           |
+| `max_budget_usd`      | no       | Override per-phase budget                                |
+| `model`               | no       | Override model for this phase                            |
+| `gate`                | no       | Override gate mode for this phase                        |
+| `blocks`              | no       | Reverse deps: inject as dependency of listed phases      |
+| `scope`               | no       | Glob patterns for owned files/dirs                       |
+| `allow_scope_overlap` | no       | Permit scope overlap with other phases                   |
+
 ### Config Cascade (Nebula)
 
 Execution settings are resolved per-task with the following precedence (highest wins, zero/empty values are skipped):
 
 1. **CLI flags** — `--max-workers`, `--max-cycles`, etc.
-2. **Task frontmatter** — `max_review_cycles`, `max_budget_usd`, `model` in `+++` block
+2. **Task frontmatter** — `max_review_cycles`, `max_budget_usd`, `model`, `gate` in `+++` block
 3. **Nebula `[execution]`** — defaults for all tasks in this nebula
 4. **Global config** — `.quasar.yaml` / `QUASAR_*` env
 5. **Built-in defaults** — cycles=3, budget=$5.00
