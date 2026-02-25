@@ -222,3 +222,166 @@ func TestBridgeDiscoveryHails(t *testing.T) {
 		}
 	})
 }
+
+func TestExtractAndPostHails(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil HailQueue is a no-op", func(t *testing.T) {
+		t.Parallel()
+		l := &Loop{
+			UI:        &noopUI{},
+			HailQueue: nil,
+		}
+		state := &CycleState{
+			ReviewOutput: "REPORT:\nNEEDS_HUMAN_REVIEW: yes\nSUMMARY: test\nRISK: high\nSATISFACTION: low",
+			Cycle:        1,
+		}
+		// Should not panic with nil HailQueue.
+		l.extractAndPostHails(context.Background(), state)
+	})
+
+	t.Run("reviewer NEEDS_HUMAN_REVIEW posts hail", func(t *testing.T) {
+		t.Parallel()
+		q := NewMemoryHailQueue()
+		l := &Loop{
+			UI:        &noopUI{},
+			HailQueue: q,
+			TaskID:    "phase-42",
+		}
+		state := &CycleState{
+			ReviewOutput: "REPORT:\nSATISFACTION: low\nRISK: high\nNEEDS_HUMAN_REVIEW: yes\nSUMMARY: risky code",
+			Cycle:        2,
+		}
+		l.extractAndPostHails(context.Background(), state)
+
+		all := q.All()
+		if len(all) != 1 {
+			t.Fatalf("HailQueue has %d hails, want 1", len(all))
+		}
+		h := all[0]
+		if h.Kind != HailHumanReviewFlag {
+			t.Errorf("Kind = %q, want %q", h.Kind, HailHumanReviewFlag)
+		}
+		if h.PhaseID != "phase-42" {
+			t.Errorf("PhaseID = %q, want %q", h.PhaseID, "phase-42")
+		}
+		if h.Cycle != 2 {
+			t.Errorf("Cycle = %d, want 2", h.Cycle)
+		}
+	})
+
+	t.Run("no NEEDS_HUMAN_REVIEW posts nothing", func(t *testing.T) {
+		t.Parallel()
+		q := NewMemoryHailQueue()
+		l := &Loop{
+			UI:        &noopUI{},
+			HailQueue: q,
+		}
+		state := &CycleState{
+			ReviewOutput: "APPROVED: All looks good.",
+			Cycle:        1,
+		}
+		l.extractAndPostHails(context.Background(), state)
+
+		all := q.All()
+		if len(all) != 0 {
+			t.Errorf("HailQueue has %d hails, want 0", len(all))
+		}
+	})
+
+	t.Run("fabric discoveries bridge to hails", func(t *testing.T) {
+		t.Parallel()
+		q := NewMemoryHailQueue()
+		mf := &mockFabric{
+			discoveries: []fabric.Discovery{
+				{Kind: fabric.DiscoveryRequirementsAmbiguity, Detail: "Which auth method?", SourceTask: "t1"},
+				{Kind: fabric.DiscoveryMissingDependency, Detail: "Need redis", SourceTask: "t2"},
+			},
+		}
+		l := &Loop{
+			UI:            &noopUI{},
+			HailQueue:     q,
+			Fabric:        mf,
+			FabricEnabled: true,
+			TaskID:        "phase-7",
+		}
+		state := &CycleState{
+			ReviewOutput: "ISSUE:\nSEVERITY: minor\nDESCRIPTION: style fix",
+			Cycle:        3,
+		}
+		l.extractAndPostHails(context.Background(), state)
+
+		all := q.All()
+		if len(all) != 2 {
+			t.Fatalf("HailQueue has %d hails, want 2", len(all))
+		}
+		if all[0].Kind != HailAmbiguity {
+			t.Errorf("all[0].Kind = %q, want %q", all[0].Kind, HailAmbiguity)
+		}
+		if all[1].Kind != HailBlocker {
+			t.Errorf("all[1].Kind = %q, want %q", all[1].Kind, HailBlocker)
+		}
+		if all[0].PhaseID != "phase-7" {
+			t.Errorf("PhaseID = %q, want %q", all[0].PhaseID, "phase-7")
+		}
+	})
+
+	t.Run("fabric disabled skips discovery bridging", func(t *testing.T) {
+		t.Parallel()
+		q := NewMemoryHailQueue()
+		mf := &mockFabric{
+			discoveries: []fabric.Discovery{
+				{Kind: fabric.DiscoveryRequirementsAmbiguity, Detail: "ambiguous"},
+			},
+		}
+		l := &Loop{
+			UI:            &noopUI{},
+			HailQueue:     q,
+			Fabric:        mf,
+			FabricEnabled: false,
+		}
+		state := &CycleState{
+			ReviewOutput: "ISSUE:\nSEVERITY: minor\nDESCRIPTION: nit",
+			Cycle:        1,
+		}
+		l.extractAndPostHails(context.Background(), state)
+
+		all := q.All()
+		if len(all) != 0 {
+			t.Errorf("HailQueue has %d hails with fabric disabled, want 0", len(all))
+		}
+	})
+
+	t.Run("both reviewer and discovery hails", func(t *testing.T) {
+		t.Parallel()
+		q := NewMemoryHailQueue()
+		mf := &mockFabric{
+			discoveries: []fabric.Discovery{
+				{Kind: fabric.DiscoveryMissingDependency, Detail: "need lib X", SourceTask: "t1"},
+			},
+		}
+		l := &Loop{
+			UI:            &noopUI{},
+			HailQueue:     q,
+			Fabric:        mf,
+			FabricEnabled: true,
+			TaskID:        "phase-99",
+		}
+		state := &CycleState{
+			ReviewOutput: "REPORT:\nSATISFACTION: medium\nRISK: high\nNEEDS_HUMAN_REVIEW: yes\nSUMMARY: needs eyes",
+			Cycle:        4,
+		}
+		l.extractAndPostHails(context.Background(), state)
+
+		all := q.All()
+		if len(all) != 2 {
+			t.Fatalf("HailQueue has %d hails, want 2 (1 reviewer + 1 discovery)", len(all))
+		}
+		if all[0].Kind != HailHumanReviewFlag {
+			t.Errorf("all[0].Kind = %q, want %q", all[0].Kind, HailHumanReviewFlag)
+		}
+		if all[1].Kind != HailBlocker {
+			t.Errorf("all[1].Kind = %q, want %q", all[1].Kind, HailBlocker)
+		}
+	})
+}
