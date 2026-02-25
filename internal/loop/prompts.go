@@ -116,23 +116,6 @@ func (l *Loop) buildReviewerPrompt(state *CycleState) string {
 	return b.String()
 }
 
-// formatHailRelay formats resolved-but-unrelayed hails into a concise prompt
-// block suitable for injection into coder or reviewer prompts.
-func formatHailRelay(hails []Hail) string {
-	if len(hails) == 0 {
-		return ""
-	}
-
-	var b strings.Builder
-	b.WriteString("[HUMAN RESPONSES]\n")
-	for _, h := range hails {
-		fmt.Fprintf(&b, "Your %s about %q (cycle %d) was answered:\n", h.Kind, h.Summary, h.Cycle)
-		fmt.Fprintf(&b, "%q\n\n", h.Resolution)
-	}
-	b.WriteString("Proceed with this guidance in mind.\n")
-	return b.String()
-}
-
 // PrependFabricContext adds current entanglements, claims, and pulses to the
 // task description so the agent starts with full coordination context rather
 // than needing to query fabric state as its first action.

@@ -552,36 +552,6 @@ func (l *Loop) extractAndPostHails(ctx context.Context, state *CycleState) {
 	}
 }
 
-// pendingHailRelay queries the HailQueue for resolved-but-unrelayed hails,
-// formats them into a prompt block, and returns both the block and the IDs
-// that should be marked as relayed after the agent processes them. When no
-// HailQueue is configured or no hails are pending, both return values are empty.
-func (l *Loop) pendingHailRelay() (block string, ids []string) {
-	if l.HailQueue == nil {
-		return "", nil
-	}
-	hails := l.HailQueue.UnrelayedResolved()
-	if len(hails) == 0 {
-		return "", nil
-	}
-	ids = make([]string, len(hails))
-	for i, h := range hails {
-		ids[i] = h.ID
-	}
-	return formatHailRelay(hails), ids
-}
-
-// markHailsRelayed marks the given hail IDs as relayed. Errors are logged
-// via the UI but do not interrupt the loop — relay is best-effort.
-func (l *Loop) markHailsRelayed(ids []string) {
-	if l.HailQueue == nil || len(ids) == 0 {
-		return
-	}
-	if err := l.HailQueue.MarkRelayed(ids); err != nil {
-		l.UI.Error(fmt.Sprintf("failed to mark hails as relayed: %v", err))
-	}
-}
-
 // emitCycleSummary sends a cycle summary to the UI for the given phase.
 func (l *Loop) emitCycleSummary(state *CycleState, phase Phase, result agent.InvocationResult) {
 	l.UI.CycleSummary(ui.CycleSummaryData{
