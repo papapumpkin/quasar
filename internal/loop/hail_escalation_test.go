@@ -213,29 +213,16 @@ func TestBuildMaxCyclesHail(t *testing.T) {
 
 	t.Run("basic max cycles hail", func(t *testing.T) {
 		t.Parallel()
-		state := &CycleState{
-			MaxCycles:    5,
-			Cycle:        5,
-			ReviewOutput: "",
-		}
+		state := &CycleState{MaxCycles: 5, Cycle: 5}
 		h := buildMaxCyclesHail(state, "phase-max")
-		if h.Kind != HailBlocker {
-			t.Errorf("Kind = %q, want %q", h.Kind, HailBlocker)
-		}
-		if h.PhaseID != "phase-max" {
-			t.Errorf("PhaseID = %q, want %q", h.PhaseID, "phase-max")
-		}
-		if h.Cycle != 5 {
-			t.Errorf("Cycle = %d, want 5", h.Cycle)
+		if h.Kind != HailBlocker || h.PhaseID != "phase-max" || h.Cycle != 5 {
+			t.Errorf("got Kind=%q PhaseID=%q Cycle=%d, want blocker/phase-max/5", h.Kind, h.PhaseID, h.Cycle)
 		}
 		if !strings.Contains(h.Summary, "Max cycles") {
 			t.Errorf("Summary missing max cycles: %q", h.Summary)
 		}
-		if !strings.Contains(h.Detail, "maximum of 5 cycles") {
-			t.Errorf("Detail missing cycle count: %q", h.Detail)
-		}
-		if len(h.Options) != 3 {
-			t.Errorf("Options = %v, want 3 options", h.Options)
+		if !strings.Contains(h.Detail, "maximum of 5 cycles") || len(h.Options) != 3 {
+			t.Errorf("Detail or Options unexpected: detail=%q options=%v", h.Detail, h.Options)
 		}
 	})
 
