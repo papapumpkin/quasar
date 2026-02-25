@@ -558,6 +558,24 @@ quasar nebula apply examples/dogfood-nebula/ --auto --max-workers 2
 
 Jet is the planned temporal orchestration layer for running nebula tasks at scale — named after the focused, directed relativistic outflows of a quasar. It will support distributed execution via Temporal workflows with Kubernetes deployment. Not yet implemented.
 
+## Concepts
+
+Quasar uses a cosmic vocabulary for its internal systems:
+
+| Concept | Package | Description |
+|---------|---------|-------------|
+| **Fabric** | `internal/fabric` | SQLite-based shared state store for multi-phase coordination |
+| **Entanglement** | `internal/fabric` | Exported type/function signature posted by one phase, visible to others |
+| **Claim** | `internal/fabric` | Exclusive file ownership lock held by a phase during execution |
+| **Discovery** | `internal/fabric` | Issue surfaced by an agent (conflict, ambiguity, missing dep) |
+| **Pulse** | `internal/fabric` | Timestamped note, decision, or failure emitted during execution |
+| **Filter** | `internal/filter` | Pre-reviewer deterministic checks (build, vet, lint, test) |
+| **Tycho** | `internal/tycho` | DAG scheduler resolving phase execution order and eligibility |
+| **Neutron** | `internal/neutron` | Archived epoch snapshot (standalone SQLite file) |
+| **Epoch** | — | A single execution run; archived to a neutron on completion |
+| **Telemetry** | `internal/telemetry` | JSONL event stream for state transitions and auditability |
+| **Hail** | `internal/fabric` | Human interrupt signal surfaced as a discovery |
+
 ## Review Format
 
 The reviewer's output must end with one of:
