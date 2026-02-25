@@ -1033,6 +1033,9 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.Keys.Diff):
 		m.handleDiffKey()
 
+	case key.Matches(msg, m.Keys.HailList):
+		cmd := m.openHailList()
+		return m, cmd
 	}
 
 	return m, nil
@@ -2109,6 +2112,14 @@ func (m AppModel) View() string {
 		return compositeOverlay(dimmed, overlayBox, m.Width, m.Height)
 	}
 
+	// Hail list overlay — rendered over a dimmed background for browsing pending hails.
+	if m.HailList != nil {
+		dimmed := styleOverlayDimmed.Width(m.Width).Height(m.Height).Render(base)
+		overlayContent := m.HailList.View(m.Width, m.Height)
+		overlayBox := centerOverlay(overlayContent, m.Width, m.Height)
+		return compositeOverlay(dimmed, overlayBox, m.Width, m.Height)
+	}
+
 	// Quit confirmation overlay — rendered over a dimmed background.
 	if m.ShowQuitConfirm {
 		dimmed := styleOverlayDimmed.Width(m.Width).Height(m.Height).Render(base)
@@ -2259,6 +2270,11 @@ func (m AppModel) buildFooter() Footer {
 		return f
 	}
 
+	if m.HailList != nil {
+		f.Bindings = HailListFooterBindings(m.Keys)
+		return f
+	}
+
 	if m.Gate != nil {
 		f.Bindings = GateFooterBindings(m.Keys)
 	} else if m.Mode == ModeHome {
@@ -2305,6 +2321,12 @@ func (m AppModel) buildFooter() Footer {
 			f.Bindings = append(f.Bindings, diffBind)
 		}
 	}
+
+	// Append hail list binding when pending hails exist.
+	if m.Keys.HailList.Enabled() {
+		f.Bindings = append(f.Bindings, m.Keys.HailList)
+	}
+
 	return f
 }
 
