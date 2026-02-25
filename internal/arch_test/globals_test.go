@@ -13,9 +13,15 @@ import (
 // but don't match the automated detection heuristics. Each entry documents why
 // it is acceptable.
 var allowedGlobals = map[string][]string{
-	// tui: splash ramp array declared without initializer, populated in init().
-	// Effectively constant after package init completes.
-	"tui": {"splashDopplerRamps"},
+	// tui: vars that don't match prefix or heuristic patterns.
+	"tui": {
+		// splashDopplerRamps: array declared without initializer, populated in init().
+		// Effectively constant after package init completes.
+		"splashDopplerRamps",
+		// renderCache: sync.Mutex-protected cache — standard Go caching pattern.
+		// TODO: consider moving to a struct with embedded mutex.
+		"renderCache",
+	},
 }
 
 // allowedGlobalPrefixes lists name prefixes for which all vars in the given
