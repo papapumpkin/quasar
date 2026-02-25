@@ -1,13 +1,19 @@
 version = 1
 nebula_name = 'arch-cleanup'
-total_cost_usd = 3.7001300000000006
+total_cost_usd = 9.841893
 
 [phases]
 [phases.split-bridge]
 bead_id = 'quasar-pezt'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-25T10:54:03.025059-05:00
-updated_at = 2026-02-25T10:54:38.638103-05:00
+updated_at = 2026-02-25T11:09:26.943005-05:00
+
+[phases.split-bridge.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean split of `bridge.go` (428→254 lines) into `bridge.go` + `bridge_phase.go` (184 lines) along the UIBridge/PhaseUIBridge boundary, with correct exception updates and no behavioral changes.'
 
 [phases.split-hail-escalation-test]
 bead_id = 'quasar-ykso'
@@ -23,9 +29,15 @@ summary = 'Straightforward test file split that correctly decomposes hail_escala
 
 [phases.split-hail-extract-test]
 bead_id = 'quasar-gtt4'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-25T10:54:05.201007-05:00
-updated_at = 2026-02-25T10:54:38.661641-05:00
+updated_at = 2026-02-25T11:09:25.593521-05:00
+
+[phases.split-hail-extract-test.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Pure file decomposition of hail_extract_test.go into two files along the extraction vs. bridge boundary — clean split, all tests pass, both files under limit.'
 
 [phases.split-hail-list-test]
 bead_id = 'quasar-ivtq'
@@ -53,12 +65,24 @@ summary = 'Clean mechanical split of an oversized test file into two well-scoped
 
 [phases.split-msg]
 bead_id = 'quasar-0pa9'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-25T10:54:02.320712-05:00
-updated_at = 2026-02-25T10:54:38.640176-05:00
+updated_at = 2026-02-25T11:09:26.007046-05:00
+
+[phases.split-msg.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean mechanical split of oversized msg.go (402→168+242 lines) along a natural loop-vs-phase boundary; no behavioral changes, all tests pass.'
 
 [phases.update-exceptions]
 bead_id = 'quasar-6ad4'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-25T10:54:06.71338-05:00
-updated_at = 2026-02-25T10:57:32.493659-05:00
+updated_at = 2026-02-25T11:09:28.289842-05:00
+
+[phases.update-exceptions.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Pure data update to arch test exception counts — all 9 stale line counts corrected to match actual file sizes, fully verified against `wc -l` and passing tests.'
