@@ -383,6 +383,7 @@ A nebula is a directory containing:
 
 - **`nebula.toml`** — Manifest with project name, description, and default settings
 - **`*.md`** — One file per task, with TOML frontmatter between `+++` delimiters
+- **`nebula.state.toml`** — Auto-generated execution state (created by `nebula apply`)
 
 ```
 my-nebula/
