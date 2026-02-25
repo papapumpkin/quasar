@@ -210,7 +210,7 @@ func exportedSymbols(t *testing.T, filePath string) []exportedSymbol {
 					if !s.Name.IsExported() {
 						continue
 					}
-					doc := docText(d.Doc, s.Doc)
+					doc := docText(s.Doc, d.Doc)
 					syms = append(syms, exportedSymbol{
 						Name:    s.Name.Name,
 						Kind:    "type",
@@ -225,7 +225,7 @@ func exportedSymbols(t *testing.T, filePath string) []exportedSymbol {
 						if !name.IsExported() {
 							continue
 						}
-						doc := docText(d.Doc, s.Doc)
+						doc := docText(s.Doc, d.Doc)
 						syms = append(syms, exportedSymbol{
 							Name:    name.Name,
 							Kind:    kind,
@@ -296,6 +296,8 @@ func interfaceDecls(t *testing.T, filePath string) []interfaceDecl {
 				continue
 			}
 
+			// Note: embedded interfaces are not included in the Methods list.
+			// Only explicitly named methods are collected.
 			var methods []string
 			if iface.Methods != nil {
 				for _, m := range iface.Methods.List {
