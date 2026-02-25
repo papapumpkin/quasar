@@ -1,0 +1,45 @@
+version = 1
+nebula_name = 'agent-interaction-ux'
+
+[phases]
+[phases.hail-extraction]
+bead_id = 'quasar-xiuc'
+status = 'created'
+created_at = 2026-02-24T22:16:39.618155-05:00
+updated_at = 2026-02-24T22:16:39.618155-05:00
+
+[phases.hail-relay]
+bead_id = 'quasar-aqi2'
+status = 'created'
+created_at = 2026-02-24T22:16:41.874621-05:00
+updated_at = 2026-02-24T22:16:41.874621-05:00
+
+[phases.hail-timeout]
+bead_id = 'quasar-aonr'
+status = 'created'
+created_at = 2026-02-24T22:16:42.606046-05:00
+updated_at = 2026-02-24T22:16:42.606046-05:00
+
+[phases.hail-types]
+bead_id = 'quasar-zxtb'
+status = 'in_progress'
+created_at = 2026-02-24T22:16:38.962394-05:00
+updated_at = 2026-02-24T22:16:43.46124-05:00
+
+[phases.reviewer-escalation]
+bead_id = 'quasar-vcsj'
+status = 'created'
+created_at = 2026-02-24T22:16:43.390547-05:00
+updated_at = 2026-02-24T22:16:43.390547-05:00
+
+[phases.tui-hail-overlay]
+bead_id = 'quasar-xo77'
+status = 'created'
+created_at = 2026-02-24T22:16:41.126118-05:00
+updated_at = 2026-02-24T22:16:41.126118-05:00
+
+[phases.ui-hail-interface]
+bead_id = 'quasar-9dwr'
+status = 'created'
+created_at = 2026-02-24T22:16:40.326977-05:00
+updated_at = 2026-02-24T22:16:40.326977-05:00

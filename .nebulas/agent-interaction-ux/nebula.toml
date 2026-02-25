@@ -9,7 +9,7 @@ labels = ["quasar", "tui", "ux", "human-in-loop"]
 assignee = ""
 
 [execution]
-max_workers = 1
+max_workers = 9
 max_review_cycles = 5
 max_budget_usd = 60.0
 model = ""
