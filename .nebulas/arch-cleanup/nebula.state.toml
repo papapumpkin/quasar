@@ -1,0 +1,45 @@
+version = 1
+nebula_name = 'arch-cleanup'
+
+[phases]
+[phases.split-bridge]
+bead_id = 'quasar-pezt'
+status = 'in_progress'
+created_at = 2026-02-25T10:54:03.025059-05:00
+updated_at = 2026-02-25T10:54:38.638103-05:00
+
+[phases.split-hail-escalation-test]
+bead_id = 'quasar-ykso'
+status = 'in_progress'
+created_at = 2026-02-25T10:54:04.452347-05:00
+updated_at = 2026-02-25T10:54:38.653634-05:00
+
+[phases.split-hail-extract-test]
+bead_id = 'quasar-gtt4'
+status = 'in_progress'
+created_at = 2026-02-25T10:54:05.201007-05:00
+updated_at = 2026-02-25T10:54:38.661641-05:00
+
+[phases.split-hail-list-test]
+bead_id = 'quasar-ivtq'
+status = 'in_progress'
+created_at = 2026-02-25T10:54:03.718159-05:00
+updated_at = 2026-02-25T10:54:38.669972-05:00
+
+[phases.split-hail-relay-test]
+bead_id = 'quasar-hf58'
+status = 'in_progress'
+created_at = 2026-02-25T10:54:05.976697-05:00
+updated_at = 2026-02-25T10:54:38.645037-05:00
+
+[phases.split-msg]
+bead_id = 'quasar-0pa9'
+status = 'in_progress'
+created_at = 2026-02-25T10:54:02.320712-05:00
+updated_at = 2026-02-25T10:54:38.640176-05:00
+
+[phases.update-exceptions]
+bead_id = 'quasar-6ad4'
+status = 'created'
+created_at = 2026-02-25T10:54:06.71338-05:00
+updated_at = 2026-02-25T10:54:38.570508-05:00

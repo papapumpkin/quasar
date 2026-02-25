@@ -1,0 +1,34 @@
+[nebula]
+name = "arch-cleanup"
+description = "Split 6 oversized Go files to bring them under the 400-line arch test limit, then update size_test.go exceptions. Pure file moves — no functionality changes."
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["quasar", "architecture", "cleanup"]
+
+[execution]
+max_workers = 9
+max_review_cycles = 5
+max_budget_usd = 30.0
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Bring all 6 oversized files under the 400-line maxLinesPerFile limit",
+    "Preserve all existing functionality — pure file decomposition",
+    "Update arch test exceptions to reflect new file counts",
+    "All tests pass: go test ./...",
+]
+constraints = [
+    "No behavioral changes — only move code between files",
+    "New files must be in the same package as the original",
+    "Maintain existing test coverage — all tests must pass after splits",
+    "Update lineCountExceptions and packageFileCountExceptions in size_test.go",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []
