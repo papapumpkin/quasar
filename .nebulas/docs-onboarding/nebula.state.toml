@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'docs-onboarding'
-total_cost_usd = 4.3126435
+total_cost_usd = 6.2254302500000005
 
 [phases]
 [phases.add-architecture-section]
@@ -59,6 +59,12 @@ summary = 'Clean, accurate addition of a comprehensive Project Structure section
 
 [phases.update-quickstart]
 bead_id = 'quasar-d3s3'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T21:13:38.378428-05:00
-updated_at = 2026-02-24T21:18:11.175878-05:00
+updated_at = 2026-02-24T21:24:55.494173-05:00
+
+[phases.update-quickstart.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean README Quick Start restructuring that accurately documents both REPL and Nebula entry paths, with appropriate cleanup of out-of-scope content from cycle-1.'
