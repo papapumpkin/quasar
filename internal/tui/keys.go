@@ -28,6 +28,9 @@ type KeyMap struct {
 
 	// Board/table view toggle.
 	BoardToggle key.Binding
+
+	// Hail list — opens the pending hails overlay.
+	HailList key.Binding
 }
 
 // DefaultKeyMap returns the default keybinding configuration.
@@ -113,6 +116,11 @@ func DefaultKeyMap() KeyMap {
 		BoardToggle: key.NewBinding(
 			key.WithKeys("v"),
 			key.WithHelp("v", "board"),
+		),
+		HailList: key.NewBinding(
+			key.WithKeys("H"),
+			key.WithHelp("H", "hails"),
+			key.WithDisabled(),
 		),
 	}
 }

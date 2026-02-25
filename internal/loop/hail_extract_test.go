@@ -352,6 +352,52 @@ func TestExtractAndPostHails(t *testing.T) {
 		}
 	})
 
+	t.Run("discovery dedup across cycles", func(t *testing.T) {
+		t.Parallel()
+		q := NewMemoryHailQueue()
+		mf := &mockFabric{
+			discoveries: []fabric.Discovery{
+				{ID: 10, Kind: fabric.DiscoveryRequirementsAmbiguity, Detail: "Which auth method?", SourceTask: "t1"},
+				{ID: 20, Kind: fabric.DiscoveryMissingDependency, Detail: "Need redis", SourceTask: "t2"},
+			},
+		}
+		l := &Loop{
+			UI:            &noopUI{},
+			HailQueue:     q,
+			Fabric:        mf,
+			FabricEnabled: true,
+			TaskID:        "phase-dedup",
+		}
+		state := &CycleState{
+			ReviewOutput: "APPROVED: looks good",
+			Cycle:        1,
+		}
+
+		// Cycle 1: both discoveries should be bridged.
+		l.extractAndPostHails(context.Background(), state)
+		if len(q.All()) != 2 {
+			t.Fatalf("cycle 1: got %d hails, want 2", len(q.All()))
+		}
+
+		// Cycle 2: same unresolved discoveries — should NOT produce duplicates.
+		state.Cycle = 2
+		state.ReviewOutput = "APPROVED: still good"
+		l.extractAndPostHails(context.Background(), state)
+		if len(q.All()) != 2 {
+			t.Fatalf("cycle 2: got %d hails, want 2 (no duplicates)", len(q.All()))
+		}
+
+		// Cycle 3: a new discovery appears alongside the old ones.
+		mf.discoveries = append(mf.discoveries, fabric.Discovery{
+			ID: 30, Kind: fabric.DiscoveryRequirementsAmbiguity, Detail: "New question", SourceTask: "t3",
+		})
+		state.Cycle = 3
+		l.extractAndPostHails(context.Background(), state)
+		if len(q.All()) != 3 {
+			t.Fatalf("cycle 3: got %d hails, want 3 (2 old + 1 new)", len(q.All()))
+		}
+	})
+
 	t.Run("both reviewer and discovery hails", func(t *testing.T) {
 		t.Parallel()
 		q := NewMemoryHailQueue()

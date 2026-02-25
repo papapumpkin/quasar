@@ -77,9 +77,16 @@ func escalateCriticalFindings(findings []ReviewFinding, state *CycleState, phase
 // escalateHighRiskLowSatisfaction creates a HailDecisionNeeded when the
 // reviewer report indicates high risk combined with low satisfaction. This
 // signals the human should consider intervening before the loop continues.
-// Returns nil when the report is nil or the escalation criteria are not met.
+// Returns nil when the report is nil, the escalation criteria are not met,
+// or NeedsHumanReview is already set (to avoid duplicate hails since
+// extractReviewerHails already handles that case).
 func escalateHighRiskLowSatisfaction(report *agent.ReviewReport, state *CycleState, phaseID string) *Hail {
 	if report == nil {
+		return nil
+	}
+	// Skip when the reviewer already flagged for human review — that hail
+	// is created by extractReviewerHails and covers this situation.
+	if report.NeedsHumanReview {
 		return nil
 	}
 	if !strings.EqualFold(report.Risk, "high") || !strings.EqualFold(report.Satisfaction, "low") {

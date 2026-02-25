@@ -180,6 +180,7 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 	}
 
 	l.UI.MaxCyclesReached(l.MaxCycles)
+	l.postMaxCyclesHail(state)
 	l.emit(ctx, Event{
 		Kind:    EventTaskFailed,
 		BeadID:  beadID,
@@ -521,7 +522,9 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 
 // extractAndPostHails parses the reviewer's report and queries fabric
 // discoveries, converting them into Hail objects posted to l.HailQueue.
-// A nil HailQueue makes this a no-op.
+// It also applies escalation rules: critical findings and high-risk/low-
+// satisfaction reports generate additional hails. A nil HailQueue makes
+// this a no-op.
 func (l *Loop) extractAndPostHails(ctx context.Context, state *CycleState) {
 	if l.HailQueue == nil {
 		return
@@ -529,7 +532,7 @@ func (l *Loop) extractAndPostHails(ctx context.Context, state *CycleState) {
 
 	phaseID := l.TaskID
 
-	// 1. Extract hails from the reviewer's report.
+	// 1. Extract hails from the reviewer's report (NEEDS_HUMAN_REVIEW flag).
 	report := ParseReviewReport(state.ReviewOutput)
 	for _, h := range extractReviewerHails(report, state, phaseID) {
 		if err := l.HailQueue.Post(h); err != nil {
@@ -537,18 +540,64 @@ func (l *Loop) extractAndPostHails(ctx context.Context, state *CycleState) {
 		}
 	}
 
-	// 2. Bridge fabric discoveries to hails.
+	// 2. Escalate critical-severity findings to blocker hails.
+	for _, h := range escalateCriticalFindings(state.Findings, state, phaseID) {
+		if err := l.HailQueue.Post(h); err != nil {
+			l.UI.Error(fmt.Sprintf("failed to post critical finding hail: %v", err))
+		}
+	}
+
+	// 3. Escalate high risk + low satisfaction to a decision-needed hail.
+	if h := escalateHighRiskLowSatisfaction(report, state, phaseID); h != nil {
+		if err := l.HailQueue.Post(*h); err != nil {
+			l.UI.Error(fmt.Sprintf("failed to post risk escalation hail: %v", err))
+		}
+	}
+
+	// 4. Bridge fabric discoveries to hails, skipping any already bridged
+	//    in previous cycles to avoid duplicate hails.
 	if l.FabricEnabled && l.Fabric != nil {
 		discoveries, err := l.Fabric.UnresolvedDiscoveries(ctx)
 		if err != nil {
 			l.UI.Error(fmt.Sprintf("failed to fetch fabric discoveries: %v", err))
 			return
 		}
-		for _, h := range bridgeDiscoveryHails(discoveries, phaseID, state.Cycle) {
+
+		// Filter out discoveries already bridged in earlier cycles.
+		var newDiscoveries []fabric.Discovery
+		for _, d := range discoveries {
+			if !state.bridgedDiscoveryIDs[d.ID] {
+				newDiscoveries = append(newDiscoveries, d)
+			}
+		}
+
+		for _, h := range bridgeDiscoveryHails(newDiscoveries, phaseID, state.Cycle) {
 			if err := l.HailQueue.Post(h); err != nil {
 				l.UI.Error(fmt.Sprintf("failed to post discovery hail: %v", err))
 			}
 		}
+
+		// Record all new discovery IDs as bridged so subsequent cycles skip them.
+		if len(newDiscoveries) > 0 {
+			if state.bridgedDiscoveryIDs == nil {
+				state.bridgedDiscoveryIDs = make(map[int64]bool)
+			}
+			for _, d := range newDiscoveries {
+				state.bridgedDiscoveryIDs[d.ID] = true
+			}
+		}
+	}
+}
+
+// postMaxCyclesHail creates and posts a blocker hail when the loop exhausts
+// its maximum cycle count without approval. A nil HailQueue makes this a no-op.
+func (l *Loop) postMaxCyclesHail(state *CycleState) {
+	if l.HailQueue == nil {
+		return
+	}
+	h := buildMaxCyclesHail(state, l.TaskID)
+	if err := l.HailQueue.Post(h); err != nil {
+		l.UI.Error(fmt.Sprintf("failed to post max-cycles hail: %v", err))
 	}
 }
 
