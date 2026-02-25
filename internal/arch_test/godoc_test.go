@@ -18,16 +18,24 @@ var docExemptions = map[string][]string{
 	// Long multi-line string constants are self-documenting by name.
 	"agent": {"DefaultCoderSystemPrompt", "DefaultReviewerSystemPrompt"},
 	// CLIResponse is a simple JSON-mapping struct; its fields are tagged.
+	// Invoke and Validate implement the agent.Invoker interface.
 	"claude": {"CLIResponse", "Invoke", "Validate"},
-	// NewBranchManager is a straightforward constructor.
-	"nebula": {"NewBranchManager"},
+	// Typed enum constants whose parent type is documented; values are
+	// self-documenting by name.
+	"nebula": {
+		"NewBranchManager",
+		"PhaseStatusPending", "PhaseStatusCreated", "PhaseStatusInProgress",
+		"PhaseStatusDone", "PhaseStatusFailed", "PhaseStatusSkipped",
+		"ActionCreate", "ActionUpdate", "ActionSkip", "ActionClose", "ActionRetry",
+	},
+	// Typed iota constants whose parent type is documented; values are
+	// self-documenting by name.
+	"tui": {
+		"ModeLoop", "ModeNebula",
+		"PhaseWaiting", "PhaseWorking", "PhaseDone",
+		"PhaseFailed", "PhaseGate", "PhaseSkipped",
+	},
 }
-
-// groupedConstVarExemptions lists packages whose grouped const/var blocks
-// use inline comments (e.g. iota enums) rather than GoDoc-style comments.
-// Constants in these blocks are exempt when the block has either a block-level
-// doc comment or inline comments on each value.
-// This is separate from docExemptions to keep intent clear.
 
 // TestExportedSymbolsHaveGoDoc verifies that every exported type, function,
 // method, var, and const in internal packages has a GoDoc comment starting

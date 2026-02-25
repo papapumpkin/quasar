@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'arch-tests'
-total_cost_usd = 1.7636567499999998
+total_cost_usd = 3.27075025
 
 [phases]
 [phases.arch-foundation]
@@ -17,9 +17,15 @@ summary = 'Clean, well-tested foundation of 6 architecture test helpers in `inte
 
 [phases.dependency-layering]
 bead_id = 'quasar-26bs'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T21:35:14.419025-05:00
-updated_at = 2026-02-24T21:42:32.740495-05:00
+updated_at = 2026-02-24T21:46:15.347324-05:00
+
+[phases.dependency-layering.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented dependency layering tests that encode the package DAG with proper exception handling for known violations; all tests pass cleanly.'
 
 [phases.exported-symbol-hygiene]
 bead_id = 'quasar-mc8t'
