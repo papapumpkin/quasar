@@ -42,24 +42,24 @@ const (
 
 // AppModel is the root BubbleTea model composing all sub-views.
 type AppModel struct {
-	Mode       Mode
-	StatusBar  StatusBar
-	Banner     Banner
-	LoopView   LoopView // used in loop mode (single task)
-	NebulaView NebulaView
-	Detail     DetailPanel
+	Mode         Mode
+	StatusBar    StatusBar
+	Banner       Banner
+	LoopView     LoopView // used in loop mode (single task)
+	NebulaView   NebulaView
+	Detail       DetailPanel
 	Gate         *GatePrompt
 	PendingGates []MsgGatePrompt // queued gate prompts waiting for the current gate to resolve
 	Hail         *HailOverlay
-	Overlay    *CompletionOverlay
-	Toasts     []Toast
-	Keys       KeyMap
-	Width      int
-	Height     int
-	StartTime  time.Time
-	Done       bool
-	DoneErr    error
-	Messages   []string // recent info/error messages
+	Overlay      *CompletionOverlay
+	Toasts       []Toast
+	Keys         KeyMap
+	Width        int
+	Height       int
+	StartTime    time.Time
+	Done         bool
+	DoneErr      error
+	Messages     []string // recent info/error messages
 
 	// Nebula navigation state.
 	Depth        ViewDepth            // current navigation depth
