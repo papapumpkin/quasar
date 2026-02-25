@@ -182,6 +182,42 @@ Inside the `quasar>` REPL:
 | `status`         | Show current config settings   |
 | `quit` / `exit`  | Exit Quasar                    |
 
+## Cockpit (TUI)
+
+The cockpit is a terminal dashboard for browsing and running nebulas interactively. It auto-discovers nebula directories under `.nebulas/`, shows phase tables with live status, cost tracking, and cycle progress, and lets you drill down into individual phase timelines and agent output.
+
+### Launching
+
+```bash
+quasar cockpit             # explicit launch
+quasar                     # auto-launches when .nebulas/ exists in the cwd
+quasar cockpit --dir path  # scan a different directory
+```
+
+### Navigation
+
+| Key              | Action                                         |
+|------------------|-------------------------------------------------|
+| `Tab`            | Cycle through tabs (phases, graph, board, log)  |
+| `Enter`          | Drill down into a phase or cycle                |
+| `Esc`            | Back up one level                               |
+| `j/k` or arrows  | Move selection up/down                          |
+| `d`              | Toggle diff view for the selected phase         |
+| `p`              | Pause/resume execution                          |
+| `s`              | Stop workers gracefully                         |
+| `q`              | Quit                                            |
+
+### Flags
+
+| Flag              | Description                              |
+|-------------------|------------------------------------------|
+| `--dir`           | Directory to scan for `.nebulas/`        |
+| `--no-splash`     | Skip the startup splash animation        |
+| `--max-workers N` | Maximum concurrent workers               |
+| `--no-tui`        | Disable TUI (use plain stderr output)    |
+
+Pass `--no-tui` to `nebula apply` when running in CI or piping output.
+
 ## Configuration
 
 Create a `.quasar.yaml` in your project root (or home directory):
@@ -373,6 +409,7 @@ max_workers = 2           # Concurrent workers for this nebula
 max_review_cycles = 3     # Default review cycles per task
 max_budget_usd = 5.0      # Default per-task budget
 model = ""                # Model override (empty = use global config)
+gate = ""                 # Gate mode: trust | review | approve | watch
 
 [context]
 repo = "github.com/example/myproject"
