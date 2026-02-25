@@ -103,8 +103,8 @@ type AppModel struct {
 	StaleItems       []tycho.StaleItem     // latest stale warning items
 
 	// Hail tracking — pending hails from agents that need human attention.
-	PendingHails []ui.HailInfo     // unresolved hails tracked via MsgHailReceived/MsgHailResolved
-	HailList     *HailListOverlay  // non-nil when the hail list overlay is active
+	PendingHails []ui.HailInfo    // unresolved hails tracked via MsgHailReceived/MsgHailResolved
+	HailList     *HailListOverlay // non-nil when the hail list overlay is active
 
 	// Home mode state (landing page).
 	HomeCursor      int            // cursor position in the home nebula list
@@ -778,6 +778,11 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Hail overlay overrides normal keys when active.
 	if m.Hail != nil {
 		return m.handleHailKey(msg)
+	}
+
+	// Hail list overlay overrides normal keys when active.
+	if m.HailList != nil {
+		return m.handleHailListKey(msg)
 	}
 
 	// When viewing a single file's diff, route scroll keys to the detail panel.
