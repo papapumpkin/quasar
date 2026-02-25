@@ -201,6 +201,29 @@ You type a task
 
 Each agent gets a per-invocation budget of `max_budget_usd / (2 * max_review_cycles)`.
 
+## Project Structure
+
+```
+cmd/              CLI commands (Cobra): run, validate, version, nebula, fabric, discovery, pulse, telemetry, tui
+internal/
+  agent/          Agent types, roles, and the Invoker interface
+  ansi/           ANSI escape code constants for terminal styling
+  beads/          Beads CLI wrapper (Client interface + CLI impl)
+  claude/         Claude CLI invoker (satisfies agent.Invoker)
+  config/         Viper-based config loading (.quasar.yaml / env QUASAR_*)
+  dag/            Directed acyclic graph engine (topological sort, cycle detection)
+  fabric/         SQLite coordination store (entanglements, claims, discoveries, pulses)
+  filter/         Deterministic pre-reviewer checks (build, vet, lint, test)
+  loop/           Core coder-reviewer loop and state machine
+  nebula/         Multi-task orchestration (parse, validate, plan, apply)
+  neutron/        Epoch archival and stale state cleanup for fabrics
+  snapshot/       Project snapshot scanner for prompt context injection
+  telemetry/      JSONL event stream for state transitions
+  tui/            BubbleTea interactive terminal UI (cockpit dashboard)
+  tycho/          DAG scheduler for nebula orchestration
+  ui/             Stderr-based UI printer (ANSI colors)
+```
+
 ## Safety
 
 Quasar has two built-in safeguards to prevent runaway costs:
