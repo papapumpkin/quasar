@@ -559,6 +559,16 @@ func (f *SQLiteFabric) PurgeAll(ctx context.Context) error {
 	return nil
 }
 
+// PurgeFulfilledEntanglements removes entanglements with status 'fulfilled'.
+// Disputed and pending entanglements are preserved for human review.
+func (f *SQLiteFabric) PurgeFulfilledEntanglements(ctx context.Context) error {
+	_, err := f.db.ExecContext(ctx, "DELETE FROM entanglements WHERE status = ?", StatusFulfilled)
+	if err != nil {
+		return fmt.Errorf("fabric: purge fulfilled entanglements: %w", err)
+	}
+	return nil
+}
+
 // Close releases the database connection.
 func (f *SQLiteFabric) Close() error {
 	return f.db.Close()

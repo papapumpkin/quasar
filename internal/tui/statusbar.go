@@ -32,6 +32,9 @@ type StatusBar struct {
 	HailCount         int // total unresolved hails
 	CriticalHailCount int // unresolved hails with blocker kind
 
+	// Gate queue counter for the status badge.
+	GateQueueCount int // number of gate prompts waiting behind the active one
+
 	// Home mode fields.
 	HomeMode        bool // true when displaying the home landing page
 	HomeNebulaCount int  // number of discovered nebulas
@@ -138,6 +141,17 @@ func (s StatusBar) buildRightSegments(compact bool) []statusSegment {
 	hailBadge := s.renderHailBadge()
 	if hailBadge != "" {
 		segments = append(segments, statusSegment{text: barBg.Render("  ") + hailBadge, priority: 3})
+	}
+
+	// Gate queue badge (priority 3 — actionable indicator of pending gates).
+	if s.GateQueueCount > 0 {
+		gateStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorStarYellow)
+		label := "gate pending"
+		if s.GateQueueCount > 1 {
+			label = "gates pending"
+		}
+		gateBadge := gateStyle.Render(fmt.Sprintf("⏳ %d %s", s.GateQueueCount, label))
+		segments = append(segments, statusSegment{text: barBg.Render("  ") + gateBadge, priority: 3})
 	}
 
 	// Resource indicator segment (priority 0 — dropped before elapsed).

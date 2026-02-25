@@ -276,28 +276,33 @@ func NewPhaseUIBridge(p *tea.Program, phaseID, workDir string) *PhaseUIBridge {
 // TaskStarted sends MsgPhaseTaskStarted.
 func (b *PhaseUIBridge) TaskStarted(beadID, title string) {
 	b.program.Send(MsgPhaseTaskStarted{PhaseID: b.phaseID, BeadID: beadID, Title: title})
+	b.ScratchpadNote(b.phaseID, "started")
 }
 
 // TaskComplete sends MsgPhaseTaskComplete.
 func (b *PhaseUIBridge) TaskComplete(beadID string, totalCost float64) {
 	b.program.Send(MsgPhaseTaskComplete{PhaseID: b.phaseID, BeadID: beadID, TotalCost: totalCost})
+	b.ScratchpadNote(b.phaseID, fmt.Sprintf("complete ($%.2f)", totalCost))
 }
 
 // CycleStart sends MsgPhaseCycleStart and records the current cycle number.
 func (b *PhaseUIBridge) CycleStart(cycle, maxCycles int) {
 	b.cycle = cycle
 	b.program.Send(MsgPhaseCycleStart{PhaseID: b.phaseID, Cycle: cycle, MaxCycles: maxCycles})
+	b.ScratchpadNote(b.phaseID, fmt.Sprintf("cycle %d", cycle))
 }
 
 // AgentStart sends MsgPhaseAgentStart.
 func (b *PhaseUIBridge) AgentStart(role string) {
 	b.program.Send(MsgPhaseAgentStart{PhaseID: b.phaseID, Role: role})
+	b.ScratchpadNote(b.phaseID, fmt.Sprintf("%s running", role))
 }
 
 // AgentDone sends MsgPhaseAgentDone. For coder agents, it also captures the
 // git diff of the most recent commit and sends MsgPhaseAgentDiff.
 func (b *PhaseUIBridge) AgentDone(role string, costUSD float64, durationMs int64) {
 	b.program.Send(MsgPhaseAgentDone{PhaseID: b.phaseID, Role: role, CostUSD: costUSD, DurationMs: durationMs})
+	b.ScratchpadNote(b.phaseID, fmt.Sprintf("%s done ($%.2f)", role, costUSD))
 	if role == "coder" {
 		if dr := captureGitDiff(b.workDir, "", ""); dr.Diff != "" {
 			b.program.Send(MsgPhaseAgentDiff{
@@ -322,26 +327,31 @@ func (b *PhaseUIBridge) CycleSummary(d ui.CycleSummaryData) {
 // IssuesFound sends MsgPhaseIssuesFound.
 func (b *PhaseUIBridge) IssuesFound(count int) {
 	b.program.Send(MsgPhaseIssuesFound{PhaseID: b.phaseID, Count: count})
+	b.ScratchpadNote(b.phaseID, fmt.Sprintf("%d issues found", count))
 }
 
 // Approved sends MsgPhaseApproved.
 func (b *PhaseUIBridge) Approved() {
 	b.program.Send(MsgPhaseApproved{PhaseID: b.phaseID})
+	b.ScratchpadNote(b.phaseID, "approved")
 }
 
 // MaxCyclesReached sends MsgPhaseError (treated as an error for the phase).
 func (b *PhaseUIBridge) MaxCyclesReached(max int) {
 	b.program.Send(MsgPhaseError{PhaseID: b.phaseID, Msg: fmt.Sprintf("max cycles reached (%d)", max)})
+	b.ScratchpadNote(b.phaseID, fmt.Sprintf("max cycles reached (%d)", max))
 }
 
 // BudgetExceeded sends MsgPhaseError.
 func (b *PhaseUIBridge) BudgetExceeded(spent, limit float64) {
 	b.program.Send(MsgPhaseError{PhaseID: b.phaseID, Msg: fmt.Sprintf("budget exceeded ($%.2f / $%.2f)", spent, limit)})
+	b.ScratchpadNote(b.phaseID, fmt.Sprintf("budget exceeded ($%.2f / $%.2f)", spent, limit))
 }
 
 // Error sends MsgPhaseError.
 func (b *PhaseUIBridge) Error(msg string) {
 	b.program.Send(MsgPhaseError{PhaseID: b.phaseID, Msg: msg})
+	b.ScratchpadNote(b.phaseID, fmt.Sprintf("error: %s", msg))
 }
 
 // Info sends MsgPhaseInfo.

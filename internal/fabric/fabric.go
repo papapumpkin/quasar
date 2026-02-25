@@ -191,6 +191,10 @@ type Fabric interface {
 	// PurgeAll removes all state from the fabric (all tables).
 	PurgeAll(ctx context.Context) error
 
+	// PurgeFulfilledEntanglements removes entanglements with status 'fulfilled'.
+	// Disputed and pending entanglements are preserved for human review.
+	PurgeFulfilledEntanglements(ctx context.Context) error
+
 	// Close releases database resources.
 	Close() error
 }

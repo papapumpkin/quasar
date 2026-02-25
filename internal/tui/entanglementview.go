@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/papapumpkin/quasar/internal/fabric"
@@ -19,6 +21,9 @@ type EntanglementView struct {
 	Cursor        int
 	Width         int
 	Height        int
+	viewport      viewport.Model
+	ready         bool // whether the viewport has been initialized with dimensions
+	totalLines    int  // total content lines (for bottom detection)
 }
 
 // NewEntanglementView creates an empty entanglement view.
@@ -106,14 +111,29 @@ func flatCount(groups []entanglementGroup) int {
 	return n
 }
 
-// MoveUp moves the cursor up by one entanglement.
+// SetSize updates the viewport dimensions and re-renders content.
+func (ev *EntanglementView) SetSize(width, height int) {
+	ev.Width = width
+	ev.Height = height
+	if !ev.ready {
+		ev.viewport = viewport.New(width, height)
+		ev.ready = true
+	} else {
+		ev.viewport.Width = width
+		ev.viewport.Height = height
+	}
+	ev.refreshContent()
+}
+
+// MoveUp moves the cursor up by one entanglement and refreshes the viewport.
 func (ev *EntanglementView) MoveUp() {
 	if ev.Cursor > 0 {
 		ev.Cursor--
 	}
+	ev.refreshContent()
 }
 
-// MoveDown moves the cursor down by one entanglement.
+// MoveDown moves the cursor down by one entanglement and refreshes the viewport.
 func (ev *EntanglementView) MoveDown() {
 	groups := groupEntanglements(ev.Entanglements)
 	max := flatCount(groups) - 1
@@ -123,6 +143,7 @@ func (ev *EntanglementView) MoveDown() {
 	if ev.Cursor < max {
 		ev.Cursor++
 	}
+	ev.refreshContent()
 }
 
 // ClampCursor ensures the cursor is within bounds for the current entanglements.
@@ -141,7 +162,26 @@ func (ev *EntanglementView) ClampCursor() {
 	}
 }
 
-// View renders the entanglement view with grouped, bordered cards.
+// Update handles viewport scroll key events for the entanglement view.
+// Home/g and End/G jump to top/bottom; other keys are delegated to the viewport.
+func (ev *EntanglementView) Update(msg tea.Msg) {
+	if !ev.ready {
+		return
+	}
+	if km, ok := msg.(tea.KeyMsg); ok {
+		switch km.String() {
+		case "home", "g":
+			ev.viewport.GotoTop()
+			return
+		case "end", "G":
+			ev.viewport.GotoBottom()
+			return
+		}
+	}
+	ev.viewport, _ = ev.viewport.Update(msg)
+}
+
+// View renders the entanglement view with grouped, bordered cards inside a viewport.
 func (ev EntanglementView) View() string {
 	if len(ev.Entanglements) == 0 {
 		return lipgloss.NewStyle().
@@ -149,8 +189,29 @@ func (ev EntanglementView) View() string {
 			PaddingLeft(2).
 			Render("No entanglements")
 	}
+	if !ev.ready {
+		return ""
+	}
+	return ev.viewport.View()
+}
 
+// refreshContent re-renders all cards into the viewport, preserving scroll position.
+func (ev *EntanglementView) refreshContent() {
+	if !ev.ready {
+		return
+	}
+	content := ev.renderContent()
+	ev.totalLines = strings.Count(content, "\n") + 1
+	ev.viewport.SetContent(content)
+}
+
+// renderContent formats all entanglement cards into a single string for the viewport.
+func (ev EntanglementView) renderContent() string {
 	groups := groupEntanglements(ev.Entanglements)
+	if len(groups) == 0 {
+		return ""
+	}
+
 	cardWidth := ev.Width - 4
 	if cardWidth < 20 {
 		cardWidth = 20

@@ -48,8 +48,9 @@ type AppModel struct {
 	LoopView   LoopView // used in loop mode (single task)
 	NebulaView NebulaView
 	Detail     DetailPanel
-	Gate       *GatePrompt
-	Hail       *HailOverlay
+	Gate         *GatePrompt
+	PendingGates []MsgGatePrompt // queued gate prompts waiting for the current gate to resolve
+	Hail         *HailOverlay
 	Overlay    *CompletionOverlay
 	Toasts     []Toast
 	Keys       KeyMap
@@ -217,8 +218,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Pass dimensions to the board view.
 		m.Board.Width = contentWidth
 		m.Board.Height = detailHeight
-		m.EntanglementView.Width = contentWidth
-		m.EntanglementView.Height = detailHeight
+		m.EntanglementView.SetSize(contentWidth, detailHeight)
 
 		// Board view sizing: on the first resize, default to board if wide enough.
 		// On subsequent resizes, auto-fallback to table if terminal shrinks below threshold.
@@ -479,14 +479,21 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// --- Gate ---
 	case MsgGatePrompt:
-		m.Gate = NewGatePrompt(msg.Checkpoint, msg.ResponseCh)
-		m.Gate.Width = m.contentWidth()
-		m.Gate.Height = m.Height
-		// Mark the phase as gated if we know which one.
+		// Mark the phase as gated regardless of whether we show immediately.
 		if msg.Checkpoint != nil {
 			m.NebulaView.SetPhaseStatus(msg.Checkpoint.PhaseID, PhaseGate)
 			m.Graph.SetPhaseStatus(msg.Checkpoint.PhaseID, PhaseGate)
 		}
+		if m.Gate == nil {
+			// No active gate — show immediately.
+			m.Gate = NewGatePrompt(msg.Checkpoint, msg.ResponseCh)
+			m.Gate.Width = m.contentWidth()
+			m.Gate.Height = m.Height
+		} else {
+			// Gate already active — queue for later.
+			m.PendingGates = append(m.PendingGates, msg)
+		}
+		m.StatusBar.GateQueueCount = len(m.PendingGates)
 
 	// --- Done signals ---
 	case MsgLoopDone:
@@ -958,6 +965,23 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Also handle g/G for top/bottom (not in KeyMap but standard viewport keys).
 		if msg.String() == "g" || msg.String() == "G" {
 			m.ScratchpadView.Update(msg)
+			return m, nil
+		}
+	}
+
+	// Entanglement viewport scrolling — when the entanglements tab is active,
+	// route page up/down, home/end, and g/G to the viewport.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.ActiveTab == TabEntanglements {
+		switch {
+		case key.Matches(msg, m.Keys.PageUp),
+			key.Matches(msg, m.Keys.PageDown),
+			key.Matches(msg, m.Keys.Home),
+			key.Matches(msg, m.Keys.End):
+			m.EntanglementView.Update(msg)
+			return m, nil
+		}
+		if msg.String() == "g" || msg.String() == "G" {
+			m.EntanglementView.Update(msg)
 			return m, nil
 		}
 	}
@@ -1531,7 +1555,8 @@ func (m AppModel) handleGateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// resolveGate sends the action, updates the phase status, and clears the gate.
+// resolveGate sends the action, updates the phase status, clears the gate,
+// and promotes the next queued gate prompt if one is pending.
 func (m *AppModel) resolveGate(action nebula.GateAction) {
 	if m.Gate != nil {
 		phaseID := m.Gate.PhaseID
@@ -1554,6 +1579,16 @@ func (m *AppModel) resolveGate(action nebula.GateAction) {
 			m.NebulaView.SetPhaseStatus(phaseID, PhaseSkipped)
 			m.Graph.SetPhaseStatus(phaseID, PhaseSkipped)
 		}
+
+		// Promote the next queued gate prompt, if any.
+		if len(m.PendingGates) > 0 {
+			next := m.PendingGates[0]
+			m.PendingGates = m.PendingGates[1:]
+			m.Gate = NewGatePrompt(next.Checkpoint, next.ResponseCh)
+			m.Gate.Width = m.contentWidth()
+			m.Gate.Height = m.Height
+		}
+		m.StatusBar.GateQueueCount = len(m.PendingGates)
 	}
 }
 
@@ -2236,8 +2271,7 @@ func (m AppModel) renderMainView() string {
 				}
 				return boardStr
 			case TabEntanglements:
-				m.EntanglementView.Width = w
-				m.EntanglementView.Height = m.detailHeight()
+				m.EntanglementView.SetSize(w, m.detailHeight())
 				return m.EntanglementView.View()
 			case TabGraph:
 				m.Graph.SetSize(w, m.detailHeight())
