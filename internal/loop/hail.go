@@ -109,8 +109,8 @@ func (q *MemoryHailQueue) Post(h Hail) error {
 }
 
 // Unresolved returns all hails that have not yet been resolved, ordered by
-// creation time (oldest first). The returned slice is a copy; callers may
-// modify it freely.
+// creation time (oldest first). The returned slice is a deep copy; callers
+// may modify it freely without affecting the queue's internal state.
 func (q *MemoryHailQueue) Unresolved() []Hail {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -118,6 +118,7 @@ func (q *MemoryHailQueue) Unresolved() []Hail {
 	var result []Hail
 	for _, h := range q.hails {
 		if !h.IsResolved() {
+			h.Options = append([]string(nil), h.Options...)
 			result = append(result, h)
 		}
 	}
@@ -144,12 +145,16 @@ func (q *MemoryHailQueue) Resolve(id string, resolution string) error {
 }
 
 // All returns every hail in the queue (both resolved and unresolved).
-// The returned slice is a copy.
+// The returned slice is a deep copy; callers may modify it freely without
+// affecting the queue's internal state.
 func (q *MemoryHailQueue) All() []Hail {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
 	out := make([]Hail, len(q.hails))
 	copy(out, q.hails)
+	for i := range out {
+		out[i].Options = append([]string(nil), out[i].Options...)
+	}
 	return out
 }

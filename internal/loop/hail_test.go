@@ -169,14 +169,18 @@ func TestMemoryHailQueue_Unresolved(t *testing.T) {
 	t.Run("returns copy not reference", func(t *testing.T) {
 		t.Parallel()
 		q := NewMemoryHailQueue()
-		_ = q.Post(Hail{ID: "h1", Kind: HailBlocker, Summary: "one"})
+		_ = q.Post(Hail{ID: "h1", Kind: HailBlocker, Summary: "one", Options: []string{"a", "b"}})
 
 		got := q.Unresolved()
 		got[0].Summary = "mutated"
+		got[0].Options[0] = "mutated"
 
 		fresh := q.Unresolved()
 		if fresh[0].Summary == "mutated" {
-			t.Error("Unresolved() returned a reference to internal state, want copy")
+			t.Error("Unresolved() returned a reference to internal state (Summary), want copy")
+		}
+		if fresh[0].Options[0] == "mutated" {
+			t.Error("Unresolved() returned a reference to internal Options slice, want deep copy")
 		}
 	})
 }
@@ -235,22 +239,42 @@ func TestMemoryHailQueue_Resolve(t *testing.T) {
 func TestMemoryHailQueue_All(t *testing.T) {
 	t.Parallel()
 
-	q := NewMemoryHailQueue()
-	_ = q.Post(Hail{ID: "h1", Kind: HailBlocker, Summary: "one"})
-	_ = q.Post(Hail{ID: "h2", Kind: HailAmbiguity, Summary: "two"})
-	_ = q.Resolve("h1", "done")
+	t.Run("includes resolved and unresolved", func(t *testing.T) {
+		t.Parallel()
+		q := NewMemoryHailQueue()
+		_ = q.Post(Hail{ID: "h1", Kind: HailBlocker, Summary: "one"})
+		_ = q.Post(Hail{ID: "h2", Kind: HailAmbiguity, Summary: "two"})
+		_ = q.Resolve("h1", "done")
 
-	all := q.All()
-	if len(all) != 2 {
-		t.Fatalf("All() = %d items, want 2", len(all))
-	}
-	// Verify both resolved and unresolved are returned.
-	if !all[0].IsResolved() {
-		t.Error("All()[0] should be resolved")
-	}
-	if all[1].IsResolved() {
-		t.Error("All()[1] should not be resolved")
-	}
+		all := q.All()
+		if len(all) != 2 {
+			t.Fatalf("All() = %d items, want 2", len(all))
+		}
+		if !all[0].IsResolved() {
+			t.Error("All()[0] should be resolved")
+		}
+		if all[1].IsResolved() {
+			t.Error("All()[1] should not be resolved")
+		}
+	})
+
+	t.Run("returns deep copy", func(t *testing.T) {
+		t.Parallel()
+		q := NewMemoryHailQueue()
+		_ = q.Post(Hail{ID: "h1", Kind: HailBlocker, Summary: "one", Options: []string{"x", "y"}})
+
+		got := q.All()
+		got[0].Summary = "mutated"
+		got[0].Options[0] = "mutated"
+
+		fresh := q.All()
+		if fresh[0].Summary == "mutated" {
+			t.Error("All() returned a reference to internal state (Summary), want copy")
+		}
+		if fresh[0].Options[0] == "mutated" {
+			t.Error("All() returned a reference to internal Options slice, want deep copy")
+		}
+	})
 }
 
 func TestMemoryHailQueue_ConcurrentAccess(t *testing.T) {
