@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'arch-cleanup'
-total_cost_usd = 1.05258325
+total_cost_usd = 3.7001300000000006
 
 [phases]
 [phases.split-bridge]
@@ -11,9 +11,15 @@ updated_at = 2026-02-25T10:54:38.638103-05:00
 
 [phases.split-hail-escalation-test]
 bead_id = 'quasar-ykso'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-25T10:54:04.452347-05:00
-updated_at = 2026-02-25T10:54:38.653634-05:00
+updated_at = 2026-02-25T10:58:06.782186-05:00
+
+[phases.split-hail-escalation-test.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Straightforward test file split that correctly decomposes hail_escalation_test.go (405→208 lines) by moving 3 post/build test functions to a new file (205 lines), with clean import separation and no lost coverage.'
 
 [phases.split-hail-extract-test]
 bead_id = 'quasar-gtt4'
@@ -23,9 +29,15 @@ updated_at = 2026-02-25T10:54:38.661641-05:00
 
 [phases.split-hail-list-test]
 bead_id = 'quasar-ivtq'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-25T10:54:03.718159-05:00
-updated_at = 2026-02-25T10:54:38.669972-05:00
+updated_at = 2026-02-25T10:58:11.149069-05:00
+
+[phases.split-hail-list-test.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean mechanical split of `hail_list_test.go` (521→234+296 lines) along a natural component-vs-model boundary with all tests preserved and both files under the 400-line limit.'
 
 [phases.split-hail-relay-test]
 bead_id = 'quasar-hf58'
