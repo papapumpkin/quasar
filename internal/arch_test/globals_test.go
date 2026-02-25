@@ -13,79 +13,20 @@ import (
 // but don't match the automated detection heuristics. Each entry documents why
 // it is acceptable.
 var allowedGlobals = map[string][]string{
-	// config: exported default values — constant-like slice literal.
-	"config": {"DefaultLintCommands"},
+	// tui: splash ramp array declared without initializer, populated in init().
+	// Effectively constant after package init completes.
+	"tui": {"splashDopplerRamps"},
+}
 
-	// fabric: lookup tables used for validation — constant-like map literals.
-	"fabric": {
-		"ValidPulseKinds",
-		"ValidDiscoveryKinds",
-		"timestampFormats",
-	},
-
-	// nebula: validation lookup tables and sentinel maps — constant-like map literals.
-	"nebula": {
-		"ValidGateModes",
-		"interventionFiles",
-	},
-
-	// snapshot: list of conventional file names — constant-like slice literal.
-	"snapshot": {"conventionsFiles"},
-
-	// tui: UI styles, color constants, ASCII art, and cached render data.
-	// These are all effectively immutable after init and are standard patterns
-	// in Bubble Tea / lipgloss applications.
-	"tui": {
-		// styles.go — lipgloss color and style constants
-		"colorPrimary", "colorAccent", "colorSuccess", "colorDanger",
-		"colorWarning", "colorNebula", "colorStardust",
-		"colorBrightWhite", "colorMuted", "colorMutedLight",
-		"colorSurface", "colorSurfaceBright", "colorRedshift",
-		"styleStatusBar", "styleStatusPhase", "styleStatusIdle",
-		"styleStatusSuccess", "styleStatusError", "styleStatusBudget",
-		"styleBreadcrumb", "styleBreadcrumbSep",
-		"styleRowSelected", "styleRowNormal", "styleColHeader",
-		"styleHeaderID", "styleHeaderTitle", "styleHeaderStatus", "styleHeaderPriority",
-		"styleTreeConnector", "styleWaveHeader",
-		"styleDetailBorder", "styleDetailTitle",
-		"styleDetailLabel", "styleDetailValue", "styleDetailDeps",
-		"styleDetailSection", "styleDetailDescription",
-		"styleDiffAdd", "styleDiffRemove",
-		"styleDiffContext", "styleDiffHeader", "styleDiffHunk",
-		"styleGateOverlay", "styleGateTitle", "styleGateAction",
-		"styleGateApprove", "styleGateReject", "styleGateSkip",
-		"styleFooter", "styleFooterKey", "styleFooterDesc",
-		"styleSectionBorder",
-		"styleOverlaySuccess", "styleOverlayError",
-		"styleBeadOpen", "styleBeadClosed", "styleBeadInProgress",
-		"styleResourceNormal", "styleResourceWarning", "styleResourceCritical",
-		"styleHailOverlay", "styleHailTitle", "styleHailBorder",
-		"styleHailInput", "styleHailPlaceholder", "styleHailFocused",
-		"styleToast",
-
-		// planview.go — plan view styles
-		"stylePlanTitle", "stylePlanPhase", "stylePlanDep",
-
-		// logo.go — logo styles
-		"styleLogoJet", "styleLogoCore",
-
-		// banner.go — ASCII art and cached rendering
-		"artXS", "artSA", "artSB", "artXL",
-		"styleRedOuter", "styleRedInner",
-		"renderCache", "renderCacheMu",
-
-		// tabs.go — fixed-size array of tab labels
-		"tabLabels",
-
-		// overlay.go — atomic counter for toast IDs (sync-like)
-		"nextToastID",
-
-		// splash.go — doppler color ramps and density rune table
-		"splashDopplerRamps", "splashDensityRamp",
-
-		// boardview.go — column definitions for the board view
-		"columnDefs",
-	},
+// allowedGlobalPrefixes lists name prefixes for which all vars in the given
+// package are treated as constant-like. This is used for packages that follow
+// a convention of naming their constant-like globals with a common prefix
+// (e.g., TUI lipgloss styles and color definitions).
+var allowedGlobalPrefixes = map[string][]string{
+	// tui: lipgloss styles (styleXxx), color definitions (colorXxx), and
+	// ASCII art (artXxx) are all effectively immutable after init and are
+	// standard patterns in Bubble Tea / lipgloss applications.
+	"tui": {"style", "color", "art"},
 }
 
 // TestNoMutableGlobalState scans all internal packages for package-level var
@@ -95,6 +36,8 @@ var allowedGlobals = map[string][]string{
 //   - regexp.MustCompile
 //   - sync primitives (sync.Once, sync.Mutex, etc.) and atomic types
 //   - simple literal values (string, int, bool, float)
+//   - composite literals (array, slice, map, struct literals)
+//   - explicitly allowlisted names or prefixes
 func TestNoMutableGlobalState(t *testing.T) {
 	t.Parallel()
 
@@ -108,6 +51,7 @@ func TestNoMutableGlobalState(t *testing.T) {
 			pkgDir := filepath.Join(dir, pkg)
 			files := goFilesIn(t, pkgDir)
 			allowed := makeAllowSet(pkg)
+			prefixes := allowedGlobalPrefixes[pkg]
 
 			fset := token.NewFileSet()
 			for _, filePath := range files {
@@ -126,7 +70,7 @@ func TestNoMutableGlobalState(t *testing.T) {
 						if !ok {
 							continue
 						}
-						checkVarSpec(t, vs, allowed, filePath)
+						checkVarSpec(t, vs, allowed, prefixes, filePath)
 					}
 				}
 			}
@@ -135,7 +79,7 @@ func TestNoMutableGlobalState(t *testing.T) {
 }
 
 // checkVarSpec checks a single var spec against the allowed patterns.
-func checkVarSpec(t *testing.T, vs *ast.ValueSpec, allowed map[string]bool, filePath string) {
+func checkVarSpec(t *testing.T, vs *ast.ValueSpec, allowed map[string]bool, prefixes []string, filePath string) {
 	t.Helper()
 
 	for i, name := range vs.Names {
@@ -146,8 +90,13 @@ func checkVarSpec(t *testing.T, vs *ast.ValueSpec, allowed map[string]bool, file
 			continue
 		}
 
-		// 2. Explicitly allowlisted.
+		// 2. Explicitly allowlisted by name.
 		if allowed[varName] {
+			continue
+		}
+
+		// 3. Allowed by prefix convention.
+		if hasAllowedPrefix(varName, prefixes) {
 			continue
 		}
 
@@ -157,23 +106,28 @@ func checkVarSpec(t *testing.T, vs *ast.ValueSpec, allowed map[string]bool, file
 			val = vs.Values[i]
 		}
 
-		// 3. Error sentinel — type is error or init calls errors.New/fmt.Errorf.
+		// 4. Error sentinel — type is error or init calls errors.New/fmt.Errorf.
 		if isErrorSentinel(vs.Type, val) {
 			continue
 		}
 
-		// 4. regexp.MustCompile
+		// 5. regexp.MustCompile
 		if isRegexpCompile(val) {
 			continue
 		}
 
-		// 5. sync primitive or atomic type.
+		// 6. sync primitive or atomic type.
 		if isSyncOrAtomicType(vs.Type) {
 			continue
 		}
 
-		// 6. Simple literal (string, int, bool, float).
+		// 7. Simple literal (string, int, bool, float).
 		if isSimpleLiteral(val) {
+			continue
+		}
+
+		// 8. Composite literal (array, slice, map, struct initialized inline).
+		if isCompositeLiteral(val) {
 			continue
 		}
 
@@ -191,6 +145,16 @@ func makeAllowSet(pkg string) map[string]bool {
 		s[n] = true
 	}
 	return s
+}
+
+// hasAllowedPrefix returns true if varName starts with any of the given prefixes.
+func hasAllowedPrefix(varName string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(varName, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // isErrorSentinel returns true if the var declaration looks like an error
@@ -270,6 +234,17 @@ func isSimpleLiteral(val ast.Expr) bool {
 		return false
 	}
 	_, ok := val.(*ast.BasicLit)
+	return ok
+}
+
+// isCompositeLiteral returns true if the initializer is a composite literal
+// (array, slice, map, or struct literal initialized inline). These are
+// constant-like lookup tables or configuration data.
+func isCompositeLiteral(val ast.Expr) bool {
+	if val == nil {
+		return false
+	}
+	_, ok := val.(*ast.CompositeLit)
 	return ok
 }
 
@@ -355,9 +330,9 @@ func TestAllowedGlobalsAreUsed(t *testing.T) {
 	}
 }
 
-// TestGlobalStateDetectionCanary is a compile-time canary that verifies the
-// detection logic works. It parses a synthetic Go source containing a
-// disallowed global and ensures the checker would flag it.
+// TestGlobalStateDetectionCanary verifies the detection logic correctly flags
+// a disallowed global (var x = make(map[...]...)). This uses synthetic source
+// to ensure the checker would catch real mutable globals.
 func TestGlobalStateDetectionCanary(t *testing.T) {
 	t.Parallel()
 
@@ -395,7 +370,8 @@ var badMap = make(map[string]string)
 				if isErrorSentinel(vs.Type, val) ||
 					isRegexpCompile(val) ||
 					isSyncOrAtomicType(vs.Type) ||
-					isSimpleLiteral(val) {
+					isSimpleLiteral(val) ||
+					isCompositeLiteral(val) {
 					t.Errorf("canary var %q should NOT be allowed by any heuristic", name.Name)
 				}
 				found = true
@@ -440,6 +416,14 @@ func TestGlobalStateAllowedPatterns(t *testing.T) {
 			name: "simple_int_literal",
 			src:  `package p; var count = 42`,
 		},
+		{
+			name: "composite_slice_literal",
+			src:  `package p; var items = []string{"a", "b", "c"}`,
+		},
+		{
+			name: "composite_map_literal",
+			src:  `package p; var lookup = map[string]bool{"x": true}`,
+		},
 	}
 
 	for _, tc := range tests {
@@ -473,11 +457,78 @@ func TestGlobalStateAllowedPatterns(t *testing.T) {
 						allowed := isErrorSentinel(vs.Type, val) ||
 							isRegexpCompile(val) ||
 							isSyncOrAtomicType(vs.Type) ||
-							isSimpleLiteral(val)
+							isSimpleLiteral(val) ||
+							isCompositeLiteral(val)
 						if !allowed {
-							relName := strings.TrimPrefix(name.Name, "_")
 							t.Errorf("var %q in test case %q should be allowed but was flagged",
-								relName, tc.name)
+								name.Name, tc.name)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestGlobalStateRejectsMake verifies that make()-allocated globals are
+// correctly flagged. Unlike composite literals which are constant-like
+// lookup tables, make() creates empty mutable containers.
+func TestGlobalStateRejectsMake(t *testing.T) {
+	t.Parallel()
+
+	sources := []struct {
+		name string
+		src  string
+	}{
+		{
+			name: "make_map",
+			src:  `package p; var m = make(map[string]string)`,
+		},
+		{
+			name: "make_slice",
+			src:  `package p; var s = make([]byte, 1024)`,
+		},
+		{
+			name: "make_chan",
+			src:  `package p; var ch = make(chan int)`,
+		},
+	}
+
+	for _, tc := range sources {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			fset := token.NewFileSet()
+			node, err := parser.ParseFile(fset, "test.go", tc.src, 0)
+			if err != nil {
+				t.Fatalf("parsing: %v", err)
+			}
+
+			for _, decl := range node.Decls {
+				gd, ok := decl.(*ast.GenDecl)
+				if !ok || gd.Tok != token.VAR {
+					continue
+				}
+				for _, spec := range gd.Specs {
+					vs, ok := spec.(*ast.ValueSpec)
+					if !ok {
+						continue
+					}
+					for i, name := range vs.Names {
+						if name.Name == "_" {
+							continue
+						}
+						var val ast.Expr
+						if i < len(vs.Values) {
+							val = vs.Values[i]
+						}
+						if isErrorSentinel(vs.Type, val) ||
+							isRegexpCompile(val) ||
+							isSyncOrAtomicType(vs.Type) ||
+							isSimpleLiteral(val) ||
+							isCompositeLiteral(val) {
+							t.Errorf("var %q in %q should be rejected but was allowed",
+								name.Name, tc.name)
 						}
 					}
 				}
