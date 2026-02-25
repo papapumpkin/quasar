@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'arch-tests'
-total_cost_usd = 5.512482
+total_cost_usd = 8.080224000000001
 
 [phases]
 [phases.arch-foundation]
@@ -29,9 +29,15 @@ summary = 'Well-implemented dependency layering tests that encode the package DA
 
 [phases.exported-symbol-hygiene]
 bead_id = 'quasar-mc8t'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T21:35:16.602655-05:00
-updated_at = 2026-02-24T21:42:32.747938-05:00
+updated_at = 2026-02-24T21:49:39.392917-05:00
+
+[phases.exported-symbol-hygiene.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented GoDoc enforcement test using go/ast with comprehensive symbol coverage, proper edge case handling, and a minimal exemptions list; only minor issue is a misleading comment on one exemption entry.'
 
 [phases.global-state-guard]
 bead_id = 'quasar-n58r'
