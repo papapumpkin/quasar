@@ -99,7 +99,7 @@ func TestChainRun(t *testing.T) {
 		}
 	})
 
-	t.Run("CancelledContext", func(t *testing.T) {
+	t.Run("CanceledContext", func(t *testing.T) {
 		t.Parallel()
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // immediately canceled

@@ -78,7 +78,7 @@ func TestTerminalGater_NonTTY_NilCheckpoint(t *testing.T) {
 	}
 }
 
-func TestTerminalGater_ContextCancelled(t *testing.T) {
+func TestTerminalGater_ContextCanceled(t *testing.T) {
 	t.Parallel()
 
 	// blockReader blocks on Read, simulating a terminal waiting for input.

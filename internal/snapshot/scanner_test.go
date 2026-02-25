@@ -461,7 +461,7 @@ func TestWalkFilesCancellation(t *testing.T) {
 	s.applyDefaults()
 	_, err := s.walkFiles(ctx)
 	if err == nil {
-		t.Error("expected error from cancelled context, got nil")
+		t.Error("expected error from canceled context, got nil")
 	}
 	if !strings.Contains(err.Error(), "context canceled") {
 		t.Errorf("expected context canceled error, got: %v", err)
