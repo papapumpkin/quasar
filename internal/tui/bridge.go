@@ -121,6 +121,16 @@ func (b *UIBridge) AgentOutput(role string, cycle int, output string) {
 // are only meaningful in nebula phase views where PhaseUIBridge is used.
 func (b *UIBridge) RefactorApplied(phaseID string) {}
 
+// HailReceived sends MsgHailReceived when an agent posts a hail.
+func (b *UIBridge) HailReceived(h ui.HailInfo) {
+	b.program.Send(MsgHailReceived{Hail: h})
+}
+
+// HailResolved sends MsgHailResolved when a hail is resolved by the human.
+func (b *UIBridge) HailResolved(id, resolution string) {
+	b.program.Send(MsgHailResolved{ID: id, Resolution: resolution})
+}
+
 // BeadUpdate sends MsgBeadUpdate with the bead hierarchy.
 func (b *UIBridge) BeadUpdate(taskBeadID, title, status string, children []ui.BeadChild) {
 	root := buildBeadInfoTree(taskBeadID, title, status, children)
@@ -354,6 +364,16 @@ func (b *PhaseUIBridge) RefactorApplied(phaseID string) {
 func (b *PhaseUIBridge) BeadUpdate(taskBeadID, title, status string, children []ui.BeadChild) {
 	root := buildBeadInfoTree(taskBeadID, title, status, children)
 	b.program.Send(MsgPhaseBeadUpdate{PhaseID: b.phaseID, TaskBeadID: taskBeadID, Root: root})
+}
+
+// HailReceived sends MsgHailReceived tagged with this phase's ID.
+func (b *PhaseUIBridge) HailReceived(h ui.HailInfo) {
+	b.program.Send(MsgHailReceived{PhaseID: b.phaseID, Hail: h})
+}
+
+// HailResolved sends MsgHailResolved tagged with this phase's ID.
+func (b *PhaseUIBridge) HailResolved(id, resolution string) {
+	b.program.Send(MsgHailResolved{PhaseID: b.phaseID, ID: id, Resolution: resolution})
 }
 
 // EntanglementPublished sends MsgEntanglementUpdate with the full entanglement list.

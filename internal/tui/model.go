@@ -16,6 +16,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/nebula"
 	"github.com/papapumpkin/quasar/internal/tycho"
+	"github.com/papapumpkin/quasar/internal/ui"
 )
 
 // Mode indicates which top-level view the TUI is displaying.
@@ -100,6 +101,10 @@ type AppModel struct {
 	Scratchpad       []MsgScratchpadEntry  // timestamped scratchpad notes
 	ScratchpadView   ScratchpadView        // persistent scratchpad viewer with viewport
 	StaleItems       []tycho.StaleItem     // latest stale warning items
+
+	// Hail tracking — pending hails from agents that need human attention.
+	PendingHails []ui.HailInfo    // unresolved hails tracked via MsgHailReceived/MsgHailResolved
+	HailList     *HailListOverlay // non-nil when the hail list overlay is active
 
 	// Home mode state (landing page).
 	HomeCursor      int            // cursor position in the home nebula list
@@ -560,6 +565,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 
+	case MsgHailReceived:
+		m.PendingHails = append(m.PendingHails, msg.Hail)
+		m.syncHailBadge()
+
+	case MsgHailResolved:
+		m.removePendingHail(msg.ID)
+		m.syncHailBadge()
+
 	case MsgScratchpadEntry:
 		m.Scratchpad = append(m.Scratchpad, msg)
 		m.ScratchpadView.AddEntry(msg)
@@ -765,6 +778,11 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Hail overlay overrides normal keys when active.
 	if m.Hail != nil {
 		return m.handleHailKey(msg)
+	}
+
+	// Hail list overlay overrides normal keys when active.
+	if m.HailList != nil {
+		return m.handleHailListKey(msg)
 	}
 
 	// When viewing a single file's diff, route scroll keys to the detail panel.
@@ -1015,6 +1033,9 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.Keys.Diff):
 		m.handleDiffKey()
 
+	case key.Matches(msg, m.Keys.HailList):
+		cmd := m.openHailList()
+		return m, cmd
 	}
 
 	return m, nil
@@ -1565,6 +1586,81 @@ func (m *AppModel) resolveHail(response string) {
 	}
 }
 
+// syncHailBadge updates the status bar hail counters from PendingHails.
+func (m *AppModel) syncHailBadge() {
+	m.StatusBar.HailCount = len(m.PendingHails)
+	critical := 0
+	for _, h := range m.PendingHails {
+		if h.Kind == "blocker" {
+			critical++
+		}
+	}
+	m.StatusBar.CriticalHailCount = critical
+
+	// Enable/disable the HailList keybinding based on pending hails.
+	m.Keys.HailList.SetEnabled(len(m.PendingHails) > 0)
+}
+
+// removePendingHail removes a hail by ID from PendingHails.
+func (m *AppModel) removePendingHail(id string) {
+	for i, h := range m.PendingHails {
+		if h.ID == id {
+			m.PendingHails = append(m.PendingHails[:i], m.PendingHails[i+1:]...)
+			return
+		}
+	}
+}
+
+// handleHailListKey routes key events when the hail list overlay is active.
+// Up/Down navigates the list, Enter selects, Esc dismisses.
+func (m AppModel) handleHailListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.Keys.Back):
+		m.HailList = nil
+		return m, nil
+	case key.Matches(msg, m.Keys.Up):
+		m.HailList.MoveUp()
+		return m, nil
+	case key.Matches(msg, m.Keys.Down):
+		m.HailList.MoveDown()
+		return m, nil
+	case key.Matches(msg, m.Keys.Enter):
+		selected := m.HailList.Selected()
+		if selected != nil {
+			// Acknowledge (remove) the selected hail and dismiss the list.
+			m.removePendingHail(selected.ID)
+			m.syncHailBadge()
+			m.HailList = nil
+			toast, cmd := NewToast(fmt.Sprintf("✓ acknowledged: %s", selected.Summary), false)
+			m.Toasts = append(m.Toasts, toast)
+			return m, cmd
+		}
+		m.HailList = nil
+		return m, nil
+	}
+	return m, nil
+}
+
+// openHailList creates and shows the hail list overlay. If only one hail
+// is pending, it acknowledges it directly instead of showing a list.
+func (m *AppModel) openHailList() tea.Cmd {
+	if len(m.PendingHails) == 0 {
+		return nil
+	}
+	if len(m.PendingHails) == 1 {
+		// Single hail — acknowledge directly with a toast.
+		hail := m.PendingHails[0]
+		m.PendingHails = nil
+		m.syncHailBadge()
+		toast, cmd := NewToast(fmt.Sprintf("⚠ [%s] %s: %s", hail.Kind, hail.SourceRole, hail.Summary), true)
+		m.Toasts = append(m.Toasts, toast)
+		return cmd
+	}
+	m.HailList = NewHailListOverlay(m.PendingHails)
+	m.HailList.Width = m.Width
+	return nil
+}
+
 // moveUp delegates to the active view based on depth.
 // When the diff file list is active, navigation targets it instead of the main list.
 func (m *AppModel) moveUp() {
@@ -2016,6 +2112,14 @@ func (m AppModel) View() string {
 		return compositeOverlay(dimmed, overlayBox, m.Width, m.Height)
 	}
 
+	// Hail list overlay — rendered over a dimmed background for browsing pending hails.
+	if m.HailList != nil {
+		dimmed := styleOverlayDimmed.Width(m.Width).Height(m.Height).Render(base)
+		overlayContent := m.HailList.View(m.Width, m.Height)
+		overlayBox := centerOverlay(overlayContent, m.Width, m.Height)
+		return compositeOverlay(dimmed, overlayBox, m.Width, m.Height)
+	}
+
 	// Quit confirmation overlay — rendered over a dimmed background.
 	if m.ShowQuitConfirm {
 		dimmed := styleOverlayDimmed.Width(m.Width).Height(m.Height).Render(base)
@@ -2166,6 +2270,11 @@ func (m AppModel) buildFooter() Footer {
 		return f
 	}
 
+	if m.HailList != nil {
+		f.Bindings = HailListFooterBindings(m.Keys)
+		return f
+	}
+
 	if m.Gate != nil {
 		f.Bindings = GateFooterBindings(m.Keys)
 	} else if m.Mode == ModeHome {
@@ -2212,6 +2321,12 @@ func (m AppModel) buildFooter() Footer {
 			f.Bindings = append(f.Bindings, diffBind)
 		}
 	}
+
+	// Append hail list binding when pending hails exist.
+	if m.Keys.HailList.Enabled() {
+		f.Bindings = append(f.Bindings, m.Keys.HailList)
+	}
+
 	return f
 }
 
