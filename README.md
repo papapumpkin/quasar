@@ -60,19 +60,52 @@ go install .
 
 ## Quick Start
 
-1. Verify dependencies are available:
+First, verify that all dependencies are installed:
 
-   ```bash
-   quasar validate
-   ```
+```bash
+quasar validate
+```
 
-2. Start the interactive REPL:
+### Single Task (REPL Mode)
+
+1. Start the interactive REPL:
 
    ```bash
    quasar run
    ```
 
-3. Type a task at the `quasar>` prompt — e.g., "Add input validation to the login handler."
+2. Type a task at the `quasar>` prompt — e.g., "Add input validation to the login handler."
+
+### Multi-Task (Nebula Mode)
+
+1. Create a nebula directory with a `nebula.toml` manifest and one `.md` file per task (see [Nebula Blueprints](#nebula-blueprints) below for the full format):
+
+   ```
+   .nebulas/my-nebula/
+   ├── nebula.toml
+   ├── implement-feature.md
+   └── write-tests.md
+   ```
+
+2. Validate the nebula:
+
+   ```bash
+   quasar nebula validate .nebulas/my-nebula/
+   ```
+
+3. Apply and run:
+
+   ```bash
+   quasar nebula apply .nebulas/my-nebula/ --auto
+   ```
+
+4. Or launch the cockpit TUI to manage nebulas interactively:
+
+   ```bash
+   quasar cockpit
+   ```
+
+Running `quasar` with no subcommand in a directory containing `.nebulas/` auto-launches the cockpit.
 
 ## Commands
 
@@ -464,6 +497,24 @@ quasar nebula apply examples/dogfood-nebula/ --auto --max-workers 2
 ### Jet (Future)
 
 Jet is the planned temporal orchestration layer for running nebula tasks at scale — named after the focused, directed relativistic outflows of a quasar. It will support distributed execution via Temporal workflows with Kubernetes deployment. Not yet implemented.
+
+## Concepts
+
+Quasar uses a cosmic vocabulary for its internal systems:
+
+| Concept | Package | Description |
+|---------|---------|-------------|
+| **Fabric** | `internal/fabric` | SQLite-based shared state store for multi-phase coordination |
+| **Entanglement** | `internal/fabric` | Exported type/function signature posted by one phase, visible to others |
+| **Claim** | `internal/fabric` | Exclusive file ownership lock held by a phase during execution |
+| **Discovery** | `internal/fabric` | Issue surfaced by an agent (conflict, ambiguity, missing dep) |
+| **Pulse** | `internal/fabric` | Timestamped note, decision, or failure emitted during execution |
+| **Filter** | `internal/filter` | Pre-reviewer deterministic checks (build, vet, lint, test) |
+| **Tycho** | `internal/tycho` | DAG scheduler resolving phase execution order and eligibility |
+| **Neutron** | `internal/neutron` | Archived epoch snapshot (standalone SQLite file) |
+| **Epoch** | -- | A single execution run; archived to a neutron on completion |
+| **Telemetry** | `internal/telemetry` | JSONL event stream for state transitions and auditability |
+| **Hail** | `internal/fabric` | Human interrupt signal surfaced as a discovery |
 
 ## Review Format
 
