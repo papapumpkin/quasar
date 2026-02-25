@@ -383,20 +383,6 @@ var (
 	// styleHailOption styles option labels (a/b/c) in blueshift cyan.
 	styleHailOption = lipgloss.NewStyle().
 			Foreground(colorBlueshift)
-
-	// styleHailOverlayCritical wraps critical hails with a thicker visual cue.
-	// Uses a double border and a red background tint to stand out from normal hails.
-	styleHailOverlayCritical = lipgloss.NewStyle().
-					Border(lipgloss.DoubleBorder()).
-					BorderForeground(colorDanger).
-					Padding(1, 2)
-
-	// styleHailHeaderCritical styles critical hail titles with a red background badge.
-	styleHailHeaderCritical = lipgloss.NewStyle().
-				Background(colorDanger).
-				Foreground(colorBrightWhite).
-				Bold(true).
-				Padding(0, 1)
 )
 
 // Toast notification styles.

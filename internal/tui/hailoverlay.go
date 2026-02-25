@@ -5,8 +5,25 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/papapumpkin/quasar/internal/fabric"
+)
+
+// Critical hail styles — visually distinct from normal hails.
+var (
+	// styleHailOverlayCritical uses a double border for critical/blocker hails.
+	styleHailOverlayCritical = lipgloss.NewStyle().
+					Border(lipgloss.DoubleBorder()).
+					BorderForeground(colorDanger).
+					Padding(1, 2)
+
+	// styleHailHeaderCritical styles critical hail titles with a red background badge.
+	styleHailHeaderCritical = lipgloss.NewStyle().
+				Background(colorDanger).
+				Foreground(colorBrightWhite).
+				Bold(true).
+				Padding(0, 1)
 )
 
 // HailOverlay renders a red-bordered floating overlay for human decision
