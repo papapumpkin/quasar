@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'agent-interaction-ux'
-total_cost_usd = 9.380340250000001
+total_cost_usd = 31.06847705
 
 [phases]
 [phases.hail-extraction]
@@ -17,15 +17,27 @@ summary = 'Hail extraction and discovery bridging with cross-cycle dedup is corr
 
 [phases.hail-relay]
 bead_id = 'quasar-wvqy'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T22:16:41.874621-05:00
-updated_at = 2026-02-25T09:01:09.52265-05:00
+updated_at = 2026-02-25T09:30:17.233349-05:00
+
+[phases.hail-relay.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean refactoring of hail relay functions into dedicated file with enhanced timeout/auto-resolve support, comprehensive test coverage, and proper integration into coder/reviewer prompt paths — all acceptance criteria met.'
 
 [phases.hail-timeout]
 bead_id = 'quasar-1sd6'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T22:16:42.606046-05:00
-updated_at = 2026-02-25T09:01:09.521287-05:00
+updated_at = 2026-02-25T09:30:17.231286-05:00
+
+[phases.hail-timeout.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'High-quality test additions for hail timeout feature — all 6 acceptance criteria verified with thorough edge case coverage, all tests pass, `go vet` clean.'
 
 [phases.hail-types]
 bead_id = 'quasar-zxtb'
@@ -41,15 +53,27 @@ summary = 'Solid implementation of Hail types, HailQueue interface, and in-memor
 
 [phases.reviewer-escalation]
 bead_id = 'quasar-bbv5'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T22:16:43.390547-05:00
-updated_at = 2026-02-25T09:01:09.534414-05:00
+updated_at = 2026-02-25T09:30:06.856136-05:00
+
+[phases.reviewer-escalation.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Reviewer escalation logic correctly auto-escalates critical findings, high-risk assessments, and max-cycle failures to structured hails with full test coverage and TUI visual differentiation.'
 
 [phases.tui-hail-overlay]
 bead_id = 'quasar-afxw'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-24T22:16:41.126118-05:00
-updated_at = 2026-02-25T09:01:09.542113-05:00
+updated_at = 2026-02-25T09:30:17.232597-05:00
+
+[phases.tui-hail-overlay.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Solid TUI hail list overlay with comprehensive test coverage, clean `go vet`, and proper integration into the existing overlay/keybinding/status bar system.'
 
 [phases.ui-hail-interface]
 bead_id = 'quasar-9dwr'
