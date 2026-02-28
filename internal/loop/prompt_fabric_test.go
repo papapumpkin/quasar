@@ -56,7 +56,7 @@ func (m *mockFabric) PulsesFor(context.Context, string) ([]fabric.Pulse, error) 
 func (m *mockFabric) AllPulses(context.Context) ([]fabric.Pulse, error) {
 	return m.pulses, nil
 }
-func (m *mockFabric) PurgeAll(context.Context) error                   { return nil }
+func (m *mockFabric) PurgeAll(context.Context) error                    { return nil }
 func (m *mockFabric) PurgeFulfilledEntanglements(context.Context) error { return nil }
 func (m *mockFabric) Close() error                                      { return nil }
 

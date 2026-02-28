@@ -187,7 +187,7 @@ func (p *Printer) HailReceived(h HailInfo) {
 	if len(h.Options) > 0 {
 		b.WriteString("  " + bold + "Options:" + reset)
 		for i, opt := range h.Options {
-			b.WriteString(fmt.Sprintf(" %c) %s", 'A'+i, opt))
+			fmt.Fprintf(&b, " %c) %s", 'A'+i, opt)
 			if i < len(h.Options)-1 {
 				b.WriteString(" ")
 			}
