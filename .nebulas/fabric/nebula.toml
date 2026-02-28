@@ -1,0 +1,45 @@
+[nebula]
+name = "fabric"
+description = "Rename internal/board to internal/fabric with canonical vocabulary (entanglements, claims, discoveries, pulses), evolve the schema, add CLI subcommands, extract the Tycho scheduler, build filters, telemetry, neutron archival, and agent prompt injection."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "fabric"]
+assignee = ""
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 120.0
+model = ""
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Rename internal/board to internal/fabric with canonical vocabulary throughout the codebase",
+    "Evolve the SQLite schema — add consumer column, pending status, discoveries table, pulses table",
+    "Build quasar fabric CLI subcommands for all fabric operations",
+    "Add discovery system with 5 kinds and hail mechanism for cockpit surfacing",
+    "Build pulse system — shared execution context between concurrent quasars (quasar pulse emit/list)",
+    "Extract DAG scheduling from WorkerGroup into internal/tycho",
+    "Build pre-reviewer filters (go build/vet/lint/test + claim validation) in internal/filter",
+    "Inject fabric protocol into agent system prompts",
+    "Build JSONL telemetry event stream in internal/telemetry",
+    "Build neutron archival for epoch snapshots with stale state reaper",
+]
+constraints = [
+    "Do not rewrite things that already work — extend and correct what is there",
+    "internal/board code is the foundation — rename and evolve it, do not rebuild from scratch",
+    "Backward compatible: Fabric=nil must preserve existing behavior (like Board=nil did)",
+    "Use canonical vocabulary exclusively — see vocabulary table in design brief",
+    "Pure Go only — no new CGo dependencies",
+    "All new packages must have comprehensive test files using stdlib testing only",
+    "Follow existing Go conventions from CLAUDE.md (small interfaces, context propagation, wrapped errors)",
+    "CLI subcommands use Cobra + Viper consistent with existing commands",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = ["contract-board"]

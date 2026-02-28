@@ -144,10 +144,10 @@ func TestHomeView_View_NoDescription(t *testing.T) {
 	if !strings.Contains(out, "nodesc") {
 		t.Errorf("expected 'nodesc' in output, got:\n%s", out)
 	}
-	// Count lines: should be just the main row + trailing newline.
+	// Count lines: filter bar + main row (no description line).
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
-	if len(lines) != 1 {
-		t.Errorf("expected 1 line (no description), got %d lines:\n%s", len(lines), out)
+	if len(lines) != 2 {
+		t.Errorf("expected 2 lines (filter bar + row), got %d lines:\n%s", len(lines), out)
 	}
 }
 
@@ -246,8 +246,8 @@ func TestHomeFooterBindings(t *testing.T) {
 	km := DefaultKeyMap()
 	bindings := HomeFooterBindings(km)
 
-	if len(bindings) != 5 {
-		t.Fatalf("expected 5 home footer bindings, got %d", len(bindings))
+	if len(bindings) != 6 {
+		t.Fatalf("expected 6 home footer bindings, got %d", len(bindings))
 	}
 
 	// Verify the enter binding says "run".
@@ -256,8 +256,14 @@ func TestHomeFooterBindings(t *testing.T) {
 		t.Errorf("expected enter binding desc 'run', got %q", enterHelp.Desc)
 	}
 
+	// Verify the filter binding says "filter".
+	filterHelp := bindings[3].Help()
+	if filterHelp.Desc != "filter" {
+		t.Errorf("expected filter binding desc 'filter', got %q", filterHelp.Desc)
+	}
+
 	// Verify the info binding says "info".
-	infoHelp := bindings[3].Help()
+	infoHelp := bindings[4].Help()
 	if infoHelp.Desc != "info" {
 		t.Errorf("expected info binding desc 'info', got %q", infoHelp.Desc)
 	}
@@ -441,6 +447,93 @@ func TestHomeView_EnsureCursorVisible(t *testing.T) {
 			t.Errorf("expected offset > 0 to bring cursor 7 into view, got %d", got)
 		}
 	})
+}
+
+func TestHomeFilter_Cycle(t *testing.T) {
+	t.Parallel()
+
+	f := HomeFilterAll
+	f = f.Next()
+	if f != HomeFilterReady {
+		t.Errorf("expected HomeFilterReady, got %d", f)
+	}
+	f = f.Next()
+	if f != HomeFilterInProgress {
+		t.Errorf("expected HomeFilterInProgress, got %d", f)
+	}
+	f = f.Next()
+	if f != HomeFilterDone {
+		t.Errorf("expected HomeFilterDone, got %d", f)
+	}
+	f = f.Next()
+	if f != HomeFilterAll {
+		t.Errorf("expected HomeFilterAll after full cycle, got %d", f)
+	}
+}
+
+func TestHomeFilter_FilterNebulae(t *testing.T) {
+	t.Parallel()
+
+	all := []NebulaChoice{
+		{Name: "a", Status: "ready"},
+		{Name: "b", Status: "in_progress"},
+		{Name: "c", Status: "done"},
+		{Name: "d", Status: "ready"},
+	}
+
+	tests := []struct {
+		filter HomeFilter
+		want   int
+	}{
+		{HomeFilterAll, 4},
+		{HomeFilterReady, 3},      // ready + in_progress
+		{HomeFilterInProgress, 1}, // in_progress only
+		{HomeFilterDone, 1},       // done only
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.filter.String(), func(t *testing.T) {
+			t.Parallel()
+			got := tc.filter.FilterNebulae(all)
+			if len(got) != tc.want {
+				t.Errorf("filter %q: expected %d, got %d", tc.filter, tc.want, len(got))
+			}
+		})
+	}
+}
+
+func TestHomeView_FilterBarRendered(t *testing.T) {
+	t.Parallel()
+
+	hv := HomeView{
+		Nebulae: []NebulaChoice{
+			{Name: "test", Status: "ready", Phases: 1},
+		},
+		Cursor: 0,
+		Width:  80,
+		Filter: HomeFilterReady,
+	}
+	out := hv.View()
+
+	// The active filter label should appear highlighted.
+	if !strings.Contains(out, "active") {
+		t.Errorf("expected 'active' filter label in output, got:\n%s", out)
+	}
+}
+
+func TestHomeView_EmptyFilter(t *testing.T) {
+	t.Parallel()
+
+	hv := HomeView{
+		Nebulae: nil,
+		Width:   80,
+		Filter:  HomeFilterDone,
+	}
+	out := hv.View()
+
+	if !strings.Contains(out, "No nebulas matching filter") {
+		t.Errorf("expected empty filter message, got:\n%s", out)
+	}
 }
 
 func TestHomeStatusLabel(t *testing.T) {

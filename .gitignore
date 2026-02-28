@@ -26,3 +26,7 @@ Thumbs.db
 
 # Config overrides
 .quasar.yaml
+
+# Runtime state (fabric DB, telemetry)
+.quasar/
+**/.quasar/

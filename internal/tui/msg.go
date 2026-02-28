@@ -3,7 +3,9 @@ package tui
 import (
 	"time"
 
+	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/tycho"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
@@ -38,6 +40,7 @@ type MsgAgentDone struct {
 	Role       string
 	CostUSD    float64
 	DurationMs int64
+	Tokens     int
 }
 
 // MsgCycleSummary is sent after each phase with structured summary data.
@@ -118,6 +121,7 @@ type MsgPhaseAgentDone struct {
 	Role       string
 	CostUSD    float64
 	DurationMs int64
+	Tokens     int
 }
 
 // MsgPhaseAgentOutput carries agent output for a specific phase.
@@ -187,7 +191,8 @@ type PhaseInfo struct {
 	ID        string
 	Title     string
 	DependsOn []string
-	PlanBody  string // markdown content from the phase file
+	PlanBody  string      // markdown content from the phase file
+	Status    PhaseStatus // initial status from saved state (default PhaseWaiting)
 }
 
 // MsgNebulaInit is sent at TUI startup to populate the phase table.
@@ -237,6 +242,12 @@ type MsgPhaseHotAdded struct {
 	PhaseID   string
 	Title     string
 	DependsOn []string
+}
+
+// MsgPhaseScanning is sent when a phase enters the fabric scanning gate,
+// allowing the TUI to surface a brief toast before the phase starts running.
+type MsgPhaseScanning struct {
+	PhaseID string
 }
 
 // Internal TUI messages.
@@ -306,3 +317,86 @@ type MsgPhaseBeadUpdate struct {
 
 // MsgSplashDone signals that the splash screen timer has elapsed.
 type MsgSplashDone struct{}
+
+// Fabric bridge messages — carry fabric event data for the cockpit TUI.
+
+// MsgEntanglementUpdate carries entanglement data for the cockpit viewer.
+type MsgEntanglementUpdate struct {
+	Entanglements []fabric.Entanglement
+}
+
+// MsgDiscoveryPosted surfaces a new discovery in the cockpit.
+type MsgDiscoveryPosted struct {
+	Discovery fabric.Discovery
+}
+
+// MsgHail surfaces a human-attention-required interrupt from a blocked phase.
+// ResponseCh, when non-nil, carries the user's response back to the worker
+// awaiting a human decision. A nil channel means fire-and-forget (the overlay
+// renders but the response is silently dropped).
+type MsgHail struct {
+	PhaseID    string
+	Discovery  fabric.Discovery
+	ResponseCh chan<- string
+}
+
+// MsgHailReceived notifies the TUI that an agent has posted a new hail
+// requiring human attention. Sent by UIBridge and PhaseUIBridge in response
+// to the ui.UI.HailReceived call.
+type MsgHailReceived struct {
+	PhaseID string // Empty in single-task (loop) mode.
+	Hail    ui.HailInfo
+}
+
+// MsgHailResolved notifies the TUI that a previously posted hail has been
+// resolved by the human. Sent by UIBridge and PhaseUIBridge in response
+// to the ui.UI.HailResolved call.
+type MsgHailResolved struct {
+	PhaseID    string // Empty in single-task (loop) mode.
+	ID         string // Hail identifier that was resolved.
+	Resolution string // The human's response text.
+}
+
+// MsgScratchpadEntry adds a timestamped note to the scratchpad view.
+type MsgScratchpadEntry struct {
+	Timestamp time.Time
+	PhaseID   string
+	Text      string
+}
+
+// MsgStaleWarning alerts the operator to stale state detected by the Tycho scheduler.
+type MsgStaleWarning struct {
+	Items []tycho.StaleItem
+}
+
+// PlanAction represents the user's chosen action from the plan preview.
+type PlanAction int
+
+const (
+	// PlanActionApply proceeds with nebula execution.
+	PlanActionApply PlanAction = iota
+	// PlanActionCancel returns to the home page.
+	PlanActionCancel
+	// PlanActionSave writes the plan to disk as JSON.
+	PlanActionSave
+)
+
+// MsgPlanReady is sent when the execution plan has been computed for a
+// selected nebula, transitioning the home view into the plan preview.
+type MsgPlanReady struct {
+	Plan      *nebula.ExecutionPlan
+	Changes   []nebula.PlanChange // diff vs. previous plan (nil if no prior plan)
+	NebulaDir string
+}
+
+// MsgPlanAction is sent when the user makes a choice in the plan preview.
+type MsgPlanAction struct {
+	Action    PlanAction
+	Plan      *nebula.ExecutionPlan
+	NebulaDir string
+}
+
+// MsgPlanError is sent when plan computation fails.
+type MsgPlanError struct {
+	Err error
+}

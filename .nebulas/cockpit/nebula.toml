@@ -1,0 +1,42 @@
+[nebula]
+name = "cockpit"
+description = "Evolve the TUI from a phase table into a columnar task board with live worker cards, tab-based entanglement/scratchpad views, inline hail prompts, and discovery surfacing — keeping the existing galactic theme, logo, and splash."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "tui", "cockpit"]
+assignee = ""
+
+[execution]
+max_workers = 5
+max_review_cycles = 5
+max_budget_usd = 80.0
+model = ""
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Add a columnar board view (Queued / Scanning / Running / Review / Blocked / Done / Failed) alongside the existing NebulaView table",
+    "Show live quasar (worker) detail cards beneath the board columns with cycle, token, and claim info",
+    "Introduce tab navigation (Board | Entanglements | Scratchpad) below the status bar",
+    "Build an entanglement viewer tab displaying interface agreements between coupled phases from the fabric",
+    "Build a scratchpad tab fed by the telemetry bridge as a shared, read-mostly viewport",
+    "Enhance the hail overlay to float above the board with inline text input for human decisions",
+    "Upgrade the stats bar with a block-style progress bar and token/cost breakdown",
+]
+constraints = [
+    "Preserve the existing galactic color theme, logo, and splash animation exactly as they are",
+    "Keep NebulaView as a toggle-able alternative — the board is an additional view mode, not a replacement",
+    "Reuse existing Lip Gloss styles from styles.go wherever possible; extend only when needed",
+    "Follow the existing Bridge/message pattern — BoardView consumes MsgPhase* and new Msg* types from the fabric nebula",
+    "Do not introduce external dependencies beyond what is already in go.mod",
+    "All new components must have corresponding test files using stdlib testing only",
+    "Adaptive layout: degrade gracefully on narrow terminals (< 80 cols) by collapsing to the existing table view",
+    "Use canonical vocabulary exclusively: Fabric, Entanglement, Claim, Discovery, Hail, Quasar (worker), Epoch, Neutron",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = ["fabric"]

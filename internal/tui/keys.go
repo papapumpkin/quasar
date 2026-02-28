@@ -25,6 +25,12 @@ type KeyMap struct {
 
 	// Diff file list keys.
 	OpenDiff key.Binding
+
+	// Board/table view toggle.
+	BoardToggle key.Binding
+
+	// Hail list — opens the pending hails overlay.
+	HailList key.Binding
 }
 
 // DefaultKeyMap returns the default keybinding configuration.
@@ -85,6 +91,7 @@ func DefaultKeyMap() KeyMap {
 		Beads: key.NewBinding(
 			key.WithKeys("b"),
 			key.WithHelp("b", "beads"),
+			key.WithDisabled(),
 		),
 		PageUp: key.NewBinding(
 			key.WithKeys("pgup"),
@@ -105,6 +112,15 @@ func DefaultKeyMap() KeyMap {
 		OpenDiff: key.NewBinding(
 			key.WithKeys("enter"),
 			key.WithHelp("⏎", "open diff"),
+		),
+		BoardToggle: key.NewBinding(
+			key.WithKeys("v"),
+			key.WithHelp("v", "board"),
+		),
+		HailList: key.NewBinding(
+			key.WithKeys("H"),
+			key.WithHelp("H", "hails"),
+			key.WithDisabled(),
 		),
 	}
 }

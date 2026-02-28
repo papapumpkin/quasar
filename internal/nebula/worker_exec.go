@@ -87,6 +87,11 @@ func (wg *WorkerGroup) executePhase(ctx context.Context, phaseID string, waveNum
 	}
 
 	wg.recordResult(phaseID, ps, phaseResult, err, done, failed, inFlight)
+
+	// Publish entanglements and update fabric state on successful completion.
+	if err == nil {
+		wg.fabricPhaseComplete(ctx, phaseID, phaseResult)
+	}
 }
 
 // recordResult updates state maps and persists state after a phase execution.

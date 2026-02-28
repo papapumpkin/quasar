@@ -20,11 +20,11 @@ import (
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
-// tuiCmd launches the TUI home screen for browsing and running nebulas.
-var tuiCmd = &cobra.Command{
-	Use:   "tui",
-	Short: "Launch the interactive TUI home screen",
-	Long: `Launch the Quasar TUI home screen that auto-discovers nebulas in
+// cockpitCmd launches the TUI home screen for browsing and running nebulas.
+var cockpitCmd = &cobra.Command{
+	Use:   "cockpit",
+	Short: "Launch the interactive cockpit home screen",
+	Long: `Launch the Quasar cockpit home screen that auto-discovers nebulas in
 the .nebulas/ directory of the current (or specified) directory. From the
 landing page you can browse nebulas, see their status, and select one to
 run.`,
@@ -33,10 +33,10 @@ run.`,
 }
 
 func init() {
-	tuiCmd.Flags().String("dir", "", "directory to scan for .nebulas/ (default: cwd)")
-	tuiCmd.Flags().Bool("no-splash", false, "skip the startup splash animation")
-	tuiCmd.Flags().Int("max-workers", 1, "maximum concurrent workers")
-	rootCmd.AddCommand(tuiCmd)
+	cockpitCmd.Flags().String("dir", "", "directory to scan for .nebulas/ (default: cwd)")
+	cockpitCmd.Flags().Bool("no-splash", false, "skip the startup splash animation")
+	cockpitCmd.Flags().Int("max-workers", 1, "maximum concurrent workers")
+	rootCmd.AddCommand(cockpitCmd)
 }
 
 // runTUI discovers nebulas in .nebulas/ and launches the home-to-execution loop.
@@ -61,7 +61,7 @@ func runTUI(cmd *cobra.Command, _ []string) error {
 	}
 
 	if !isStderrTTY() {
-		return fmt.Errorf("quasar tui requires a TTY (terminal)")
+		return fmt.Errorf("quasar cockpit requires a TTY (terminal)")
 	}
 
 	cfg, err := config.Load()
@@ -155,15 +155,43 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 		return nebulaResult{Err: fmt.Errorf("validation failed")}
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Resolve workDir and checkout nebula branch BEFORE loading state or
+	// applying bead changes. The state file lives on the feature branch;
+	// writing it before checkout creates an untracked file that blocks
+	// the subsequent git checkout.
+	workDir := cfg.WorkDir
+	if n.Manifest.Context.WorkingDir != "" {
+		workDir = n.Manifest.Context.WorkingDir
+	}
+	if workDir == "." || workDir == "" {
+		wd, wdErr := os.Getwd()
+		if wdErr != nil {
+			return nebulaResult{Err: fmt.Errorf("failed to get working directory: %w", wdErr)}
+		}
+		workDir = wd
+	}
+
+	// Create nebula branch if in a git repo.
+	branchMgr, branchErr := nebula.NewBranchManager(ctx, workDir, n.Manifest.Nebula.Name)
+	if branchErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: branch management unavailable: %v\n", branchErr)
+	}
+	if branchMgr != nil {
+		if err := branchMgr.CreateOrCheckout(ctx); err != nil {
+			return nebulaResult{Err: fmt.Errorf("failed to create nebula branch: %w", err)}
+		}
+	}
+	branchName := branchMgr.Branch()
+
 	state, err := nebula.LoadState(dir)
 	if err != nil {
 		return nebulaResult{Err: fmt.Errorf("failed to load state: %w", err)}
 	}
 
 	client := &beads.CLI{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	plan, err := nebula.BuildPlan(ctx, n, state, client)
 	if err != nil {
@@ -202,54 +230,43 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 		return nebulaResult{Err: fmt.Errorf("claude not available: %w", err)}
 	}
 
-	workDir := cfg.WorkDir
-	if n.Manifest.Context.WorkingDir != "" {
-		workDir = n.Manifest.Context.WorkingDir
+	// Initialize fabric infrastructure when the DAG has inter-phase dependencies.
+	fc, fcErr := initFabric(ctx, n, dir, workDir, claudeInv)
+	if fcErr != nil {
+		return nebulaResult{Err: fmt.Errorf("fabric initialization failed: %w", fcErr)}
 	}
-	if workDir == "." || workDir == "" {
-		wd, wdErr := os.Getwd()
-		if wdErr != nil {
-			return nebulaResult{Err: fmt.Errorf("failed to get working directory: %w", wdErr)}
-		}
-		workDir = wd
-	}
-
-	// Create nebula branch if in a git repo.
-	branchMgr, branchErr := nebula.NewBranchManager(ctx, workDir, n.Manifest.Nebula.Name)
-	if branchErr != nil {
-		fmt.Fprintf(os.Stderr, "warning: branch management unavailable: %v\n", branchErr)
-	}
-	if branchMgr != nil {
-		if err := branchMgr.CreateOrCheckout(ctx); err != nil {
-			return nebulaResult{Err: fmt.Errorf("failed to create nebula branch: %w", err)}
-		}
-	}
-	branchName := branchMgr.Branch()
+	defer fc.Close()
 
 	git := loop.NewCycleCommitterWithBranch(ctx, workDir, branchName)
 	phaseCommitter := nebula.NewGitCommitterWithBranch(ctx, workDir, branchName)
 
-	// Build TUI phase info.
+	// Build TUI phase info, seeding status from saved state.
 	phases := make([]tui.PhaseInfo, 0, len(n.Phases))
 	for _, p := range n.Phases {
-		phases = append(phases, tui.PhaseInfo{
+		pi := tui.PhaseInfo{
 			ID:        p.ID,
 			Title:     p.Title,
 			DependsOn: p.DependsOn,
 			PlanBody:  p.Body,
-		})
+		}
+		if ps := state.Phases[p.ID]; ps != nil {
+			pi.Status = tui.PhaseStatusFromString(string(ps.Status))
+		}
+		phases = append(phases, pi)
 	}
 
 	tuiProgram := tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir, noSplash)
 
-	wg := nebula.NewWorkerGroup(n, state,
+	wgOpts := []nebula.Option{
 		nebula.WithMaxWorkers(maxWorkers),
 		nebula.WithBeadsClient(client),
 		nebula.WithGlobalCycles(cfg.MaxReviewCycles),
 		nebula.WithGlobalBudget(cfg.MaxBudgetUSD),
 		nebula.WithGlobalModel(cfg.Model),
 		nebula.WithCommitter(phaseCommitter),
-	)
+	}
+	wgOpts = append(wgOpts, fc.WorkerGroupOptions()...)
+	wg := nebula.NewWorkerGroup(n, state, wgOpts...)
 
 	wg.Runner = &tuiLoopAdapter{
 		program:      tuiProgram,
@@ -263,6 +280,7 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 		coderPrompt:  coderPrompt,
 		reviewPrompt: reviewerPrompt,
 		workDir:      workDir,
+		fabric:       wg.Fabric, // nil-safe — emitFabricEvents checks for nil
 	}
 	wg.Logger = io.Discard
 	wg.Prompter = tui.NewGater(tuiProgram)
@@ -302,7 +320,8 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 		results, runErr := wg.Run(ctx)
 		prog.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
 		if br != "" {
-			gitResult := nebula.PostCompletion(context.Background(), wd, br)
+			allSucceeded := runErr == nil
+			gitResult := nebula.PostCompletion(context.Background(), wd, br, allSucceeded)
 			prog.Send(tui.MsgGitPostCompletion{Result: gitResult})
 		}
 	}()

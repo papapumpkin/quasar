@@ -17,6 +17,7 @@ type StatusBar struct {
 	Completed    int
 	Total        int
 	InProgress   int // phases currently being worked on
+	TotalTokens  int // aggregate token usage across all agents
 	CostUSD      float64
 	BudgetUSD    float64
 	StartTime    time.Time
@@ -26,6 +27,13 @@ type StatusBar struct {
 	Stopping     bool
 	Resources    ResourceSnapshot
 	Thresholds   ResourceThresholds
+
+	// Hail counters for the status badge.
+	HailCount         int // total unresolved hails
+	CriticalHailCount int // unresolved hails with blocker kind
+
+	// Gate queue counter for the status badge.
+	GateQueueCount int // number of gate prompts waiting behind the active one
 
 	// Home mode fields.
 	HomeMode        bool // true when displaying the home landing page
@@ -129,6 +137,23 @@ func (s StatusBar) buildRightSegments(compact bool) []statusSegment {
 		})
 	}
 
+	// Hail badge segment (priority 3 — keep as long as possible since it's actionable).
+	hailBadge := s.renderHailBadge()
+	if hailBadge != "" {
+		segments = append(segments, statusSegment{text: barBg.Render("  ") + hailBadge, priority: 3})
+	}
+
+	// Gate queue badge (priority 3 — actionable indicator of pending gates).
+	if s.GateQueueCount > 0 {
+		gateStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorStarYellow)
+		label := "gate pending"
+		if s.GateQueueCount > 1 {
+			label = "gates pending"
+		}
+		gateBadge := gateStyle.Render(fmt.Sprintf("⏳ %d %s", s.GateQueueCount, label))
+		segments = append(segments, statusSegment{text: barBg.Render("  ") + gateBadge, priority: 3})
+	}
+
 	// Resource indicator segment (priority 0 — dropped before elapsed).
 	resText := s.renderResourceSegment(compact)
 	if resText != "" {
@@ -175,6 +200,35 @@ func (s StatusBar) renderResourceSegment(compact bool) string {
 	}
 
 	return result
+}
+
+// renderHailBadge renders a compact badge showing unresolved hail counts.
+// Critical hails are shown in red ("🔴 1 critical"), normal hails in yellow
+// ("⚠ 2 hails"). When both exist, they are combined. Returns an empty string
+// when there are no unresolved hails.
+func (s StatusBar) renderHailBadge() string {
+	if s.HailCount <= 0 {
+		return ""
+	}
+
+	normalCount := s.HailCount - s.CriticalHailCount
+	var parts []string
+
+	if s.CriticalHailCount > 0 {
+		critStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorDanger).Bold(true)
+		parts = append(parts, critStyle.Render(fmt.Sprintf("🔴 %d critical", s.CriticalHailCount)))
+	}
+	if normalCount > 0 {
+		warnStyle := lipgloss.NewStyle().Background(colorSurface).Foreground(colorStarYellow)
+		label := "hail"
+		if normalCount > 1 {
+			label = "hails"
+		}
+		parts = append(parts, warnStyle.Render(fmt.Sprintf("⚠ %d %s", normalCount, label)))
+	}
+
+	barBg := lipgloss.NewStyle().Background(colorSurface)
+	return strings.Join(parts, barBg.Render(" "))
 }
 
 // buildFixedLeftPrefix returns the mode label + progress text (without the name).
@@ -447,6 +501,109 @@ func budgetColor(ratio float64) lipgloss.Color {
 	default:
 		return colorMutedLight
 	}
+}
+
+// BottomBar renders the cockpit-style aggregate stats line pinned below the main
+// content area: tokens, cost, elapsed, and a block-character progress bar.
+// Format: " tokens 284.3k | cost $1.42 | elapsed 4m 32s | progress █████░░░ 5/8"
+func (s StatusBar) BottomBar() string {
+	if s.Width <= 0 {
+		return ""
+	}
+
+	label := lipgloss.NewStyle().Foreground(colorMuted)
+	value := lipgloss.NewStyle().Foreground(colorWhite)
+
+	var parts []string
+
+	// Token segment.
+	parts = append(parts, label.Render("tokens ")+value.Render(FormatTokens(s.TotalTokens)))
+
+	// Cost segment.
+	parts = append(parts, label.Render("cost ")+value.Render(fmt.Sprintf("$%.2f", s.CostUSD)))
+
+	// Elapsed segment.
+	var elapsed time.Duration
+	if s.FinalElapsed > 0 {
+		elapsed = s.FinalElapsed
+	} else if !s.StartTime.IsZero() {
+		elapsed = time.Since(s.StartTime).Truncate(time.Second)
+	}
+	parts = append(parts, label.Render("elapsed ")+value.Render(formatElapsedCompact(elapsed)))
+
+	// Progress bar segment.
+	if s.Total > 0 {
+		// Scale bar width: min 5, max 20, proportional to terminal width.
+		barWidth := s.Width / 8
+		if barWidth < 5 {
+			barWidth = 5
+		}
+		if barWidth > 20 {
+			barWidth = 20
+		}
+		bar := renderBottomProgressBar(s.Completed, s.Total, barWidth)
+		counter := value.Render(fmt.Sprintf("%d/%d", s.Completed, s.Total))
+		parts = append(parts, label.Render("progress ")+bar+" "+counter)
+	}
+
+	sep := label.Render(" | ")
+	line := " " + strings.Join(parts, sep)
+
+	// Clamp to terminal width.
+	if lipgloss.Width(line) > s.Width {
+		line = truncateToWidth(line, s.Width)
+	}
+
+	return line
+}
+
+// renderBottomProgressBar creates a filled/empty block-character progress bar
+// using █ (filled, colorSuccess) and ░ (empty, colorMuted).
+func renderBottomProgressBar(completed, total, width int) string {
+	if total <= 0 || width <= 0 {
+		return ""
+	}
+	ratio := float64(completed) / float64(total)
+	if ratio > 1 {
+		ratio = 1
+	}
+	filled := int(ratio * float64(width))
+	empty := width - filled
+
+	filledStyle := lipgloss.NewStyle().Foreground(colorSuccess)
+	emptyStyle := lipgloss.NewStyle().Foreground(colorMuted)
+
+	return filledStyle.Render(strings.Repeat("█", filled)) +
+		emptyStyle.Render(strings.Repeat("░", empty))
+}
+
+// FormatTokens formats a token count with a k suffix for thousands.
+// Values below 1000 are rendered as-is; above as e.g. "284.3k".
+func FormatTokens(tokens int) string {
+	if tokens < 1000 {
+		return fmt.Sprintf("%d", tokens)
+	}
+	k := float64(tokens) / 1000.0
+	return fmt.Sprintf("%.1fk", k)
+}
+
+// formatElapsedCompact formats a duration as "Xm Xs" or "Xh Xm" for longer runs.
+// Zero duration renders as "0s".
+func formatElapsedCompact(d time.Duration) string {
+	if d <= 0 {
+		return "0s"
+	}
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	s := int(d.Seconds()) % 60
+
+	if h > 0 {
+		return fmt.Sprintf("%dh %dm", h, m)
+	}
+	if m > 0 {
+		return fmt.Sprintf("%dm %ds", m, s)
+	}
+	return fmt.Sprintf("%ds", s)
 }
 
 // truncateToWidth hard-truncates a string (which may contain ANSI escape sequences)

@@ -1,0 +1,100 @@
+version = 1
+nebula_name = 'scanning-and-gate-fixes'
+total_cost_usd = 13.220393249999997
+
+[phases]
+[phases.auto-enable-contract-board]
+bead_id = 'quasar-q1if'
+status = 'done'
+created_at = 2026-02-24T12:03:40.443703-05:00
+updated_at = 2026-02-24T13:27:00.512719-05:00
+
+[phases.auto-enable-contract-board.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean comment-only changes updating stale "agentmail" terminology to "contract board" / "inter-phase dependencies" across 3 Go files, with verified correct underlying implementation from a prior commit.'
+
+[phases.gate-prompt-overflow]
+bead_id = 'quasar-bqch'
+status = 'done'
+created_at = 2026-02-24T12:03:39.042584-05:00
+updated_at = 2026-02-24T13:33:32.623922-05:00
+
+[phases.gate-prompt-overflow.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Gate overlay width overflow fixed via proper width clamping, ANSI-aware path truncation, and dynamic resize handling — clean, correct changes with no regressions.'
+
+[phases.graph-gate-color-fix]
+bead_id = 'quasar-mvii'
+status = 'done'
+created_at = 2026-02-24T12:03:39.739132-05:00
+updated_at = 2026-02-24T13:24:21.816002-05:00
+
+[phases.graph-gate-color-fix.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Minimal, correct 4-line fix adds missing Graph status updates in resolveGate to match the existing NebulaView updates, fixing purple-instead-of-green display after gate resolution.'
+
+[phases.graph-legend-and-gate-status]
+bead_id = 'quasar-7kh8'
+status = 'done'
+created_at = 2026-02-24T12:03:41.14694-05:00
+updated_at = 2026-02-24T13:23:35.171507-05:00
+
+[phases.graph-legend-and-gate-status.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Coder correctly verified that both the graph legend gate/review entry and PhaseStatusFromString "gate" case were already present in the codebase, requiring no changes.'
+
+[phases.homepage-layout-squished]
+bead_id = 'quasar-17z7'
+status = 'done'
+created_at = 2026-02-24T12:03:42.530822-05:00
+updated_at = 2026-02-24T13:31:05.296535-05:00
+
+[phases.homepage-layout-squished.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Correct fix for homepage layout squishing — properly accounts for bottom bar in chrome count, adds banner/detail collapse thresholds for short terminals, and reduces detail panel fraction in home mode with consistent height calculations and good test coverage.'
+
+[phases.phase-timer-cumulative]
+bead_id = 'quasar-n0c7'
+status = 'done'
+created_at = 2026-02-24T12:03:41.821586-05:00
+updated_at = 2026-02-24T13:24:32.801671-05:00
+
+[phases.phase-timer-cumulative.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Phase elapsed timer fix was already fully implemented — `CompletedAt` field, setter logic, and frozen-duration display all verified correct in the source code.'
+
+[phases.remove-scanning-column]
+bead_id = 'quasar-3jek'
+status = 'done'
+created_at = 2026-02-24T12:03:37.617952-05:00
+updated_at = 2026-02-24T13:25:01.089071-05:00
+
+[phases.remove-scanning-column.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'ColScanning board column was already correctly removed in a prior commit; coder verified the state and no further changes were needed — code is clean with 6 columns, proper tests, and no stale references.'
+
+[phases.scanning-toast]
+bead_id = 'quasar-opk6'
+status = 'done'
+created_at = 2026-02-24T12:03:38.326562-05:00
+updated_at = 2026-02-24T13:34:20.235609-05:00
+
+[phases.scanning-toast.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean implementation of fabric scanning toast notifications via OnScanning callback, following established patterns with proper nil guards and legacy-mode protection.'

@@ -1,0 +1,38 @@
+[nebula]
+name = "arch-tests"
+description = "Add architecture tests that enforce dependency layering, interface placement, global state hygiene, exported symbol documentation, and package/file size limits. Guards against structural drift during large refactors."
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["quasar", "testing", "architecture"]
+
+[execution]
+max_workers = 9
+max_review_cycles = 5
+max_budget_usd = 40.0
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Codify the package dependency DAG so upward imports are caught immediately",
+    "Enforce interface-at-consumer convention across all internal packages",
+    "Prevent creep of mutable global state beyond error sentinels and constants",
+    "Ensure all exported symbols have GoDoc comments",
+    "Set size guardrails (20 files/pkg, 400 LOC/file) to signal when packages need splitting",
+    "All tests run via `go test ./internal/arch_test/...` with zero external dependencies",
+]
+constraints = [
+    "Use stdlib testing only — no external test frameworks or arch-test libraries",
+    "Tests must be fully automated and deterministic (no network, no temp files)",
+    "Use go/ast and go/parser for static analysis — parse source, don't import packages",
+    "Document known layering violations as explicit exceptions with TODOs",
+    "Do not modify any production code — only add test files",
+    "board package is dead code; exclude it from analysis",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

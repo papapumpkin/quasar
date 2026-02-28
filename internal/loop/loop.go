@@ -3,28 +3,39 @@ package loop
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/papapumpkin/quasar/internal/agent"
+	"github.com/papapumpkin/quasar/internal/fabric"
+	"github.com/papapumpkin/quasar/internal/filter"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
 // Loop orchestrates the coder-reviewer cycle for a single task.
 type Loop struct {
-	Invoker        agent.Invoker
-	UI             ui.UI
-	Git            CycleCommitter // Optional; nil disables per-cycle commits.
-	Hooks          []Hook         // Lifecycle hooks (e.g., BeadHook for tracking).
-	Linter         Linter         // Optional; nil disables lint checks between coder and reviewer.
-	MaxCycles      int
-	MaxLintRetries int // Max times coder is asked to fix lint issues per cycle. 0 uses DefaultMaxLintRetries.
-	MaxBudgetUSD   float64
-	Model          string
-	CoderPrompt    string
-	ReviewPrompt   string
-	WorkDir        string
-	MCP            *agent.MCPConfig // Optional MCP server config passed to agents.
-	RefactorCh     <-chan string    // Optional channel carrying updated task descriptions from phase edits.
-	CommitSummary  string           // Short label for cycle commit messages. If empty, derived from task title.
+	Invoker          agent.Invoker
+	UI               ui.UI
+	Git              CycleCommitter // Optional; nil disables per-cycle commits.
+	Hooks            []Hook         // Lifecycle hooks (e.g., BeadHook for tracking).
+	Linter           Linter         // Optional; nil disables lint checks between coder and reviewer.
+	Filter           filter.Filter  // Optional; nil skips pre-reviewer filtering and goes straight to reviewer.
+	MaxCycles        int
+	MaxLintRetries   int // Max times coder is asked to fix lint issues per cycle. 0 uses DefaultMaxLintRetries.
+	MaxBudgetUSD     float64
+	Model            string
+	CoderPrompt      string
+	ReviewPrompt     string
+	WorkDir          string
+	MCP              *agent.MCPConfig // Optional MCP server config passed to agents.
+	RefactorCh       <-chan string    // Optional channel carrying updated task descriptions from phase edits.
+	CommitSummary    string           // Short label for cycle commit messages. If empty, derived from task title.
+	Fabric           fabric.Fabric    // Optional; when set and FabricEnabled, auto-inject fabric state into prompts.
+	FabricEnabled    bool             // When true, inject fabric protocol into agent system prompts.
+	TaskID           string           // Task ID for fabric context (QUASAR_TASK_ID).
+	ProjectContext   string           // Injected into agent system prompts for prompt caching.
+	MaxContextTokens int              // Token budget for context injection. 0 = use default.
+	HailQueue        HailQueue        // Optional; when set, hails extracted during execution are posted here.
+	HailTimeout      time.Duration    // Auto-resolve timeout for hails. 0 disables auto-resolution.
 }
 
 // TaskResult holds the outcome of a completed task loop.
@@ -116,12 +127,32 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 			return nil, err
 		}
 
+		// Run pre-reviewer filter checks. If the filter fails, bounce
+		// the failure back to the coder as findings instead of invoking
+		// the reviewer.
+		if l.Filter != nil {
+			failed, err := l.runFilterChecks(ctx, state)
+			if err != nil {
+				return nil, err
+			}
+			if failed {
+				// Filter failed — skip reviewer, continue to next cycle.
+				l.sealCycleSHA(state)
+				l.drainRefactor(state)
+				l.emit(ctx, Event{Kind: EventCycleStart, BeadID: beadID, Cycle: cycle})
+				continue
+			}
+		}
+
 		if err := l.runReviewerPhase(ctx, state, perAgentBudget); err != nil {
 			return nil, err
 		}
 		if err := l.checkBudget(ctx, state); err != nil {
 			return nil, err
 		}
+
+		// Extract hails from the reviewer's report and any fabric discoveries.
+		l.extractAndPostHails(ctx, state)
 
 		if isApproved(state.ReviewOutput) {
 			return l.handleApproval(ctx, state)
@@ -149,6 +180,7 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 	}
 
 	l.UI.MaxCyclesReached(l.MaxCycles)
+	l.postMaxCyclesHail(state)
 	l.emit(ctx, Event{
 		Kind:    EventTaskFailed,
 		BeadID:  beadID,
@@ -242,6 +274,47 @@ func (l *Loop) runLintFixLoop(ctx context.Context, state *CycleState, perAgentBu
 	return nil
 }
 
+// runFilterChecks runs the pre-reviewer filter chain. If the filter fails, it
+// records a synthetic finding from the failing check and returns true to signal
+// the caller should skip the reviewer and bounce to the next coder cycle.
+// Returns (false, nil) when the filter passes or is nil.
+func (l *Loop) runFilterChecks(ctx context.Context, state *CycleState) (failed bool, err error) {
+	state.Phase = PhaseFiltering
+	l.UI.Info("running pre-reviewer filter checks…")
+
+	result, err := l.Filter.Run(ctx, l.WorkDir)
+	if err != nil {
+		// Infrastructure error (e.g. context canceled) is fatal.
+		return false, fmt.Errorf("filter execution failed: %w", err)
+	}
+
+	if result.Passed {
+		state.FilterOutput = ""
+		state.FilterCheckName = ""
+		l.UI.Info("filter checks passed")
+		return false, nil
+	}
+
+	// Filter failed — build a synthetic finding from the first failure.
+	failure := result.FirstFailure()
+	state.FilterOutput = failure.Output
+	state.FilterCheckName = failure.Name
+	l.UI.Info(fmt.Sprintf("filter check %q failed (%s), bouncing to coder", failure.Name, failure.Elapsed))
+
+	// Surface the failure as a finding so the coder sees it next cycle.
+	state.Findings = []ReviewFinding{{
+		Severity:    "critical",
+		Description: fmt.Sprintf("[filter:%s] %s", failure.Name, truncate(failure.Output, 3000)),
+		Cycle:       state.Cycle,
+	}}
+	l.UI.IssuesFound(1)
+	state.Phase = PhaseResolvingIssues
+	state.AllFindings = append(state.AllFindings, state.Findings...)
+	l.emitBeadUpdate(state, "in_progress")
+
+	return true, nil
+}
+
 // drainRefactor checks the RefactorCh for a pending phase edit and applies it
 // to the cycle state. The current cycle always completes before the new
 // description takes effect. Only the most recent value on the channel wins.
@@ -302,10 +375,16 @@ func (l *Loop) initCycleState(ctx context.Context, beadID, taskDescription strin
 }
 
 // coderAgent builds the agent configuration for the coder role.
+// When FabricEnabled is true, the fabric protocol is appended to the system prompt.
 func (l *Loop) coderAgent(budget float64) agent.Agent {
+	sysPrompt := agent.BuildSystemPrompt(l.CoderPrompt, agent.PromptOpts{
+		FabricEnabled:  l.FabricEnabled,
+		TaskID:         l.TaskID,
+		ProjectContext: l.ProjectContext,
+	})
 	return agent.Agent{
 		Role:         agent.RoleCoder,
-		SystemPrompt: l.CoderPrompt,
+		SystemPrompt: sysPrompt,
 		Model:        l.Model,
 		MaxBudgetUSD: budget,
 		AllowedTools: []string{
@@ -317,10 +396,17 @@ func (l *Loop) coderAgent(budget float64) agent.Agent {
 }
 
 // reviewerAgent builds the agent configuration for the reviewer role.
+// When ProjectContext or FabricEnabled is set, the system prompt is built
+// through BuildSystemPrompt so both roles benefit from cached context.
 func (l *Loop) reviewerAgent(budget float64) agent.Agent {
+	sysPrompt := agent.BuildSystemPrompt(l.ReviewPrompt, agent.PromptOpts{
+		FabricEnabled:  l.FabricEnabled,
+		TaskID:         l.TaskID,
+		ProjectContext: l.ProjectContext,
+	})
 	return agent.Agent{
 		Role:         agent.RoleReviewer,
-		SystemPrompt: l.ReviewPrompt,
+		SystemPrompt: sysPrompt,
 		Model:        l.Model,
 		MaxBudgetUSD: budget,
 		AllowedTools: []string{
@@ -343,7 +429,14 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	origDesc := state.OriginalDescription
 	refactorDesc := state.RefactorDescription
 
-	result, err := l.Invoker.Invoke(ctx, l.coderAgent(perAgentBudget), l.buildCoderPrompt(state), l.WorkDir)
+	prompt := l.buildCoderPrompt(state)
+	relayBlock, relayIDs := l.pendingHailRelay()
+	if relayBlock != "" {
+		prompt = relayBlock + "\n" + prompt
+	}
+	prompt = l.composeContextPrefix(ctx, prompt)
+
+	result, err := l.Invoker.Invoke(ctx, l.coderAgent(perAgentBudget), prompt, l.WorkDir)
 	if err != nil {
 		state.Phase = PhaseError
 		return fmt.Errorf("coder invocation failed: %w", err)
@@ -355,6 +448,7 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	l.UI.AgentOutput("coder", state.Cycle, result.ResultText)
 	l.UI.AgentDone("coder", result.CostUSD, result.DurationMs)
 	l.emitCycleSummary(state, PhaseCodeComplete, result)
+	l.markHailsRelayed(relayIDs)
 
 	// Commit the coder's changes for this cycle.
 	// The SHA is stored in lastCycleSHA and sealed into CycleCommits at cycle end.
@@ -394,7 +488,14 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	state.Phase = PhaseReviewing
 	l.UI.AgentStart("reviewer")
 
-	result, err := l.Invoker.Invoke(ctx, l.reviewerAgent(perAgentBudget), l.buildReviewerPrompt(state), l.WorkDir)
+	prompt := l.buildReviewerPrompt(state)
+	relayBlock, relayIDs := l.pendingHailRelay()
+	if relayBlock != "" {
+		prompt = relayBlock + "\n" + prompt
+	}
+	prompt = l.composeContextPrefix(ctx, prompt)
+
+	result, err := l.Invoker.Invoke(ctx, l.reviewerAgent(perAgentBudget), prompt, l.WorkDir)
 	if err != nil {
 		state.Phase = PhaseError
 		return fmt.Errorf("reviewer invocation failed: %w", err)
@@ -405,6 +506,7 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	state.Phase = PhaseReviewComplete
 	l.UI.AgentOutput("reviewer", state.Cycle, result.ResultText)
 	l.UI.AgentDone("reviewer", result.CostUSD, result.DurationMs)
+	l.markHailsRelayed(relayIDs)
 	l.emit(ctx, Event{
 		Kind:    EventAgentDone,
 		BeadID:  state.TaskBeadID,
@@ -416,6 +518,87 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	state.Findings = ParseReviewFindings(result.ResultText)
 	l.emitCycleSummary(state, PhaseReviewComplete, result)
 	return nil
+}
+
+// extractAndPostHails parses the reviewer's report and queries fabric
+// discoveries, converting them into Hail objects posted to l.HailQueue.
+// It also applies escalation rules: critical findings and high-risk/low-
+// satisfaction reports generate additional hails. A nil HailQueue makes
+// this a no-op.
+func (l *Loop) extractAndPostHails(ctx context.Context, state *CycleState) {
+	if l.HailQueue == nil {
+		return
+	}
+
+	phaseID := l.TaskID
+
+	// 1. Extract hails from the reviewer's report (NEEDS_HUMAN_REVIEW flag).
+	report := ParseReviewReport(state.ReviewOutput)
+	for _, h := range extractReviewerHails(report, state, phaseID) {
+		if err := l.HailQueue.Post(h); err != nil {
+			l.UI.Error(fmt.Sprintf("failed to post reviewer hail: %v", err))
+		}
+	}
+
+	// 2. Escalate critical-severity findings to blocker hails.
+	for _, h := range escalateCriticalFindings(state.Findings, state, phaseID) {
+		if err := l.HailQueue.Post(h); err != nil {
+			l.UI.Error(fmt.Sprintf("failed to post critical finding hail: %v", err))
+		}
+	}
+
+	// 3. Escalate high risk + low satisfaction to a decision-needed hail.
+	if h := escalateHighRiskLowSatisfaction(report, state, phaseID); h != nil {
+		if err := l.HailQueue.Post(*h); err != nil {
+			l.UI.Error(fmt.Sprintf("failed to post risk escalation hail: %v", err))
+		}
+	}
+
+	// 4. Bridge fabric discoveries to hails, skipping any already bridged
+	//    in previous cycles to avoid duplicate hails.
+	if l.FabricEnabled && l.Fabric != nil {
+		discoveries, err := l.Fabric.UnresolvedDiscoveries(ctx)
+		if err != nil {
+			l.UI.Error(fmt.Sprintf("failed to fetch fabric discoveries: %v", err))
+			return
+		}
+
+		// Filter out discoveries already bridged in earlier cycles.
+		var newDiscoveries []fabric.Discovery
+		for _, d := range discoveries {
+			if !state.bridgedDiscoveryIDs[d.ID] {
+				newDiscoveries = append(newDiscoveries, d)
+			}
+		}
+
+		for _, h := range bridgeDiscoveryHails(newDiscoveries, phaseID, state.Cycle) {
+			if err := l.HailQueue.Post(h); err != nil {
+				l.UI.Error(fmt.Sprintf("failed to post discovery hail: %v", err))
+			}
+		}
+
+		// Record all new discovery IDs as bridged so subsequent cycles skip them.
+		if len(newDiscoveries) > 0 {
+			if state.bridgedDiscoveryIDs == nil {
+				state.bridgedDiscoveryIDs = make(map[int64]bool)
+			}
+			for _, d := range newDiscoveries {
+				state.bridgedDiscoveryIDs[d.ID] = true
+			}
+		}
+	}
+}
+
+// postMaxCyclesHail creates and posts a blocker hail when the loop exhausts
+// its maximum cycle count without approval. A nil HailQueue makes this a no-op.
+func (l *Loop) postMaxCyclesHail(state *CycleState) {
+	if l.HailQueue == nil {
+		return
+	}
+	h := buildMaxCyclesHail(state, l.TaskID)
+	if err := l.HailQueue.Post(h); err != nil {
+		l.UI.Error(fmt.Sprintf("failed to post max-cycles hail: %v", err))
+	}
 }
 
 // emitCycleSummary sends a cycle summary to the UI for the given phase.

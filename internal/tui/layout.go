@@ -18,11 +18,18 @@ const (
 	// CompactWidth triggers compact mode for progress bars, footer, etc.
 	CompactWidth = 60
 	// DetailCollapseHeight triggers auto-collapse of the detail panel.
-	DetailCollapseHeight = 20
-	// SidePanelMinWidth is the minimum terminal width to show the S-B side panel art.
-	SidePanelMinWidth = 120
+	DetailCollapseHeight = 30
+	// HomeDetailCollapseHeight triggers auto-collapse of the detail panel in home mode.
+	// Higher than DetailCollapseHeight because the banner competes for vertical space.
+	HomeDetailCollapseHeight = 40
+	// BannerCollapseHeight is the minimum terminal height for showing the top banner.
+	// Below this height, the banner is hidden to preserve content space.
+	BannerCollapseHeight = 35
 	// BannerSMinWidth is the minimum width for the S-A Wide Ellipse top banner.
 	BannerSMinWidth = 90
+	// BoardMinWidth is the minimum terminal width for the columnar board view.
+	// Below this width, the TUI auto-falls back to the table view.
+	BoardMinWidth = 100
 )
 
 // TruncateWithEllipsis truncates s to maxLen runes, appending "..." if truncated.

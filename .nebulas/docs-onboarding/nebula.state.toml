@@ -1,0 +1,88 @@
+version = 1
+nebula_name = 'docs-onboarding'
+total_cost_usd = 12.56323505
+
+[phases]
+[phases.add-architecture-section]
+bead_id = 'quasar-el6k'
+status = 'done'
+created_at = 2026-02-24T21:13:39.848008-05:00
+updated_at = 2026-02-24T21:25:33.842615-05:00
+
+[phases.add-architecture-section.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean documentation addition of a Concepts glossary table to README.md with all 11 vocabulary terms accurately mapped to their packages.'
+
+[phases.add-cockpit-section]
+bead_id = 'quasar-r2za'
+status = 'done'
+created_at = 2026-02-24T21:13:39.093873-05:00
+updated_at = 2026-02-24T21:22:33.034608-05:00
+
+[phases.add-cockpit-section.report]
+satisfaction = 'medium'
+risk = 'low'
+needs_human_review = false
+summary = "Cockpit TUI section exists and is accurate in README, but was added by a different concurrent phase — this coder's actual change only adds a minor \"State File\" subsection with misleading commit attribution."
+
+[phases.update-commands-and-flags]
+bead_id = 'quasar-0u1j'
+status = 'done'
+created_at = 2026-02-24T21:13:37.611425-05:00
+updated_at = 2026-02-24T21:26:43.933663-05:00
+
+[phases.update-commands-and-flags.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, accurate README update that documents all missing CLI commands and flags, verified against the actual codebase — no issues found.'
+
+[phases.update-config-section]
+bead_id = 'quasar-ei79'
+status = 'done'
+created_at = 2026-02-24T21:13:40.621002-05:00
+updated_at = 2026-02-24T21:18:11.150455-05:00
+
+[phases.update-config-section.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Documentation-only change correctly adds the missing `lint_commands` config key and `.quasar/` runtime directory note, fully verified against source code.'
+
+[phases.update-nebula-section]
+bead_id = 'quasar-ygwm'
+status = 'done'
+created_at = 2026-02-24T21:13:41.357917-05:00
+updated_at = 2026-02-24T21:26:43.935443-05:00
+
+[phases.update-nebula-section.report]
+satisfaction = 'medium'
+risk = 'low'
+needs_human_review = false
+summary = 'Minimal one-line README addition documenting nebula.state.toml in the file format listing; all acceptance criteria were already met by prior phases except this small gap.'
+
+[phases.update-project-structure]
+bead_id = 'quasar-8f9x'
+status = 'done'
+created_at = 2026-02-24T21:13:36.865113-05:00
+updated_at = 2026-02-24T21:18:28.965338-05:00
+
+[phases.update-project-structure.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, accurate addition of a comprehensive Project Structure section to the README covering all 16 active internal packages and current CLI commands.'
+
+[phases.update-quickstart]
+bead_id = 'quasar-d3s3'
+status = 'done'
+created_at = 2026-02-24T21:13:38.378428-05:00
+updated_at = 2026-02-24T21:24:55.494173-05:00
+
+[phases.update-quickstart.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean README Quick Start restructuring that accurately documents both REPL and Nebula entry paths, with appropriate cleanup of out-of-scope content from cycle-1.'

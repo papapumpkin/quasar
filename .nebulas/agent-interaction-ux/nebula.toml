@@ -1,0 +1,43 @@
+[nebula]
+name = "agent-interaction-ux"
+description = "Add mechanisms for agents to surface blockers, questions, and decisions to the human operator in real-time — via the TUI when available, and via structured stderr when not. Moves Quasar from fire-and-forget execution to a collaborative model where the human stays in the loop on decisions that matter."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "tui", "ux", "human-in-loop"]
+assignee = ""
+
+[execution]
+max_workers = 9
+max_review_cycles = 5
+max_budget_usd = 60.0
+model = ""
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Agents can signal 'I need human input' during execution via a structured Hail mechanism",
+    "Hails surface in the TUI as overlay prompts with context and options",
+    "Hails degrade gracefully to stderr prompts in non-TTY mode",
+    "The human can respond to hails with decisions that get relayed back to the agent on next cycle",
+    "Reviewer issues flagged as NEEDS_HUMAN_REVIEW surface as hails, not just report metadata",
+    "Discovery events (requirements_ambiguity, missing_dependency) trigger hails automatically",
+    "The TUI shows a persistent notification badge when unresolved hails exist",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "All UI output goes to stderr via ui.Printer or TUI bridge",
+    "Hails must not block agent execution indefinitely — there should be a configurable timeout with fallback behavior",
+    "The hail mechanism must work for both single-task (loop) and multi-task (nebula) modes",
+    "Reuse the existing Discovery type and fabric infrastructure where possible",
+    "Gate prompts and hails are distinct: gates pause execution, hails queue for next cycle",
+    "Non-TTY mode must remain fully functional — hails degrade to formatted stderr output",
+    "No external dependencies — use stdlib and existing BubbleTea infrastructure",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

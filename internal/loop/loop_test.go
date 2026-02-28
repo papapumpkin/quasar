@@ -8,8 +8,11 @@ import (
 	"sync"
 	"testing"
 
+	"time"
+
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/filter"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
@@ -36,6 +39,8 @@ func (n *noopUI) Info(string)                                       {}
 func (n *noopUI) AgentOutput(string, int, string)                   {}
 func (n *noopUI) BeadUpdate(string, string, string, []ui.BeadChild) {}
 func (n *noopUI) RefactorApplied(string)                            {}
+func (n *noopUI) HailReceived(ui.HailInfo)                          {}
+func (n *noopUI) HailResolved(string, string)                       {}
 
 // ---------------------------------------------------------------------------
 // noopBeads satisfies beads.Client for tests without side effects.
@@ -484,6 +489,51 @@ func TestCoderAgentWithMCP(t *testing.T) {
 	a := l.coderAgent(1.0)
 	if a.MCP != mcp {
 		t.Error("expected MCP config to be passed to coder agent")
+	}
+}
+
+func TestCoderAgentWithProjectContext(t *testing.T) {
+	t.Parallel()
+
+	l := &Loop{
+		CoderPrompt:    "You are a coder.",
+		ProjectContext: "# Project: quasar",
+	}
+	a := l.coderAgent(1.0)
+	if !strings.HasPrefix(a.SystemPrompt, "# Project: quasar") {
+		t.Errorf("expected system prompt to start with project context, got:\n%s", a.SystemPrompt)
+	}
+	if !strings.Contains(a.SystemPrompt, "You are a coder.") {
+		t.Error("expected base prompt to be present after project context")
+	}
+}
+
+func TestReviewerAgentWithProjectContext(t *testing.T) {
+	t.Parallel()
+
+	l := &Loop{
+		ReviewPrompt:   "You are a reviewer.",
+		ProjectContext: "# Project: quasar",
+	}
+	a := l.reviewerAgent(1.0)
+	if !strings.HasPrefix(a.SystemPrompt, "# Project: quasar") {
+		t.Errorf("expected system prompt to start with project context, got:\n%s", a.SystemPrompt)
+	}
+	if !strings.Contains(a.SystemPrompt, "You are a reviewer.") {
+		t.Error("expected base prompt to be present after project context")
+	}
+}
+
+func TestReviewerAgentWithFabric(t *testing.T) {
+	t.Parallel()
+
+	l := &Loop{
+		ReviewPrompt:  "You are a reviewer.",
+		FabricEnabled: true,
+	}
+	a := l.reviewerAgent(1.0)
+	if !strings.Contains(a.SystemPrompt, "## Fabric Protocol") {
+		t.Error("expected fabric protocol in reviewer system prompt when FabricEnabled")
 	}
 }
 
@@ -1748,4 +1798,277 @@ func TestGenerateCheckpoint(t *testing.T) {
 			t.Fatal("expected error")
 		}
 	})
+}
+
+// ---------------------------------------------------------------------------
+// fakeFilter implements filter.Filter for testing.
+// ---------------------------------------------------------------------------
+
+type fakeFilter struct {
+	result *filter.Result
+	err    error
+	calls  int
+}
+
+func (f *fakeFilter) Run(_ context.Context, _ string) (*filter.Result, error) {
+	f.calls++
+	return f.result, f.err
+}
+
+func TestRunFilterChecks(t *testing.T) {
+	t.Parallel()
+
+	t.Run("FilterPasses", func(t *testing.T) {
+		t.Parallel()
+		rUI := &recordingUI{}
+		ff := &fakeFilter{
+			result: &filter.Result{
+				Passed: true,
+				Checks: []filter.CheckResult{
+					{Name: "build", Passed: true, Elapsed: 100 * time.Millisecond},
+				},
+			},
+		}
+		l := &Loop{UI: rUI, Filter: ff, WorkDir: "/tmp"}
+		state := &CycleState{Cycle: 1}
+
+		failed, err := l.runFilterChecks(context.Background(), state)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if failed {
+			t.Error("expected filter to pass")
+		}
+		if state.FilterOutput != "" {
+			t.Errorf("FilterOutput = %q, want empty", state.FilterOutput)
+		}
+	})
+
+	t.Run("FilterFails", func(t *testing.T) {
+		t.Parallel()
+		rUI := &recordingUI{}
+		ff := &fakeFilter{
+			result: &filter.Result{
+				Passed: false,
+				Checks: []filter.CheckResult{
+					{Name: "build", Passed: true},
+					{Name: "vet", Passed: false, Output: "vet found issues", Elapsed: 50 * time.Millisecond},
+				},
+			},
+		}
+		l := &Loop{UI: rUI, Filter: ff, WorkDir: "/tmp"}
+		state := &CycleState{Cycle: 1}
+
+		failed, err := l.runFilterChecks(context.Background(), state)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !failed {
+			t.Error("expected filter to fail")
+		}
+		if state.FilterCheckName != "vet" {
+			t.Errorf("FilterCheckName = %q, want 'vet'", state.FilterCheckName)
+		}
+		if !strings.Contains(state.FilterOutput, "vet found issues") {
+			t.Errorf("FilterOutput = %q, want to contain 'vet found issues'", state.FilterOutput)
+		}
+		if len(state.Findings) != 1 {
+			t.Fatalf("expected 1 finding, got %d", len(state.Findings))
+		}
+		if state.Findings[0].Severity != "critical" {
+			t.Errorf("severity = %q, want 'critical'", state.Findings[0].Severity)
+		}
+		if !strings.Contains(state.Findings[0].Description, "[filter:vet]") {
+			t.Errorf("description = %q, want to contain '[filter:vet]'", state.Findings[0].Description)
+		}
+	})
+
+	t.Run("FilterInfraError", func(t *testing.T) {
+		t.Parallel()
+		ff := &fakeFilter{err: errors.New("context canceled")}
+		l := &Loop{UI: &noopUI{}, Filter: ff, WorkDir: "/tmp"}
+		state := &CycleState{Cycle: 1}
+
+		_, err := l.runFilterChecks(context.Background(), state)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "filter execution failed") {
+			t.Errorf("error = %q, want to contain 'filter execution failed'", err.Error())
+		}
+	})
+}
+
+func TestRunLoopWithFilter(t *testing.T) {
+	t.Parallel()
+
+	t.Run("NilFilterSkipsFiltering", func(t *testing.T) {
+		t.Parallel()
+		// Verify backward compatibility: nil Filter goes straight to reviewer.
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "coded", CostUSD: 0.30},
+				{ResultText: "APPROVED: Good.", CostUSD: 0.20},
+			},
+		}
+		l := &Loop{
+			Invoker:      inv,
+			UI:           &noopUI{},
+			Filter:       nil, // explicitly nil
+			MaxCycles:    3,
+			MaxBudgetUSD: 10.0,
+		}
+		result, err := l.runLoop(context.Background(), "bead-1", "task")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.CyclesUsed != 1 {
+			t.Errorf("CyclesUsed = %d, want 1", result.CyclesUsed)
+		}
+	})
+
+	t.Run("FilterPassesGoesToReviewer", func(t *testing.T) {
+		t.Parallel()
+		ff := &fakeFilter{
+			result: &filter.Result{
+				Passed: true,
+				Checks: []filter.CheckResult{{Name: "build", Passed: true}},
+			},
+		}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "coded", CostUSD: 0.30},
+				{ResultText: "APPROVED: Good.", CostUSD: 0.20},
+			},
+		}
+		l := &Loop{
+			Invoker:      inv,
+			UI:           &noopUI{},
+			Filter:       ff,
+			MaxCycles:    3,
+			MaxBudgetUSD: 10.0,
+		}
+		result, err := l.runLoop(context.Background(), "bead-1", "task")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.CyclesUsed != 1 {
+			t.Errorf("CyclesUsed = %d, want 1", result.CyclesUsed)
+		}
+		if ff.calls != 1 {
+			t.Errorf("filter calls = %d, want 1", ff.calls)
+		}
+	})
+
+	t.Run("FilterFailsBouncesToCoder", func(t *testing.T) {
+		t.Parallel()
+		ff := &fakeFilter{
+			result: &filter.Result{
+				Passed: false,
+				Checks: []filter.CheckResult{
+					{Name: "build", Passed: false, Output: "does not compile", Elapsed: 200 * time.Millisecond},
+				},
+			},
+		}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				// Cycle 1: coder
+				{ResultText: "first attempt", CostUSD: 0.30},
+				// Cycle 2: coder (bounced by filter, no reviewer in cycle 1)
+				{ResultText: "fixed build", CostUSD: 0.30},
+				// Cycle 2: reviewer (filter passes on 2nd call — but we reuse same fakeFilter)
+				// Actually, fakeFilter always returns the same result. Let me handle this differently.
+				// For this test, the filter always fails so we'll hit max cycles.
+			},
+		}
+		l := &Loop{
+			Invoker:      inv,
+			UI:           &recordingUI{},
+			Filter:       ff,
+			MaxCycles:    2,
+			MaxBudgetUSD: 10.0,
+		}
+		result, err := l.runLoop(context.Background(), "bead-1", "fix build")
+		if !errors.Is(err, ErrMaxCycles) {
+			t.Errorf("expected ErrMaxCycles, got %v", err)
+		}
+		if result == nil {
+			t.Fatal("expected non-nil result")
+		}
+		// Filter always fails, so reviewer is never called.
+		// 2 cycles × coder only = 2 invocations.
+		if inv.calls != 2 {
+			t.Errorf("invoker calls = %d, want 2 (coder only, no reviewer)", inv.calls)
+		}
+		if ff.calls != 2 {
+			t.Errorf("filter calls = %d, want 2", ff.calls)
+		}
+	})
+
+	t.Run("FilterFailsThenPassesSecondCycle", func(t *testing.T) {
+		t.Parallel()
+		// Filter that fails first time, passes second time.
+		// Use a custom filter that fails first time, passes second time.
+		var customFilter countingFilter
+		customFilter.results = []*filter.Result{
+			{
+				Passed: false,
+				Checks: []filter.CheckResult{
+					{Name: "test", Passed: false, Output: "tests failed", Elapsed: 100 * time.Millisecond},
+				},
+			},
+			{
+				Passed: true,
+				Checks: []filter.CheckResult{
+					{Name: "build", Passed: true},
+					{Name: "test", Passed: true},
+				},
+			},
+		}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				// Cycle 1: coder
+				{ResultText: "first attempt", CostUSD: 0.30},
+				// Cycle 1: filter fails → no reviewer, bounce to cycle 2
+				// Cycle 2: coder
+				{ResultText: "fixed tests", CostUSD: 0.30},
+				// Cycle 2: filter passes → reviewer
+				{ResultText: "APPROVED: All good.", CostUSD: 0.20},
+			},
+		}
+		l := &Loop{
+			Invoker:      inv,
+			UI:           &recordingUI{},
+			Filter:       &customFilter,
+			MaxCycles:    3,
+			MaxBudgetUSD: 10.0,
+		}
+		result, err := l.runLoop(context.Background(), "bead-1", "fix tests")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.CyclesUsed != 2 {
+			t.Errorf("CyclesUsed = %d, want 2", result.CyclesUsed)
+		}
+		// 3 invocations: coder, coder, reviewer (filter bounced first cycle)
+		if inv.calls != 3 {
+			t.Errorf("invoker calls = %d, want 3", inv.calls)
+		}
+	})
+}
+
+// countingFilter returns different results on successive calls.
+type countingFilter struct {
+	results []*filter.Result
+	calls   int
+}
+
+func (f *countingFilter) Run(_ context.Context, _ string) (*filter.Result, error) {
+	idx := f.calls
+	f.calls++
+	if idx < len(f.results) {
+		return f.results[idx], nil
+	}
+	// Default: pass
+	return &filter.Result{Passed: true}, nil
 }

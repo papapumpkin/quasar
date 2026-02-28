@@ -17,6 +17,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/claude"
 	"github.com/papapumpkin/quasar/internal/config"
 	"github.com/papapumpkin/quasar/internal/loop"
+	"github.com/papapumpkin/quasar/internal/snapshot"
 	"github.com/papapumpkin/quasar/internal/tui"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
@@ -35,6 +36,8 @@ func init() {
 	runCmd.Flags().Bool("auto", false, "run a single task from stdin and exit (non-interactive)")
 	runCmd.Flags().Bool("no-tui", false, "disable TUI even on a TTY (use stderr printer)")
 	runCmd.Flags().Bool("no-splash", false, "skip the startup splash animation")
+	runCmd.Flags().Bool("project-context", false, "scan and inject project context into agent prompts for caching")
+	runCmd.Flags().Int("max-context-tokens", 0, "token budget for injected context (0 = use default 10000)")
 
 	rootCmd.AddCommand(runCmd)
 }
@@ -56,16 +59,29 @@ func runRun(cmd *cobra.Command, args []string) error {
 	auto, _ := cmd.Flags().GetBool("auto")
 	noTUI, _ := cmd.Flags().GetBool("no-tui")
 	noSplash, _ := cmd.Flags().GetBool("no-splash")
+	useProjectCtx, _ := cmd.Flags().GetBool("project-context")
+	maxContextTokens, _ := cmd.Flags().GetInt("max-context-tokens")
 
 	// TUI path: auto mode on a TTY without --no-tui.
 	if auto && !noTUI && isStderrTTY() {
-		return runAutoTUI(cfg, printer, coderPrompt, reviewerPrompt, noSplash, args)
+		return runAutoTUI(cfg, printer, coderPrompt, reviewerPrompt, noSplash, useProjectCtx, maxContextTokens, args)
 	}
 
 	taskLoop, err := buildLoop(&cfg, printer, coderPrompt, reviewerPrompt)
 	if err != nil {
 		return err
 	}
+
+	// Opt-in project context scanning for prompt caching.
+	if useProjectCtx {
+		s := &snapshot.Scanner{WorkDir: taskLoop.WorkDir}
+		if scanned, scanErr := s.Scan(context.Background()); scanErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: project context scan failed: %v\n", scanErr)
+		} else {
+			taskLoop.ProjectContext = scanned
+		}
+	}
+	taskLoop.MaxContextTokens = maxContextTokens
 
 	ctx, cancel := setupSignalContext(printer)
 	defer cancel()
@@ -77,7 +93,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 }
 
 // runAutoTUI launches the BubbleTea TUI for a single auto-mode task.
-func runAutoTUI(cfg config.Config, printer *ui.Printer, coderPrompt, reviewerPrompt string, noSplash bool, args []string) error {
+func runAutoTUI(cfg config.Config, printer *ui.Printer, coderPrompt, reviewerPrompt string, noSplash, useProjectCtx bool, maxContextTokens int, args []string) error {
 	task := strings.Join(args, " ")
 	if task == "" {
 		scanner := bufio.NewScanner(os.Stdin)
@@ -101,6 +117,17 @@ func runAutoTUI(cfg config.Config, printer *ui.Printer, coderPrompt, reviewerPro
 	if err != nil {
 		return err
 	}
+
+	// Opt-in project context scanning for prompt caching.
+	if useProjectCtx {
+		s := &snapshot.Scanner{WorkDir: taskLoop.WorkDir}
+		if scanned, scanErr := s.Scan(context.Background()); scanErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: project context scan failed: %v\n", scanErr)
+		} else {
+			taskLoop.ProjectContext = scanned
+		}
+	}
+	taskLoop.MaxContextTokens = maxContextTokens
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

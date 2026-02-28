@@ -26,6 +26,8 @@ var (
 	ErrScopeOverlap = errors.New("scope overlap")
 	// ErrPhaseAlreadyStarted indicates a reverse-dep target has already begun executing.
 	ErrPhaseAlreadyStarted = errors.New("phase already started")
+	// ErrPlanHasErrors indicates the execution plan contains error-severity risks.
+	ErrPlanHasErrors = errors.New("execution plan has error-severity risks")
 )
 
 // ValidationError records a validation problem with source context.

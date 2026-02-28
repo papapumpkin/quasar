@@ -1,0 +1,52 @@
+version = 1
+nebula_name = 'diffraction'
+total_cost_usd = 11.15030425
+
+[phases]
+[phases.contract-poller]
+bead_id = 'quasar-3tjq'
+status = 'done'
+created_at = 2026-02-24T09:38:50.053004-05:00
+updated_at = 2026-02-24T09:42:40.776059-05:00
+
+[phases.contract-poller.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-structured deterministic ContractPoller replacing LLM-based dispatch gating, with thorough test coverage and correct interface implementation.'
+
+[phases.poller-wiring]
+bead_id = 'quasar-r9d1'
+status = 'done'
+created_at = 2026-02-24T09:38:52.244001-05:00
+updated_at = 2026-02-24T10:08:53.32877-05:00
+
+[phases.poller-wiring.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean two-file change wiring WaveScanner.OnEscalate to Scheduler.HandleEscalation, with correct initialization order, guard conditions, and existing test coverage.'
+
+[phases.soft-dag]
+bead_id = 'quasar-gtqg'
+status = 'done'
+created_at = 2026-02-24T09:38:51.471329-05:00
+updated_at = 2026-02-24T09:57:58.941098-05:00
+
+[phases.soft-dag.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Soft-DAG dispatch correctly implemented via AllPending + fabric-nil branching in ResolveEligible, with comprehensive test coverage and all safety filters preserved.'
+
+[phases.wave-scanner]
+bead_id = 'quasar-my9s'
+status = 'done'
+created_at = 2026-02-24T09:38:50.775997-05:00
+updated_at = 2026-02-24T09:53:37.026209-05:00
+
+[phases.wave-scanner.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Adds missing ActionEscalate handling to WaveScanner with callback delegation and proper test coverage — clean, well-scoped bug fix.'

@@ -42,17 +42,19 @@ func (f Footer) View() string {
 
 // LoopFooterBindings returns footer bindings for loop mode.
 func LoopFooterBindings(km KeyMap) []key.Binding {
-	return []key.Binding{km.Up, km.Down, km.Enter, km.Beads, km.Quit}
+	return []key.Binding{km.Up, km.Down, km.Enter, km.Quit}
 }
 
 // NebulaFooterBindings returns footer bindings for nebula mode.
 func NebulaFooterBindings(km KeyMap) []key.Binding {
-	return []key.Binding{km.Up, km.Down, km.Enter, km.Info, km.Beads, km.Pause, km.Stop, km.Quit}
+	boardToggle := km.BoardToggle
+	boardToggle.SetHelp("v", "board")
+	return []key.Binding{km.Up, km.Down, km.Enter, km.Info, boardToggle, km.Pause, km.Stop, km.Quit}
 }
 
 // NebulaDetailFooterBindings returns footer bindings when drilled into a phase.
 func NebulaDetailFooterBindings(km KeyMap) []key.Binding {
-	return []key.Binding{km.Up, km.Down, km.Enter, km.Info, km.Beads, km.Back, km.Quit}
+	return []key.Binding{km.Up, km.Down, km.Enter, km.Info, km.Back, km.Quit}
 }
 
 // DiffFileListFooterBindings returns footer bindings when the diff file list is active.
@@ -69,7 +71,23 @@ func HomeFooterBindings(km KeyMap) []key.Binding {
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "run"),
 	)
-	return []key.Binding{km.Up, km.Down, enter, km.Info, km.Quit}
+	filter := key.NewBinding(
+		key.WithKeys("tab"),
+		key.WithHelp("tab", "filter"),
+	)
+	return []key.Binding{km.Up, km.Down, enter, filter, km.Info, km.Quit}
+}
+
+// CockpitFooterBindings returns footer bindings when the board view is active.
+// Shows tab navigation, board toggle, and cockpit-specific actions.
+func CockpitFooterBindings(km KeyMap) []key.Binding {
+	tab := key.NewBinding(
+		key.WithKeys("tab"),
+		key.WithHelp("tab", "tabs"),
+	)
+	boardToggle := km.BoardToggle
+	boardToggle.SetHelp("v", "table")
+	return []key.Binding{km.Up, km.Down, km.Enter, tab, boardToggle, km.Info, km.Pause, km.Stop, km.Quit}
 }
 
 // GateFooterBindings returns footer bindings during gate prompts.
@@ -78,4 +96,9 @@ func GateFooterBindings(km KeyMap) []key.Binding {
 	esc := km.Back
 	esc.SetHelp("esc", "skip")
 	return []key.Binding{km.Accept, km.Reject, km.Retry, km.Skip, esc}
+}
+
+// HailListFooterBindings returns footer bindings when the hail list overlay is active.
+func HailListFooterBindings(km KeyMap) []key.Binding {
+	return []key.Binding{km.Up, km.Down, km.Enter, km.Back}
 }

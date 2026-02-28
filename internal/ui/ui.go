@@ -50,6 +50,8 @@ type UI interface {
 	AgentOutput(role string, cycle int, output string)
 	BeadUpdate(taskBeadID, title, status string, children []BeadChild)
 	RefactorApplied(phaseID string)
+	HailReceived(h HailInfo)
+	HailResolved(id, resolution string)
 }
 
 // BeadChild carries display information for a child bead in the hierarchy.
@@ -59,6 +61,19 @@ type BeadChild struct {
 	Status   string // "open", "in_progress", "closed"
 	Severity string // "critical", "major", "minor"
 	Cycle    int    // cycle in which this child was created
+}
+
+// HailInfo holds the data needed to display a hail notification. It mirrors
+// the loop.Hail fields relevant for rendering without importing the loop
+// package (which depends on ui).
+type HailInfo struct {
+	ID         string   // Unique hail identifier.
+	Kind       string   // Classification (e.g. "decision_needed", "ambiguity").
+	Cycle      int      // Cycle in which the hail was raised.
+	SourceRole string   // "coder" or "reviewer".
+	Summary    string   // One-line human-readable description.
+	Detail     string   // Full context for the human decision.
+	Options    []string // Optional choices the human can pick from.
 }
 
 // Verify that *Printer satisfies the UI interface at compile time.
@@ -150,6 +165,42 @@ func (p *Printer) BeadUpdate(taskBeadID, title, status string, children []BeadCh
 // RefactorApplied is a no-op for the stderr printer; refactor indicators
 // are only displayed in the TUI phase view.
 func (p *Printer) RefactorApplied(phaseID string) {}
+
+// HailReceived prints an attention-grabbing block to stderr when an agent
+// needs human input.
+func (p *Printer) HailReceived(h HailInfo) {
+	var b strings.Builder
+	b.WriteString(yellow + bold + "⚠ AGENT NEEDS INPUT" + reset)
+	b.WriteString(" [" + h.Kind + "]")
+	if h.Cycle > 0 || h.SourceRole != "" {
+		b.WriteString(dim + " — cycle " + fmt.Sprintf("%d", h.Cycle) + ", " + h.SourceRole + reset)
+	}
+	b.WriteString("\n")
+	b.WriteString("  " + bold + "Summary:" + reset + " " + h.Summary + "\n")
+	if h.Detail != "" {
+		detail := h.Detail
+		if len(detail) > 200 {
+			detail = detail[:200] + "…"
+		}
+		b.WriteString("  " + dim + "Detail: " + detail + reset + "\n")
+	}
+	if len(h.Options) > 0 {
+		b.WriteString("  " + bold + "Options:" + reset)
+		for i, opt := range h.Options {
+			fmt.Fprintf(&b, " %c) %s", 'A'+i, opt)
+			if i < len(h.Options)-1 {
+				b.WriteString(" ")
+			}
+		}
+		b.WriteString("\n")
+	}
+	fmt.Fprint(os.Stderr, b.String())
+}
+
+// HailResolved prints a brief confirmation that a hail was resolved.
+func (p *Printer) HailResolved(id, resolution string) {
+	fmt.Fprintf(os.Stderr, green+"✓ hail resolved"+reset+" [%s] %s\n", id, resolution)
+}
 
 // TaskStarted prints a status line when a task begins.
 func (p *Printer) TaskStarted(beadID, title string) {

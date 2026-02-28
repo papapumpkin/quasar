@@ -9,6 +9,7 @@ const (
 	PhaseCoding                       // Coder agent is running.
 	PhaseCodeComplete                 // Coder finished, awaiting review.
 	PhaseLinting                      // Running lint checks after coder pass.
+	PhaseFiltering                    // Running pre-reviewer filter checks.
 	PhaseReviewing                    // Reviewer agent is running.
 	PhaseReviewComplete               // Reviewer finished.
 	PhaseResolvingIssues              // Issues found, sending back to coder.
@@ -29,6 +30,8 @@ func (p Phase) String() string {
 		return "code_complete"
 	case PhaseLinting:
 		return "linting"
+	case PhaseFiltering:
+		return "filtering"
 	case PhaseReviewing:
 		return "reviewing"
 	case PhaseReviewComplete:
@@ -62,6 +65,8 @@ type CycleState struct {
 	MaxBudgetUSD        float64
 	CoderOutput         string
 	LintOutput          string // lint command output from the most recent lint pass
+	FilterOutput        string // output from pre-reviewer filter on failure
+	FilterCheckName     string // name of the failing filter check (empty if passed)
 	ReviewOutput        string
 	Findings            []ReviewFinding // current cycle's findings (reset each cycle)
 	AllFindings         []ReviewFinding // accumulated findings across all cycles
@@ -72,4 +77,5 @@ type CycleState struct {
 	BaseCommitSHA       string          // HEAD before first cycle (captured at task start)
 	CycleCommits        []string        // commit SHA per cycle (index = cycle-1)
 	lastCycleSHA        string          // transient: last commit SHA for the current cycle (sealed into CycleCommits at cycle end)
+	bridgedDiscoveryIDs map[int64]bool  // tracks fabric discovery IDs already bridged to hails, preventing duplicates across cycles
 }

@@ -343,3 +343,110 @@ func TestNewScheduler_DuplicatePhaseID(t *testing.T) {
 		t.Errorf("error should mention phase ID %q, got: %v", "a", err)
 	}
 }
+
+func TestAllPending(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns all non-done phases", func(t *testing.T) {
+		t.Parallel()
+		// a -> b -> c (chain)
+		phases := []PhaseSpec{
+			{ID: "a", Priority: 1},
+			{ID: "b", Priority: 2, DependsOn: []string{"a"}},
+			{ID: "c", Priority: 3, DependsOn: []string{"b"}},
+		}
+
+		s, err := NewScheduler(phases)
+		if err != nil {
+			t.Fatalf("NewScheduler failed: %v", err)
+		}
+
+		// With nothing done, all phases are pending.
+		pending := s.AllPending(map[string]bool{})
+		if len(pending) != 3 {
+			t.Fatalf("expected 3 pending, got %d: %v", len(pending), pending)
+		}
+
+		// Unlike ReadyTasks, AllPending includes phases with unsatisfied deps.
+		ready := s.ReadyTasks(map[string]bool{})
+		if len(ready) != 1 {
+			t.Fatalf("expected 1 ready, got %d", len(ready))
+		}
+		// AllPending returns b and c even though their deps aren't done.
+		pendingSet := make(map[string]bool)
+		for _, id := range pending {
+			pendingSet[id] = true
+		}
+		if !pendingSet["b"] || !pendingSet["c"] {
+			t.Errorf("expected b and c in pending despite unsatisfied deps, got %v", pending)
+		}
+	})
+
+	t.Run("excludes done phases", func(t *testing.T) {
+		t.Parallel()
+		phases := []PhaseSpec{
+			{ID: "a"},
+			{ID: "b"},
+			{ID: "c"},
+		}
+
+		s, err := NewScheduler(phases)
+		if err != nil {
+			t.Fatalf("NewScheduler failed: %v", err)
+		}
+
+		done := map[string]bool{"a": true, "c": true}
+		pending := s.AllPending(done)
+		if len(pending) != 1 || pending[0] != "b" {
+			t.Errorf("expected [b] pending, got %v", pending)
+		}
+	})
+
+	t.Run("returns empty when all done", func(t *testing.T) {
+		t.Parallel()
+		phases := []PhaseSpec{
+			{ID: "a"},
+			{ID: "b"},
+		}
+
+		s, err := NewScheduler(phases)
+		if err != nil {
+			t.Fatalf("NewScheduler failed: %v", err)
+		}
+
+		done := map[string]bool{"a": true, "b": true}
+		pending := s.AllPending(done)
+		if len(pending) != 0 {
+			t.Errorf("expected empty pending, got %v", pending)
+		}
+	})
+
+	t.Run("sorted by impact score descending", func(t *testing.T) {
+		t.Parallel()
+		// Diamond: a and b are roots, c depends on both.
+		// a and b should have higher impact scores than c (they block c).
+		phases := []PhaseSpec{
+			{ID: "a", Priority: 1},
+			{ID: "b", Priority: 1},
+			{ID: "c", Priority: 1, DependsOn: []string{"a", "b"}},
+		}
+
+		s, err := NewScheduler(phases)
+		if err != nil {
+			t.Fatalf("NewScheduler failed: %v", err)
+		}
+
+		pending := s.AllPending(map[string]bool{})
+		if len(pending) != 3 {
+			t.Fatalf("expected 3 pending, got %d", len(pending))
+		}
+
+		scores := s.ImpactScores()
+		for i := 1; i < len(pending); i++ {
+			if scores[pending[i-1]] < scores[pending[i]] {
+				t.Errorf("pending not sorted by impact: %q (%.4f) < %q (%.4f)",
+					pending[i-1], scores[pending[i-1]], pending[i], scores[pending[i]])
+			}
+		}
+	})
+}

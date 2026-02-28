@@ -17,11 +17,10 @@ func TestBannerSize(t *testing.T) {
 		{"very narrow hides art", 50, BannerNone},
 		{"narrow shows XS pill", 60, BannerXS},
 		{"medium shows S-A wide ellipse", 90, BannerS},
-		{"wide shows S-B side panel", 120, BannerSB},
-		{"extra wide shows S-B side panel", 200, BannerSB},
+		{"wide shows S-A top banner", 120, BannerS},
+		{"extra wide shows S-A top banner", 200, BannerS},
 		{"boundary below 60", 59, BannerNone},
 		{"boundary below 90", 89, BannerXS},
-		{"boundary below 120", 119, BannerS},
 	}
 
 	for _, tt := range tests {
@@ -45,12 +44,15 @@ func TestBannerViewReturnsEmptyForNone(t *testing.T) {
 	}
 }
 
-func TestBannerViewReturnsEmptyForSidePanel(t *testing.T) {
+func TestBannerViewWideTerminalShowsTopBanner(t *testing.T) {
 	t.Parallel()
 	b := Banner{Width: 130, Height: 30}
 	got := b.View()
-	if got != "" {
-		t.Errorf("Banner{Width: 130}.View() should be empty for side panel mode, got length %d", len(got))
+	if got == "" {
+		t.Fatal("Banner{Width: 130}.View() should return top banner for wide terminal")
+	}
+	if !strings.Contains(got, "Q") {
+		t.Error("Wide terminal banner should contain QUASAR text")
 	}
 }
 
@@ -78,46 +80,29 @@ func TestBannerViewS(t *testing.T) {
 	}
 }
 
-func TestBannerSidePanelWidth(t *testing.T) {
+func TestBannerSidePanelWidthAlwaysZero(t *testing.T) {
 	t.Parallel()
 
-	t.Run("returns width for wide terminal", func(t *testing.T) {
-		t.Parallel()
-		b := Banner{Width: 130, Height: 30}
-		if got := b.SidePanelWidth(); got != sidePanelWidth {
-			t.Errorf("SidePanelWidth() = %d, want %d", got, sidePanelWidth)
-		}
-	})
-
-	t.Run("returns 0 for narrow terminal", func(t *testing.T) {
-		t.Parallel()
-		b := Banner{Width: 80, Height: 30}
+	// Side panel mode is deprecated; SidePanelWidth always returns 0.
+	for _, width := range []int{80, 130, 200} {
+		b := Banner{Width: width, Height: 30}
 		if got := b.SidePanelWidth(); got != 0 {
-			t.Errorf("SidePanelWidth() = %d, want 0", got)
+			t.Errorf("SidePanelWidth() for width %d = %d, want 0", width, got)
 		}
-	})
+	}
 }
 
-func TestBannerSidePanelView(t *testing.T) {
+func TestBannerSidePanelViewAlwaysEmpty(t *testing.T) {
 	t.Parallel()
 
-	t.Run("returns content for wide terminal", func(t *testing.T) {
-		t.Parallel()
-		b := Banner{Width: 130, Height: 30}
-		got := b.SidePanelView(40)
-		if got == "" {
-			t.Fatal("SidePanelView should not be empty for wide terminal")
-		}
-	})
-
-	t.Run("returns empty for narrow terminal", func(t *testing.T) {
-		t.Parallel()
-		b := Banner{Width: 80, Height: 30}
+	// Side panel mode is deprecated; SidePanelView always returns "".
+	for _, width := range []int{80, 130, 200} {
+		b := Banner{Width: width, Height: 30}
 		got := b.SidePanelView(40)
 		if got != "" {
-			t.Errorf("SidePanelView should be empty for narrow terminal, got length %d", len(got))
+			t.Errorf("SidePanelView() for width %d should be empty, got length %d", width, len(got))
 		}
-	})
+	}
 }
 
 func TestBannerSplashView(t *testing.T) {
