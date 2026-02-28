@@ -1,0 +1,35 @@
+[nebula]
+name = "auto-decomposition"
+description = "Detect struggle signals during phase execution (repeated filter failures, recurring identical findings, excessive budget burn) and automatically decompose stuck phases into smaller sub-phases via the architect agent, hot-inserting them into the live DAG."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "auto-decomposition", "reliability"]
+
+[execution]
+max_workers = 6
+max_review_cycles = 5
+max_budget_usd = 65.0
+gate = "trust"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Detect when a phase is struggling: repeated filter failures, recurring same findings across cycles, runaway budget burn rate",
+    "Pause struggling phases and invoke the architect agent to decompose them into 2-3 smaller sub-phases",
+    "Hot-insert sub-phases into the live DAG, wiring dependencies so the original phase's dependents wait on all sub-phases",
+    "Surface decomposition events through the TUI, hails, metrics, and fabric state transitions",
+    "Make struggle detection thresholds configurable per-phase and at the nebula level",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "Use the existing RunArchitect function with a new ArchitectMode for decomposition",
+    "Leverage the existing HotReloader and OnHotAdd callback for DAG insertion",
+    "No new external dependencies; use stdlib only",
+    "All new code must have table-driven tests",
+    "Decomposition is opt-in: only triggers when auto_decompose is enabled in execution config",
+    "A phase can only be decomposed once to prevent infinite recursion",
+    "The original phase must be removed from the DAG after successful decomposition",
+]

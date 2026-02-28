@@ -1,0 +1,40 @@
+[nebula]
+name = "speculative-pipeline"
+description = "Pipeline optimization for nebula orchestration: speculatively schedule Phase N+1's coder while Phase N's reviewer is evaluating, discarding speculative work on rejection. Applies CPU pipeline hazard management to agent orchestration."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "speculative-pipeline"]
+assignee = ""
+
+[execution]
+max_workers = 6
+max_review_cycles = 5
+max_budget_usd = 70.0
+model = ""
+gate = "trust"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Reduce end-to-end nebula execution time by overlapping review and coding phases",
+    "Speculatively dispatch Phase N+1's coder while Phase N's reviewer runs",
+    "Cleanly discard speculative work when reviews reject (pipeline flush)",
+    "Maintain correctness — speculative results are never committed until the dependency's review passes",
+    "Surface speculative execution state in the TUI so operators understand what is happening",
+]
+constraints = [
+    "Speculative dispatch must be opt-in (off by default) to preserve existing behavior",
+    "No speculative work may be committed to git or persisted to beads until the dependency review passes",
+    "Rollback must restore the working tree to exactly the state before speculative work began",
+    "Existing tests must pass — no regressions to the non-speculative execution path",
+    "The speculative pipeline must respect max_workers and semaphore limits",
+    "All new code must follow existing project conventions (interfaces at consumer, context propagation, stderr UI)",
+    "Fabric-aware scanning must still work correctly with speculative phases",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

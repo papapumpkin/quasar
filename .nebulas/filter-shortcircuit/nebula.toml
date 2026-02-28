@@ -1,0 +1,42 @@
+[nebula]
+name = "filter-shortcircuit"
+description = "When filter checks fail, short-circuit the full coder-reviewer cycle by parsing structured error output and sending a hyper-focused fix prompt to the coder. Creates a fast inner loop (coder-fix -> filter) inside the slower outer loop (coder -> filter -> reviewer), dramatically reducing cost and latency for mechanical failures."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "filter", "cost-optimization"]
+assignee = ""
+
+[execution]
+max_workers = 6
+max_review_cycles = 5
+max_budget_usd = 60.0
+model = ""
+gate = "trust"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Avoid burning full coder-reviewer cycles on mechanical filter failures (build, vet, lint, test)",
+    "Parse structured error output to extract file paths, line numbers, and error messages",
+    "Build hyper-focused fix prompts that include only the error and affected file context",
+    "Generalize the existing runLintFixLoop pattern into a filter-level inner fix loop",
+    "Cache passing filter results so only the failing check is re-run after a fix attempt",
+    "Emit telemetry for filter short-circuit events to track cost savings",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "Do not modify the filter.Filter interface — extend with new types alongside it",
+    "The inner fix loop must respect the existing budget and cycle limits",
+    "Claims check failures are NOT short-circuitable (they require coordination, not code fixes)",
+    "The existing runLintFixLoop remains for backward compatibility but delegates to the new system",
+    "All new code must have table-driven tests using stdlib testing only",
+    "Error parser must handle go build, go vet, golangci-lint, and go test output formats",
+    "Prompt construction follows the strings.Builder pattern used in internal/loop/prompts.go",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

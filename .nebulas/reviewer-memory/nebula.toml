@@ -1,0 +1,34 @@
+[nebula]
+name = "Reviewer Memory"
+description = "Inject the reviewer's previous cycle findings into the next review prompt with explicit verification instructions, tracking finding lifecycle from found through fixed/still_present/regressed"
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "reviewer", "quality"]
+
+[execution]
+max_workers = 6
+max_review_cycles = 5
+max_budget_usd = 45.0
+gate = "trust"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Give the reviewer memory of prior findings so it can verify fixes rather than reviewing from scratch",
+    "Inject serialized prior findings into the reviewer prompt each cycle",
+    "Instruct the reviewer to explicitly verify each prior finding as fixed, still_present, or regressed",
+    "Parse verification statuses from the reviewer's output into structured data",
+    "Track finding lifecycle across cycles: found -> fixed/still_present/regressed",
+    "Surface finding lifecycle summaries in UI and bead comments",
+]
+constraints = [
+    "Do not change externally visible behavior for cycle-1 reviews (no prior findings exist)",
+    "Keep prompt injection concise — truncate finding descriptions to avoid blowing context windows",
+    "Parsing must be backward-compatible: a reviewer that ignores VERIFICATION blocks still produces valid findings",
+    "All UI output goes to stderr via ui.Printer",
+    "Follow existing Go conventions from CLAUDE.md",
+    "Use stdlib testing only — no external test frameworks",
+]

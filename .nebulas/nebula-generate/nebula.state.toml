@@ -1,0 +1,39 @@
+version = 1
+nebula_name = 'nebula-generate'
+
+[phases]
+[phases.cli-command]
+bead_id = 'quasar-zlle'
+status = 'created'
+created_at = 2026-02-28T18:47:17.761766-05:00
+updated_at = 2026-02-28T18:47:17.761766-05:00
+
+[phases.codebase-analyzer]
+bead_id = 'quasar-t6s7'
+status = 'in_progress'
+created_at = 2026-02-28T18:47:14.641675-05:00
+updated_at = 2026-02-28T18:47:18.794278-05:00
+
+[phases.dependency-inference]
+bead_id = 'quasar-xvh5'
+status = 'created'
+created_at = 2026-02-28T18:47:15.368348-05:00
+updated_at = 2026-02-28T18:47:15.368348-05:00
+
+[phases.multi-phase-architect]
+bead_id = 'quasar-qvnx'
+status = 'created'
+created_at = 2026-02-28T18:47:16.24456-05:00
+updated_at = 2026-02-28T18:47:16.24456-05:00
+
+[phases.nebula-writer]
+bead_id = 'quasar-nsk6'
+status = 'created'
+created_at = 2026-02-28T18:47:17.045192-05:00
+updated_at = 2026-02-28T18:47:17.045192-05:00
+
+[phases.validation-integration]
+bead_id = 'quasar-8ey9'
+status = 'created'
+created_at = 2026-02-28T18:47:18.488847-05:00
+updated_at = 2026-02-28T18:47:18.488847-05:00
