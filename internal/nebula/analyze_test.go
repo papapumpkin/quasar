@@ -70,6 +70,10 @@ func TestAnalyzeCodebase(t *testing.T) {
 				if containsStr(pkg.ExportedSymbols, "private") {
 					t.Errorf("unexported 'private' should not appear in exports")
 				}
+				// exported methods (with receiver) should not appear.
+				if containsStr(pkg.ExportedSymbols, "DoSomething") {
+					t.Errorf("exported method 'DoSomething' should not appear in top-level exports")
+				}
 				break
 			}
 		}
@@ -201,6 +205,69 @@ func TestFormatForPrompt(t *testing.T) {
 			t.Error("expected '(not detected)' for empty module path")
 		}
 	})
+
+	t.Run("respects output budget", func(t *testing.T) {
+		t.Parallel()
+
+		// Build an analysis with many packages that would exceed a small budget.
+		var pkgs []PackageSummary
+		for i := 0; i < 50; i++ {
+			pkgs = append(pkgs, PackageSummary{
+				ImportPath:      fmt.Sprintf("example.com/test/pkg%02d", i),
+				RelativePath:    fmt.Sprintf("pkg%02d", i),
+				GoFiles:         []string{"a.go", "b.go", "c.go"},
+				ExportedSymbols: []string{"Alpha", "Beta", "Gamma", "Delta", "Epsilon"},
+			})
+		}
+
+		budget := 500
+		analysis := &CodebaseAnalysis{
+			ProjectSnapshot: "snapshot content",
+			ModulePath:      "example.com/test",
+			Packages:        pkgs,
+			maxOutputSize:   budget,
+		}
+
+		output := analysis.FormatForPrompt()
+		if len(output) > budget {
+			t.Errorf("output size %d exceeds budget %d", len(output), budget)
+		}
+		if !strings.Contains(output, "remaining packages omitted") {
+			t.Error("expected truncation notice")
+		}
+		// Should still have the core sections.
+		if !strings.Contains(output, "## Project Snapshot") {
+			t.Error("missing Project Snapshot section")
+		}
+		if !strings.Contains(output, "## Module") {
+			t.Error("missing Module section")
+		}
+		if !strings.Contains(output, "## Packages") {
+			t.Error("missing Packages section")
+		}
+	})
+
+	t.Run("no budget emits all packages", func(t *testing.T) {
+		t.Parallel()
+
+		analysis := &CodebaseAnalysis{
+			ProjectSnapshot: "snapshot",
+			ModulePath:      "example.com/test",
+			Packages: []PackageSummary{
+				{RelativePath: "a", GoFiles: []string{"a.go"}, ExportedSymbols: []string{"A"}},
+				{RelativePath: "b", GoFiles: []string{"b.go"}, ExportedSymbols: []string{"B"}},
+			},
+			maxOutputSize: 0, // no budget constraint
+		}
+
+		output := analysis.FormatForPrompt()
+		if strings.Contains(output, "remaining packages omitted") {
+			t.Error("should not truncate when no budget is set")
+		}
+		if !strings.Contains(output, "### `a`") || !strings.Contains(output, "### `b`") {
+			t.Error("expected both packages in output")
+		}
+	})
 }
 
 func TestSnapshotSizeCap(t *testing.T) {
@@ -241,11 +308,18 @@ func TestSnapshotSizeCap(t *testing.T) {
 
 	output := analysis.FormatForPrompt()
 
-	// The raw snapshot is capped by the scanner. The FormatForPrompt adds
-	// package data on top, so total output can exceed maxSnapshotSize.
-	// But the snapshot portion itself should be within budget.
+	// The raw snapshot is capped by the scanner.
 	if len(analysis.ProjectSnapshot) > maxSize {
 		t.Errorf("project snapshot size %d exceeds max %d", len(analysis.ProjectSnapshot), maxSize)
+	}
+	// The total FormatForPrompt output must also respect the budget.
+	if len(output) > maxSize {
+		t.Errorf("total FormatForPrompt output size %d exceeds max %d", len(output), maxSize)
+	}
+	// With 50 packages × 20 exports each and a 4000-byte budget, some packages
+	// must have been truncated.
+	if !strings.Contains(output, "remaining packages omitted") {
+		t.Error("expected truncation notice when output exceeds budget")
 	}
 	// Verify it's non-empty and has required sections.
 	if !strings.Contains(output, "## Project Snapshot") {
@@ -281,6 +355,9 @@ func main() {}
 
 // Bar is an exported type.
 type Bar struct{}
+
+// DoSomething is an exported method on Bar — should NOT appear in ExportedSymbols.
+func (b Bar) DoSomething() {}
 
 // Baz is an exported function.
 func Baz() {}

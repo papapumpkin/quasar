@@ -22,6 +22,7 @@ type CodebaseAnalysis struct {
 	ProjectSnapshot string           // Raw snapshot from snapshot.Scanner
 	Packages        []PackageSummary // Top-level package summaries
 	ModulePath      string           // Go module path (e.g., "github.com/papapumpkin/quasar")
+	maxOutputSize   int              // Budget for total FormatForPrompt output size
 }
 
 // PackageSummary describes a single Go package and its key exports.
@@ -67,12 +68,15 @@ func AnalyzeCodebase(ctx context.Context, workDir string, maxSnapshotSize int) (
 		ProjectSnapshot: snap,
 		Packages:        packages,
 		ModulePath:      modulePath,
+		maxOutputSize:   maxSnapshotSize,
 	}, nil
 }
 
 // FormatForPrompt renders the analysis as a markdown string suitable for
 // embedding in an architect agent prompt. The output contains sections for
-// the project snapshot, module info, and package summaries.
+// the project snapshot, module info, and package summaries. The total output
+// is capped to the maxOutputSize budget set during analysis. When the budget
+// is approached, remaining packages are omitted with a truncation notice.
 func (a *CodebaseAnalysis) FormatForPrompt() string {
 	var b strings.Builder
 
@@ -93,15 +97,33 @@ func (a *CodebaseAnalysis) FormatForPrompt() string {
 	if len(a.Packages) == 0 {
 		b.WriteString("No Go packages detected.\n")
 	} else {
-		for _, pkg := range a.Packages {
-			fmt.Fprintf(&b, "### `%s`\n", pkg.RelativePath)
+		// Reserve space for a potential truncation notice.
+		const truncNotice = "\n... (remaining packages omitted to stay within budget)\n"
+		budget := a.maxOutputSize
+		for i, pkg := range a.Packages {
+			var entry strings.Builder
+			fmt.Fprintf(&entry, "### `%s`\n", pkg.RelativePath)
 			if len(pkg.GoFiles) > 0 {
-				fmt.Fprintf(&b, "- Files: %s\n", strings.Join(pkg.GoFiles, ", "))
+				fmt.Fprintf(&entry, "- Files: %s\n", strings.Join(pkg.GoFiles, ", "))
 			}
 			if len(pkg.ExportedSymbols) > 0 {
-				fmt.Fprintf(&b, "- Exports: %s\n", strings.Join(pkg.ExportedSymbols, ", "))
+				fmt.Fprintf(&entry, "- Exports: %s\n", strings.Join(pkg.ExportedSymbols, ", "))
 			}
-			b.WriteString("\n")
+			entry.WriteString("\n")
+
+			// If a budget is set, check whether adding this entry would exceed it.
+			if budget > 0 {
+				needed := b.Len() + entry.Len()
+				if i < len(a.Packages)-1 {
+					needed += len(truncNotice)
+				}
+				if needed > budget {
+					b.WriteString(truncNotice)
+					break
+				}
+			}
+
+			b.WriteString(entry.String())
 		}
 	}
 
