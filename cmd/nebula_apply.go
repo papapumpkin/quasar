@@ -19,6 +19,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/loop"
 	"github.com/papapumpkin/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/snapshot"
 	"github.com/papapumpkin/quasar/internal/tui"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
@@ -30,6 +31,7 @@ func addNebulaApplyFlags(cmd *cobra.Command) {
 	cmd.Flags().Int("max-workers", 1, "maximum concurrent workers (with --auto)")
 	cmd.Flags().Bool("no-tui", false, "disable TUI even on a TTY (use stderr output)")
 	cmd.Flags().Bool("no-splash", false, "skip the startup splash animation")
+	cmd.Flags().Int("max-context-tokens", 0, "token budget for injected context (0 = use default 10000)")
 }
 
 func runNebulaApply(cmd *cobra.Command, args []string) error {
@@ -128,6 +130,13 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		maxWorkers = n.Manifest.Execution.MaxWorkers
 	}
 
+	// Resolve max context tokens: CLI flag > nebula manifest > 0 (use default).
+	maxContextTokens, _ := cmd.Flags().GetInt("max-context-tokens")
+	maxContextTokensChanged := cmd.Flags().Changed("max-context-tokens")
+	if !maxContextTokensChanged && n.Manifest.Execution.MaxContextTokens > 0 {
+		maxContextTokens = n.Manifest.Execution.MaxContextTokens
+	}
+
 	// Load custom prompts.
 	coderPrompt := agent.DefaultCoderSystemPrompt
 	if cfg.CoderSystemPrompt != "" {
@@ -150,6 +159,15 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("fabric initialization failed: %w", err)
 	}
 	defer func() { fc.Close() }()
+
+	// Scan project context once for prompt caching. Non-fatal if scanning fails.
+	var projectCtx string
+	scanner := &snapshot.Scanner{WorkDir: workDir}
+	if scanned, scanErr := scanner.Scan(ctx); scanErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: project context scan failed: %v\n", scanErr)
+	} else {
+		projectCtx = scanned
+	}
 
 	git := loop.NewCycleCommitterWithBranch(ctx, workDir, branchName)
 	phaseCommitter := nebula.NewGitCommitterWithBranch(ctx, workDir, branchName)
@@ -189,18 +207,20 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		tuiProgram = tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir, noSplash)
 		// Per-phase loops with PhaseUIBridge for hierarchical TUI tracking.
 		wg.Runner = &tuiLoopAdapter{
-			program:      tuiProgram,
-			invoker:      claudeInv,
-			beads:        client,
-			git:          git,
-			linter:       loop.NewLinter(cfg.LintCommands, workDir),
-			maxCycles:    cfg.MaxReviewCycles,
-			maxBudget:    cfg.MaxBudgetUSD,
-			model:        cfg.Model,
-			coderPrompt:  coderPrompt,
-			reviewPrompt: reviewerPrompt,
-			workDir:      workDir,
-			fabric:       wg.Fabric, // nil-safe — emitFabricEvents checks for nil
+			program:          tuiProgram,
+			invoker:          claudeInv,
+			beads:            client,
+			git:              git,
+			linter:           loop.NewLinter(cfg.LintCommands, workDir),
+			maxCycles:        cfg.MaxReviewCycles,
+			maxBudget:        cfg.MaxBudgetUSD,
+			model:            cfg.Model,
+			coderPrompt:      coderPrompt,
+			reviewPrompt:     reviewerPrompt,
+			workDir:          workDir,
+			fabric:           wg.Fabric, // nil-safe — emitFabricEvents checks for nil
+			projectContext:   projectCtx,
+			maxContextTokens: maxContextTokens,
 		}
 		wg.Logger = io.Discard
 		wg.Prompter = tui.NewGater(tuiProgram)
@@ -238,17 +258,21 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	} else {
 		// Stderr path: single shared loop with Printer UI.
 		taskLoop := &loop.Loop{
-			Invoker:      claudeInv,
-			UI:           printer,
-			Git:          git,
-			Hooks:        []loop.Hook{&loop.BeadHook{Beads: client, UI: printer}},
-			Linter:       loop.NewLinter(cfg.LintCommands, workDir),
-			MaxCycles:    cfg.MaxReviewCycles,
-			MaxBudgetUSD: cfg.MaxBudgetUSD,
-			Model:        cfg.Model,
-			CoderPrompt:  coderPrompt,
-			ReviewPrompt: reviewerPrompt,
-			WorkDir:      workDir,
+			Invoker:          claudeInv,
+			UI:               printer,
+			Git:              git,
+			Hooks:            []loop.Hook{&loop.BeadHook{Beads: client, UI: printer}},
+			Linter:           loop.NewLinter(cfg.LintCommands, workDir),
+			MaxCycles:        cfg.MaxReviewCycles,
+			MaxBudgetUSD:     cfg.MaxBudgetUSD,
+			Model:            cfg.Model,
+			CoderPrompt:      coderPrompt,
+			ReviewPrompt:     reviewerPrompt,
+			WorkDir:          workDir,
+			Fabric:           wg.Fabric,
+			FabricEnabled:    wg.Fabric != nil,
+			ProjectContext:   projectCtx,
+			MaxContextTokens: maxContextTokens,
 		}
 		wg.Runner = &loopAdapter{loop: taskLoop}
 		// Stderr path: use dashboard and terminal gater.
@@ -291,9 +315,10 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			go func() {
 				results, runErr := wg.Run(ctx)
 				prog.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
-				// Post-completion git workflow: push branch and checkout main.
+				// Post-completion git workflow: commit+push, checkout main only on success.
 				if br != "" {
-					gitResult := nebula.PostCompletion(context.Background(), wd, br)
+					allSucceeded := runErr == nil
+					gitResult := nebula.PostCompletion(context.Background(), wd, br, allSucceeded)
 					prog.Send(tui.MsgGitPostCompletion{Result: gitResult})
 				}
 			}()
@@ -401,18 +426,20 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				wg = nebula.NewWorkerGroup(nextN, nextState, nextWgOpts...)
 				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, noSplash)
 				wg.Runner = &tuiLoopAdapter{
-					program:      tuiProgram,
-					invoker:      claudeInv,
-					beads:        client,
-					git:          loop.NewCycleCommitterWithBranch(ctx, nextWorkDir, nextBranchName),
-					linter:       loop.NewLinter(cfg.LintCommands, nextWorkDir),
-					maxCycles:    cfg.MaxReviewCycles,
-					maxBudget:    cfg.MaxBudgetUSD,
-					model:        cfg.Model,
-					coderPrompt:  coderPrompt,
-					reviewPrompt: reviewerPrompt,
-					workDir:      nextWorkDir,
-					fabric:       wg.Fabric, // nil-safe
+					program:          tuiProgram,
+					invoker:          claudeInv,
+					beads:            client,
+					git:              loop.NewCycleCommitterWithBranch(ctx, nextWorkDir, nextBranchName),
+					linter:           loop.NewLinter(cfg.LintCommands, nextWorkDir),
+					maxCycles:        cfg.MaxReviewCycles,
+					maxBudget:        cfg.MaxBudgetUSD,
+					model:            cfg.Model,
+					coderPrompt:      coderPrompt,
+					reviewPrompt:     reviewerPrompt,
+					workDir:          nextWorkDir,
+					fabric:           wg.Fabric, // nil-safe
+					projectContext:   projectCtx,
+					maxContextTokens: maxContextTokens,
 				}
 				wg.Prompter = tui.NewGater(tuiProgram)
 				// Re-wire OnHail for the next nebula's TUI program.
@@ -481,9 +508,9 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 
 	printer.NebulaWorkerResults(results)
 
-	// Post-completion git workflow for stderr path.
+	// Post-completion git workflow for stderr path (only reached on success).
 	if branchName != "" {
-		gitResult := nebula.PostCompletion(context.Background(), workDir, branchName)
+		gitResult := nebula.PostCompletion(context.Background(), workDir, branchName, true)
 		if gitResult.CommitErr != nil {
 			printer.Error(fmt.Sprintf("git commit failed: %v", gitResult.CommitErr))
 		}

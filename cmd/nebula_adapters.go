@@ -56,18 +56,20 @@ func (a *loopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDescr
 // This ensures each nebula phase sends UI messages tagged with its phase ID,
 // enabling the TUI to track per-phase cycle timelines independently.
 type tuiLoopAdapter struct {
-	program      *tui.Program
-	invoker      agent.Invoker
-	beads        beads.Client
-	git          loop.CycleCommitter
-	linter       loop.Linter
-	maxCycles    int
-	maxBudget    float64
-	model        string
-	coderPrompt  string
-	reviewPrompt string
-	workDir      string
-	fabric       fabric.Fabric // nil when fabric is not configured
+	program          *tui.Program
+	invoker          agent.Invoker
+	beads            beads.Client
+	git              loop.CycleCommitter
+	linter           loop.Linter
+	maxCycles        int
+	maxBudget        float64
+	model            string
+	coderPrompt      string
+	reviewPrompt     string
+	workDir          string
+	fabric           fabric.Fabric // nil when fabric is not configured
+	projectContext   string        // Deterministic project snapshot for prompt caching.
+	maxContextTokens int           // Token budget for context injection. 0 = use default.
 }
 
 func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, phaseTitle, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
@@ -75,18 +77,22 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 	phaseUI := tui.NewPhaseUIBridge(a.program, phaseID, a.workDir)
 
 	l := &loop.Loop{
-		Invoker:       a.invoker,
-		UI:            phaseUI,
-		Git:           a.git,
-		Hooks:         []loop.Hook{&loop.BeadHook{Beads: a.beads, UI: phaseUI}},
-		Linter:        a.linter,
-		MaxCycles:     a.maxCycles,
-		MaxBudgetUSD:  a.maxBudget,
-		Model:         a.model,
-		CoderPrompt:   a.coderPrompt,
-		ReviewPrompt:  a.reviewPrompt,
-		WorkDir:       a.workDir,
-		CommitSummary: phaseTitle,
+		Invoker:          a.invoker,
+		UI:               phaseUI,
+		Git:              a.git,
+		Hooks:            []loop.Hook{&loop.BeadHook{Beads: a.beads, UI: phaseUI}},
+		Linter:           a.linter,
+		MaxCycles:        a.maxCycles,
+		MaxBudgetUSD:     a.maxBudget,
+		Model:            a.model,
+		CoderPrompt:      a.coderPrompt,
+		ReviewPrompt:     a.reviewPrompt,
+		WorkDir:          a.workDir,
+		CommitSummary:    phaseTitle,
+		Fabric:           a.fabric,
+		FabricEnabled:    a.fabric != nil,
+		ProjectContext:   a.projectContext,
+		MaxContextTokens: a.maxContextTokens,
 	}
 
 	// Apply per-phase execution overrides.
@@ -135,17 +141,19 @@ func (a *tuiLoopAdapter) emitFabricEvents(ctx context.Context, phaseID string, p
 func (a *tuiLoopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error) {
 	phaseUI := tui.NewPhaseUIBridge(a.program, "checkpoint", a.workDir)
 	l := &loop.Loop{
-		Invoker:      a.invoker,
-		UI:           phaseUI,
-		Git:          a.git,
-		Hooks:        []loop.Hook{&loop.BeadHook{Beads: a.beads, UI: phaseUI}},
-		Linter:       a.linter,
-		MaxCycles:    a.maxCycles,
-		MaxBudgetUSD: a.maxBudget,
-		Model:        a.model,
-		CoderPrompt:  a.coderPrompt,
-		ReviewPrompt: a.reviewPrompt,
-		WorkDir:      a.workDir,
+		Invoker:          a.invoker,
+		UI:               phaseUI,
+		Git:              a.git,
+		Hooks:            []loop.Hook{&loop.BeadHook{Beads: a.beads, UI: phaseUI}},
+		Linter:           a.linter,
+		MaxCycles:        a.maxCycles,
+		MaxBudgetUSD:     a.maxBudget,
+		Model:            a.model,
+		CoderPrompt:      a.coderPrompt,
+		ReviewPrompt:     a.reviewPrompt,
+		WorkDir:          a.workDir,
+		ProjectContext:   a.projectContext,
+		MaxContextTokens: a.maxContextTokens,
 	}
 	return l.GenerateCheckpoint(ctx, beadID, phaseDescription)
 }
@@ -199,14 +207,14 @@ func initFabric(ctx context.Context, n *nebula.Nebula, dir, workDir string, inv 
 		return &fabricComponents{}, nil
 	}
 
-	fabricDir := filepath.Join(dir, ".quasar")
+	fabricDir := filepath.Join(workDir, ".quasar")
 	if err := os.MkdirAll(fabricDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating fabric directory: %w", err)
 	}
 
 	// Ensure the telemetry directory and file exist so that TelemetryBridge
 	// can start tailing immediately when the scratchpad is opened.
-	telemetryDir := filepath.Join(dir, ".quasar", "telemetry")
+	telemetryDir := filepath.Join(workDir, ".quasar", "telemetry")
 	if err := os.MkdirAll(telemetryDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating telemetry directory: %w", err)
 	}

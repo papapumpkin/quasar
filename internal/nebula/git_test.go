@@ -393,7 +393,7 @@ func TestPostCompletion(t *testing.T) {
 		// Create a nebula branch.
 		run(ctx, t, dir, "git", "checkout", "-b", "nebula/no-remote")
 
-		result := PostCompletion(ctx, dir, "nebula/no-remote")
+		result := PostCompletion(ctx, dir, "nebula/no-remote", true)
 
 		// Push should fail because there's no remote.
 		if result.PushErr == nil {
@@ -412,7 +412,7 @@ func TestPostCompletion(t *testing.T) {
 		// Create a nebula branch from whatever default branch.
 		run(ctx, t, dir, "git", "checkout", "-b", "nebula/no-main")
 
-		result := PostCompletion(ctx, dir, "nebula/no-main")
+		result := PostCompletion(ctx, dir, "nebula/no-main", true)
 
 		// Checkout main may fail if the default branch is "master".
 		// We just verify the result is populated.
@@ -432,7 +432,7 @@ func TestPostCompletion(t *testing.T) {
 		// Create nebula branch.
 		run(ctx, t, dir, "git", "checkout", "-b", "nebula/checkout-test")
 
-		result := PostCompletion(ctx, dir, "nebula/checkout-test")
+		result := PostCompletion(ctx, dir, "nebula/checkout-test", true)
 
 		if result.CheckoutErr != nil {
 			t.Errorf("expected checkout to succeed: %v", result.CheckoutErr)
@@ -458,7 +458,7 @@ func TestPostCompletion(t *testing.T) {
 		// Create nebula branch.
 		run(ctx, t, dir, "git", "checkout", "-b", "nebula/master-test")
 
-		result := PostCompletion(ctx, dir, "nebula/master-test")
+		result := PostCompletion(ctx, dir, "nebula/master-test", true)
 
 		if result.CheckoutErr != nil {
 			t.Errorf("expected checkout to succeed: %v", result.CheckoutErr)
@@ -471,6 +471,30 @@ func TestPostCompletion(t *testing.T) {
 		current := currentBranchHelper(ctx, t, dir)
 		if current != "master" {
 			t.Errorf("expected to be on master after PostCompletion, got %q", current)
+		}
+	})
+
+	t.Run("skips checkout when incomplete", func(t *testing.T) {
+		dir := initTestRepo(t)
+		ctx := context.Background()
+
+		run(ctx, t, dir, "git", "branch", "-M", "main")
+		run(ctx, t, dir, "git", "checkout", "-b", "nebula/incomplete-test")
+
+		result := PostCompletion(ctx, dir, "nebula/incomplete-test", false)
+
+		// Checkout should be skipped entirely.
+		if result.CheckoutBranch != "" {
+			t.Errorf("expected CheckoutBranch='', got %q", result.CheckoutBranch)
+		}
+		if result.CheckoutErr != nil {
+			t.Errorf("expected no CheckoutErr, got %v", result.CheckoutErr)
+		}
+
+		// Should still be on the nebula branch.
+		current := currentBranchHelper(ctx, t, dir)
+		if current != "nebula/incomplete-test" {
+			t.Errorf("expected to stay on nebula/incomplete-test, got %q", current)
 		}
 	})
 }

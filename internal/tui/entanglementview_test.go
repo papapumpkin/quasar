@@ -22,10 +22,10 @@ func TestEntanglementView_EmptyRendersPlaceholder(t *testing.T) {
 func TestEntanglementView_CardRendersID(t *testing.T) {
 	t.Parallel()
 	ev := NewEntanglementView()
-	ev.Width = 80
 	ev.Entanglements = []fabric.Entanglement{
 		{ID: 42, Name: "FooService", Producer: "phase-a", Consumer: "phase-b", Status: fabric.StatusPending, Signature: "func Foo() error"},
 	}
+	ev.SetSize(80, 40)
 
 	view := ev.View()
 
@@ -40,10 +40,10 @@ func TestEntanglementView_CardRendersID(t *testing.T) {
 func TestEntanglementView_CardRendersParties(t *testing.T) {
 	t.Parallel()
 	ev := NewEntanglementView()
-	ev.Width = 80
 	ev.Entanglements = []fabric.Entanglement{
 		{ID: 1, Name: "Svc", Producer: "alpha", Consumer: "beta", Status: fabric.StatusFulfilled, Signature: "type Svc interface{}"},
 	}
+	ev.SetSize(80, 40)
 
 	view := ev.View()
 
@@ -61,10 +61,10 @@ func TestEntanglementView_CardRendersParties(t *testing.T) {
 func TestEntanglementView_NilConsumerRendersWildcard(t *testing.T) {
 	t.Parallel()
 	ev := NewEntanglementView()
-	ev.Width = 80
 	ev.Entanglements = []fabric.Entanglement{
 		{ID: 1, Name: "Svc", Producer: "alpha", Consumer: "", Status: fabric.StatusPending, Signature: "type X struct{}"},
 	}
+	ev.SetSize(80, 40)
 
 	view := ev.View()
 
@@ -91,10 +91,10 @@ func TestEntanglementView_StatusColors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			ev := NewEntanglementView()
-			ev.Width = 80
 			ev.Entanglements = []fabric.Entanglement{
 				{ID: 1, Name: "X", Producer: "p", Status: tt.status, Signature: "func()"},
 			}
+			ev.SetSize(80, 40)
 
 			view := ev.View()
 
@@ -108,10 +108,10 @@ func TestEntanglementView_StatusColors(t *testing.T) {
 func TestEntanglementView_InterfaceBodyRendered(t *testing.T) {
 	t.Parallel()
 	ev := NewEntanglementView()
-	ev.Width = 120
 	ev.Entanglements = []fabric.Entanglement{
 		{ID: 1, Name: "X", Producer: "p", Status: fabric.StatusPending, Signature: "func DoWork(ctx context.Context) error"},
 	}
+	ev.SetSize(120, 40)
 
 	view := ev.View()
 
@@ -123,12 +123,12 @@ func TestEntanglementView_InterfaceBodyRendered(t *testing.T) {
 func TestEntanglementView_GroupedByProducer(t *testing.T) {
 	t.Parallel()
 	ev := NewEntanglementView()
-	ev.Width = 80
 	ev.Entanglements = []fabric.Entanglement{
 		{ID: 1, Name: "A", Producer: "phase-b", Status: fabric.StatusPending, Signature: "func A()"},
 		{ID: 2, Name: "B", Producer: "phase-a", Status: fabric.StatusFulfilled, Signature: "func B()"},
 		{ID: 3, Name: "C", Producer: "phase-b", Status: fabric.StatusFulfilled, Signature: "func C()"},
 	}
+	ev.SetSize(80, 80)
 
 	view := ev.View()
 
@@ -184,12 +184,12 @@ func TestEntanglementView_SortedByStatusWithinGroup(t *testing.T) {
 func TestEntanglementView_CursorNavigation(t *testing.T) {
 	t.Parallel()
 	ev := NewEntanglementView()
-	ev.Width = 80
 	ev.Entanglements = []fabric.Entanglement{
 		{ID: 1, Name: "A", Producer: "p", Status: fabric.StatusPending, Signature: "func A()"},
 		{ID: 2, Name: "B", Producer: "p", Status: fabric.StatusFulfilled, Signature: "func B()"},
 		{ID: 3, Name: "C", Producer: "q", Status: fabric.StatusDisputed, Signature: "func C()"},
 	}
+	ev.SetSize(80, 40)
 
 	// Initial cursor at 0.
 	if ev.Cursor != 0 {
@@ -385,7 +385,6 @@ func TestFlatCount_Empty(t *testing.T) {
 func TestEntanglementView_MultilineSignature(t *testing.T) {
 	t.Parallel()
 	ev := NewEntanglementView()
-	ev.Width = 120
 	ev.Entanglements = []fabric.Entanglement{
 		{
 			ID:       1,
@@ -397,6 +396,7 @@ func TestEntanglementView_MultilineSignature(t *testing.T) {
 				"}",
 		},
 	}
+	ev.SetSize(120, 40)
 
 	view := ev.View()
 
@@ -411,10 +411,10 @@ func TestEntanglementView_MultilineSignature(t *testing.T) {
 func TestEntanglementView_EmptySignatureFallback(t *testing.T) {
 	t.Parallel()
 	ev := NewEntanglementView()
-	ev.Width = 80
 	ev.Entanglements = []fabric.Entanglement{
 		{ID: 1, Name: "X", Producer: "p", Status: fabric.StatusPending, Signature: ""},
 	}
+	ev.SetSize(80, 40)
 
 	view := ev.View()
 

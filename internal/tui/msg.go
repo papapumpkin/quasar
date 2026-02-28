@@ -340,6 +340,23 @@ type MsgHail struct {
 	ResponseCh chan<- string
 }
 
+// MsgHailReceived notifies the TUI that an agent has posted a new hail
+// requiring human attention. Sent by UIBridge and PhaseUIBridge in response
+// to the ui.UI.HailReceived call.
+type MsgHailReceived struct {
+	PhaseID string // Empty in single-task (loop) mode.
+	Hail    ui.HailInfo
+}
+
+// MsgHailResolved notifies the TUI that a previously posted hail has been
+// resolved by the human. Sent by UIBridge and PhaseUIBridge in response
+// to the ui.UI.HailResolved call.
+type MsgHailResolved struct {
+	PhaseID    string // Empty in single-task (loop) mode.
+	ID         string // Hail identifier that was resolved.
+	Resolution string // The human's response text.
+}
+
 // MsgScratchpadEntry adds a timestamped note to the scratchpad view.
 type MsgScratchpadEntry struct {
 	Timestamp time.Time

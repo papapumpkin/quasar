@@ -1,10 +1,13 @@
 package loop
 
 import (
+	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/papapumpkin/quasar/internal/fabric"
+	"github.com/papapumpkin/quasar/internal/snapshot"
 )
 
 // buildCoderPrompt constructs the prompt sent to the coder agent for a given
@@ -123,4 +126,106 @@ func PrependFabricContext(desc string, snap fabric.Snapshot) string {
 	b.WriteString("\n\n---\n\n")
 	b.WriteString(desc)
 	return b.String()
+}
+
+// buildFabricSnapshot queries the Fabric store for current state and returns
+// a Snapshot suitable for injection into agent prompts. Errors from individual
+// queries are non-fatal — the snapshot will contain whatever data was available,
+// but errors are logged via the UI so operators can diagnose degraded snapshots.
+func (l *Loop) buildFabricSnapshot(ctx context.Context) fabric.Snapshot {
+	entanglements, err := l.Fabric.AllEntanglements(ctx)
+	if err != nil {
+		l.UI.Error(fmt.Sprintf("fabric: failed to query entanglements: %v", err))
+	}
+	claims, err := l.Fabric.AllClaims(ctx)
+	if err != nil {
+		l.UI.Error(fmt.Sprintf("fabric: failed to query claims: %v", err))
+	}
+	states, err := l.Fabric.AllPhaseStates(ctx)
+	if err != nil {
+		l.UI.Error(fmt.Sprintf("fabric: failed to query phase states: %v", err))
+	}
+	discoveries, err := l.Fabric.UnresolvedDiscoveries(ctx)
+	if err != nil {
+		l.UI.Error(fmt.Sprintf("fabric: failed to query unresolved discoveries: %v", err))
+	}
+	pulses, err := l.Fabric.AllPulses(ctx)
+	if err != nil {
+		l.UI.Error(fmt.Sprintf("fabric: failed to query pulses: %v", err))
+	}
+
+	// Partition phases into completed, in-progress, and blocked.
+	var completed, inProgress, blocked []string
+	for id, s := range states {
+		switch s {
+		case fabric.StateDone:
+			completed = append(completed, id)
+		case fabric.StateRunning:
+			inProgress = append(inProgress, id)
+		case fabric.StateBlocked:
+			blocked = append(blocked, id)
+		}
+	}
+	sort.Strings(completed)
+	sort.Strings(inProgress)
+	sort.Strings(blocked)
+
+	// Build claim map from filepath to owning phase.
+	claimMap := make(map[string]string, len(claims))
+	for _, c := range claims {
+		claimMap[c.Filepath] = c.OwnerTask
+	}
+
+	return fabric.Snapshot{
+		Entanglements:         entanglements,
+		FileClaims:            claimMap,
+		Completed:             completed,
+		InProgress:            inProgress,
+		Blocked:               blocked,
+		UnresolvedDiscoveries: discoveries,
+		Pulses:                pulses,
+		PhaseStates:           states,
+		// PhaseCycles is populated by the nebula orchestrator when available;
+		// the fabric store does not track cycle counts directly.
+	}
+}
+
+// composeContextPrefix uses ContextBudget to assemble context layers and prepend
+// them to the task prompt. When MaxContextTokens is 0, it falls back to the
+// legacy PrependFabricContext behavior for backward compatibility.
+func (l *Loop) composeContextPrefix(ctx context.Context, taskPrompt string) string {
+	maxTokens := l.MaxContextTokens
+
+	// When budget is explicitly 0 and no project context, fall back to legacy
+	// fabric-only injection for backward compatibility.
+	if maxTokens == 0 && l.ProjectContext == "" {
+		if l.FabricEnabled && l.Fabric != nil {
+			return PrependFabricContext(taskPrompt, l.buildFabricSnapshot(ctx))
+		}
+		return taskPrompt
+	}
+
+	// Use default budget when not explicitly configured.
+	if maxTokens == 0 {
+		maxTokens = snapshot.DefaultMaxContextTokens
+	}
+
+	budget := &snapshot.ContextBudget{MaxTokens: maxTokens}
+
+	var fabricState string
+	if l.FabricEnabled && l.Fabric != nil {
+		snap := l.buildFabricSnapshot(ctx)
+		var b strings.Builder
+		b.WriteString("## Current Fabric State\n\n")
+		b.WriteString(fabric.RenderSnapshot(snap))
+		fabricState = b.String()
+	}
+
+	// Prior work is not yet sourced — reserved for future neutron archive injection.
+	composed := budget.Compose(l.ProjectContext, fabricState, "")
+	if composed == "" {
+		return taskPrompt
+	}
+
+	return composed + "\n\n---\n\n" + taskPrompt
 }

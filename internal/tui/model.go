@@ -16,6 +16,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/nebula"
 	"github.com/papapumpkin/quasar/internal/tycho"
+	"github.com/papapumpkin/quasar/internal/ui"
 )
 
 // Mode indicates which top-level view the TUI is displaying.
@@ -47,8 +48,9 @@ type AppModel struct {
 	LoopView   LoopView // used in loop mode (single task)
 	NebulaView NebulaView
 	Detail     DetailPanel
-	Gate       *GatePrompt
-	Hail       *HailOverlay
+	Gate         *GatePrompt
+	PendingGates []MsgGatePrompt // queued gate prompts waiting for the current gate to resolve
+	Hail         *HailOverlay
 	Overlay    *CompletionOverlay
 	Toasts     []Toast
 	Keys       KeyMap
@@ -100,6 +102,10 @@ type AppModel struct {
 	Scratchpad       []MsgScratchpadEntry  // timestamped scratchpad notes
 	ScratchpadView   ScratchpadView        // persistent scratchpad viewer with viewport
 	StaleItems       []tycho.StaleItem     // latest stale warning items
+
+	// Hail tracking — pending hails from agents that need human attention.
+	PendingHails []ui.HailInfo    // unresolved hails tracked via MsgHailReceived/MsgHailResolved
+	HailList     *HailListOverlay // non-nil when the hail list overlay is active
 
 	// Home mode state (landing page).
 	HomeCursor      int            // cursor position in the home nebula list
@@ -212,8 +218,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Pass dimensions to the board view.
 		m.Board.Width = contentWidth
 		m.Board.Height = detailHeight
-		m.EntanglementView.Width = contentWidth
-		m.EntanglementView.Height = detailHeight
+		m.EntanglementView.SetSize(contentWidth, detailHeight)
 
 		// Board view sizing: on the first resize, default to board if wide enough.
 		// On subsequent resizes, auto-fallback to table if terminal shrinks below threshold.
@@ -474,14 +479,21 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// --- Gate ---
 	case MsgGatePrompt:
-		m.Gate = NewGatePrompt(msg.Checkpoint, msg.ResponseCh)
-		m.Gate.Width = m.contentWidth()
-		m.Gate.Height = m.Height
-		// Mark the phase as gated if we know which one.
+		// Mark the phase as gated regardless of whether we show immediately.
 		if msg.Checkpoint != nil {
 			m.NebulaView.SetPhaseStatus(msg.Checkpoint.PhaseID, PhaseGate)
 			m.Graph.SetPhaseStatus(msg.Checkpoint.PhaseID, PhaseGate)
 		}
+		if m.Gate == nil {
+			// No active gate — show immediately.
+			m.Gate = NewGatePrompt(msg.Checkpoint, msg.ResponseCh)
+			m.Gate.Width = m.contentWidth()
+			m.Gate.Height = m.Height
+		} else {
+			// Gate already active — queue for later.
+			m.PendingGates = append(m.PendingGates, msg)
+		}
+		m.StatusBar.GateQueueCount = len(m.PendingGates)
 
 	// --- Done signals ---
 	case MsgLoopDone:
@@ -559,6 +571,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Toasts = append(m.Toasts, toast)
 			cmds = append(cmds, cmd)
 		}
+
+	case MsgHailReceived:
+		m.PendingHails = append(m.PendingHails, msg.Hail)
+		m.syncHailBadge()
+
+	case MsgHailResolved:
+		m.removePendingHail(msg.ID)
+		m.syncHailBadge()
 
 	case MsgScratchpadEntry:
 		m.Scratchpad = append(m.Scratchpad, msg)
@@ -767,6 +787,11 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleHailKey(msg)
 	}
 
+	// Hail list overlay overrides normal keys when active.
+	if m.HailList != nil {
+		return m.handleHailListKey(msg)
+	}
+
 	// When viewing a single file's diff, route scroll keys to the detail panel.
 	// Esc returns to the file list.
 	if m.ShowDiff && m.DiffFileList != nil && m.DiffFileOpen {
@@ -944,6 +969,23 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Entanglement viewport scrolling — when the entanglements tab is active,
+	// route page up/down, home/end, and g/G to the viewport.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.ActiveTab == TabEntanglements {
+		switch {
+		case key.Matches(msg, m.Keys.PageUp),
+			key.Matches(msg, m.Keys.PageDown),
+			key.Matches(msg, m.Keys.Home),
+			key.Matches(msg, m.Keys.End):
+			m.EntanglementView.Update(msg)
+			return m, nil
+		}
+		if msg.String() == "g" || msg.String() == "G" {
+			m.EntanglementView.Update(msg)
+			return m, nil
+		}
+	}
+
 	// Home mode: plan preview key handling.
 	if m.Mode == ModeHome && m.ShowPlanPreview && m.PlanPreview != nil {
 		return m.handlePlanKey(msg)
@@ -1015,6 +1057,9 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.Keys.Diff):
 		m.handleDiffKey()
 
+	case key.Matches(msg, m.Keys.HailList):
+		cmd := m.openHailList()
+		return m, cmd
 	}
 
 	return m, nil
@@ -1510,7 +1555,8 @@ func (m AppModel) handleGateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// resolveGate sends the action, updates the phase status, and clears the gate.
+// resolveGate sends the action, updates the phase status, clears the gate,
+// and promotes the next queued gate prompt if one is pending.
 func (m *AppModel) resolveGate(action nebula.GateAction) {
 	if m.Gate != nil {
 		phaseID := m.Gate.PhaseID
@@ -1533,6 +1579,16 @@ func (m *AppModel) resolveGate(action nebula.GateAction) {
 			m.NebulaView.SetPhaseStatus(phaseID, PhaseSkipped)
 			m.Graph.SetPhaseStatus(phaseID, PhaseSkipped)
 		}
+
+		// Promote the next queued gate prompt, if any.
+		if len(m.PendingGates) > 0 {
+			next := m.PendingGates[0]
+			m.PendingGates = m.PendingGates[1:]
+			m.Gate = NewGatePrompt(next.Checkpoint, next.ResponseCh)
+			m.Gate.Width = m.contentWidth()
+			m.Gate.Height = m.Height
+		}
+		m.StatusBar.GateQueueCount = len(m.PendingGates)
 	}
 }
 
@@ -1563,6 +1619,81 @@ func (m *AppModel) resolveHail(response string) {
 		m.Hail.Resolve(response)
 		m.Hail = nil
 	}
+}
+
+// syncHailBadge updates the status bar hail counters from PendingHails.
+func (m *AppModel) syncHailBadge() {
+	m.StatusBar.HailCount = len(m.PendingHails)
+	critical := 0
+	for _, h := range m.PendingHails {
+		if h.Kind == "blocker" {
+			critical++
+		}
+	}
+	m.StatusBar.CriticalHailCount = critical
+
+	// Enable/disable the HailList keybinding based on pending hails.
+	m.Keys.HailList.SetEnabled(len(m.PendingHails) > 0)
+}
+
+// removePendingHail removes a hail by ID from PendingHails.
+func (m *AppModel) removePendingHail(id string) {
+	for i, h := range m.PendingHails {
+		if h.ID == id {
+			m.PendingHails = append(m.PendingHails[:i], m.PendingHails[i+1:]...)
+			return
+		}
+	}
+}
+
+// handleHailListKey routes key events when the hail list overlay is active.
+// Up/Down navigates the list, Enter selects, Esc dismisses.
+func (m AppModel) handleHailListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.Keys.Back):
+		m.HailList = nil
+		return m, nil
+	case key.Matches(msg, m.Keys.Up):
+		m.HailList.MoveUp()
+		return m, nil
+	case key.Matches(msg, m.Keys.Down):
+		m.HailList.MoveDown()
+		return m, nil
+	case key.Matches(msg, m.Keys.Enter):
+		selected := m.HailList.Selected()
+		if selected != nil {
+			// Acknowledge (remove) the selected hail and dismiss the list.
+			m.removePendingHail(selected.ID)
+			m.syncHailBadge()
+			m.HailList = nil
+			toast, cmd := NewToast(fmt.Sprintf("✓ acknowledged: %s", selected.Summary), false)
+			m.Toasts = append(m.Toasts, toast)
+			return m, cmd
+		}
+		m.HailList = nil
+		return m, nil
+	}
+	return m, nil
+}
+
+// openHailList creates and shows the hail list overlay. If only one hail
+// is pending, it acknowledges it directly instead of showing a list.
+func (m *AppModel) openHailList() tea.Cmd {
+	if len(m.PendingHails) == 0 {
+		return nil
+	}
+	if len(m.PendingHails) == 1 {
+		// Single hail — acknowledge directly with a toast.
+		hail := m.PendingHails[0]
+		m.PendingHails = nil
+		m.syncHailBadge()
+		toast, cmd := NewToast(fmt.Sprintf("⚠ [%s] %s: %s", hail.Kind, hail.SourceRole, hail.Summary), true)
+		m.Toasts = append(m.Toasts, toast)
+		return cmd
+	}
+	m.HailList = NewHailListOverlay(m.PendingHails)
+	m.HailList.Width = m.Width
+	return nil
 }
 
 // moveUp delegates to the active view based on depth.
@@ -2016,6 +2147,14 @@ func (m AppModel) View() string {
 		return compositeOverlay(dimmed, overlayBox, m.Width, m.Height)
 	}
 
+	// Hail list overlay — rendered over a dimmed background for browsing pending hails.
+	if m.HailList != nil {
+		dimmed := styleOverlayDimmed.Width(m.Width).Height(m.Height).Render(base)
+		overlayContent := m.HailList.View(m.Width, m.Height)
+		overlayBox := centerOverlay(overlayContent, m.Width, m.Height)
+		return compositeOverlay(dimmed, overlayBox, m.Width, m.Height)
+	}
+
 	// Quit confirmation overlay — rendered over a dimmed background.
 	if m.ShowQuitConfirm {
 		dimmed := styleOverlayDimmed.Width(m.Width).Height(m.Height).Render(base)
@@ -2132,8 +2271,7 @@ func (m AppModel) renderMainView() string {
 				}
 				return boardStr
 			case TabEntanglements:
-				m.EntanglementView.Width = w
-				m.EntanglementView.Height = m.detailHeight()
+				m.EntanglementView.SetSize(w, m.detailHeight())
 				return m.EntanglementView.View()
 			case TabGraph:
 				m.Graph.SetSize(w, m.detailHeight())
@@ -2163,6 +2301,11 @@ func (m AppModel) buildFooter() Footer {
 	// When the diff file list is active, show dedicated diff-mode bindings.
 	if m.ShowDiff && m.DiffFileList != nil {
 		f.Bindings = DiffFileListFooterBindings(m.Keys)
+		return f
+	}
+
+	if m.HailList != nil {
+		f.Bindings = HailListFooterBindings(m.Keys)
 		return f
 	}
 
@@ -2212,6 +2355,12 @@ func (m AppModel) buildFooter() Footer {
 			f.Bindings = append(f.Bindings, diffBind)
 		}
 	}
+
+	// Append hail list binding when pending hails exist.
+	if m.Keys.HailList.Enabled() {
+		f.Bindings = append(f.Bindings, m.Keys.HailList)
+	}
+
 	return f
 }
 

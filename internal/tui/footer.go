@@ -97,3 +97,8 @@ func GateFooterBindings(km KeyMap) []key.Binding {
 	esc.SetHelp("esc", "skip")
 	return []key.Binding{km.Accept, km.Reject, km.Retry, km.Skip, esc}
 }
+
+// HailListFooterBindings returns footer bindings when the hail list overlay is active.
+func HailListFooterBindings(km KeyMap) []key.Binding {
+	return []key.Binding{km.Up, km.Down, km.Enter, km.Back}
+}

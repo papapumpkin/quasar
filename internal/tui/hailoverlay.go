@@ -5,8 +5,25 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/papapumpkin/quasar/internal/fabric"
+)
+
+// Critical hail styles — visually distinct from normal hails.
+var (
+	// styleHailOverlayCritical uses a double border for critical/blocker hails.
+	styleHailOverlayCritical = lipgloss.NewStyle().
+					Border(lipgloss.DoubleBorder()).
+					BorderForeground(colorDanger).
+					Padding(1, 2)
+
+	// styleHailHeaderCritical styles critical hail titles with a red background badge.
+	styleHailHeaderCritical = lipgloss.NewStyle().
+				Background(colorDanger).
+				Foreground(colorBrightWhite).
+				Bold(true).
+				Padding(0, 1)
 )
 
 // HailOverlay renders a red-bordered floating overlay for human decision
@@ -23,6 +40,7 @@ type HailOverlay struct {
 	Input      textinput.Model
 	ResponseCh chan<- string
 	Width      int
+	IsCritical bool // true for blocker-kind hails that need red highlighting
 }
 
 // NewHailOverlay creates a hail overlay from a MsgHail and optional context.
@@ -38,12 +56,18 @@ func NewHailOverlay(msg MsgHail, responseCh chan<- string) *HailOverlay {
 	// that start with "- " (a common pattern in discovery options).
 	options := extractOptions(msg.Discovery.Detail)
 
+	// Critical discovery kinds get visually distinct styling.
+	isCritical := msg.Discovery.Kind == fabric.DiscoveryMissingDependency ||
+		msg.Discovery.Kind == "blocker" ||
+		msg.Discovery.Kind == "max_cycles_reached"
+
 	return &HailOverlay{
 		PhaseID:    msg.PhaseID,
 		Discovery:  msg.Discovery,
 		Options:    options,
 		Input:      ti,
 		ResponseCh: responseCh,
+		IsCritical: isCritical,
 	}
 }
 
@@ -108,8 +132,13 @@ func (h HailOverlay) View(width, _ int) string {
 		overlayWidth = 30
 	}
 
-	// Header.
-	header := styleHailHeader.Render("⚠  HAIL")
+	// Header — critical hails get a more urgent indicator.
+	var header string
+	if h.IsCritical {
+		header = styleHailHeaderCritical.Render("🔴  CRITICAL HAIL")
+	} else {
+		header = styleHailHeader.Render("⚠  HAIL")
+	}
 	b.WriteString(header)
 	b.WriteString("\n\n")
 
@@ -149,7 +178,11 @@ func (h HailOverlay) View(width, _ int) string {
 	// Text input.
 	b.WriteString(h.Input.View())
 
-	return styleHailOverlay.Width(overlayWidth).Render(b.String())
+	overlayStyle := styleHailOverlay
+	if h.IsCritical {
+		overlayStyle = styleHailOverlayCritical
+	}
+	return overlayStyle.Width(overlayWidth).Render(b.String())
 }
 
 // stripOptionLines removes lines starting with "- " from the detail text,

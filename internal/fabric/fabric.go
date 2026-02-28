@@ -82,6 +82,7 @@ type Entanglement struct {
 	Name      string    `json:"name"`
 	Signature string    `json:"signature"`
 	Package   string    `json:"package"`
+	File      string    `json:"file,omitempty"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -189,6 +190,10 @@ type Fabric interface {
 
 	// PurgeAll removes all state from the fabric (all tables).
 	PurgeAll(ctx context.Context) error
+
+	// PurgeFulfilledEntanglements removes entanglements with status 'fulfilled'.
+	// Disputed and pending entanglements are preserved for human review.
+	PurgeFulfilledEntanglements(ctx context.Context) error
 
 	// Close releases database resources.
 	Close() error

@@ -1,0 +1,35 @@
+[nebula]
+name = "docs-onboarding"
+description = "Update README and project docs to reflect current state so a new user can follow them to onboard"
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["quasar", "docs"]
+
+[execution]
+max_workers = 9
+max_review_cycles = 3
+max_budget_usd = 15.0
+model = ""
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "A new user can clone the repo, read the README, and successfully build and use Quasar",
+    "All documented commands, flags, and project structure match the actual codebase",
+    "Advanced features (Fabric, Telemetry, TUI) are introduced at a useful level without overwhelming newcomers",
+]
+constraints = [
+    "Follow existing README tone and formatting conventions",
+    "Keep README concise — link to separate docs for deep dives rather than bloating the README",
+    "Do not remove or restructure content that is already accurate",
+    "Do not add emoji to docs",
+    "Preserve the ASCII art banner at the top of the README",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

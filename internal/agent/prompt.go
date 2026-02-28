@@ -50,14 +50,24 @@ RULES:
 
 // PromptOpts controls optional sections appended to the agent system prompt.
 type PromptOpts struct {
-	FabricEnabled bool   // When true, the fabric protocol block is appended.
-	TaskID        string // Injected as QUASAR_TASK_ID context when non-empty.
+	FabricEnabled  bool   // When true, the fabric protocol block is appended.
+	TaskID         string // Injected as QUASAR_TASK_ID context when non-empty.
+	ProjectContext string // Deterministic project snapshot prepended for prompt caching.
 }
 
 // BuildSystemPrompt constructs the full system prompt for an agent by
 // combining the base prompt with optional sections based on opts.
+// The ordering is: [ProjectContext] → [base prompt] → [fabric protocol].
+// Project context is placed first because it is stable across all invocations,
+// maximizing Anthropic prompt cache hit rates.
 func BuildSystemPrompt(basePrompt string, opts PromptOpts) string {
 	var b strings.Builder
+
+	if opts.ProjectContext != "" {
+		b.WriteString(opts.ProjectContext)
+		b.WriteString("\n\n---\n\n")
+	}
+
 	b.WriteString(basePrompt)
 
 	if opts.FabricEnabled {

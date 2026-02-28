@@ -464,6 +464,14 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		wg.executePhase(c, phaseID, waveNumber)
 	})
 
+	// Purge fulfilled entanglements now that the nebula is complete.
+	// Disputed/pending entanglements are preserved for human review.
+	if wg.Fabric != nil {
+		if purgeErr := wg.Fabric.PurgeFulfilledEntanglements(ctx); purgeErr != nil {
+			fmt.Fprintf(wg.logger(), "warning: failed to purge fulfilled entanglements: %v\n", purgeErr)
+		}
+	}
+
 	wg.mu.Lock()
 	results := wg.results
 	wg.mu.Unlock()

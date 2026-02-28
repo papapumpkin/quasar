@@ -274,23 +274,24 @@ func (r *PostCompletionResult) Summary() string {
 		fmt.Fprintf(&b, "Pushed to origin/%s", r.PushBranch)
 	}
 	b.WriteString("\n")
-	branch := r.CheckoutBranch
-	if branch == "" {
-		branch = "default branch"
-	}
-	if r.CheckoutErr != nil {
-		fmt.Fprintf(&b, "Checkout %s failed: %v", branch, r.CheckoutErr)
+	if r.CheckoutBranch == "" {
+		// Checkout was skipped (incomplete nebula — staying on branch).
+		fmt.Fprintf(&b, "Staying on %s", r.PushBranch)
+	} else if r.CheckoutErr != nil {
+		fmt.Fprintf(&b, "Checkout %s failed: %v", r.CheckoutBranch, r.CheckoutErr)
 	} else {
-		fmt.Fprintf(&b, "Checked out %s", branch)
+		fmt.Fprintf(&b, "Checked out %s", r.CheckoutBranch)
 	}
 	return b.String()
 }
 
 // PostCompletion runs the post-nebula git workflow: commit any remaining
-// changes, push the branch to origin with --set-upstream, and checkout the
-// default branch. Errors are captured in the result, not returned, so the
-// caller can display them without aborting.
-func PostCompletion(ctx context.Context, dir, branch string) *PostCompletionResult {
+// changes, push the branch to origin with --set-upstream, and optionally
+// checkout the default branch. When completed is false (nebula failed or
+// is still in-progress), the checkout is skipped so the working tree stays
+// on the nebula branch for easy re-runs. Errors are captured in the result,
+// not returned, so the caller can display them without aborting.
+func PostCompletion(ctx context.Context, dir, branch string, completed bool) *PostCompletionResult {
 	result := &PostCompletionResult{PushBranch: branch}
 
 	// Stage and commit any remaining uncommitted changes.
@@ -307,14 +308,18 @@ func PostCompletion(ctx context.Context, dir, branch string) *PostCompletionResu
 		result.PushErr = fmt.Errorf("%w: %s", err, strings.TrimSpace(pushStderr.String()))
 	}
 
-	// Detect the default branch and checkout.
-	defaultBranch := detectDefaultBranch(ctx, dir)
-	result.CheckoutBranch = defaultBranch
-	checkoutCmd := exec.CommandContext(ctx, "git", "-C", dir, "checkout", defaultBranch)
-	var checkoutStderr bytes.Buffer
-	checkoutCmd.Stderr = &checkoutStderr
-	if err := checkoutCmd.Run(); err != nil {
-		result.CheckoutErr = fmt.Errorf("%w: %s", err, strings.TrimSpace(checkoutStderr.String()))
+	// Only checkout the default branch when the nebula completed
+	// successfully. For failed/in-progress nebulas, stay on the nebula
+	// branch so re-runs don't require a branch switch.
+	if completed {
+		defaultBranch := detectDefaultBranch(ctx, dir)
+		result.CheckoutBranch = defaultBranch
+		checkoutCmd := exec.CommandContext(ctx, "git", "-C", dir, "checkout", defaultBranch)
+		var checkoutStderr bytes.Buffer
+		checkoutCmd.Stderr = &checkoutStderr
+		if err := checkoutCmd.Run(); err != nil {
+			result.CheckoutErr = fmt.Errorf("%w: %s", err, strings.TrimSpace(checkoutStderr.String()))
+		}
 	}
 
 	return result
