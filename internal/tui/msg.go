@@ -236,6 +236,16 @@ type MsgPhaseRefactorApplied struct {
 	PhaseID string
 }
 
+// MsgHealingAttempt is sent when the auto-healing pipeline activates for a
+// failed phase. It provides context for the TUI to render a distinct
+// warning-colored line (e.g., "⚕ Healing phase-2 (max_cycles) → heal-phase-2").
+type MsgHealingAttempt struct {
+	FailedPhaseID    string
+	FailureKind      string
+	RemediationID    string
+	RemediationTitle string
+}
+
 // MsgPhaseHotAdded signals that a new phase was dynamically inserted into
 // the running nebula DAG.
 type MsgPhaseHotAdded struct {

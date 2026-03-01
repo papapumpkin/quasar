@@ -50,6 +50,55 @@ type FailureDiagnosis struct {
 	FilterName    string   // non-empty only for FailureKindFilter
 	FilterOutput  string   // the failing filter's output
 	Findings      []string // reviewer findings from the final cycle
+	PartialWork   *PartialWork
+}
+
+// PartialWork captures the state of a phase's progress at the point of failure.
+// It is injected into the remediation phase's coder prompt so the agent can
+// build on existing work rather than starting from scratch.
+type PartialWork struct {
+	PhaseID       string
+	CommitSHAs    []string // one SHA per completed cycle
+	BaseCommitSHA string   // HEAD before the phase started
+	FilesTouched  []string // files modified across all commits (extracted via git diff)
+	CyclesUsed    int
+	LastFindings  []string // final cycle's reviewer findings (the unresolved objections)
+}
+
+// GitDiffLister lists files changed between two commits.
+type GitDiffLister interface {
+	DiffFileList(ctx context.Context, base, head string) ([]string, error)
+}
+
+// BuildPartialWork extracts a PartialWork snapshot from a PhaseRunnerResult.
+// The filesTouched list is computed by diffing BaseCommitSHA against the last
+// CycleCommit SHA via the provided GitDiffLister.
+//
+// When result is nil or BaseCommitSHA is empty (no commits made), returns a
+// PartialWork with empty FilesTouched.
+func BuildPartialWork(ctx context.Context, result *PhaseRunnerResult, findings []string, git GitDiffLister) (*PartialWork, error) {
+	if result == nil {
+		return &PartialWork{}, nil
+	}
+
+	pw := &PartialWork{
+		CommitSHAs:    result.CycleCommits,
+		BaseCommitSHA: result.BaseCommitSHA,
+		CyclesUsed:    result.CyclesUsed,
+		LastFindings:  findings,
+	}
+
+	// Compute files touched by diffing base against the final commit.
+	if pw.BaseCommitSHA != "" && len(pw.CommitSHAs) > 0 && git != nil {
+		head := pw.CommitSHAs[len(pw.CommitSHAs)-1]
+		files, err := git.DiffFileList(ctx, pw.BaseCommitSHA, head)
+		if err != nil {
+			return pw, fmt.Errorf("listing files touched: %w", err)
+		}
+		pw.FilesTouched = files
+	}
+
+	return pw, nil
 }
 
 // FailureContext carries the cycle-state fields needed for failure analysis.
@@ -292,6 +341,35 @@ func BuildRemediationRequest(diag *FailureDiagnosis, neb *Nebula, failedSpec *Ph
 		Nebula:     neb,
 		PhaseID:    diag.PhaseID,
 	}
+}
+
+// HealingSummary returns a formatted report of all healing attempts during the run.
+// attempts maps original failed phase IDs to the number of healing attempts;
+// results maps remediation phase IDs to whether they succeeded.
+// Returns an empty string if no healing was attempted.
+func HealingSummary(attempts map[string]int, results map[string]bool) string {
+	if len(attempts) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("## Healing Summary\n\n")
+	fmt.Fprintf(&b, "| Failed Phase | Attempts | Remediation | Outcome |\n")
+	fmt.Fprintf(&b, "|---|---|---|---|\n")
+
+	for phaseID, count := range attempts {
+		remID := "heal-" + phaseID
+		outcome := "pending"
+		if success, ok := results[remID]; ok {
+			if success {
+				outcome = "success"
+			} else {
+				outcome = "failed"
+			}
+		}
+		fmt.Fprintf(&b, "| %s | %d | %s | %s |\n", phaseID, count, remID, outcome)
+	}
+	return b.String()
 }
 
 // FinalizeRemediationSpec post-processes an ArchitectResult for remediation,

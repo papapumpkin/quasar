@@ -3,6 +3,8 @@ package nebula
 import (
 	"sync"
 	"time"
+
+	"github.com/papapumpkin/quasar/internal/telemetry"
 )
 
 // PhaseMetrics captures runtime measurements for a single phase execution.
@@ -47,6 +49,7 @@ type Metrics struct {
 	TotalRestarts  int
 	Phases         []PhaseMetrics
 	Waves          []WaveMetrics
+	Telemetry      *telemetry.Emitter // nil = no telemetry
 	mu             sync.Mutex
 }
 

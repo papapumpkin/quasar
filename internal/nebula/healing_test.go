@@ -948,6 +948,154 @@ func TestInsertRemediationPhase_FailedNodeNotFound(t *testing.T) {
 	}
 }
 
+func TestHealingSummary_Empty(t *testing.T) {
+	t.Parallel()
+
+	got := HealingSummary(nil, nil)
+	if got != "" {
+		t.Errorf("expected empty string for nil attempts, got %q", got)
+	}
+
+	got = HealingSummary(map[string]int{}, map[string]bool{})
+	if got != "" {
+		t.Errorf("expected empty string for empty attempts, got %q", got)
+	}
+}
+
+func TestHealingSummary_SingleSuccess(t *testing.T) {
+	t.Parallel()
+
+	attempts := map[string]int{"phase-1": 1}
+	results := map[string]bool{"heal-phase-1": true}
+
+	got := HealingSummary(attempts, results)
+
+	if !strings.Contains(got, "## Healing Summary") {
+		t.Error("missing header")
+	}
+	if !strings.Contains(got, "phase-1") {
+		t.Error("missing phase ID")
+	}
+	if !strings.Contains(got, "heal-phase-1") {
+		t.Error("missing remediation ID")
+	}
+	if !strings.Contains(got, "success") {
+		t.Error("missing success outcome")
+	}
+	if !strings.Contains(got, "| 1 |") {
+		t.Error("missing attempt count")
+	}
+}
+
+func TestHealingSummary_SingleFailure(t *testing.T) {
+	t.Parallel()
+
+	attempts := map[string]int{"phase-2": 1}
+	results := map[string]bool{"heal-phase-2": false}
+
+	got := HealingSummary(attempts, results)
+
+	if !strings.Contains(got, "failed") {
+		t.Error("expected 'failed' outcome")
+	}
+}
+
+func TestHealingSummary_Pending(t *testing.T) {
+	t.Parallel()
+
+	attempts := map[string]int{"phase-3": 1}
+	results := map[string]bool{} // no result yet
+
+	got := HealingSummary(attempts, results)
+
+	if !strings.Contains(got, "pending") {
+		t.Error("expected 'pending' outcome when no result available")
+	}
+}
+
+func TestHealingSummary_MultiplePhases(t *testing.T) {
+	t.Parallel()
+
+	attempts := map[string]int{
+		"phase-a": 1,
+		"phase-b": 2,
+	}
+	results := map[string]bool{
+		"heal-phase-a": true,
+		"heal-phase-b": false,
+	}
+
+	got := HealingSummary(attempts, results)
+
+	if !strings.Contains(got, "phase-a") {
+		t.Error("missing phase-a")
+	}
+	if !strings.Contains(got, "phase-b") {
+		t.Error("missing phase-b")
+	}
+	if !strings.Contains(got, "| 2 |") {
+		t.Error("missing attempt count 2 for phase-b")
+	}
+}
+
+func TestHealingSkipReason(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		policy   HealingPolicy
+		diag     *FailureDiagnosis
+		attempts int
+		want     string
+	}{
+		{
+			name:     "PolicyDisabled",
+			policy:   HealingPolicy{Enabled: false, MaxAttempts: 1, BudgetReserve: 5.0},
+			diag:     &FailureDiagnosis{Healable: true},
+			attempts: 0,
+			want:     "policy_disabled",
+		},
+		{
+			name:     "Unhealable",
+			policy:   HealingPolicy{Enabled: true, MaxAttempts: 1, BudgetReserve: 5.0},
+			diag:     &FailureDiagnosis{Healable: false},
+			attempts: 0,
+			want:     "unhealable",
+		},
+		{
+			name:     "NilDiagnosis",
+			policy:   HealingPolicy{Enabled: true, MaxAttempts: 1, BudgetReserve: 5.0},
+			diag:     nil,
+			attempts: 0,
+			want:     "unhealable",
+		},
+		{
+			name:     "MaxAttempts",
+			policy:   HealingPolicy{Enabled: true, MaxAttempts: 1, BudgetReserve: 5.0},
+			diag:     &FailureDiagnosis{Healable: true},
+			attempts: 1,
+			want:     "max_attempts",
+		},
+		{
+			name:     "NoBudget",
+			policy:   HealingPolicy{Enabled: true, MaxAttempts: 1, BudgetReserve: 0},
+			diag:     &FailureDiagnosis{Healable: true},
+			attempts: 0,
+			want:     "no_budget",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := healingSkipReason(tt.policy, tt.diag, tt.attempts)
+			if got != tt.want {
+				t.Errorf("healingSkipReason() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTruncate(t *testing.T) {
 	t.Parallel()
 

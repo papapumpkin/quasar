@@ -1,13 +1,19 @@
 version = 1
 nebula_name = 'auto-healing'
-total_cost_usd = 5.696930999999999
+total_cost_usd = 12.80702775
 
 [phases]
 [phases.dag-insertion]
 bead_id = 'quasar-tvyv'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-01T00:13:42.36618-05:00
-updated_at = 2026-03-01T00:32:25.282492-05:00
+updated_at = 2026-03-01T00:46:24.479367-05:00
+
+[phases.dag-insertion.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean fixes for dead code removal and a helpful UX warning log for the healing subsystem; all prior findings addressed appropriately.'
 
 [phases.failure-analyzer]
 bead_id = 'quasar-c79w'
@@ -23,15 +29,15 @@ summary = 'Failure analyzer and healing policy implementation is well-structured
 
 [phases.observability]
 bead_id = 'quasar-k1xh'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-01T00:13:44.007851-05:00
-updated_at = 2026-03-01T00:13:44.007851-05:00
+updated_at = 2026-03-01T00:46:24.496044-05:00
 
 [phases.partial-completion]
 bead_id = 'quasar-q0ic'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-01T00:13:43.241475-05:00
-updated_at = 2026-03-01T00:13:43.241475-05:00
+updated_at = 2026-03-01T00:46:24.495709-05:00
 
 [phases.remediation-architect]
 bead_id = 'quasar-1ysq'

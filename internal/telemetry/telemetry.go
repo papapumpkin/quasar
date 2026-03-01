@@ -27,6 +27,13 @@ const (
 	KindFilterResult       = "filter_result"
 	KindCycleStart         = "cycle_start"
 	KindCycleDone          = "cycle_done"
+
+	// Healing pipeline lifecycle events.
+	KindHealingStart   = "healing.start"   // emitted when failure analysis begins
+	KindHealingSkipped = "healing.skipped" // emitted when diagnosis is unhealable or policy rejects
+	KindHealingPlan    = "healing.plan"    // emitted when architect returns a remediation phase
+	KindHealingInsert  = "healing.insert"  // emitted when remediation phase is hot-inserted into DAG
+	KindHealingDone    = "healing.done"    // emitted when remediation phase completes (success or failure)
 )
 
 // Event represents a single telemetry record. Each event carries a timestamp,

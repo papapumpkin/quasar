@@ -4,10 +4,44 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/fabric"
+	"github.com/papapumpkin/quasar/internal/telemetry"
 )
+
+// emitHealing is a nil-safe helper that emits a healing telemetry event.
+// It is a no-op when wg.Metrics or wg.Metrics.Telemetry is nil.
+func (wg *WorkerGroup) emitHealing(kind string, taskID string, data any) {
+	if wg.Metrics == nil || wg.Metrics.Telemetry == nil {
+		return
+	}
+	_ = wg.Metrics.Telemetry.Emit(telemetry.Event{
+		Timestamp: time.Now(),
+		Kind:      kind,
+		TaskID:    taskID,
+		Data:      data,
+	})
+}
+
+// healingSkipReason returns a human-readable reason string for why healing
+// was skipped, suitable for telemetry and logging.
+func healingSkipReason(policy HealingPolicy, diag *FailureDiagnosis, attempts int) string {
+	if !policy.Enabled {
+		return "policy_disabled"
+	}
+	if diag == nil || !diag.Healable {
+		return "unhealable"
+	}
+	if attempts >= policy.MaxAttempts {
+		return "max_attempts"
+	}
+	if policy.BudgetReserve <= 0 {
+		return "no_budget"
+	}
+	return "unknown"
+}
 
 // attemptHealing runs the healing pipeline for a failed phase: analyzes the
 // failure, invokes the architect for a remediation spec, inserts the
@@ -26,19 +60,41 @@ func (wg *WorkerGroup) attemptHealing(ctx context.Context, phaseID string, err e
 	}
 	diag := AnalyzeFailure(phaseID, err, result, fctx)
 
+	// Emit healing.start telemetry.
+	wg.emitHealing(telemetry.KindHealingStart, phaseID, map[string]any{
+		"phase_id":     phaseID,
+		"failure_kind": string(diag.Kind),
+		"cycles_used":  diag.CyclesUsed,
+		"budget_spent": diag.BudgetSpent,
+	})
+
 	// Check healing eligibility under lock.
 	wg.mu.Lock()
 	attempts := wg.healAttempts[phaseID]
 	canHeal := wg.healingPolicy.CanHeal(diag, attempts)
 	if !canHeal {
+		skipReason := healingSkipReason(wg.healingPolicy, diag, attempts)
 		wg.mu.Unlock()
-		fmt.Fprintf(wg.logger(), "healing: phase %q not healable (kind=%s, attempts=%d)\n", phaseID, diag.Kind, attempts)
+
+		// Emit healing.skipped telemetry.
+		wg.emitHealing(telemetry.KindHealingSkipped, phaseID, map[string]any{
+			"phase_id": phaseID,
+			"reason":   skipReason,
+		})
+		fmt.Fprintf(wg.logger(), "healing: phase %q not healable (kind=%s, attempts=%d, reason=%s)\n", phaseID, diag.Kind, attempts, skipReason)
 		return
 	}
 	wg.healAttempts[phaseID]++
 	wg.mu.Unlock()
 
 	fmt.Fprintf(wg.logger(), "healing: attempting remediation for phase %q (kind=%s)\n", phaseID, diag.Kind)
+
+	// Set fabric state to "healing" before architect invocation.
+	if wg.Fabric != nil {
+		if stateErr := wg.Fabric.SetPhaseState(ctx, phaseID, fabric.StateHealing); stateErr != nil {
+			fmt.Fprintf(wg.logger(), "healing: failed to set fabric healing state for %q: %v\n", phaseID, stateErr)
+		}
+	}
 
 	// Snapshot nebula and locate the failed spec.
 	wg.mu.Lock()
@@ -68,6 +124,13 @@ func (wg *WorkerGroup) attemptHealing(ctx context.Context, phaseID string, err e
 	// Finalize the remediation spec.
 	archResult = FinalizeRemediationSpec(archResult, diag, failedSpec)
 	remSpec := &archResult.PhaseSpec
+
+	// Emit healing.plan telemetry.
+	wg.emitHealing(telemetry.KindHealingPlan, phaseID, map[string]any{
+		"phase_id":       phaseID,
+		"remediation_id": remSpec.ID,
+		"title":          remSpec.Title,
+	})
 
 	// Insert into live DAG under lock.
 	wg.mu.Lock()
@@ -105,6 +168,13 @@ func (wg *WorkerGroup) attemptHealing(ctx context.Context, phaseID string, err e
 		}
 	}
 	wg.mu.Unlock()
+
+	// Emit healing.insert telemetry.
+	wg.emitHealing(telemetry.KindHealingInsert, phaseID, map[string]any{
+		"phase_id":           phaseID,
+		"remediation_id":     remSpec.ID,
+		"rewired_dependents": rewired,
+	})
 
 	// Create a bead for the remediation phase (outside lock to avoid blocking).
 	beadID := ""
@@ -148,11 +218,11 @@ func (wg *WorkerGroup) attemptHealing(ctx context.Context, phaseID string, err e
 		wg.OnHotAdd(remSpec.ID, remSpec.Title, remSpec.DependsOn)
 	}
 
-	// Post a hail for observability.
+	// Send TUI healing attempt message.
 	if wg.OnHail != nil {
 		wg.OnHail(phaseID, fabric.Discovery{
 			Kind:   "healing",
-			Detail: fmt.Sprintf("Phase %q failed (%s); remediation phase %q inserted, rewiring dependents: %s", phaseID, diag.Kind, remSpec.ID, strings.Join(rewired, ", ")),
+			Detail: fmt.Sprintf("Auto-healing activated for %s (%s). Remediation phase: %s — %s", phaseID, diag.Kind, remSpec.ID, remSpec.Title),
 		})
 	}
 
