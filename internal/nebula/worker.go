@@ -231,6 +231,9 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	// Initialize healing state.
 	wg.healingPolicy = wg.Nebula.Manifest.Execution.HealingPolicy()
 	wg.healAttempts = make(map[string]int)
+	if wg.healingPolicy.Enabled && wg.healingPolicy.BudgetReserve <= 0 {
+		fmt.Fprintf(wg.logger(), "warning: healing is enabled but healing_budget_reserve is zero; healing will be effectively disabled\n")
+	}
 
 	// Construct collaborators.
 	wg.tracker = NewPhaseTracker(wg.Nebula.Phases, wg.State)
