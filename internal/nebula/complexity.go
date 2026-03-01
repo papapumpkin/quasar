@@ -6,10 +6,10 @@ import (
 
 // Signal weights for the composite complexity score.
 const (
-	weightScope  = 0.25
-	weightBody   = 0.35
-	weightDepth  = 0.25
-	weightType   = 0.15
+	weightScope = 0.25
+	weightBody  = 0.35
+	weightDepth = 0.25
+	weightType  = 0.15
 )
 
 // Saturation caps for each signal dimension.
