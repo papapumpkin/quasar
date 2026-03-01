@@ -689,7 +689,7 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	if relayBlock != "" {
 		prompt = relayBlock + "\n" + prompt
 	}
-	prompt = l.composeContextPrefix(ctx, prompt)
+	prompt = l.composeVolatilePrefix(ctx, prompt)
 
 	result, err := l.Invoker.Invoke(ctx, l.coderAgent(perAgentBudget), prompt, l.WorkDir)
 	if err != nil {
@@ -748,7 +748,7 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	if relayBlock != "" {
 		prompt = relayBlock + "\n" + prompt
 	}
-	prompt = l.composeContextPrefix(ctx, prompt)
+	prompt = l.composeVolatilePrefix(ctx, prompt)
 
 	result, err := l.Invoker.Invoke(ctx, l.reviewerAgent(perAgentBudget), prompt, l.WorkDir)
 	if err != nil {
