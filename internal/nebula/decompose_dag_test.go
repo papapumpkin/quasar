@@ -40,13 +40,13 @@ func TestApplyDecomposition(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		nodes       []string   // "id:priority"
-		edges       []string   // "from->to"
-		op          DecomposeOp
-		wantIDs     []string
-		wantErr     string
-		checkGraph  func(t *testing.T, d *dag.DAG)
+		name       string
+		nodes      []string // "id:priority"
+		edges      []string // "from->to"
+		op         DecomposeOp
+		wantIDs    []string
+		wantErr    string
+		checkGraph func(t *testing.T, d *dag.DAG)
 	}{
 		{
 			name:  "simple two sub-phases",
