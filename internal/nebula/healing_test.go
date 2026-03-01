@@ -293,6 +293,110 @@ func TestAnalyzeFailure_ResultOverridesContext(t *testing.T) {
 	}
 }
 
+func TestAnalyzeFailure_ContextCanceledWithStaleFilterFields(t *testing.T) {
+	t.Parallel()
+
+	// When context.Canceled is the error but the FailureContext retains
+	// populated filter fields from a prior cycle, the diagnosis must be
+	// unhealable — not misclassified as a filter failure.
+	fctx := &FailureContext{
+		Cycle:           3,
+		FilterCheckName: "go-vet",
+		FilterOutput:    "vet: stale output from prior cycle",
+	}
+
+	diag := AnalyzeFailure("phase-stale-filter", context.Canceled, nil, fctx)
+
+	if diag.Kind != FailureKindUnhealable {
+		t.Errorf("kind = %q, want %q (context.Canceled must take precedence over stale filter fields)", diag.Kind, FailureKindUnhealable)
+	}
+	if diag.Healable {
+		t.Error("expected healable = false for context.Canceled even with filter fields populated")
+	}
+	if !strings.Contains(diag.Summary, "cancelled") {
+		t.Errorf("summary = %q, expected to contain 'cancelled'", diag.Summary)
+	}
+}
+
+func TestAnalyzeFailure_DeadlineExceededWithStaleFilterFields(t *testing.T) {
+	t.Parallel()
+
+	// Same as above but for DeadlineExceeded.
+	fctx := &FailureContext{
+		Cycle:           2,
+		FilterCheckName: "go-build",
+		FilterOutput:    "build: stale output",
+	}
+
+	diag := AnalyzeFailure("phase-deadline-filter", context.DeadlineExceeded, nil, fctx)
+
+	if diag.Kind != FailureKindUnhealable {
+		t.Errorf("kind = %q, want %q (DeadlineExceeded must take precedence over stale filter fields)", diag.Kind, FailureKindUnhealable)
+	}
+	if diag.Healable {
+		t.Error("expected healable = false for DeadlineExceeded even with filter fields populated")
+	}
+}
+
+func TestAnalyzeFailure_ResultFindingsOverrideContextFindings(t *testing.T) {
+	t.Parallel()
+
+	// When both FailureContext and PhaseRunnerResult have findings,
+	// the result's findings should take precedence (more authoritative).
+	fctx := &FailureContext{
+		Cycle: 5,
+		AllFindings: []DecomposeFinding{
+			{Description: "context finding A"},
+		},
+	}
+	result := &PhaseRunnerResult{
+		CyclesUsed:   5,
+		TotalCostUSD: 4.0,
+		AllFindings: []DecomposeFinding{
+			{Description: "result finding X"},
+			{Description: "result finding Y"},
+		},
+	}
+
+	diag := AnalyzeFailure("phase-findings-override", ErrHealMaxCycles, result, fctx)
+
+	if len(diag.Findings) != 2 {
+		t.Fatalf("findings count = %d, want 2 (from result)", len(diag.Findings))
+	}
+	if diag.Findings[0] != "result finding X" {
+		t.Errorf("findings[0] = %q, want %q", diag.Findings[0], "result finding X")
+	}
+	if diag.Findings[1] != "result finding Y" {
+		t.Errorf("findings[1] = %q, want %q", diag.Findings[1], "result finding Y")
+	}
+}
+
+func TestAnalyzeFailure_ContextFindingsUsedWhenResultHasNone(t *testing.T) {
+	t.Parallel()
+
+	// When result has no findings, context findings should be used.
+	fctx := &FailureContext{
+		Cycle: 5,
+		AllFindings: []DecomposeFinding{
+			{Description: "context finding A"},
+			{Description: "context finding B"},
+		},
+	}
+	result := &PhaseRunnerResult{
+		CyclesUsed:   5,
+		TotalCostUSD: 3.0,
+	}
+
+	diag := AnalyzeFailure("phase-ctx-findings", ErrHealMaxCycles, result, fctx)
+
+	if len(diag.Findings) != 2 {
+		t.Fatalf("findings count = %d, want 2 (from context)", len(diag.Findings))
+	}
+	if diag.Findings[0] != "context finding A" {
+		t.Errorf("findings[0] = %q, want %q", diag.Findings[0], "context finding A")
+	}
+}
+
 func TestAnalyzeFailure_FilterWithoutOutput(t *testing.T) {
 	t.Parallel()
 

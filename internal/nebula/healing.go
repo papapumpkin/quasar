@@ -108,17 +108,29 @@ func AnalyzeFailure(phaseID string, err error, result *PhaseRunnerResult, fctx *
 	}
 
 	// Classify the failure.
+	// Order matters: sentinel errors take precedence over filter-context inspection.
+	// Context cancellation is checked before filter to avoid misclassifying a
+	// cancelled phase that has stale filter fields from a prior cycle.
 	switch {
 	case isMaxCyclesErr(err):
 		diag.Kind = FailureKindMaxCycles
 		diag.Healable = true
 		diag.Summary = "phase exhausted all review cycles without approval"
 		diag.Findings = extractFindingDescriptions(fctx)
+		// Override findings from result if available (more authoritative).
+		if result != nil && len(result.AllFindings) > 0 {
+			diag.Findings = extractDecomposeFindingDescriptions(result.AllFindings)
+		}
 
 	case isBudgetErr(err):
 		diag.Kind = FailureKindBudget
 		diag.Healable = true
 		diag.Summary = "phase exceeded its budget before completing"
+
+	case errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded):
+		diag.Kind = FailureKindUnhealable
+		diag.Healable = false
+		diag.Summary = "phase cancelled or timed out"
 
 	case isFilterFailure(fctx):
 		diag.Kind = FailureKindFilter
@@ -130,11 +142,7 @@ func AnalyzeFailure(phaseID string, err error, result *PhaseRunnerResult, fctx *
 	default:
 		diag.Kind = FailureKindUnhealable
 		diag.Healable = false
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			diag.Summary = "phase cancelled or timed out"
-		} else {
-			diag.Summary = "phase failed with an unrecoverable error"
-		}
+		diag.Summary = "phase failed with an unrecoverable error"
 	}
 
 	return diag
@@ -176,14 +184,25 @@ func extractFindingDescriptions(fctx *FailureContext) []string {
 	if fctx == nil {
 		return nil
 	}
-	findings := make([]string, 0, len(fctx.AllFindings))
-	for _, f := range fctx.AllFindings {
-		findings = append(findings, f.Description)
-	}
-	return findings
+	return extractDecomposeFindingDescriptions(fctx.AllFindings)
 }
 
-// truncate returns s truncated to at most maxLen characters.
+// extractDecomposeFindingDescriptions collects description strings from a slice of DecomposeFinding.
+func extractDecomposeFindingDescriptions(findings []DecomposeFinding) []string {
+	if len(findings) == 0 {
+		return nil
+	}
+	descs := make([]string, 0, len(findings))
+	for _, f := range findings {
+		descs = append(descs, f.Description)
+	}
+	return descs
+}
+
+// truncate returns s truncated to at most maxLen bytes.
+// Note: this operates on byte length and may split a multi-byte UTF-8 character
+// at the boundary. This is acceptable because the inputs are LLM-generated
+// English text that is overwhelmingly ASCII.
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
