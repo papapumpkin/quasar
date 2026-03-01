@@ -499,6 +499,314 @@ func TestCanHeal(t *testing.T) {
 	}
 }
 
+func TestBuildRemediationRequest_MaxCycles(t *testing.T) {
+	t.Parallel()
+
+	diag := &FailureDiagnosis{
+		PhaseID:      "auth-login",
+		Kind:         FailureKindMaxCycles,
+		Healable:     true,
+		Summary:      "phase exhausted all review cycles without approval",
+		CyclesUsed:   5,
+		BudgetSpent:  2.50,
+		LastCoderOut: "implemented auth flow",
+		Findings:     []string{"missing error handling", "test coverage too low"},
+	}
+	neb := &Nebula{
+		Manifest: Manifest{Nebula: Info{Name: "test-nebula"}},
+	}
+	failedSpec := &PhaseSpec{
+		ID:    "auth-login",
+		Title: "Implement Auth Login",
+	}
+
+	req := BuildRemediationRequest(diag, neb, failedSpec)
+
+	if req.Mode != ArchitectModeRemediate {
+		t.Errorf("mode = %q, want %q", req.Mode, ArchitectModeRemediate)
+	}
+	if req.PhaseID != "auth-login" {
+		t.Errorf("phaseID = %q, want %q", req.PhaseID, "auth-login")
+	}
+	if req.Nebula != neb {
+		t.Error("nebula not set on request")
+	}
+
+	// Verify prompt structure.
+	prompt := req.UserPrompt
+	for _, want := range []string{
+		"## Remediation Request",
+		`"Implement Auth Login"`,
+		"auth-login",
+		"max_cycles",
+		"### Failure Summary",
+		"phase exhausted all review cycles without approval",
+		"### Context",
+		"Cycles used: 5",
+		"Budget spent: $2.50",
+		"### Last Coder Output (truncated)",
+		"implemented auth flow",
+		"### Last Reviewer Findings",
+		"- missing error handling",
+		"- test coverage too low",
+		"### Instructions",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt missing %q", want)
+		}
+	}
+}
+
+func TestBuildRemediationRequest_FilterFailure(t *testing.T) {
+	t.Parallel()
+
+	diag := &FailureDiagnosis{
+		PhaseID:      "build-step",
+		Kind:         FailureKindFilter,
+		Healable:     true,
+		Summary:      "phase failed due to persistent filter check failure",
+		CyclesUsed:   3,
+		BudgetSpent:  1.20,
+		FilterName:   "go-vet",
+		FilterOutput: "found suspicious construct",
+	}
+	neb := &Nebula{
+		Manifest: Manifest{Nebula: Info{Name: "test-nebula"}},
+	}
+	failedSpec := &PhaseSpec{
+		ID:    "build-step",
+		Title: "Build Step",
+	}
+
+	req := BuildRemediationRequest(diag, neb, failedSpec)
+	prompt := req.UserPrompt
+
+	for _, want := range []string{
+		"filter_failure",
+		"Failing filter: go-vet",
+		"Filter output:",
+		"found suspicious construct",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt missing %q", want)
+		}
+	}
+}
+
+func TestBuildRemediationRequest_NoCoderOutput(t *testing.T) {
+	t.Parallel()
+
+	diag := &FailureDiagnosis{
+		PhaseID:     "phase-x",
+		Kind:        FailureKindBudget,
+		Summary:     "phase exceeded its budget",
+		BudgetSpent: 10.0,
+	}
+	neb := &Nebula{
+		Manifest: Manifest{Nebula: Info{Name: "test-nebula"}},
+	}
+	failedSpec := &PhaseSpec{ID: "phase-x", Title: "Phase X"}
+
+	req := BuildRemediationRequest(diag, neb, failedSpec)
+	prompt := req.UserPrompt
+
+	if strings.Contains(prompt, "### Last Coder Output") {
+		t.Error("prompt should not contain coder output section when output is empty")
+	}
+	if strings.Contains(prompt, "### Last Reviewer Findings") {
+		t.Error("prompt should not contain findings section when findings are empty")
+	}
+}
+
+func TestBuildRemediationRequest_NoFindings(t *testing.T) {
+	t.Parallel()
+
+	diag := &FailureDiagnosis{
+		PhaseID:      "phase-y",
+		Kind:         FailureKindMaxCycles,
+		Summary:      "exhausted cycles",
+		LastCoderOut: "some output",
+	}
+	neb := &Nebula{
+		Manifest: Manifest{Nebula: Info{Name: "test-nebula"}},
+	}
+	failedSpec := &PhaseSpec{ID: "phase-y", Title: "Phase Y"}
+
+	req := BuildRemediationRequest(diag, neb, failedSpec)
+	prompt := req.UserPrompt
+
+	if strings.Contains(prompt, "### Last Reviewer Findings") {
+		t.Error("prompt should not contain findings section when there are no findings")
+	}
+	if !strings.Contains(prompt, "### Last Coder Output") {
+		t.Error("prompt should contain coder output section")
+	}
+}
+
+func TestFinalizeRemediationSpec_IDPrefix(t *testing.T) {
+	t.Parallel()
+
+	result := &ArchitectResult{
+		PhaseSpec: PhaseSpec{
+			ID:    "original-id",
+			Title: "Generated Fix",
+		},
+	}
+	diag := &FailureDiagnosis{PhaseID: "auth-login"}
+	failedSpec := &PhaseSpec{
+		ID:     "auth-login",
+		Scope:  []string{"internal/auth/**"},
+		Gate:   "review",
+		Labels: []string{"auth"},
+	}
+
+	got := FinalizeRemediationSpec(result, diag, failedSpec)
+
+	if got.PhaseSpec.ID != "heal-auth-login" {
+		t.Errorf("ID = %q, want %q", got.PhaseSpec.ID, "heal-auth-login")
+	}
+}
+
+func TestFinalizeRemediationSpec_ScopeInheritance(t *testing.T) {
+	t.Parallel()
+
+	result := &ArchitectResult{
+		PhaseSpec: PhaseSpec{ID: "temp"},
+	}
+	diag := &FailureDiagnosis{PhaseID: "phase-1"}
+	failedSpec := &PhaseSpec{
+		ID:    "phase-1",
+		Scope: []string{"src/**/*.go", "internal/**"},
+	}
+
+	got := FinalizeRemediationSpec(result, diag, failedSpec)
+
+	if len(got.PhaseSpec.Scope) != 2 {
+		t.Fatalf("scope length = %d, want 2", len(got.PhaseSpec.Scope))
+	}
+	if got.PhaseSpec.Scope[0] != "src/**/*.go" {
+		t.Errorf("scope[0] = %q, want %q", got.PhaseSpec.Scope[0], "src/**/*.go")
+	}
+	if got.PhaseSpec.Scope[1] != "internal/**" {
+		t.Errorf("scope[1] = %q, want %q", got.PhaseSpec.Scope[1], "internal/**")
+	}
+
+	// Verify it's a copy, not a shared reference.
+	failedSpec.Scope[0] = "modified"
+	if got.PhaseSpec.Scope[0] == "modified" {
+		t.Error("scope should be a copy, not a shared reference")
+	}
+}
+
+func TestFinalizeRemediationSpec_EmptyScope(t *testing.T) {
+	t.Parallel()
+
+	result := &ArchitectResult{
+		PhaseSpec: PhaseSpec{ID: "temp", Scope: []string{"existing"}},
+	}
+	diag := &FailureDiagnosis{PhaseID: "phase-1"}
+	failedSpec := &PhaseSpec{ID: "phase-1"}
+
+	got := FinalizeRemediationSpec(result, diag, failedSpec)
+
+	// When failed phase has no scope, the result's existing scope is preserved.
+	if len(got.PhaseSpec.Scope) != 1 || got.PhaseSpec.Scope[0] != "existing" {
+		t.Errorf("scope = %v, want [existing]", got.PhaseSpec.Scope)
+	}
+}
+
+func TestFinalizeRemediationSpec_GateInheritance(t *testing.T) {
+	t.Parallel()
+
+	result := &ArchitectResult{
+		PhaseSpec: PhaseSpec{ID: "temp", Gate: "trust"},
+	}
+	diag := &FailureDiagnosis{PhaseID: "phase-1"}
+	failedSpec := &PhaseSpec{ID: "phase-1", Gate: "approve"}
+
+	got := FinalizeRemediationSpec(result, diag, failedSpec)
+
+	if got.PhaseSpec.Gate != "approve" {
+		t.Errorf("gate = %q, want %q", got.PhaseSpec.Gate, "approve")
+	}
+}
+
+func TestFinalizeRemediationSpec_LabelMerging(t *testing.T) {
+	t.Parallel()
+
+	result := &ArchitectResult{
+		PhaseSpec: PhaseSpec{ID: "temp", Labels: []string{"generated"}},
+	}
+	diag := &FailureDiagnosis{PhaseID: "phase-1"}
+	failedSpec := &PhaseSpec{
+		ID:     "phase-1",
+		Labels: []string{"auth", "critical"},
+	}
+
+	got := FinalizeRemediationSpec(result, diag, failedSpec)
+
+	if len(got.PhaseSpec.Labels) != 3 {
+		t.Fatalf("labels length = %d, want 3", len(got.PhaseSpec.Labels))
+	}
+	wantLabels := []string{"auth", "critical", "auto-healing"}
+	for i, want := range wantLabels {
+		if got.PhaseSpec.Labels[i] != want {
+			t.Errorf("labels[%d] = %q, want %q", i, got.PhaseSpec.Labels[i], want)
+		}
+	}
+
+	// Verify labels are a copy.
+	failedSpec.Labels[0] = "modified"
+	if got.PhaseSpec.Labels[0] == "modified" {
+		t.Error("labels should be a copy, not a shared reference")
+	}
+}
+
+func TestFinalizeRemediationSpec_LabelDedup(t *testing.T) {
+	t.Parallel()
+
+	result := &ArchitectResult{
+		PhaseSpec: PhaseSpec{ID: "temp"},
+	}
+	diag := &FailureDiagnosis{PhaseID: "phase-1"}
+	failedSpec := &PhaseSpec{
+		ID:     "phase-1",
+		Labels: []string{"auto-healing", "existing"},
+	}
+
+	got := FinalizeRemediationSpec(result, diag, failedSpec)
+
+	// "auto-healing" already present, should not be duplicated.
+	count := 0
+	for _, l := range got.PhaseSpec.Labels {
+		if l == "auto-healing" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("auto-healing label appears %d times, want 1", count)
+	}
+}
+
+func TestFinalizeRemediationSpec_EmptyLabels(t *testing.T) {
+	t.Parallel()
+
+	result := &ArchitectResult{
+		PhaseSpec: PhaseSpec{ID: "temp"},
+	}
+	diag := &FailureDiagnosis{PhaseID: "phase-1"}
+	failedSpec := &PhaseSpec{ID: "phase-1"}
+
+	got := FinalizeRemediationSpec(result, diag, failedSpec)
+
+	if len(got.PhaseSpec.Labels) != 1 {
+		t.Fatalf("labels length = %d, want 1", len(got.PhaseSpec.Labels))
+	}
+	if got.PhaseSpec.Labels[0] != "auto-healing" {
+		t.Errorf("labels[0] = %q, want %q", got.PhaseSpec.Labels[0], "auto-healing")
+	}
+}
+
 func TestTruncate(t *testing.T) {
 	t.Parallel()
 

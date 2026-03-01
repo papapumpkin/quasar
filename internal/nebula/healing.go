@@ -3,6 +3,8 @@ package nebula
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 )
 
 // Sentinel errors used by AnalyzeFailure for failure classification.
@@ -208,4 +210,87 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen]
+}
+
+// BuildRemediationRequest constructs an ArchitectRequest from a failure diagnosis.
+// The generated prompt includes the failure kind, summary, last agent outputs,
+// and reviewer findings so the architect can produce a targeted fix phase.
+func BuildRemediationRequest(diag *FailureDiagnosis, neb *Nebula, failedSpec *PhaseSpec) ArchitectRequest {
+	var b strings.Builder
+
+	b.WriteString("## Remediation Request\n\n")
+	fmt.Fprintf(&b, "Phase %q (id: %s) failed with: %s\n\n", failedSpec.Title, diag.PhaseID, diag.Kind)
+
+	b.WriteString("### Failure Summary\n")
+	fmt.Fprintf(&b, "%s\n\n", diag.Summary)
+
+	b.WriteString("### Context\n")
+	fmt.Fprintf(&b, "- Cycles used: %d\n", diag.CyclesUsed)
+	fmt.Fprintf(&b, "- Budget spent: $%.2f\n", diag.BudgetSpent)
+
+	if diag.Kind == FailureKindFilter {
+		fmt.Fprintf(&b, "- Failing filter: %s\n", diag.FilterName)
+		b.WriteString("- Filter output:\n")
+		fmt.Fprintf(&b, "%s\n", diag.FilterOutput)
+	}
+	b.WriteString("\n")
+
+	if diag.LastCoderOut != "" {
+		b.WriteString("### Last Coder Output (truncated)\n")
+		fmt.Fprintf(&b, "%s\n\n", diag.LastCoderOut)
+	}
+
+	if len(diag.Findings) > 0 {
+		b.WriteString("### Last Reviewer Findings\n")
+		for _, f := range diag.Findings {
+			fmt.Fprintf(&b, "- %s\n", f)
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("### Instructions\n")
+	b.WriteString("Generate a remediation phase that:\n")
+	b.WriteString("1. Addresses the root cause identified above\n")
+	b.WriteString("2. Builds on the partial work already committed by the failed phase\n")
+	b.WriteString("3. Has a narrower scope than the original phase\n")
+	b.WriteString("4. Can complete within fewer cycles and lower budget\n")
+
+	return ArchitectRequest{
+		Mode:       ArchitectModeRemediate,
+		UserPrompt: b.String(),
+		Nebula:     neb,
+		PhaseID:    diag.PhaseID,
+	}
+}
+
+// FinalizeRemediationSpec post-processes an ArchitectResult for remediation,
+// inheriting scope and gate from the failed phase and setting a heal- prefixed ID.
+func FinalizeRemediationSpec(result *ArchitectResult, diag *FailureDiagnosis, failedSpec *PhaseSpec) *ArchitectResult {
+	result.PhaseSpec.ID = "heal-" + diag.PhaseID
+
+	// Inherit file ownership from the failed phase.
+	if len(failedSpec.Scope) > 0 {
+		result.PhaseSpec.Scope = make([]string, len(failedSpec.Scope))
+		copy(result.PhaseSpec.Scope, failedSpec.Scope)
+	}
+
+	// Inherit gate mode from the failed phase.
+	result.PhaseSpec.Gate = failedSpec.Gate
+
+	// Merge labels: start with failed phase's labels, append "auto-healing" if not present.
+	labels := make([]string, len(failedSpec.Labels))
+	copy(labels, failedSpec.Labels)
+	hasHealingLabel := false
+	for _, l := range labels {
+		if l == "auto-healing" {
+			hasHealingLabel = true
+			break
+		}
+	}
+	if !hasHealingLabel {
+		labels = append(labels, "auto-healing")
+	}
+	result.PhaseSpec.Labels = labels
+
+	return result
 }

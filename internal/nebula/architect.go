@@ -24,11 +24,14 @@ const (
 	// ArchitectModeDecompose instructs the architect to split a struggling phase
 	// into 2-3 smaller sub-phases.
 	ArchitectModeDecompose ArchitectMode = "decompose"
+	// ArchitectModeRemediate instructs the architect to generate a remediation
+	// phase that addresses a specific failure diagnosis.
+	ArchitectModeRemediate ArchitectMode = "remediate"
 )
 
 // ArchitectRequest describes what the architect agent should produce.
 type ArchitectRequest struct {
-	Mode       ArchitectMode     // "create", "refactor", "generate", or "decompose"
+	Mode       ArchitectMode     // "create", "refactor", "generate", "decompose", or "remediate"
 	UserPrompt string            // what the user wants
 	Nebula     *Nebula           // current nebula state for context
 	PhaseID    string            // for refactor/decompose: which phase to target
@@ -204,6 +207,19 @@ func buildArchitectPrompt(req ArchitectRequest) (string, error) {
 		b.WriteString("Use sequential numbering for filenames (e.g. 01-setup-auth.md, 02-add-routes.md).\n\n")
 		b.WriteString("Output ALL phases using the PHASE_FILE/END_PHASE_FILE format.\n")
 		b.WriteString("Each phase must have a unique kebab-case `id` and descriptive `title`.\n\n")
+	case ArchitectModeRemediate:
+		b.WriteString("## Task: Generate a Remediation Phase\n\n")
+		b.WriteString("A prior phase has failed and needs a targeted remediation phase.\n")
+		b.WriteString("Partial work from the failed phase has already been committed to disk.\n")
+		b.WriteString("The remediation phase should be narrowly scoped and surgical — it should\n")
+		b.WriteString("address only the specific failure described below, building on the partial\n")
+		b.WriteString("work that already exists.\n\n")
+		fmt.Fprintf(&b, "%s\n\n", req.UserPrompt)
+		b.WriteString("Generate a single remediation phase that:\n")
+		b.WriteString("1. Addresses the root cause identified above\n")
+		b.WriteString("2. Builds on partial work already committed by the failed phase\n")
+		b.WriteString("3. Has a narrower scope than the original phase\n")
+		b.WriteString("4. Can complete within fewer cycles and lower budget\n\n")
 	default:
 		return "", fmt.Errorf("unknown architect mode: %q", req.Mode)
 	}

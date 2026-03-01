@@ -1,5 +1,6 @@
 version = 1
 nebula_name = 'auto-healing'
+total_cost_usd = 3.5003959999999994
 
 [phases]
 [phases.dag-insertion]
@@ -10,9 +11,15 @@ updated_at = 2026-03-01T00:13:42.36618-05:00
 
 [phases.failure-analyzer]
 bead_id = 'quasar-c79w'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-01T00:13:40.773858-05:00
-updated_at = 2026-03-01T00:13:44.081346-05:00
+updated_at = 2026-03-01T00:26:06.296023-05:00
+
+[phases.failure-analyzer.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Failure analyzer and healing policy implementation is well-structured with all prior review findings resolved, comprehensive test coverage (28 tests), and clean separation from the loop package.'
 
 [phases.observability]
 bead_id = 'quasar-k1xh'
@@ -28,6 +35,6 @@ updated_at = 2026-03-01T00:13:43.241475-05:00
 
 [phases.remediation-architect]
 bead_id = 'quasar-1ysq'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-01T00:13:41.520764-05:00
-updated_at = 2026-03-01T00:13:41.520764-05:00
+updated_at = 2026-03-01T00:26:06.306881-05:00
