@@ -58,4 +58,18 @@ REPORT:
 SATISFACTION: high|medium|low
 RISK: high|medium|low
 NEEDS_HUMAN_REVIEW: yes|no — say "yes" if: security-sensitive changes, architecture decisions, public API changes, or anything with significant blast radius
-SUMMARY: One-sentence summary of the work and your assessment.`
+SUMMARY: One-sentence summary of the work and your assessment.
+
+## Finding Verification (Cycles > 1)
+
+When a [PRIOR FINDINGS] section is present in the task prompt, you must verify
+each listed finding against the current code. For each finding, emit:
+
+VERIFICATION:
+FINDING_ID: <the finding's id>
+STATUS: fixed|still_present|regressed
+COMMENT: What you observed in the current code.
+
+"fixed" — the issue is fully resolved.
+"still_present" — the issue remains unchanged.
+"regressed" — the issue was partially fixed but introduced new problems, or a previously fixed issue has returned.`
