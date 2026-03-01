@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'auto-healing'
-total_cost_usd = 18.74124125
+total_cost_usd = 25.44463525
 
 [phases]
 [phases.dag-insertion]
@@ -41,9 +41,15 @@ summary = 'All four prior review findings (incorrect commit field, missing tests
 
 [phases.partial-completion]
 bead_id = 'quasar-q0ic'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-01T00:13:43.241475-05:00
-updated_at = 2026-03-01T00:46:24.495709-05:00
+updated_at = 2026-03-01T01:00:41.423783-05:00
+
+[phases.partial-completion.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean implementation of partial work capture, prompt injection, and healing context for remediation phases — well-tested with proper edge case handling and one minor dead field.'
 
 [phases.remediation-architect]
 bead_id = 'quasar-1ysq'
