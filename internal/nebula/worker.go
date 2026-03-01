@@ -70,6 +70,7 @@ type WorkerGroup struct {
 	blockedTracker  *fabric.BlockedTracker  // nil when Fabric is nil
 	pushbackHandler *fabric.PushbackHandler // nil when Fabric is nil
 	tychoScheduler  *tycho.Scheduler        // nil when Fabric is nil
+	routingCtx      *RoutingContext          // nil when auto-routing is disabled
 }
 
 // logger returns the effective log writer (os.Stderr if Logger is nil).
@@ -260,6 +261,16 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	waves, wavesErr := dagGraph.ComputeWaves()
 	if wavesErr != nil {
 		fmt.Fprintf(wg.logger(), "warning: failed to compute waves: %v\n", wavesErr)
+	}
+
+	// Build routing context for adaptive model selection. When routing is
+	// enabled in the manifest and no blanket model override is set, phases
+	// will be scored for complexity and routed to an appropriate tier.
+	if wg.Nebula.Manifest.Execution.Routing.Enabled {
+		wg.routingCtx = &RoutingContext{
+			Routing: wg.Nebula.Manifest.Execution.Routing,
+			DAG:     dagGraph,
+		}
 	}
 
 	// Always create the Tycho scheduler for DAG resolution. When fabric

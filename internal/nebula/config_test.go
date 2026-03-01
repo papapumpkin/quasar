@@ -3,7 +3,7 @@ package nebula
 import "testing"
 
 func TestResolveExecution_BuiltInDefaults(t *testing.T) {
-	r := ResolveExecution(0, 0, "", nil, nil)
+	r := ResolveExecution(0, 0, "", nil, nil, nil)
 	if r.MaxReviewCycles != DefaultMaxReviewCycles {
 		t.Errorf("expected %d cycles, got %d", DefaultMaxReviewCycles, r.MaxReviewCycles)
 	}
@@ -16,7 +16,7 @@ func TestResolveExecution_BuiltInDefaults(t *testing.T) {
 }
 
 func TestResolveExecution_GlobalOverridesDefaults(t *testing.T) {
-	r := ResolveExecution(10, 20.0, "claude-sonnet", nil, nil)
+	r := ResolveExecution(10, 20.0, "claude-sonnet", nil, nil, nil)
 	if r.MaxReviewCycles != 10 {
 		t.Errorf("expected 10 cycles, got %d", r.MaxReviewCycles)
 	}
@@ -30,7 +30,7 @@ func TestResolveExecution_GlobalOverridesDefaults(t *testing.T) {
 
 func TestResolveExecution_NebulaOverridesGlobal(t *testing.T) {
 	neb := &Execution{MaxReviewCycles: 5, MaxBudgetUSD: 8.0, Model: "claude-opus"}
-	r := ResolveExecution(10, 20.0, "claude-sonnet", neb, nil)
+	r := ResolveExecution(10, 20.0, "claude-sonnet", neb, nil, nil)
 	if r.MaxReviewCycles != 5 {
 		t.Errorf("expected 5 cycles, got %d", r.MaxReviewCycles)
 	}
@@ -45,7 +45,7 @@ func TestResolveExecution_NebulaOverridesGlobal(t *testing.T) {
 func TestResolveExecution_PhaseOverridesNebula(t *testing.T) {
 	neb := &Execution{MaxReviewCycles: 5, MaxBudgetUSD: 8.0, Model: "claude-opus"}
 	phase := &PhaseSpec{MaxReviewCycles: 7, MaxBudgetUSD: 15.0, Model: "claude-haiku"}
-	r := ResolveExecution(10, 20.0, "claude-sonnet", neb, phase)
+	r := ResolveExecution(10, 20.0, "claude-sonnet", neb, phase, nil)
 	if r.MaxReviewCycles != 7 {
 		t.Errorf("expected 7 cycles, got %d", r.MaxReviewCycles)
 	}
@@ -61,7 +61,7 @@ func TestResolveExecution_PartialOverrides(t *testing.T) {
 	// Nebula sets cycles, phase sets budget, global sets model.
 	neb := &Execution{MaxReviewCycles: 5}
 	phase := &PhaseSpec{MaxBudgetUSD: 12.0}
-	r := ResolveExecution(0, 0, "claude-sonnet", neb, phase)
+	r := ResolveExecution(0, 0, "claude-sonnet", neb, phase, nil)
 	if r.MaxReviewCycles != 5 {
 		t.Errorf("expected 5 cycles from nebula, got %d", r.MaxReviewCycles)
 	}
@@ -76,7 +76,7 @@ func TestResolveExecution_PartialOverrides(t *testing.T) {
 func TestResolveExecution_ZeroPhaseDoesNotOverride(t *testing.T) {
 	neb := &Execution{MaxReviewCycles: 5, MaxBudgetUSD: 8.0}
 	phase := &PhaseSpec{MaxReviewCycles: 0, MaxBudgetUSD: 0}
-	r := ResolveExecution(0, 0, "", neb, phase)
+	r := ResolveExecution(0, 0, "", neb, phase, nil)
 	if r.MaxReviewCycles != 5 {
 		t.Errorf("zero phase cycles should not override nebula, got %d", r.MaxReviewCycles)
 	}
