@@ -9,6 +9,7 @@ type ResolvedExecution struct {
 	Model           string
 	RoutedTier      string  // Non-empty when auto-routing selected the model.
 	ComplexityScore float64 // Zero when auto-routing was not applied.
+	AutoDecompose   bool    // true if struggle detection + auto-decomposition is enabled for this phase.
 }
 
 // RoutingContext carries the optional data needed for adaptive model routing.
@@ -86,6 +87,20 @@ func ResolveExecution(globalCycles int, globalBudget float64, globalModel string
 		r.Model = tier.Model
 		r.RoutedTier = tier.Name
 		r.ComplexityScore = result.Score
+	}
+
+	// Resolve auto-decomposition: manifest default → phase override → decomposed guard.
+	if neb != nil {
+		r.AutoDecompose = neb.AutoDecompose
+	}
+	if phase != nil {
+		if phase.AutoDecompose != nil {
+			r.AutoDecompose = *phase.AutoDecompose
+		}
+		// Phases produced by decomposition must not be decomposed again.
+		if phase.Decomposed {
+			r.AutoDecompose = false
+		}
 	}
 
 	return r

@@ -38,6 +38,15 @@ func (a *loopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, pha
 	}
 	a.loop.CommitSummary = phaseTitle
 
+	// Enable struggle detection when auto-decomposition is active.
+	if exec.AutoDecompose {
+		cfg := loop.DefaultStruggleConfig()
+		cfg.Enabled = true
+		a.loop.StruggleConfig = cfg
+	} else {
+		a.loop.StruggleConfig = loop.StruggleConfig{} // disabled
+	}
+
 	result, err := a.loop.RunExistingTask(ctx, beadID, phaseDescription)
 	if err != nil {
 		if result != nil {
@@ -104,6 +113,13 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 	}
 	if exec.Model != "" {
 		l.Model = exec.Model
+	}
+
+	// Enable struggle detection when auto-decomposition is active.
+	if exec.AutoDecompose {
+		cfg := loop.DefaultStruggleConfig()
+		cfg.Enabled = true
+		l.StruggleConfig = cfg
 	}
 
 	result, err := l.RunExistingTask(ctx, beadID, phaseDescription)

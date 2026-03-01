@@ -14,8 +14,8 @@ type PhaseRunnerResult struct {
 	TotalCostUSD   float64
 	CyclesUsed     int
 	Report         *agent.ReviewReport
-	BaseCommitSHA  string // HEAD at start of the phase
-	FinalCommitSHA string // last cycle's sealed SHA (or current HEAD as fallback)
+	BaseCommitSHA  string             // HEAD at start of the phase
+	FinalCommitSHA string             // last cycle's sealed SHA (or current HEAD as fallback)
 	Decompose      bool               // true if the loop exited due to a struggle signal
 	StruggleReason string             // human-readable reason from StruggleSignal.Reason
 	AllFindings    []DecomposeFinding // accumulated findings at time of decomposition

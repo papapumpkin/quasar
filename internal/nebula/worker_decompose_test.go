@@ -8,11 +8,11 @@ func TestShouldDecompose(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		phase          *PhaseSpec
-		invokerSet     bool
-		manifestAuto   bool
-		want           bool
+		name         string
+		phase        *PhaseSpec
+		invokerSet   bool
+		manifestAuto bool
+		want         bool
 	}{
 		{
 			name:         "EnabledViaManifest",

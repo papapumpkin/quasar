@@ -22,7 +22,7 @@ type Execution struct {
 	MaxBudgetUSD     float64    `toml:"max_budget_usd"`
 	MaxContextTokens int        `toml:"max_context_tokens"` // Token budget for context injection. 0 = disabled.
 	Model            string     `toml:"model"`
-	Gate             GateMode   `toml:"gate"`         // Default gate mode for all phases
+	Gate             GateMode   `toml:"gate"`           // Default gate mode for all phases
 	HailTimeout      string     `toml:"hail_timeout"`   // Duration string for hail auto-resolve timeout (e.g. "5m"). Empty = default (5m). "0" = disabled.
 	Routing          TierConfig `toml:"routing"`        // Auto-routing config. Zero-value = disabled.
 	AutoDecompose    bool       `toml:"auto_decompose"` // Enable auto-decomposition on struggle.
@@ -85,15 +85,15 @@ type PhaseSpec struct {
 	DependsOn         []string `toml:"depends_on"`
 	Labels            []string `toml:"labels"`
 	Assignee          string   `toml:"assignee"`
-	MaxReviewCycles   int      `toml:"max_review_cycles"`   // 0 = use default
-	MaxBudgetUSD      float64  `toml:"max_budget_usd"`      // 0 = use default
-	Model             string   `toml:"model"`               // "" = use default
-	Gate              GateMode `toml:"gate"`                // "" = inherit from manifest
-	Blocks            []string `toml:"blocks"`              // Reverse deps: inject as dep of listed phases
-	Scope             []string `toml:"scope"`               // Glob patterns for owned files/dirs
-	AllowScopeOverlap bool     `toml:"allow_scope_overlap"`          // Override: permit overlap
-	Decomposed        bool     `toml:"decomposed,omitempty"`         // true if this phase was produced by auto-decomposition
-	AutoDecompose     *bool    `toml:"auto_decompose,omitempty"`     // per-phase override (nil = inherit from manifest)
+	MaxReviewCycles   int      `toml:"max_review_cycles"`        // 0 = use default
+	MaxBudgetUSD      float64  `toml:"max_budget_usd"`           // 0 = use default
+	Model             string   `toml:"model"`                    // "" = use default
+	Gate              GateMode `toml:"gate"`                     // "" = inherit from manifest
+	Blocks            []string `toml:"blocks"`                   // Reverse deps: inject as dep of listed phases
+	Scope             []string `toml:"scope"`                    // Glob patterns for owned files/dirs
+	AllowScopeOverlap bool     `toml:"allow_scope_overlap"`      // Override: permit overlap
+	Decomposed        bool     `toml:"decomposed,omitempty"`     // true if this phase was produced by auto-decomposition
+	AutoDecompose     *bool    `toml:"auto_decompose,omitempty"` // per-phase override (nil = inherit from manifest)
 	Body              string   // Markdown body after +++ block
 	SourceFile        string   // Relative path for error context
 }
@@ -148,6 +148,10 @@ func (n *Nebula) Snapshot() *Nebula {
 			if p.Blocks != nil {
 				cp.Phases[i].Blocks = append([]string{}, p.Blocks...)
 			}
+			if p.AutoDecompose != nil {
+				v := *p.AutoDecompose
+				cp.Phases[i].AutoDecompose = &v
+			}
 		}
 	}
 	return &cp
@@ -183,9 +187,9 @@ const (
 	PhaseStatusCreated    PhaseStatus = "created"
 	PhaseStatusInProgress PhaseStatus = "in_progress"
 	PhaseStatusDone       PhaseStatus = "done"
-	PhaseStatusFailed      PhaseStatus = "failed"
-	PhaseStatusSkipped     PhaseStatus = "skipped"
-	PhaseStatusDecomposed  PhaseStatus = "decomposed"
+	PhaseStatusFailed     PhaseStatus = "failed"
+	PhaseStatusSkipped    PhaseStatus = "skipped"
+	PhaseStatusDecomposed PhaseStatus = "decomposed"
 )
 
 // State is persisted in nebula.state.toml, mapping phase IDs to bead IDs.

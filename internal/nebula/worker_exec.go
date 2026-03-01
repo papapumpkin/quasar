@@ -45,29 +45,36 @@ func (wg *WorkerGroup) executePhase(ctx context.Context, phaseID string, waveNum
 	}
 
 	// Handle auto-decomposition when the loop signals a struggle.
-	if err == nil && phaseResult != nil && phaseResult.Decompose && wg.shouldDecompose(phase) {
-		_, decompErr := wg.decomposePhase(ctx, phaseID, phaseResult)
-		if decompErr != nil {
-			fmt.Fprintf(wg.logger(), "decomposition failed for %s: %v\n", phaseID, decompErr)
-			// Fall through to record the phase as failed.
-			wg.recordResult(phaseID, ps, phaseResult, fmt.Errorf("decomposition failed: %w", decompErr), done, failed, inFlight)
+	if err == nil && phaseResult != nil && phaseResult.Decompose {
+		if wg.shouldDecompose(phase) {
+			_, decompErr := wg.decomposePhase(ctx, phaseID, phaseResult)
+			if decompErr != nil {
+				fmt.Fprintf(wg.logger(), "decomposition failed for %s: %v\n", phaseID, decompErr)
+				// Fall through to record the phase as failed.
+				wg.recordResult(phaseID, ps, phaseResult, fmt.Errorf("decomposition failed: %w", decompErr), done, failed, inFlight)
+				return
+			}
+			// Mark original phase as decomposed and enqueue sub-phases.
+			wg.mu.Lock()
+			wg.State.SetPhaseState(phaseID, ps.BeadID, PhaseStatusDecomposed)
+			done[phaseID] = true
+			delete(inFlight, phaseID)
+			wg.results = append(wg.results, WorkerResult{PhaseID: phaseID, BeadID: ps.BeadID})
+			wg.progress.SaveState()
+			wg.progress.ReportProgress()
+			wg.mu.Unlock()
+			// Signal hot-added phases to the scheduler.
+			if wg.hotReload != nil {
+				wg.mu.Lock()
+				wg.hotReload.CheckHotAddedReady()
+				wg.mu.Unlock()
+			}
 			return
 		}
-		// Mark original phase as decomposed and enqueue sub-phases.
-		wg.mu.Lock()
-		wg.State.SetPhaseState(phaseID, ps.BeadID, PhaseStatusDecomposed)
-		done[phaseID] = true
-		delete(inFlight, phaseID)
-		wg.results = append(wg.results, WorkerResult{PhaseID: phaseID, BeadID: ps.BeadID})
-		wg.progress.SaveState()
-		wg.progress.ReportProgress()
-		wg.mu.Unlock()
-		// Signal hot-added phases to the scheduler.
-		if wg.hotReload != nil {
-			wg.mu.Lock()
-			wg.hotReload.CheckHotAddedReady()
-			wg.mu.Unlock()
-		}
+		// The loop exited early due to a struggle signal, but decomposition
+		// is not enabled for this phase. Mark as failed — the phase did not
+		// complete its review cycle.
+		wg.recordResult(phaseID, ps, phaseResult, fmt.Errorf("phase %q exited due to struggle but auto-decomposition is disabled", phaseID), done, failed, inFlight)
 		return
 	}
 
@@ -381,8 +388,8 @@ func (wg *WorkerGroup) decomposePhase(ctx context.Context, phaseID string, resul
 		}
 	}
 
+	// Apply decomposition under lock.
 	wg.mu.Lock()
-	defer wg.mu.Unlock()
 
 	// Build live graph if hot-reload state is available, otherwise build from phases.
 	var liveGraph *dag.DAG
@@ -400,49 +407,68 @@ func (wg *WorkerGroup) decomposePhase(ctx context.Context, phaseID string, resul
 
 	subIDs, err := ApplyDecompositionToNebula(wg.Nebula, liveGraph, op, livePhasesMap)
 	if err != nil {
+		wg.mu.Unlock()
 		return nil, fmt.Errorf("applying decomposition for %s: %w", phaseID, err)
 	}
+	wg.mu.Unlock()
 
-	// Set fabric state for the original phase.
+	// Set fabric state for the original phase (no lock needed for fabric RPCs).
 	if wg.Fabric != nil {
 		if stateErr := wg.Fabric.SetPhaseState(ctx, phaseID, fabric.StateDecomposed); stateErr != nil {
 			fmt.Fprintf(wg.logger(), "warning: failed to set fabric state for decomposed phase %s: %v\n", phaseID, stateErr)
 		}
 	}
 
-	// Create beads and state entries for sub-phases.
+	// Create beads for sub-phases outside the lock to avoid panics from
+	// a deferred Unlock when the RPC is in an unlocked state.
+	type beadResult struct {
+		specID string
+		beadID string
+		body   string
+		ok     bool
+	}
+	var beadResults []beadResult
 	for _, sp := range op.SubPhases {
-		beadID := ""
+		br := beadResult{specID: sp.Spec.ID}
 		if wg.BeadsClient != nil {
-			wg.mu.Unlock()
-			var createErr error
-			beadID, createErr = wg.BeadsClient.Create(ctx, sp.Spec.Title, beads.CreateOpts{
+			id, createErr := wg.BeadsClient.Create(ctx, sp.Spec.Title, beads.CreateOpts{
 				Description: sp.Body,
 				Type:        sp.Spec.Type,
 				Labels:      sp.Spec.Labels,
 				Assignee:    sp.Spec.Assignee,
 				Priority:    priorityStr(sp.Spec.Priority),
 			})
-			wg.mu.Lock()
 			if createErr != nil {
 				fmt.Fprintf(wg.logger(), "warning: failed to create bead for sub-phase %q: %v\n", sp.Spec.ID, createErr)
 				continue
 			}
+			br.beadID = id
 		}
-		wg.State.SetPhaseState(sp.Spec.ID, beadID, PhaseStatusPending)
+		br.ok = true
+		beadResults = append(beadResults, br)
+	}
+
+	// Apply bead results and fabric state under lock.
+	wg.mu.Lock()
+	for _, br := range beadResults {
+		if !br.ok {
+			continue
+		}
+		wg.State.SetPhaseState(br.specID, br.beadID, PhaseStatusPending)
 
 		// Set fabric state for sub-phase.
 		if wg.Fabric != nil {
-			if stateErr := wg.Fabric.SetPhaseState(ctx, sp.Spec.ID, fabric.StateQueued); stateErr != nil {
-				fmt.Fprintf(wg.logger(), "warning: failed to set fabric state for sub-phase %s: %v\n", sp.Spec.ID, stateErr)
+			if stateErr := wg.Fabric.SetPhaseState(ctx, br.specID, fabric.StateQueued); stateErr != nil {
+				fmt.Fprintf(wg.logger(), "warning: failed to set fabric state for sub-phase %s: %v\n", br.specID, stateErr)
 			}
 		}
 	}
 
 	wg.progress.SaveState()
 	wg.progress.ReportProgress()
+	wg.mu.Unlock()
 
-	// Notify TUI of hot-added sub-phases.
+	// Notify TUI of hot-added sub-phases (callbacks must not hold the lock).
 	if wg.OnHotAdd != nil {
 		for _, sp := range op.SubPhases {
 			wg.OnHotAdd(sp.Spec.ID, sp.Spec.Title, sp.Spec.DependsOn)
@@ -461,4 +487,3 @@ func (wg *WorkerGroup) decomposePhase(ctx context.Context, phaseID string, resul
 
 	return subIDs, nil
 }
-

@@ -2114,7 +2114,7 @@ func TestRunLoopWithStruggleDetection(t *testing.T) {
 				Enabled:                 true,
 				MinCyclesBeforeCheck:    2,
 				FilterRepeatThreshold:   2,
-				FindingOverlapThreshold: 0.3,  // low threshold to trigger easily
+				FindingOverlapThreshold: 0.3, // low threshold to trigger easily
 				BudgetBurnThreshold:     0.3,
 				CompositeThreshold:      0.05, // very low to ensure trigger
 			},
