@@ -1,0 +1,76 @@
+version = 1
+nebula_name = 'nebula-generate'
+total_cost_usd = 21.96535645
+
+[phases]
+[phases.cli-command]
+bead_id = 'quasar-zlle'
+status = 'done'
+created_at = 2026-02-28T18:47:17.761766-05:00
+updated_at = 2026-02-28T19:37:53.948001-05:00
+
+[phases.cli-command.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Adds post-generation validation gate to `nebula generate` command — minimal 8-line change that prevents invalid nebulae from being written to disk, with correct nil guarding and consistent error reporting patterns.'
+
+[phases.codebase-analyzer]
+bead_id = 'quasar-t6s7'
+status = 'done'
+created_at = 2026-02-28T18:47:14.641675-05:00
+updated_at = 2026-02-28T18:57:33.973842-05:00
+
+[phases.codebase-analyzer.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean codebase analysis bridge with correct AST parsing, good error handling, comprehensive tests, and two cosmetic-only minor issues (dead code, soft budget edge case).'
+
+[phases.dependency-inference]
+bead_id = 'quasar-xvh5'
+status = 'done'
+created_at = 2026-02-28T18:47:15.368348-05:00
+updated_at = 2026-02-28T19:04:24.866395-05:00
+
+[phases.dependency-inference.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean dependency inference engine with 5-step pipeline, 20 well-structured tests, and proper reuse of existing DAG/scope infrastructure — two minor non-blocking issues around `Added` slice staleness after transitive reduction and a missing bounds check in test assertions.'
+
+[phases.multi-phase-architect]
+bead_id = 'quasar-qvnx'
+status = 'done'
+created_at = 2026-02-28T18:47:16.24456-05:00
+updated_at = 2026-02-28T19:16:10.348679-05:00
+
+[phases.multi-phase-architect.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Solid multi-phase generation pipeline with clean architecture, thorough error handling, and comprehensive test coverage — ready to merge.'
+
+[phases.nebula-writer]
+bead_id = 'quasar-nsk6'
+status = 'done'
+created_at = 2026-02-28T18:47:17.045192-05:00
+updated_at = 2026-02-28T19:28:10.063794-05:00
+
+[phases.nebula-writer.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Three targeted fixes to nebula writer (path traversal guard, non-directory overwrite protection, test rename) plus three new tests — all correct, well-tested, and minimal blast radius.'
+
+[phases.validation-integration]
+bead_id = 'quasar-8ey9'
+status = 'done'
+created_at = 2026-02-28T18:47:18.488847-05:00
+updated_at = 2026-02-28T19:50:39.490399-05:00
+
+[phases.validation-integration.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-structured validation auto-correction and retry pipeline with comprehensive tests; three minor issues around string-based dep extraction, stale map entries after duplicate-ID fixes, and an unused constant — none blocking.'

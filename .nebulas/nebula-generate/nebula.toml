@@ -1,0 +1,41 @@
+[nebula]
+name = "nebula-generate"
+description = "AI-powered nebula generation: analyze codebase, decompose a user prompt into phases with dependency DAGs, and write a complete nebula (manifest + phase files) to disk"
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "nebula-generate"]
+assignee = ""
+
+[execution]
+max_workers = 6
+max_review_cycles = 5
+max_budget_usd = 80.0
+model = ""
+gate = "trust"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Enable `quasar nebula generate <prompt>` to produce a complete, valid nebula from a natural-language description",
+    "Leverage the existing snapshot.Scanner to give the architect agent codebase context",
+    "Decompose user intent into properly ordered phases with accurate dependency DAGs",
+    "Produce output that passes `nebula.Validate` without manual fixes",
+    "Integrate seamlessly with existing nebula subcommand infrastructure in cmd/nebula.go",
+]
+constraints = [
+    "Extend the existing architect.go — do not duplicate RunArchitect logic",
+    "Use agent.Invoker interface for all LLM calls; no direct Claude CLI usage",
+    "All new exported types and functions must have GoDoc comments",
+    "All output goes to stderr via ui.Printer; generated files go to disk only",
+    "Validate generated nebula with nebula.Validate before writing to disk",
+    "Respect context.Context for cancellation throughout the call chain",
+    "Table-driven tests with stdlib testing only — no external test frameworks",
+    "Run `go vet ./...` and `go test ./...` clean before considering a phase complete",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

@@ -1,0 +1,38 @@
+[nebula]
+name = "auto-healing"
+description = "Self-repairing execution pipeline: when a phase fails (max cycles, budget exceeded, persistent filter failures), analyze the failure, invoke the architect to generate a remediation phase, hot-insert it into the DAG, and continue execution."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "auto-healing", "reliability"]
+assignee = ""
+
+[execution]
+max_workers = 6
+max_review_cycles = 5
+max_budget_usd = 65.0
+model = ""
+gate = "trust"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Detect phase failures (ErrMaxCycles, ErrBudgetExceeded, persistent filter failures) and classify root cause",
+    "Invoke the architect to generate targeted remediation phases from failure context",
+    "Hot-insert remediation phases into the live DAG as dependencies of the failed phase's dependents",
+    "Carry forward partial work from the failed phase so remediation builds on progress, not from scratch",
+    "Emit telemetry events and TUI messages for full observability of the healing pipeline",
+]
+constraints = [
+    "Maximum one healing attempt per failed phase to prevent infinite remediation loops",
+    "Healing must be opt-in via execution config (disabled by default)",
+    "Remediation phases inherit the failed phase's scope and gate mode",
+    "Total nebula budget cap still applies — healing phases consume from the same budget pool",
+    "No changes to the Loop type itself — healing is orchestrated at the WorkerGroup level",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

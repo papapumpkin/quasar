@@ -30,8 +30,29 @@ var (
 	ErrPlanHasErrors = errors.New("execution plan has error-severity risks")
 )
 
+// ValidationCategory classifies a validation error for programmatic handling.
+type ValidationCategory string
+
+const (
+	// ValCatMissingField indicates a required field is empty.
+	ValCatMissingField ValidationCategory = "missing_field"
+	// ValCatDuplicateID indicates two or more phases share the same ID.
+	ValCatDuplicateID ValidationCategory = "duplicate_id"
+	// ValCatUnknownDep indicates a dependency references a non-existent phase.
+	ValCatUnknownDep ValidationCategory = "unknown_dep"
+	// ValCatCycle indicates a circular dependency among phases.
+	ValCatCycle ValidationCategory = "cycle"
+	// ValCatInvalidGate indicates an unrecognized gate mode value.
+	ValCatInvalidGate ValidationCategory = "invalid_gate"
+	// ValCatScopeOverlap indicates overlapping file ownership scopes.
+	ValCatScopeOverlap ValidationCategory = "scope_overlap"
+	// ValCatBoundsViolation indicates a numeric field is out of valid range.
+	ValCatBoundsViolation ValidationCategory = "bounds_violation"
+)
+
 // ValidationError records a validation problem with source context.
 type ValidationError struct {
+	Category   ValidationCategory // Machine-readable category for programmatic handling
 	PhaseID    string
 	SourceFile string
 	Field      string

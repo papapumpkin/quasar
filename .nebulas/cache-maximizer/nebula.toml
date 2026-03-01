@@ -1,0 +1,43 @@
+[nebula]
+name = "cache-maximizer"
+description = "Structure all agent prompts to maximize Anthropic's prompt caching by enforcing a stable-prefix / volatile-suffix layout. Across cycles within a phase, the system prompt prefix (project context + base prompt + fabric protocol) remains byte-identical for cache hits. Across phases, a shared project-context prefix enables cross-phase caching. Add telemetry to measure cache effectiveness and config knobs to control the behavior."
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["quasar", "cache", "cost-optimization"]
+assignee = ""
+
+[execution]
+max_workers = 6
+max_review_cycles = 5
+max_budget_usd = 50.0
+model = ""
+gate = "trust"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Ensure system prompts have a stable prefix (project context, base prompt, fabric protocol) that is byte-identical across all invocations within a phase for prompt cache hits",
+    "Move all volatile/cycle-specific content (task description, findings, lint output, hail relays, refactor context) out of the system prompt and into the user prompt",
+    "Share a common project-context prefix across coder and reviewer agents within the same phase for cross-role cache hits",
+    "Achieve cross-phase caching by keeping the project-context segment identical across different phases in a nebula run",
+    "Add telemetry to track prompt-prefix stability and cache hit potential per invocation",
+    "Expose configuration for enabling/disabling cache optimization and tuning prefix content",
+]
+constraints = [
+    "Follow existing Go conventions from CLAUDE.md",
+    "System prompt is passed via --system-prompt to claude CLI — it must remain a single string",
+    "User prompt is passed via -p to claude CLI — volatile content moves here",
+    "BuildSystemPrompt currently places ProjectContext first, then basePrompt, then FabricProtocol — this ordering is already correct for caching and must be preserved",
+    "composeContextPrefix currently prepends fabric state + project context to the task prompt (user prompt) — this needs to be separated so stable parts go to system prompt and volatile parts stay in user prompt",
+    "Do not break backward compatibility — when cache optimization is disabled, behavior must match current code",
+    "All new code must have comprehensive tests using stdlib testing only",
+    "The fabric snapshot changes between cycles (new claims, pulses, phase states) — it must stay in the volatile suffix, NOT in the system prompt",
+    "The project context from Scanner.Scan() is deterministic and stable — it belongs in the system prompt prefix",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

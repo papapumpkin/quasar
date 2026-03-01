@@ -45,6 +45,7 @@ func validateScopeOverlaps(phases []PhaseSpec, d *dag.DAG) []ValidationError {
 					pattern = patA + " / " + patB
 				}
 				errs = append(errs, ValidationError{
+					Category:   ValCatScopeOverlap,
 					PhaseID:    a.ID,
 					SourceFile: a.SourceFile,
 					Field:      "scope",

@@ -1,0 +1,35 @@
+[nebula]
+name = "checkpoint-resume"
+description = "Serialize CycleState + git SHA + agent outputs after each significant state transition. On crash or restart, `quasar nebula apply --resume` detects checkpoints and resumes from the exact point of interruption."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "checkpoint", "reliability"]
+assignee = ""
+
+[execution]
+max_workers = 6
+max_review_cycles = 5
+max_budget_usd = 70.0
+model = ""
+gate = "trust"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Enable crash-resilient nebula execution via checkpoint files",
+    "Allow --resume flag to restart from the last successful checkpoint",
+    "Preserve full CycleState, git SHA, and agent outputs across restarts",
+]
+constraints = [
+    "Checkpoint writes must be atomic (write-tmp + rename) to prevent corruption",
+    "Resume must validate git SHA matches current HEAD before continuing",
+    "No changes to the happy path when checkpoints are not involved",
+    "Use existing TOML serialization patterns from nebula state persistence",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

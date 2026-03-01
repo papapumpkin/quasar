@@ -125,15 +125,16 @@ func (ev *EntanglementView) SetSize(width, height int) {
 	ev.refreshContent()
 }
 
-// MoveUp moves the cursor up by one entanglement and refreshes the viewport.
+// MoveUp moves the cursor up by one entanglement and scrolls to keep it visible.
 func (ev *EntanglementView) MoveUp() {
 	if ev.Cursor > 0 {
 		ev.Cursor--
 	}
 	ev.refreshContent()
+	ev.scrollToCursor()
 }
 
-// MoveDown moves the cursor down by one entanglement and refreshes the viewport.
+// MoveDown moves the cursor down by one entanglement and scrolls to keep it visible.
 func (ev *EntanglementView) MoveDown() {
 	groups := groupEntanglements(ev.Entanglements)
 	max := flatCount(groups) - 1
@@ -144,6 +145,7 @@ func (ev *EntanglementView) MoveDown() {
 		ev.Cursor++
 	}
 	ev.refreshContent()
+	ev.scrollToCursor()
 }
 
 // ClampCursor ensures the cursor is within bounds for the current entanglements.
@@ -193,6 +195,42 @@ func (ev EntanglementView) View() string {
 		return ""
 	}
 	return ev.viewport.View()
+}
+
+// scrollToCursor adjusts the viewport offset so the cursor card is visible.
+func (ev *EntanglementView) scrollToCursor() {
+	if !ev.ready || ev.Height <= 0 {
+		return
+	}
+
+	// Estimate the starting line of each card by counting rendered lines.
+	// Each group header = 1 line, each card ≈ 6 lines (4 content + 2 border),
+	// plus 1 blank line between groups.
+	groups := groupEntanglements(ev.Entanglements)
+	cardLines := 6 // approximate lines per card (border top + 4 content + border bottom)
+	lineOffset := 0
+	flatIdx := 0
+
+	for gi, group := range groups {
+		lineOffset++ // group header line
+		for range group.Entanglements {
+			if flatIdx == ev.Cursor {
+				// Scroll so this card is visible.
+				yOffset := ev.viewport.YOffset
+				if lineOffset < yOffset {
+					ev.viewport.SetYOffset(lineOffset)
+				} else if lineOffset+cardLines > yOffset+ev.Height {
+					ev.viewport.SetYOffset(lineOffset + cardLines - ev.Height)
+				}
+				return
+			}
+			lineOffset += cardLines + 1 // card + trailing newline
+			flatIdx++
+		}
+		if gi < len(groups)-1 {
+			lineOffset++ // blank line between groups
+		}
+	}
 }
 
 // refreshContent re-renders all cards into the viewport, preserving scroll position.

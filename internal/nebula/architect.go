@@ -18,14 +18,18 @@ const (
 	ArchitectModeCreate ArchitectMode = "create"
 	// ArchitectModeRefactor instructs the architect to update an existing phase file.
 	ArchitectModeRefactor ArchitectMode = "refactor"
+	// ArchitectModeGenerate instructs the architect to produce an entire nebula
+	// (multiple phase files) from a single user prompt.
+	ArchitectModeGenerate ArchitectMode = "generate"
 )
 
 // ArchitectRequest describes what the architect agent should produce.
 type ArchitectRequest struct {
-	Mode       ArchitectMode // "create" or "refactor"
-	UserPrompt string        // what the user wants
-	Nebula     *Nebula       // current nebula state for context
-	PhaseID    string        // for refactor: which phase to modify
+	Mode       ArchitectMode     // "create", "refactor", or "generate"
+	UserPrompt string            // what the user wants
+	Nebula     *Nebula           // current nebula state for context
+	PhaseID    string            // for refactor: which phase to modify
+	Analysis   *CodebaseAnalysis // for generate: pre-computed codebase analysis (may be nil)
 }
 
 // ArchitectResult holds the parsed output from the architect agent.
@@ -173,6 +177,24 @@ func buildArchitectPrompt(req ArchitectRequest) (string, error) {
 
 		fmt.Fprintf(&b, "User change request: %s\n\n", req.UserPrompt)
 		b.WriteString("Produce an updated phase file that incorporates the user's feedback while preserving relevant context.\n\n")
+	case ArchitectModeGenerate:
+		b.WriteString("## Task: Generate a Complete Nebula\n\n")
+		fmt.Fprintf(&b, "User request: %s\n\n", req.UserPrompt)
+
+		// Include codebase context if available.
+		if req.Analysis != nil {
+			b.WriteString("## Codebase Context\n\n")
+			b.WriteString(req.Analysis.FormatForPrompt())
+			b.WriteString("\n\n")
+		}
+
+		b.WriteString("Decompose the user's request into 3-15 focused phases.\n")
+		b.WriteString("Each phase must be a coherent unit of work for a single coder-reviewer loop.\n")
+		b.WriteString("Assign `depends_on` based on data/code dependencies between phases.\n")
+		b.WriteString("Assign `scope` glob patterns to each phase for file ownership.\n")
+		b.WriteString("Use sequential numbering for filenames (e.g. 01-setup-auth.md, 02-add-routes.md).\n\n")
+		b.WriteString("Output ALL phases using the PHASE_FILE/END_PHASE_FILE format.\n")
+		b.WriteString("Each phase must have a unique kebab-case `id` and descriptive `title`.\n\n")
 	default:
 		return "", fmt.Errorf("unknown architect mode: %q", req.Mode)
 	}
@@ -320,55 +342,43 @@ func validateAgainstDAG(result *ArchitectResult, req ArchitectRequest) []string 
 }
 
 // architectSystemPrompt is the system prompt for the architect agent.
-const architectSystemPrompt = `You are a nebula phase architect. Your job is to create and refactor phase files
-for a multi-phase AI coding orchestration system called "quasar nebula."
+const architectSystemPrompt = `You are a nebula phase architect. Your job is to create, refactor, and generate
+phase files for a multi-phase AI coding orchestration system called "quasar nebula."
 
 ## Phase File Format
 
-Phase files are Markdown files with TOML frontmatter between +++ delimiters.
-
-### Required Frontmatter Fields
-- id: A kebab-case identifier (e.g., "implement-auth", "fix-parsing-bug")
-- title: A human-readable title for the phase
-
-### Optional Frontmatter Fields
-- type: Phase type (default inherited from nebula config)
-- priority: Integer priority (default inherited from nebula config)
-- depends_on: Array of phase IDs this phase depends on
-- max_review_cycles: Override for max review cycles
-- max_budget_usd: Override for max budget
-- model: Override for AI model
-- blocks: Array of phase IDs this phase should block (reverse dependency)
-- scope: Array of glob patterns for files this phase owns
-
-### Markdown Body
-The body should contain:
-- **Problem**: What needs to be done and why
-- **Solution**: How to approach it
-- **Files to Modify**: Which files need changes (if known)
-- **Acceptance Criteria**: How to verify the work is complete
+Phase files are Markdown with TOML frontmatter between +++ delimiters.
+Required fields: id (kebab-case), title (human-readable).
+Optional fields: type, priority, depends_on, max_review_cycles, max_budget_usd, model, blocks, scope.
+The body should contain: Problem, Solution, Files, and Acceptance Criteria sections.
 
 ## Output Format
 
-You MUST output exactly one phase file in this format:
+Each phase uses this format (output one for create/refactor, or ALL for generate mode):
 
 PHASE_FILE: <filename.md>
 +++
 id = "<phase-id>"
 title = "<Phase Title>"
-depends_on = [<list of dependency IDs if any>]
+depends_on = [<dependency IDs>]
+scope = [<glob patterns for owned files>]
 +++
 
 <markdown body>
 END_PHASE_FILE
 
+## Multi-Phase Generation
+
+When generating a complete nebula: produce 3-15 focused phases, each a coherent unit of work
+for one coder-reviewer cycle. Use sequential filenames (01-first.md, 02-second.md).
+Assign depends_on by data/code dependency, not ordering. Parallel-safe phases should NOT depend
+on each other. Assign scope globs to declare file ownership; avoid overlap between phases.
+
 ## Rules
 
 1. Use kebab-case for phase IDs and filenames
-2. Analyze existing phases to choose appropriate depends_on values
-3. Only depend on phases that must complete before this one can start
-4. Keep phase descriptions focused and actionable
-5. The filename should be descriptive (e.g., "implement-user-auth.md")
-6. For refactors, preserve the original phase ID unless explicitly asked to change it
-7. Do not include fields that match the defaults — only override when necessary
+2. Only depend on phases that must complete before this one starts
+3. Keep descriptions focused and actionable
+4. For refactors, preserve the original phase ID unless asked to change it
+5. Do not include fields that match defaults — only override when necessary
 `
