@@ -268,9 +268,9 @@ type CycleSummaryData struct {
 	DurationMs        int64
 	Approved          bool
 	IssueCount        int
-	FilterFixAttempts int     // Number of inner fix attempts this cycle (0 = no filter failures).
-	FilterFixCostUSD  float64 // Cost spent on filter fixes this cycle.
-	FilterFixSuccess  bool    // True if filter was fixed via inner loop.
+	FilterFixAttempts int     // Number of inner fix attempts in this cycle (0 = no filter failures).
+	FilterFixCostUSD  float64 // Cost spent on filter fixes in this cycle.
+	FilterFixSuccess  bool    // True if filter was fixed via inner loop in this cycle.
 }
 
 // CycleSummary prints a structured summary after each coder/reviewer phase.

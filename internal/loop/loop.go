@@ -119,6 +119,10 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 
 	for cycle := 1; cycle <= l.MaxCycles; cycle++ {
 		state.Cycle = cycle
+		// Reset per-cycle filter fix tracking at cycle start.
+		state.FilterFixedThisCycle = false
+		state.CycleFilterFixAttempts = 0
+		state.CycleFilterFixCostUSD = 0
 		l.UI.CycleStart(cycle, l.MaxCycles)
 
 		if err := l.runCoderPhase(ctx, state, perAgentBudget); err != nil {
@@ -154,6 +158,7 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 					l.emit(ctx, Event{Kind: EventCycleStart, BeadID: beadID, Cycle: cycle})
 					continue
 				}
+				state.FilterFixedThisCycle = true
 				// Fixed! Re-validate the chain from the failure point onward
 				// to catch regressions the fix may have introduced.
 				var revalResult *filter.Result
@@ -475,6 +480,8 @@ func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkNam
 		state.TotalCostUSD += result.CostUSD
 		state.FilterFixCostUSD += result.CostUSD
 		state.FilterFixAttempts++
+		state.CycleFilterFixCostUSD += result.CostUSD
+		state.CycleFilterFixAttempts++
 		l.UI.AgentDone("coder", result.CostUSD, result.DurationMs)
 
 		if err := l.checkBudget(ctx, state); err != nil {
@@ -862,9 +869,9 @@ func (l *Loop) emitCycleSummary(state *CycleState, phase Phase, result agent.Inv
 		DurationMs:        result.DurationMs,
 		Approved:          isApproved(state.ReviewOutput),
 		IssueCount:        len(state.Findings),
-		FilterFixAttempts: state.FilterFixAttempts,
-		FilterFixCostUSD:  state.FilterFixCostUSD,
-		FilterFixSuccess:  state.FilterFixCostUSD > 0 && state.FilterOutput == "",
+		FilterFixAttempts: state.CycleFilterFixAttempts,
+		FilterFixCostUSD:  state.CycleFilterFixCostUSD,
+		FilterFixSuccess:  state.FilterFixedThisCycle,
 	})
 }
 
