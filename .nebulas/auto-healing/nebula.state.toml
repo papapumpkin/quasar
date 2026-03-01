@@ -1,0 +1,33 @@
+version = 1
+nebula_name = 'auto-healing'
+
+[phases]
+[phases.dag-insertion]
+bead_id = 'quasar-tvyv'
+status = 'created'
+created_at = 2026-03-01T00:13:42.36618-05:00
+updated_at = 2026-03-01T00:13:42.36618-05:00
+
+[phases.failure-analyzer]
+bead_id = 'quasar-c79w'
+status = 'in_progress'
+created_at = 2026-03-01T00:13:40.773858-05:00
+updated_at = 2026-03-01T00:13:44.081346-05:00
+
+[phases.observability]
+bead_id = 'quasar-k1xh'
+status = 'created'
+created_at = 2026-03-01T00:13:44.007851-05:00
+updated_at = 2026-03-01T00:13:44.007851-05:00
+
+[phases.partial-completion]
+bead_id = 'quasar-q0ic'
+status = 'created'
+created_at = 2026-03-01T00:13:43.241475-05:00
+updated_at = 2026-03-01T00:13:43.241475-05:00
+
+[phases.remediation-architect]
+bead_id = 'quasar-1ysq'
+status = 'created'
+created_at = 2026-03-01T00:13:41.520764-05:00
+updated_at = 2026-03-01T00:13:41.520764-05:00
