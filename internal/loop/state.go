@@ -79,33 +79,33 @@ type FindingVerification struct {
 
 // CycleState tracks the mutable state of a coder-reviewer loop across cycles.
 type CycleState struct {
-	TaskBeadID          string
-	TaskTitle           string
-	Phase               Phase
-	Cycle               int
-	MaxCycles           int
-	TotalCostUSD        float64
-	MaxBudgetUSD        float64
-	CoderOutput         string
-	LintOutput          string // lint command output from the most recent lint pass
-	FilterOutput        string // output from pre-reviewer filter on failure
-	FilterCheckName     string // name of the failing filter check (empty if passed)
-	ReviewOutput        string
-	Findings            []ReviewFinding       // current cycle's findings (reset each cycle)
-	Verifications       []FindingVerification // current cycle's verification results
-	AllFindings         []ReviewFinding       // accumulated findings across all cycles
-	ChildBeadIDs        []string              // accumulated child bead IDs across all cycles
-	Refactored          bool                  // true when a mid-run phase edit was applied
-	OriginalDescription string                // task description before the refactor
-	RefactorDescription string                // the new description from the user edit
-	BaseCommitSHA       string                // HEAD before first cycle (captured at task start)
-	FilterHistory       []string              // accumulated FilterCheckName per cycle (index = cycle-1)
-	CycleCommits        []string              // commit SHA per cycle (index = cycle-1)
-	FilterFixAttempts   int                   // number of inner fix attempts accumulated across the entire loop run
-	FilterFixCostUSD    float64               // cost accumulated during filter fix attempts across the entire loop run
-	FilterFixedThisCycle       bool           // true when runFilterFixLoop returned true in the current cycle; reset at cycle start
-	CycleFilterFixAttempts     int            // inner fix attempts for the current cycle; reset at cycle start
-	CycleFilterFixCostUSD      float64        // filter fix cost for the current cycle; reset at cycle start
-	lastCycleSHA        string                // transient: last commit SHA for the current cycle (sealed into CycleCommits at cycle end)
-	bridgedDiscoveryIDs map[int64]bool        // tracks fabric discovery IDs already bridged to hails, preventing duplicates across cycles
+	TaskBeadID             string
+	TaskTitle              string
+	Phase                  Phase
+	Cycle                  int
+	MaxCycles              int
+	TotalCostUSD           float64
+	MaxBudgetUSD           float64
+	CoderOutput            string
+	LintOutput             string // lint command output from the most recent lint pass
+	FilterOutput           string // output from pre-reviewer filter on failure
+	FilterCheckName        string // name of the failing filter check (empty if passed)
+	ReviewOutput           string
+	Findings               []ReviewFinding       // current cycle's findings (reset each cycle)
+	Verifications          []FindingVerification // current cycle's verification results
+	AllFindings            []ReviewFinding       // accumulated findings across all cycles
+	ChildBeadIDs           []string              // accumulated child bead IDs across all cycles
+	Refactored             bool                  // true when a mid-run phase edit was applied
+	OriginalDescription    string                // task description before the refactor
+	RefactorDescription    string                // the new description from the user edit
+	BaseCommitSHA          string                // HEAD before first cycle (captured at task start)
+	FilterHistory          []string              // accumulated FilterCheckName per cycle (index = cycle-1)
+	CycleCommits           []string              // commit SHA per cycle (index = cycle-1)
+	FilterFixAttempts      int                   // number of inner fix attempts accumulated across the entire loop run
+	FilterFixCostUSD       float64               // cost accumulated during filter fix attempts across the entire loop run
+	FilterFixedThisCycle   bool                  // true when runFilterFixLoop returned true in the current cycle; reset at cycle start
+	CycleFilterFixAttempts int                   // inner fix attempts for the current cycle; reset at cycle start
+	CycleFilterFixCostUSD  float64               // filter fix cost for the current cycle; reset at cycle start
+	lastCycleSHA           string                // transient: last commit SHA for the current cycle (sealed into CycleCommits at cycle end)
+	bridgedDiscoveryIDs    map[int64]bool        // tracks fabric discovery IDs already bridged to hails, preventing duplicates across cycles
 }
