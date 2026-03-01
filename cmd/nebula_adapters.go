@@ -160,13 +160,28 @@ func (a *tuiLoopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDe
 
 // toPhaseRunnerResult converts a loop.TaskResult to nebula.PhaseRunnerResult.
 func toPhaseRunnerResult(result *loop.TaskResult) *nebula.PhaseRunnerResult {
-	return &nebula.PhaseRunnerResult{
+	pr := &nebula.PhaseRunnerResult{
 		TotalCostUSD:   result.TotalCostUSD,
 		CyclesUsed:     result.CyclesUsed,
 		Report:         result.Report,
 		BaseCommitSHA:  result.BaseCommitSHA,
 		FinalCommitSHA: result.FinalCommitSHA,
+		Decompose:      result.Decompose,
+		StruggleReason: result.StruggleReason,
 	}
+	// Convert loop.ReviewFinding to nebula.DecomposeFinding to avoid
+	// a circular dependency between the loop and nebula packages.
+	if len(result.AllFindings) > 0 {
+		pr.AllFindings = make([]nebula.DecomposeFinding, len(result.AllFindings))
+		for i, f := range result.AllFindings {
+			pr.AllFindings[i] = nebula.DecomposeFinding{
+				Severity:    f.Severity,
+				Description: f.Description,
+				Cycle:       f.Cycle,
+			}
+		}
+	}
+	return pr
 }
 
 // fabricComponents holds initialized fabric infrastructure for passing to

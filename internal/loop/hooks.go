@@ -22,6 +22,9 @@ const (
 	EventTaskFailed
 	// EventRefactored is emitted when a mid-run phase edit is applied.
 	EventRefactored
+	// EventStruggleDetected is emitted when the struggle detector triggers,
+	// signaling that the phase should be decomposed.
+	EventStruggleDetected
 )
 
 // Event represents a lifecycle event in the coder-reviewer loop.

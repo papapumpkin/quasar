@@ -36,6 +36,7 @@ type Loop struct {
 	MaxContextTokens int              // Token budget for context injection. 0 = use default.
 	HailQueue        HailQueue        // Optional; when set, hails extracted during execution are posted here.
 	HailTimeout      time.Duration    // Auto-resolve timeout for hails. 0 disables auto-resolution.
+	StruggleConfig   StruggleConfig   // Optional; zero value disables struggle detection.
 }
 
 // TaskResult holds the outcome of a completed task loop.
@@ -45,6 +46,9 @@ type TaskResult struct {
 	Report         *agent.ReviewReport // From final reviewer cycle (may be nil)
 	BaseCommitSHA  string              // HEAD captured at task start
 	FinalCommitSHA string              // last cycle's sealed SHA (or current HEAD as fallback)
+	Decompose      bool                // true if the loop exited due to a struggle signal
+	StruggleReason string              // human-readable reason from StruggleSignal.Reason
+	AllFindings    []ReviewFinding     // accumulated findings at time of decomposition
 }
 
 // RunTask creates a new bead for the given task and runs the coder-reviewer loop.
@@ -189,6 +193,28 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 		state.ChildBeadIDs = append(state.ChildBeadIDs, newChildIDs...)
 		state.AllFindings = append(state.AllFindings, state.Findings...)
 		l.emitBeadUpdate(state, "in_progress")
+
+		// Evaluate struggle detection after findings are accumulated.
+		if l.StruggleConfig.Enabled {
+			signal := EvaluateStruggle(state, l.StruggleConfig)
+			if signal.Triggered {
+				l.emit(ctx, Event{
+					Kind:    EventStruggleDetected,
+					BeadID:  beadID,
+					Cycle:   cycle,
+					Message: signal.Reason,
+				})
+				return &TaskResult{
+					TotalCostUSD:   state.TotalCostUSD,
+					CyclesUsed:     state.Cycle,
+					BaseCommitSHA:  state.BaseCommitSHA,
+					FinalCommitSHA: l.finalCommitSHA(ctx, state),
+					Decompose:      true,
+					StruggleReason: signal.Reason,
+					AllFindings:    state.AllFindings,
+				}, nil
+			}
+		}
 
 		l.emit(ctx, Event{Kind: EventCycleStart, BeadID: beadID, Cycle: cycle})
 	}

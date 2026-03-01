@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/dag"
 	"github.com/papapumpkin/quasar/internal/fabric"
@@ -55,6 +56,7 @@ type WorkerGroup struct {
 	OnHotAdd     HotAddFunc                               // optional callback for hot-added phases
 	OnHail       func(phaseID string, d fabric.Discovery) // optional callback for hail surfacing
 	OnScanning   func(phaseID string)                     // optional callback for fabric scanning notifications
+	Invoker      agent.Invoker                            // optional; required for auto-decomposition
 	Metrics      *Metrics                                 // optional; nil = no collection
 	Logger       io.Writer                                // optional; nil = os.Stderr
 

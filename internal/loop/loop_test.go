@@ -2073,3 +2073,143 @@ func (f *countingFilter) Run(_ context.Context, _ string) (*filter.Result, error
 	// Default: pass
 	return &filter.Result{Passed: true}, nil
 }
+
+// ---------------------------------------------------------------------------
+// Struggle detection integration tests
+// ---------------------------------------------------------------------------
+
+func TestRunLoopWithStruggleDetection(t *testing.T) {
+	t.Parallel()
+
+	t.Run("StruggleTriggersDecompose", func(t *testing.T) {
+		t.Parallel()
+		// Set up a loop that has high finding overlap to trigger struggle.
+		// Cycle 1: coder + reviewer (rejected with findings)
+		// Cycle 2: coder + reviewer (rejected with overlapping findings -> struggle triggers)
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				// Cycle 1: coder
+				{ResultText: "attempt 1", CostUSD: 0.50},
+				// Cycle 1: reviewer — rejected
+				{ResultText: "ISSUE:\nSEVERITY: major\nDESCRIPTION: missing error handling", CostUSD: 0.30},
+				// Cycle 2: coder
+				{ResultText: "attempt 2", CostUSD: 0.50},
+				// Cycle 2: reviewer — rejected with same finding
+				{ResultText: "ISSUE:\nSEVERITY: major\nDESCRIPTION: missing error handling", CostUSD: 0.30},
+			},
+		}
+
+		var events []EventKind
+		hook := HookFunc(func(_ context.Context, e Event) {
+			events = append(events, e.Kind)
+		})
+
+		l := &Loop{
+			Invoker:      inv,
+			UI:           &noopUI{},
+			Hooks:        []Hook{hook},
+			MaxCycles:    5,
+			MaxBudgetUSD: 10.0,
+			StruggleConfig: StruggleConfig{
+				Enabled:                 true,
+				MinCyclesBeforeCheck:    2,
+				FilterRepeatThreshold:   2,
+				FindingOverlapThreshold: 0.3,  // low threshold to trigger easily
+				BudgetBurnThreshold:     0.3,
+				CompositeThreshold:      0.05, // very low to ensure trigger
+			},
+		}
+
+		result, err := l.runLoop(context.Background(), "bead-1", "implement feature")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !result.Decompose {
+			t.Fatal("expected Decompose=true when struggle is detected")
+		}
+		if result.StruggleReason == "" {
+			t.Error("expected non-empty StruggleReason")
+		}
+		if len(result.AllFindings) == 0 {
+			t.Error("expected AllFindings to be populated")
+		}
+		if result.CyclesUsed != 2 {
+			t.Errorf("CyclesUsed = %d, want 2", result.CyclesUsed)
+		}
+
+		// Verify EventStruggleDetected was emitted.
+		foundStruggle := false
+		for _, e := range events {
+			if e == EventStruggleDetected {
+				foundStruggle = true
+				break
+			}
+		}
+		if !foundStruggle {
+			t.Error("expected EventStruggleDetected event to be emitted")
+		}
+	})
+
+	t.Run("DisabledStruggleNoDecompose", func(t *testing.T) {
+		t.Parallel()
+		// Even with overlapping findings, disabled config should not trigger.
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "attempt 1", CostUSD: 0.50},
+				{ResultText: "ISSUE:\nSEVERITY: major\nDESCRIPTION: missing error handling", CostUSD: 0.30},
+				{ResultText: "attempt 2", CostUSD: 0.50},
+				{ResultText: "APPROVED: Looks good.", CostUSD: 0.20},
+			},
+		}
+		l := &Loop{
+			Invoker:        inv,
+			UI:             &noopUI{},
+			MaxCycles:      5,
+			MaxBudgetUSD:   10.0,
+			StruggleConfig: DefaultStruggleConfig(), // Enabled: false
+		}
+
+		result, err := l.runLoop(context.Background(), "bead-1", "implement feature")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.Decompose {
+			t.Error("expected Decompose=false when struggle detection is disabled")
+		}
+	})
+
+	t.Run("StruggleNotTriggeredBelowMinCycles", func(t *testing.T) {
+		t.Parallel()
+		// With MinCyclesBeforeCheck=3, struggle should not trigger on cycle 2.
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "attempt 1", CostUSD: 0.50},
+				{ResultText: "ISSUE:\nSEVERITY: major\nDESCRIPTION: missing error handling", CostUSD: 0.30},
+				{ResultText: "attempt 2", CostUSD: 0.50},
+				{ResultText: "APPROVED: OK", CostUSD: 0.20},
+			},
+		}
+		l := &Loop{
+			Invoker:      inv,
+			UI:           &noopUI{},
+			MaxCycles:    5,
+			MaxBudgetUSD: 10.0,
+			StruggleConfig: StruggleConfig{
+				Enabled:                 true,
+				MinCyclesBeforeCheck:    3, // Won't trigger until cycle 3
+				FilterRepeatThreshold:   2,
+				FindingOverlapThreshold: 0.3,
+				BudgetBurnThreshold:     0.3,
+				CompositeThreshold:      0.05,
+			},
+		}
+
+		result, err := l.runLoop(context.Background(), "bead-1", "implement feature")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.Decompose {
+			t.Error("expected Decompose=false when below MinCyclesBeforeCheck")
+		}
+	})
+}
