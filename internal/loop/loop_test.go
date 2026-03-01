@@ -3355,3 +3355,106 @@ func TestReviewerAgentFallbackWithoutCache(t *testing.T) {
 		t.Errorf("SystemPrompt = %q, want %q", a.SystemPrompt, "You are a reviewer.")
 	}
 }
+
+func TestFilterFixLoopUsesCachedPrompt(t *testing.T) {
+	t.Parallel()
+
+	// When cacheSystemPrompts has been called, runFilterFixLoop should
+	// use the cached coder system prompt rather than rebuilding it.
+	ff := &fakeFilterWithRunCheck{
+		checkResults: []*filter.CheckResult{
+			{Name: "build", Passed: true},
+		},
+	}
+	inv := &fakeInvoker{
+		responses: []agent.InvocationResult{
+			{ResultText: "fixed the error", CostUSD: 0.03},
+		},
+	}
+	l := &Loop{
+		Invoker:        inv,
+		UI:             &noopUI{},
+		Filter:         ff,
+		MaxFilterFixes: 3,
+		MaxCycles:      3,
+		WorkDir:        "/tmp",
+		CoderPrompt:    "You are a coder.",
+		ProjectContext: "# Project: quasar",
+		FabricEnabled:  true,
+	}
+	l.cacheSystemPrompts()
+
+	state := &CycleState{
+		TaskBeadID: "bead-1",
+		TaskTitle:  "implement feature",
+		Cycle:      1,
+	}
+
+	fixed, err := l.runFilterFixLoop(context.Background(), state, "build", "main.go:10:5: undefined: foo")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !fixed {
+		t.Error("expected filter fix to succeed")
+	}
+
+	// The agent passed to Invoke must carry the cached system prompt.
+	if len(inv.agents) < 1 {
+		t.Fatal("expected at least one agent invocation")
+	}
+	got := inv.agents[0].SystemPrompt
+	if got != l.cachedCoderSystemPrompt {
+		t.Errorf("runFilterFixLoop did not use cached system prompt\ngot len=%d, cached len=%d",
+			len(got), len(l.cachedCoderSystemPrompt))
+	}
+}
+
+func TestFilterFixLoopFallbackWithoutCache(t *testing.T) {
+	t.Parallel()
+
+	// When cacheSystemPrompts has NOT been called, runFilterFixLoop should
+	// fall back to building the prompt on the fly (backward compatibility).
+	ff := &fakeFilterWithRunCheck{
+		checkResults: []*filter.CheckResult{
+			{Name: "build", Passed: true},
+		},
+	}
+	inv := &fakeInvoker{
+		responses: []agent.InvocationResult{
+			{ResultText: "fixed the error", CostUSD: 0.03},
+		},
+	}
+	l := &Loop{
+		Invoker:        inv,
+		UI:             &noopUI{},
+		Filter:         ff,
+		MaxFilterFixes: 3,
+		MaxCycles:      3,
+		WorkDir:        "/tmp",
+		CoderPrompt:    "You are a coder.",
+	}
+	// Deliberately do NOT call l.cacheSystemPrompts().
+
+	state := &CycleState{
+		TaskBeadID: "bead-1",
+		TaskTitle:  "implement feature",
+		Cycle:      1,
+	}
+
+	fixed, err := l.runFilterFixLoop(context.Background(), state, "build", "main.go:5: error")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !fixed {
+		t.Error("expected filter fix to succeed")
+	}
+
+	// Without caching, the prompt should still be built correctly.
+	if len(inv.agents) < 1 {
+		t.Fatal("expected at least one agent invocation")
+	}
+	got := inv.agents[0].SystemPrompt
+	if got != "You are a coder." {
+		t.Errorf("SystemPrompt = %q, want %q", got, "You are a coder.")
+	}
+}

@@ -478,12 +478,18 @@ func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkNam
 			checkName, len(parsed.Errors), attempt+1, maxFixes))
 
 		// Build a focused fix prompt and invoke the coder with restricted tools.
+		// Use the pre-computed system prompt for cache hits. Fall back to
+		// building on the fly when the cache is empty (e.g., unit tests
+		// calling runFilterFixLoop directly without cacheSystemPrompts).
 		prompt := l.buildFilterFixPrompt(state, parsed)
-		sysPrompt := agent.BuildSystemPrompt(l.CoderPrompt, agent.PromptOpts{
-			FabricEnabled:  l.FabricEnabled,
-			TaskID:         l.TaskID,
-			ProjectContext: l.ProjectContext,
-		})
+		sysPrompt := l.cachedCoderSystemPrompt
+		if sysPrompt == "" {
+			sysPrompt = agent.BuildSystemPrompt(l.CoderPrompt, agent.PromptOpts{
+				FabricEnabled:  l.FabricEnabled,
+				TaskID:         l.TaskID,
+				ProjectContext: l.ProjectContext,
+			})
+		}
 		a := agent.Agent{
 			Role:         agent.RoleCoder,
 			SystemPrompt: sysPrompt,

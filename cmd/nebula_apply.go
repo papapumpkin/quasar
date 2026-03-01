@@ -258,21 +258,23 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	} else {
 		// Stderr path: single shared loop with Printer UI.
 		taskLoop := &loop.Loop{
-			Invoker:          claudeInv,
-			UI:               printer,
-			Git:              git,
-			Hooks:            []loop.Hook{&loop.BeadHook{Beads: client, UI: printer}},
-			Linter:           loop.NewLinter(cfg.LintCommands, workDir),
-			MaxCycles:        cfg.MaxReviewCycles,
-			MaxBudgetUSD:     cfg.MaxBudgetUSD,
-			Model:            cfg.Model,
-			CoderPrompt:      coderPrompt,
-			ReviewPrompt:     reviewerPrompt,
-			WorkDir:          workDir,
-			Fabric:           wg.Fabric,
-			FabricEnabled:    wg.Fabric != nil,
-			ProjectContext:   projectCtx,
-			MaxContextTokens: maxContextTokens,
+			Invoker:           claudeInv,
+			UI:                printer,
+			Git:               git,
+			Hooks:             []loop.Hook{&loop.BeadHook{Beads: client, UI: printer}},
+			Linter:            loop.NewLinter(cfg.LintCommands, workDir),
+			MaxCycles:         cfg.MaxReviewCycles,
+			MaxBudgetUSD:      cfg.MaxBudgetUSD,
+			Model:             cfg.Model,
+			CoderPrompt:       coderPrompt,
+			ReviewPrompt:      reviewerPrompt,
+			WorkDir:           workDir,
+			Fabric:            wg.Fabric,
+			FabricEnabled:     wg.Fabric != nil,
+			ProjectContext:    projectCtx,
+			MaxContextTokens:  maxContextTokens,
+			CacheOptimization: cfg.CacheOptimization,
+			CacheVerbose:      cfg.CacheVerbose,
 		}
 		wg.Runner = &loopAdapter{loop: taskLoop}
 		// Stderr path: use dashboard and terminal gater.
