@@ -70,7 +70,7 @@ type WorkerGroup struct {
 	blockedTracker  *fabric.BlockedTracker  // nil when Fabric is nil
 	pushbackHandler *fabric.PushbackHandler // nil when Fabric is nil
 	tychoScheduler  *tycho.Scheduler        // nil when Fabric is nil
-	routingCtx      *RoutingContext          // nil when auto-routing is disabled
+	routingCtx      *RoutingContext         // nil when auto-routing is disabled
 }
 
 // logger returns the effective log writer (os.Stderr if Logger is nil).
