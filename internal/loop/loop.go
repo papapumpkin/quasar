@@ -154,7 +154,32 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 					l.emit(ctx, Event{Kind: EventCycleStart, BeadID: beadID, Cycle: cycle})
 					continue
 				}
-				// Fixed! Remove the synthetic finding that runFilterChecks
+				// Fixed! Re-validate the chain from the failure point onward
+				// to catch regressions the fix may have introduced.
+				var revalResult *filter.Result
+				var revalErr error
+				if chain, ok := l.Filter.(*filter.Chain); ok {
+					revalResult, revalErr = chain.RunFrom(ctx, l.WorkDir, state.FilterCheckName)
+				} else {
+					// Non-Chain filter — full re-run.
+					revalResult, revalErr = l.Filter.Run(ctx, l.WorkDir)
+				}
+				if revalErr != nil {
+					return nil, fmt.Errorf("filter re-validation failed: %w", revalErr)
+				}
+				if !revalResult.Passed {
+					// Re-validation found a new failure — bounce to outer cycle.
+					revalFail := revalResult.FirstFailure()
+					state.FilterOutput = revalFail.Output
+					state.FilterCheckName = revalFail.Name
+					state.FilterHistory = append(state.FilterHistory, state.FilterCheckName)
+					l.sealCycleSHA(state)
+					l.drainRefactor(state)
+					l.emit(ctx, Event{Kind: EventCycleStart, BeadID: beadID, Cycle: cycle})
+					continue
+				}
+
+				// Remove the synthetic finding that runFilterChecks
 				// appended so the reviewer doesn't waste tokens verifying a
 				// resolved issue and struggle detection doesn't see a phantom
 				// critical finding.
@@ -423,7 +448,8 @@ func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkNam
 	fixBudget := l.filterFixBudget()
 
 	for attempt := 0; attempt < maxFixes; attempt++ {
-		l.UI.Info(fmt.Sprintf("filter fix attempt %d/%d for %s", attempt+1, maxFixes, checkName))
+		l.UI.Info(fmt.Sprintf("filter check %q failed with %d error(s), attempting targeted fix (attempt %d/%d)",
+			checkName, len(parsed.Errors), attempt+1, maxFixes))
 
 		// Build a focused fix prompt and invoke the coder with restricted tools.
 		prompt := l.buildFilterFixPrompt(state, parsed)
@@ -475,8 +501,39 @@ func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkNam
 			return false, fmt.Errorf("re-running check %q: %w", checkName, err)
 		}
 
-		if cr.Passed {
-			l.UI.Info(fmt.Sprintf("filter check %q fixed after %d attempt(s)", checkName, attempt+1))
+		checkPassed := cr.Passed
+
+		// Emit per-attempt telemetry event.
+		l.emit(ctx, Event{
+			Kind:   EventFilterFixAttempt,
+			BeadID: state.TaskBeadID,
+			Cycle:  state.Cycle,
+			FilterFix: &FilterFixData{
+				CheckName:   checkName,
+				Attempt:     attempt + 1,
+				MaxAttempts: maxFixes,
+				Fixed:       checkPassed,
+				CostUSD:     result.CostUSD,
+				ErrorCount:  len(parsed.Errors),
+				DurationMs:  result.DurationMs,
+			},
+		})
+
+		if checkPassed {
+			l.UI.Info(fmt.Sprintf("filter check %q fixed on attempt %d", checkName, attempt+1))
+			l.emit(ctx, Event{
+				Kind:   EventFilterFixResult,
+				BeadID: state.TaskBeadID,
+				Cycle:  state.Cycle,
+				FilterFix: &FilterFixData{
+					CheckName:   checkName,
+					Attempt:     state.FilterFixAttempts,
+					MaxAttempts: maxFixes,
+					Fixed:       true,
+					CostUSD:     state.FilterFixCostUSD,
+					ErrorCount:  len(parsed.Errors),
+				},
+			})
 			return true, nil
 		}
 
@@ -488,7 +545,21 @@ func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkNam
 		})
 	}
 
-	l.UI.Info(fmt.Sprintf("filter fix loop exhausted after %d attempts for %s", maxFixes, checkName))
+	l.UI.Info(fmt.Sprintf("filter check %q not fixed after %d attempts, falling back to outer cycle",
+		checkName, maxFixes))
+	l.emit(ctx, Event{
+		Kind:   EventFilterFixResult,
+		BeadID: state.TaskBeadID,
+		Cycle:  state.Cycle,
+		FilterFix: &FilterFixData{
+			CheckName:   checkName,
+			Attempt:     state.FilterFixAttempts,
+			MaxAttempts: maxFixes,
+			Fixed:       false,
+			CostUSD:     state.FilterFixCostUSD,
+			ErrorCount:  len(parsed.Errors),
+		},
+	})
 	return false, nil
 }
 
@@ -782,15 +853,18 @@ func (l *Loop) postMaxCyclesHail(state *CycleState) {
 // emitCycleSummary sends a cycle summary to the UI for the given phase.
 func (l *Loop) emitCycleSummary(state *CycleState, phase Phase, result agent.InvocationResult) {
 	l.UI.CycleSummary(ui.CycleSummaryData{
-		Cycle:        state.Cycle,
-		MaxCycles:    l.MaxCycles,
-		Phase:        phase.String(),
-		CostUSD:      result.CostUSD,
-		TotalCostUSD: state.TotalCostUSD,
-		MaxBudgetUSD: l.MaxBudgetUSD,
-		DurationMs:   result.DurationMs,
-		Approved:     isApproved(state.ReviewOutput),
-		IssueCount:   len(state.Findings),
+		Cycle:             state.Cycle,
+		MaxCycles:         l.MaxCycles,
+		Phase:             phase.String(),
+		CostUSD:           result.CostUSD,
+		TotalCostUSD:      state.TotalCostUSD,
+		MaxBudgetUSD:      l.MaxBudgetUSD,
+		DurationMs:        result.DurationMs,
+		Approved:          isApproved(state.ReviewOutput),
+		IssueCount:        len(state.Findings),
+		FilterFixAttempts: state.FilterFixAttempts,
+		FilterFixCostUSD:  state.FilterFixCostUSD,
+		FilterFixSuccess:  state.FilterFixCostUSD > 0 && state.FilterOutput == "",
 	})
 }
 

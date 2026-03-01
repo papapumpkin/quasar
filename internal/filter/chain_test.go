@@ -574,6 +574,239 @@ func TestChainRunCheck(t *testing.T) {
 	})
 }
 
+func TestChainRunFrom(t *testing.T) {
+	t.Parallel()
+
+	// Helper: build a chain of named checks that record which checks ran.
+	buildChain := func(names ...string) (*Chain, *[]string) {
+		var ran []string
+		checks := make([]Check, len(names))
+		for i, name := range names {
+			n := name // capture
+			checks[i] = Check{
+				Name: n,
+				Fn: func(_ context.Context, _ string) (string, error) {
+					ran = append(ran, n)
+					return "", nil
+				},
+			}
+		}
+		return &Chain{Checks: checks}, &ran
+	}
+
+	t.Run("StartFromFirst", func(t *testing.T) {
+		t.Parallel()
+		chain, ran := buildChain("build", "vet", "lint", "test")
+
+		result, err := chain.RunFrom(context.Background(), "/tmp", "build")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !result.Passed {
+			t.Error("expected result.Passed to be true")
+		}
+		// When starting from the first check, all checks should run (no skips).
+		if len(*ran) != 4 {
+			t.Errorf("expected 4 checks to run, got %d: %v", len(*ran), *ran)
+		}
+		if len(result.Checks) != 4 {
+			t.Fatalf("expected 4 check results, got %d", len(result.Checks))
+		}
+		// All should have been actually run (non-zero elapsed would indicate this
+		// in real runs, but in tests the mock is instant).
+		for _, c := range result.Checks {
+			if !c.Passed {
+				t.Errorf("check %q should have passed", c.Name)
+			}
+		}
+	})
+
+	t.Run("StartFromMiddle", func(t *testing.T) {
+		t.Parallel()
+		chain, ran := buildChain("build", "vet", "lint", "test")
+
+		result, err := chain.RunFrom(context.Background(), "/tmp", "lint")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !result.Passed {
+			t.Error("expected result.Passed to be true")
+		}
+		// lint is at index 2, so startIdx = max(0, 2-1) = 1 (vet).
+		// build (index 0) should be skipped, vet/lint/test should run.
+		if len(*ran) != 3 {
+			t.Errorf("expected 3 checks to run, got %d: %v", len(*ran), *ran)
+		}
+		expected := []string{"vet", "lint", "test"}
+		for i, want := range expected {
+			if i >= len(*ran) || (*ran)[i] != want {
+				t.Errorf("ran[%d] = %q, want %q", i, (*ran)[i], want)
+			}
+		}
+		// Result should contain all 4 entries.
+		if len(result.Checks) != 4 {
+			t.Fatalf("expected 4 check results, got %d", len(result.Checks))
+		}
+		// First check (build) should be skipped: Passed=true, Elapsed=0.
+		if !result.Checks[0].Passed {
+			t.Error("skipped check 'build' should have Passed=true")
+		}
+		if result.Checks[0].Elapsed != 0 {
+			t.Errorf("skipped check 'build' should have Elapsed=0, got %v", result.Checks[0].Elapsed)
+		}
+	})
+
+	t.Run("StartFromLast", func(t *testing.T) {
+		t.Parallel()
+		chain, ran := buildChain("build", "vet", "lint", "test")
+
+		result, err := chain.RunFrom(context.Background(), "/tmp", "test")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !result.Passed {
+			t.Error("expected result.Passed to be true")
+		}
+		// test is at index 3, so startIdx = max(0, 3-1) = 2 (lint).
+		// build and vet should be skipped, lint and test should run.
+		if len(*ran) != 2 {
+			t.Errorf("expected 2 checks to run, got %d: %v", len(*ran), *ran)
+		}
+		expected := []string{"lint", "test"}
+		for i, want := range expected {
+			if i >= len(*ran) || (*ran)[i] != want {
+				t.Errorf("ran[%d] = %q, want %q", i, (*ran)[i], want)
+			}
+		}
+		// First two checks should be skipped.
+		if len(result.Checks) != 4 {
+			t.Fatalf("expected 4 check results, got %d", len(result.Checks))
+		}
+		for _, idx := range []int{0, 1} {
+			if !result.Checks[idx].Passed || result.Checks[idx].Elapsed != 0 {
+				t.Errorf("check %q should be skipped (Passed=true, Elapsed=0)", result.Checks[idx].Name)
+			}
+		}
+	})
+
+	t.Run("UnknownNameRunsAll", func(t *testing.T) {
+		t.Parallel()
+		chain, ran := buildChain("build", "vet", "lint")
+
+		result, err := chain.RunFrom(context.Background(), "/tmp", "nonexistent")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !result.Passed {
+			t.Error("expected result.Passed to be true")
+		}
+		// Unknown name falls back to Run — all checks should execute.
+		if len(*ran) != 3 {
+			t.Errorf("expected 3 checks to run (fallback), got %d: %v", len(*ran), *ran)
+		}
+	})
+
+	t.Run("RegressionSafety", func(t *testing.T) {
+		t.Parallel()
+		// When starting from "vet" (index 1), startIdx = max(0, 1-1) = 0.
+		// So build (index 0) should also run, not be skipped.
+		chain, ran := buildChain("build", "vet", "lint", "test")
+
+		result, err := chain.RunFrom(context.Background(), "/tmp", "vet")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !result.Passed {
+			t.Error("expected result.Passed to be true")
+		}
+		// All 4 checks should run (startIdx=0 means no skipping).
+		if len(*ran) != 4 {
+			t.Errorf("expected 4 checks to run, got %d: %v", len(*ran), *ran)
+		}
+		// No skipped entries — all should have been actually run.
+		for _, c := range result.Checks {
+			if !c.Passed {
+				t.Errorf("check %q should have passed", c.Name)
+			}
+		}
+	})
+
+	t.Run("StopsOnFailure", func(t *testing.T) {
+		t.Parallel()
+		testCalled := false
+		chain := &Chain{
+			Checks: []Check{
+				{Name: "build", Fn: func(_ context.Context, _ string) (string, error) {
+					return "", nil
+				}},
+				{Name: "vet", Fn: func(_ context.Context, _ string) (string, error) {
+					return "", nil
+				}},
+				{Name: "lint", Fn: func(_ context.Context, _ string) (string, error) {
+					return "lint error", errors.New("lint failed")
+				}},
+				{Name: "test", Fn: func(_ context.Context, _ string) (string, error) {
+					testCalled = true
+					return "", nil
+				}},
+			},
+		}
+
+		result, err := chain.RunFrom(context.Background(), "/tmp", "lint")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.Passed {
+			t.Error("expected result.Passed to be false")
+		}
+		if testCalled {
+			t.Error("test check should not have been called after lint failure")
+		}
+		// Should have build (skipped), vet (ran), lint (failed) = 3 entries.
+		// build is skipped because lint is at index 2, startIdx = 1 (vet).
+		if len(result.Checks) != 3 {
+			t.Fatalf("expected 3 check results, got %d", len(result.Checks))
+		}
+		if result.Checks[0].Name != "build" || !result.Checks[0].Passed || result.Checks[0].Elapsed != 0 {
+			t.Error("build should be skipped (Passed=true, Elapsed=0)")
+		}
+		if result.Checks[1].Name != "vet" || !result.Checks[1].Passed {
+			t.Error("vet should have passed")
+		}
+		if result.Checks[2].Name != "lint" || result.Checks[2].Passed {
+			t.Error("lint should have failed")
+		}
+		if result.Checks[2].Output != "lint error" {
+			t.Errorf("lint output = %q, want 'lint error'", result.Checks[2].Output)
+		}
+	})
+
+	t.Run("CanceledContext", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		chain := &Chain{
+			Checks: []Check{
+				{Name: "build", Fn: func(_ context.Context, _ string) (string, error) {
+					return "", nil
+				}},
+				{Name: "vet", Fn: func(_ context.Context, _ string) (string, error) {
+					return "", nil
+				}},
+			},
+		}
+
+		_, err := chain.RunFrom(ctx, "/tmp", "vet")
+		if err == nil {
+			t.Fatal("expected error for canceled context")
+		}
+		if !strings.Contains(err.Error(), "filter chain canceled") {
+			t.Errorf("error = %q, want to contain 'filter chain canceled'", err.Error())
+		}
+	})
+}
+
 // writeFile is a test helper that creates a file with the given content.
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()

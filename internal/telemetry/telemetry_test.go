@@ -210,6 +210,8 @@ func TestEventKinds_AreDistinct(t *testing.T) {
 		KindDiscoveryPosted,
 		KindDiscoveryResolved,
 		KindFilterResult,
+		KindFilterFixAttempt,
+		KindFilterFixResult,
 		KindCycleStart,
 		KindCycleDone,
 		KindHealingStart,

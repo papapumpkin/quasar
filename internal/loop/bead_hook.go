@@ -57,6 +57,17 @@ func (h *BeadHook) OnEvent(ctx context.Context, event Event) {
 
 	case EventTaskFailed:
 		h.beadComment(ctx, event.BeadID, event.Message)
+
+	case EventFilterFixResult:
+		if event.FilterFix != nil {
+			status := "not fixed"
+			if event.FilterFix.Fixed {
+				status = "fixed"
+			}
+			h.beadComment(ctx, event.BeadID, fmt.Sprintf(
+				"Filter fix loop for %q completed: %s (%d attempt(s), $%.4f)",
+				event.FilterFix.CheckName, status, event.FilterFix.Attempt, event.FilterFix.CostUSD))
+		}
 	}
 }
 
