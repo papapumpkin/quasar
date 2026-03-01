@@ -29,9 +29,9 @@ type PhaseInput struct {
 // PhaseContract represents the statically-derived inputs and outputs of a phase.
 type PhaseContract struct {
 	PhaseID     string
-	Produces    []Entanglement // what this phase is expected to create
-	Consumes    []Entanglement // what this phase expects to find
-	Scope       []string       // resolved file paths from scope globs
+	Produces    []Entanglement  // what this phase is expected to create
+	Consumes    []Entanglement  // what this phase expects to find
+	Scope       []string        // resolved file paths from scope globs
 	NewProduces map[string]bool // keys (kind:name) of symbols from files not yet on disk
 }
 
