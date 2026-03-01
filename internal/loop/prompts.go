@@ -146,13 +146,13 @@ func (l *Loop) buildFilterFixPrompt(state *CycleState, parsed filter.ParseResult
 }
 
 // writeStructuredErrors writes the ERRORS and AFFECTED FILES sections from
-// a list of FilterErrors. Errors are grouped by file path and sorted by error
+// a list of filter.Error entries. Errors are grouped by file path and sorted by error
 // count descending; within each file, errors are sorted by line number ascending.
-func writeStructuredErrors(b *strings.Builder, errs []filter.FilterError) {
+func writeStructuredErrors(b *strings.Builder, errs []filter.Error) {
 	// Group errors by file.
 	type fileGroup struct {
 		File   string
-		Errors []filter.FilterError
+		Errors []filter.Error
 	}
 	byFile := make(map[string]*fileGroup, len(errs))
 	var order []string

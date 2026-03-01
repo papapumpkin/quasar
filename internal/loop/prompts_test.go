@@ -241,7 +241,7 @@ func TestBuildFilterFixPrompt(t *testing.T) {
 			parsed: filter.ParseResult{
 				CheckName: "build",
 				RawOutput: "raw build output",
-				Errors: []filter.FilterError{
+				Errors: []filter.Error{
 					{File: "internal/loop/loop.go", Line: 42, Column: 15, Message: "undefined: foo", Tool: "build"},
 					{File: "internal/loop/loop.go", Line: 58, Column: 3, Message: "cannot use x as string", Tool: "build"},
 				},
@@ -270,7 +270,7 @@ func TestBuildFilterFixPrompt(t *testing.T) {
 			state: &CycleState{TaskBeadID: "bead-200"},
 			parsed: filter.ParseResult{
 				CheckName: "vet",
-				Errors: []filter.FilterError{
+				Errors: []filter.Error{
 					{File: "cmd/run.go", Line: 10, Column: 5, Message: "unreachable code", Tool: "vet"},
 					{File: "internal/loop/loop.go", Line: 42, Column: 15, Message: "error one", Tool: "vet"},
 					{File: "internal/loop/loop.go", Line: 58, Column: 3, Message: "error two", Tool: "vet"},
@@ -312,7 +312,7 @@ func TestBuildFilterFixPrompt(t *testing.T) {
 			parsed: filter.ParseResult{
 				CheckName: "build",
 				RawOutput: "",
-				Errors:    []filter.FilterError{},
+				Errors:    []filter.Error{},
 			},
 			checks: []string{
 				"Fix failing build check",
@@ -329,7 +329,7 @@ func TestBuildFilterFixPrompt(t *testing.T) {
 			state: &CycleState{TaskBeadID: "bead-500"},
 			parsed: filter.ParseResult{
 				CheckName: "lint",
-				Errors: []filter.FilterError{
+				Errors: []filter.Error{
 					{File: "main.go", Line: 1, Column: 1, Message: "unused", Tool: "lint"},
 				},
 			},
@@ -347,7 +347,7 @@ func TestBuildFilterFixPrompt(t *testing.T) {
 			state: &CycleState{TaskBeadID: "bead-600"},
 			parsed: filter.ParseResult{
 				CheckName: "test",
-				Errors: []filter.FilterError{
+				Errors: []filter.Error{
 					{File: "foo_test.go", Line: 15, Column: 0, Message: "[TestFoo] expected true", Tool: "test"},
 				},
 			},
@@ -388,7 +388,7 @@ func TestBuildFilterFixPrompt_ErrorOrdering(t *testing.T) {
 	state := &CycleState{TaskBeadID: "bead-ord"}
 	parsed := filter.ParseResult{
 		CheckName: "build",
-		Errors: []filter.FilterError{
+		Errors: []filter.Error{
 			{File: "b.go", Line: 99, Column: 1, Message: "err b:99", Tool: "build"},
 			{File: "a.go", Line: 50, Column: 1, Message: "err a:50", Tool: "build"},
 			{File: "a.go", Line: 10, Column: 1, Message: "err a:10", Tool: "build"},
@@ -415,7 +415,7 @@ func TestBuildFilterFixPrompt_ErrorOrdering(t *testing.T) {
 	if idx10 < 0 || idx30 < 0 || idx50 < 0 {
 		t.Fatalf("expected all a.go errors in prompt\ngot:\n%s", prompt)
 	}
-	if !(idx10 < idx30 && idx30 < idx50) {
+	if idx10 >= idx30 || idx30 >= idx50 {
 		t.Errorf("expected a.go errors sorted by line: 10 < 30 < 50, got indices %d, %d, %d", idx10, idx30, idx50)
 	}
 }

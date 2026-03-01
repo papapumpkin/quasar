@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-// FilterError represents a single structured error extracted from tool output.
-type FilterError struct {
+// Error represents a single structured error extracted from tool output.
+type Error struct {
 	File    string // relative file path (e.g. "internal/loop/loop.go")
 	Line    int    // 1-based line number, 0 if unknown
 	Column  int    // 1-based column, 0 if unknown
@@ -17,9 +17,9 @@ type FilterError struct {
 
 // ParseResult holds all errors extracted from a single check's output.
 type ParseResult struct {
-	Errors    []FilterError // structured errors, may be empty if parsing fails
-	RawOutput string        // original output preserved as fallback
-	CheckName string        // "build", "vet", "lint", "test"
+	Errors    []Error // structured errors, may be empty if parsing fails
+	RawOutput string  // original output preserved as fallback
+	CheckName string  // "build", "vet", "lint", "test"
 }
 
 // errLineRe matches the standard Go toolchain error format: file.go:line:col: message
@@ -65,21 +65,21 @@ func ParseCheckOutput(cr CheckResult) ParseResult {
 // parseBuildErrors handles `go build ./...` output.
 // Format: <file>:<line>:<col>: <message>
 // Lines starting with # (package headers) are skipped.
-func parseBuildErrors(output string) []FilterError {
+func parseBuildErrors(output string) []Error {
 	return parseStandardErrors(output, "build")
 }
 
 // parseVetErrors handles `go vet ./...` output.
 // Format: <file>:<line>:<col>: <message>
 // Also handles "# <package>" header lines and optional "vet:" prefix.
-func parseVetErrors(output string) []FilterError {
+func parseVetErrors(output string) []Error {
 	return parseStandardErrors(output, "vet")
 }
 
 // parseLintErrors handles `golangci-lint run` output.
 // Format: <file>:<line>:<col>: <message> (<linter-name>)
-func parseLintErrors(output string) []FilterError {
-	var errs []FilterError
+func parseLintErrors(output string) []Error {
+	var errs []Error
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -89,7 +89,7 @@ func parseLintErrors(output string) []FilterError {
 		if m == nil {
 			continue
 		}
-		fe := FilterError{
+		fe := Error{
 			File:    cleanPath(m[1]),
 			Line:    atoi(m[2]),
 			Column:  atoi(m[3]),
@@ -110,8 +110,8 @@ func parseLintErrors(output string) []FilterError {
 // parseTestErrors handles `go test ./...` output.
 // Extracts both compilation errors (same format as build) and test assertion
 // failures with file:line: message format. Also extracts panic stack traces.
-func parseTestErrors(output string) []FilterError {
-	var errs []FilterError
+func parseTestErrors(output string) []Error {
+	var errs []Error
 	var currentTest string
 	for _, line := range strings.Split(output, "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -127,7 +127,7 @@ func parseTestErrors(output string) []FilterError {
 
 		// Standard file:line:col: message (compilation errors within tests).
 		if m := errLineRe.FindStringSubmatch(trimmed); m != nil {
-			errs = append(errs, FilterError{
+			errs = append(errs, Error{
 				File:    cleanPath(m[1]),
 				Line:    atoi(m[2]),
 				Column:  atoi(m[3]),
@@ -139,7 +139,7 @@ func parseTestErrors(output string) []FilterError {
 
 		// Panic stack trace: file.go:123 +0x...
 		if m := panicTraceRe.FindStringSubmatch(line); m != nil {
-			errs = append(errs, FilterError{
+			errs = append(errs, Error{
 				File:    cleanPath(m[1]),
 				Line:    atoi(m[2]),
 				Column:  0,
@@ -157,7 +157,7 @@ func parseTestErrors(output string) []FilterError {
 			if currentTest != "" {
 				msg = "[" + currentTest + "] " + msg
 			}
-			errs = append(errs, FilterError{
+			errs = append(errs, Error{
 				File:    cleanPath(m[1]),
 				Line:    atoi(m[2]),
 				Column:  0,
@@ -172,8 +172,8 @@ func parseTestErrors(output string) []FilterError {
 
 // parseStandardErrors parses the common file:line:col: message format
 // shared by go build and go vet. Lines starting with # are skipped.
-func parseStandardErrors(output, tool string) []FilterError {
-	var errs []FilterError
+func parseStandardErrors(output, tool string) []Error {
+	var errs []Error
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -183,7 +183,7 @@ func parseStandardErrors(output, tool string) []FilterError {
 		if m == nil {
 			continue
 		}
-		errs = append(errs, FilterError{
+		errs = append(errs, Error{
 			File:    cleanPath(m[1]),
 			Line:    atoi(m[2]),
 			Column:  atoi(m[3]),
@@ -194,8 +194,8 @@ func parseStandardErrors(output, tool string) []FilterError {
 	return errs
 }
 
-// dedup removes duplicate FilterError entries with the same File, Line, and Message.
-func dedup(errs []FilterError) []FilterError {
+// dedup removes duplicate Error entries with the same File, Line, and Message.
+func dedup(errs []Error) []Error {
 	if len(errs) == 0 {
 		return errs
 	}
@@ -205,7 +205,7 @@ func dedup(errs []FilterError) []FilterError {
 		Message string
 	}
 	seen := make(map[key]struct{}, len(errs))
-	out := make([]FilterError, 0, len(errs))
+	out := make([]Error, 0, len(errs))
 	for _, e := range errs {
 		k := key{File: e.File, Line: e.Line, Message: e.Message}
 		if _, exists := seen[k]; exists {

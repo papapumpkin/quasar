@@ -115,14 +115,14 @@ func TestParseBuildErrors(t *testing.T) {
 		name    string
 		input   string
 		wantLen int
-		check   func(t *testing.T, errs []FilterError)
+		check   func(t *testing.T, errs []Error)
 	}{
 		{
 			name: "SingleError",
 			input: `# github.com/aaronsalm/quasar/internal/loop
 ./internal/loop/loop.go:42:15: undefined: foo`,
 			wantLen: 1,
-			check: func(t *testing.T, errs []FilterError) {
+			check: func(t *testing.T, errs []Error) {
 				e := errs[0]
 				if e.File != "internal/loop/loop.go" {
 					t.Errorf("File = %q, want %q", e.File, "internal/loop/loop.go")
@@ -148,7 +148,7 @@ func TestParseBuildErrors(t *testing.T) {
 ./internal/loop/loop.go:50:2: syntax error: unexpected newline
 ./internal/loop/state.go:10:5: cannot use x (variable of type int) as string`,
 			wantLen: 3,
-			check: func(t *testing.T, errs []FilterError) {
+			check: func(t *testing.T, errs []Error) {
 				if errs[0].Line != 42 {
 					t.Errorf("first error line = %d, want 42", errs[0].Line)
 				}
@@ -167,7 +167,7 @@ func TestParseBuildErrors(t *testing.T) {
 # github.com/aaronsalm/quasar/internal/filter
 ./internal/filter/chain.go:10:5: too many arguments`,
 			wantLen: 2,
-			check: func(t *testing.T, errs []FilterError) {
+			check: func(t *testing.T, errs []Error) {
 				if errs[0].File != "internal/loop/loop.go" {
 					t.Errorf("first error file = %q", errs[0].File)
 				}
@@ -190,7 +190,7 @@ func TestParseBuildErrors(t *testing.T) {
 			name:    "PathWithoutDotSlash",
 			input:   `internal/loop/loop.go:42:15: undefined: bar`,
 			wantLen: 1,
-			check: func(t *testing.T, errs []FilterError) {
+			check: func(t *testing.T, errs []Error) {
 				if errs[0].File != "internal/loop/loop.go" {
 					t.Errorf("File = %q, want %q", errs[0].File, "internal/loop/loop.go")
 				}
@@ -219,14 +219,14 @@ func TestParseVetErrors(t *testing.T) {
 		name    string
 		input   string
 		wantLen int
-		check   func(t *testing.T, errs []FilterError)
+		check   func(t *testing.T, errs []Error)
 	}{
 		{
 			name: "StandardVetOutput",
 			input: `# github.com/aaronsalm/quasar/internal/loop
 ./internal/loop/loop.go:10:2: printf: Sprintf format %d has arg of wrong type string`,
 			wantLen: 1,
-			check: func(t *testing.T, errs []FilterError) {
+			check: func(t *testing.T, errs []Error) {
 				e := errs[0]
 				if e.File != "internal/loop/loop.go" {
 					t.Errorf("File = %q", e.File)
@@ -245,7 +245,7 @@ func TestParseVetErrors(t *testing.T) {
 ./cmd/run.go:25:3: unreachable code
 ./cmd/run.go:30:5: result of fmt.Sprintf call not used`,
 			wantLen: 2,
-			check: func(t *testing.T, errs []FilterError) {
+			check: func(t *testing.T, errs []Error) {
 				if errs[0].Message != "unreachable code" {
 					t.Errorf("first message = %q", errs[0].Message)
 				}
@@ -279,13 +279,13 @@ func TestParseLintErrors(t *testing.T) {
 		name    string
 		input   string
 		wantLen int
-		check   func(t *testing.T, errs []FilterError)
+		check   func(t *testing.T, errs []Error)
 	}{
 		{
 			name:    "SingleLintError",
 			input:   `internal/loop/loop.go:42:15: SA1029: should not use built-in type string as key for value (staticcheck)`,
 			wantLen: 1,
-			check: func(t *testing.T, errs []FilterError) {
+			check: func(t *testing.T, errs []Error) {
 				e := errs[0]
 				if e.File != "internal/loop/loop.go" {
 					t.Errorf("File = %q", e.File)
@@ -313,7 +313,7 @@ func TestParseLintErrors(t *testing.T) {
 			input: `internal/loop/loop.go:10:5: error return value not checked (errcheck)
 internal/loop/loop.go:20:3: func is unused (unused)`,
 			wantLen: 2,
-			check: func(t *testing.T, errs []FilterError) {
+			check: func(t *testing.T, errs []Error) {
 				if !strings.Contains(errs[0].Message, "[errcheck]") {
 					t.Errorf("first message = %q, want [errcheck]", errs[0].Message)
 				}
@@ -326,7 +326,7 @@ internal/loop/loop.go:20:3: func is unused (unused)`,
 			name:    "NoTrailingLinterName",
 			input:   `internal/loop/loop.go:10:5: some generic warning`,
 			wantLen: 1,
-			check: func(t *testing.T, errs []FilterError) {
+			check: func(t *testing.T, errs []Error) {
 				if errs[0].Message != "some generic warning" {
 					t.Errorf("Message = %q", errs[0].Message)
 				}
@@ -360,7 +360,7 @@ func TestParseTestErrors(t *testing.T) {
 		name    string
 		input   string
 		wantLen int
-		check   func(t *testing.T, errs []FilterError)
+		check   func(t *testing.T, errs []Error)
 	}{
 		{
 			name: "CompilationError",
@@ -368,7 +368,7 @@ func TestParseTestErrors(t *testing.T) {
 ./main_test.go:12:3: undefined: nonexistent
 FAIL	testmod [build failed]`,
 			wantLen: 1,
-			check: func(t *testing.T, errs []FilterError) {
+			check: func(t *testing.T, errs []Error) {
 				e := errs[0]
 				if e.File != "main_test.go" {
 					t.Errorf("File = %q", e.File)
@@ -391,7 +391,7 @@ FAIL	testmod [build failed]`,
 FAIL
 FAIL	testmod	0.005s`,
 			wantLen: 1,
-			check: func(t *testing.T, errs []FilterError) {
+			check: func(t *testing.T, errs []Error) {
 				e := errs[0]
 				if e.File != "main_test.go" {
 					t.Errorf("File = %q", e.File)
@@ -417,7 +417,7 @@ FAIL	testmod	0.005s`,
 --- FAIL: TestBar (0.01s)
     bar_test.go:20: missing field`,
 			wantLen: 2,
-			check: func(t *testing.T, errs []FilterError) {
+			check: func(t *testing.T, errs []Error) {
 				if errs[0].File != "foo_test.go" {
 					t.Errorf("first file = %q", errs[0].File)
 				}
@@ -440,7 +440,7 @@ main.doSomething()
 main.main()
 	/home/user/project/main.go:10 +0x25`,
 			wantLen: 2,
-			check: func(t *testing.T, errs []FilterError) {
+			check: func(t *testing.T, errs []Error) {
 				// Panic traces don't strip ./ prefix since they use absolute paths.
 				if errs[0].Line != 55 {
 					t.Errorf("first panic line = %d", errs[0].Line)
@@ -461,7 +461,7 @@ main.main()
     main_test.go:20: expected true
 FAIL	testmod	0.003s`,
 			wantLen: 2,
-			check: func(t *testing.T, errs []FilterError) {
+			check: func(t *testing.T, errs []Error) {
 				if errs[0].Line != 5 {
 					t.Errorf("compilation error line = %d", errs[0].Line)
 				}
@@ -506,7 +506,7 @@ func TestDedup(t *testing.T) {
 
 	t.Run("RemovesDuplicates", func(t *testing.T) {
 		t.Parallel()
-		errs := []FilterError{
+		errs := []Error{
 			{File: "a.go", Line: 10, Message: "undefined: foo", Tool: "build"},
 			{File: "a.go", Line: 10, Message: "undefined: foo", Tool: "build"},
 			{File: "a.go", Line: 10, Message: "undefined: foo", Tool: "vet"},
@@ -520,7 +520,7 @@ func TestDedup(t *testing.T) {
 
 	t.Run("PreservesDifferentMessages", func(t *testing.T) {
 		t.Parallel()
-		errs := []FilterError{
+		errs := []Error{
 			{File: "a.go", Line: 10, Message: "undefined: foo", Tool: "build"},
 			{File: "a.go", Line: 10, Message: "cannot use x as y", Tool: "build"},
 		}
@@ -532,7 +532,7 @@ func TestDedup(t *testing.T) {
 
 	t.Run("PreservesDifferentLines", func(t *testing.T) {
 		t.Parallel()
-		errs := []FilterError{
+		errs := []Error{
 			{File: "a.go", Line: 10, Message: "undefined: foo", Tool: "build"},
 			{File: "a.go", Line: 20, Message: "undefined: foo", Tool: "build"},
 		}
@@ -552,7 +552,7 @@ func TestDedup(t *testing.T) {
 
 	t.Run("EmptyInput", func(t *testing.T) {
 		t.Parallel()
-		result := dedup([]FilterError{})
+		result := dedup([]Error{})
 		if len(result) != 0 {
 			t.Errorf("expected empty, got %d", len(result))
 		}
