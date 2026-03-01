@@ -63,7 +63,7 @@ const (
 
 // ReviewFinding represents a single issue identified by the reviewer.
 type ReviewFinding struct {
-	ID          string        // deterministic hash for cross-cycle tracking
+	ID          string // deterministic hash for cross-cycle tracking
 	Severity    string
 	Description string
 	Cycle       int           // cycle in which this finding was created (set during accumulation)
