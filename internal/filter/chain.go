@@ -67,6 +67,106 @@ func (c *Chain) Run(ctx context.Context, workDir string) (*Result, error) {
 	return result, nil
 }
 
+// RunCheck executes a single named check from the chain. Returns the
+// CheckResult, or an error if the check name is not found.
+func (c *Chain) RunCheck(ctx context.Context, workDir string, name string) (*CheckResult, error) {
+	for _, check := range c.Checks {
+		if check.Name != name {
+			continue
+		}
+
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("check %q canceled: %w", name, err)
+		}
+
+		start := time.Now()
+		output, err := check.Fn(ctx, workDir)
+		elapsed := time.Since(start)
+
+		cr := &CheckResult{
+			Name:    check.Name,
+			Passed:  err == nil,
+			Output:  output,
+			Elapsed: elapsed,
+		}
+		return cr, nil
+	}
+	return nil, fmt.Errorf("check %q not found in chain", name)
+}
+
+// RunFrom executes the chain starting from one check before the named check,
+// skipping all checks prior to that. This is useful after an inner fix loop
+// resolves a failure — checks well before the failure point already passed
+// and don't need re-running. The one-before offset catches regressions where
+// a fix for check N accidentally breaks check N-1.
+//
+// Skipped checks get synthetic CheckResult{Passed: true, Elapsed: 0} entries
+// so Result.Checks always contains the full picture. A zero Elapsed with
+// Passed true signals the check was skipped, not run.
+//
+// If the named check is not found, RunFrom behaves like Run (executes all).
+// Stops on first failure, same as Run.
+func (c *Chain) RunFrom(ctx context.Context, workDir string, startFrom string) (*Result, error) {
+	startIdx := -1
+	for i, check := range c.Checks {
+		if check.Name == startFrom {
+			// Start one before the named check for regression safety,
+			// clamped to zero.
+			startIdx = i - 1
+			if startIdx < 0 {
+				startIdx = 0
+			}
+			break
+		}
+	}
+
+	// Unknown name — fall back to running all checks.
+	if startIdx < 0 {
+		return c.Run(ctx, workDir)
+	}
+
+	result := &Result{Passed: true}
+
+	for i, check := range c.Checks {
+		if i < startIdx {
+			// Skipped — prefill with synthetic passing result.
+			result.Checks = append(result.Checks, CheckResult{
+				Name:   check.Name,
+				Passed: true,
+			})
+			continue
+		}
+
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("filter chain canceled: %w", err)
+		}
+
+		start := time.Now()
+		output, err := check.Fn(ctx, workDir)
+		elapsed := time.Since(start)
+
+		if err != nil {
+			result.Passed = false
+			result.Checks = append(result.Checks, CheckResult{
+				Name:    check.Name,
+				Passed:  false,
+				Output:  output,
+				Elapsed: elapsed,
+			})
+			return result, nil
+		}
+
+		result.Checks = append(result.Checks, CheckResult{
+			Name:    check.Name,
+			Passed:  true,
+			Output:  output,
+			Elapsed: elapsed,
+		})
+	}
+
+	return result, nil
+}
+
 // DefaultChain returns the standard pre-reviewer filter chain:
 // build, vet, lint (if available), test, claims (if fabric present).
 func DefaultChain(fabric ClaimChecker, taskID string, modifiedFiles []string) *Chain {

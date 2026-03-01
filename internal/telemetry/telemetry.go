@@ -28,6 +28,10 @@ const (
 	KindCycleStart         = "cycle_start"
 	KindCycleDone          = "cycle_done"
 
+	// Filter fix inner loop events.
+	KindFilterFixAttempt = "filter_fix_attempt" // emitted per inner fix attempt
+	KindFilterFixResult  = "filter_fix_result"  // emitted when inner fix loop concludes
+
 	// Healing pipeline lifecycle events.
 	KindHealingStart   = "healing.start"   // emitted when failure analysis begins
 	KindHealingSkipped = "healing.skipped" // emitted when diagnosis is unhealable or policy rejects

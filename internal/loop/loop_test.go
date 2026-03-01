@@ -1816,6 +1816,47 @@ func (f *fakeFilter) Run(_ context.Context, _ string) (*filter.Result, error) {
 	return f.result, f.err
 }
 
+// ---------------------------------------------------------------------------
+// fakeFilterWithRunCheck implements both filter.Filter and SingleCheckRunner
+// for testing the inner filter fix loop.
+// ---------------------------------------------------------------------------
+
+type fakeFilterWithRunCheck struct {
+	// results is a queue for Run calls.
+	results []*filter.Result
+	runErr  error
+	runIdx  int
+
+	// checkResults is a queue for RunCheck calls.
+	checkResults []*filter.CheckResult
+	checkErr     error
+	checkIdx     int
+}
+
+func (f *fakeFilterWithRunCheck) Run(_ context.Context, _ string) (*filter.Result, error) {
+	if f.runErr != nil {
+		return nil, f.runErr
+	}
+	idx := f.runIdx
+	f.runIdx++
+	if idx < len(f.results) {
+		return f.results[idx], nil
+	}
+	return &filter.Result{Passed: true}, nil
+}
+
+func (f *fakeFilterWithRunCheck) RunCheck(_ context.Context, _ string, _ string) (*filter.CheckResult, error) {
+	if f.checkErr != nil {
+		return nil, f.checkErr
+	}
+	idx := f.checkIdx
+	f.checkIdx++
+	if idx < len(f.checkResults) {
+		return f.checkResults[idx], nil
+	}
+	return &filter.CheckResult{Passed: true}, nil
+}
+
 func TestRunFilterChecks(t *testing.T) {
 	t.Parallel()
 
@@ -2210,6 +2251,845 @@ func TestRunLoopWithStruggleDetection(t *testing.T) {
 		}
 		if result.Decompose {
 			t.Error("expected Decompose=false when below MinCyclesBeforeCheck")
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// TestMaxFilterFixes
+// ---------------------------------------------------------------------------
+
+func TestMaxFilterFixes(t *testing.T) {
+	t.Parallel()
+
+	t.Run("DefaultWhenZero", func(t *testing.T) {
+		t.Parallel()
+		l := &Loop{MaxFilterFixes: 0}
+		if got := l.maxFilterFixes(); got != DefaultMaxFilterFixes {
+			t.Errorf("maxFilterFixes() = %d, want %d", got, DefaultMaxFilterFixes)
+		}
+	})
+
+	t.Run("CustomValue", func(t *testing.T) {
+		t.Parallel()
+		l := &Loop{MaxFilterFixes: 5}
+		if got := l.maxFilterFixes(); got != 5 {
+			t.Errorf("maxFilterFixes() = %d, want 5", got)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// TestRunFilterFixLoop
+// ---------------------------------------------------------------------------
+
+func TestRunFilterFixLoop(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ClaimsGuard", func(t *testing.T) {
+		t.Parallel()
+		// Claims failures should never be short-circuited.
+		l := &Loop{
+			UI:     &noopUI{},
+			Filter: &fakeFilterWithRunCheck{},
+		}
+		state := &CycleState{TaskBeadID: "bead-1", TaskTitle: "task"}
+		fixed, err := l.runFilterFixLoop(context.Background(), state, "claims", "unclaimed files")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if fixed {
+			t.Error("claims failures must not be fixed by inner loop")
+		}
+	})
+
+	t.Run("NilFilterFallsThrough", func(t *testing.T) {
+		t.Parallel()
+		// When Filter is nil, runFilterFixLoop can't run.
+		l := &Loop{
+			UI:     &noopUI{},
+			Filter: nil,
+		}
+		state := &CycleState{TaskBeadID: "bead-1", TaskTitle: "task"}
+		fixed, err := l.runFilterFixLoop(context.Background(), state, "build", "error")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if fixed {
+			t.Error("expected false when Filter is nil")
+		}
+	})
+
+	t.Run("FilterWithoutRunCheckFallsThrough", func(t *testing.T) {
+		t.Parallel()
+		// fakeFilter doesn't implement SingleCheckRunner.
+		l := &Loop{
+			UI:     &noopUI{},
+			Filter: &fakeFilter{result: &filter.Result{Passed: true}},
+		}
+		state := &CycleState{TaskBeadID: "bead-1", TaskTitle: "task"}
+		fixed, err := l.runFilterFixLoop(context.Background(), state, "build", "error")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if fixed {
+			t.Error("expected false when Filter doesn't implement SingleCheckRunner")
+		}
+	})
+
+	t.Run("SuccessfulFix", func(t *testing.T) {
+		t.Parallel()
+		ff := &fakeFilterWithRunCheck{
+			checkResults: []*filter.CheckResult{
+				{Name: "build", Passed: true}, // passes on first re-check
+			},
+		}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "fixed the build error", CostUSD: 0.05},
+			},
+		}
+		l := &Loop{
+			Invoker:        inv,
+			UI:             &noopUI{},
+			Filter:         ff,
+			MaxFilterFixes: 3,
+			MaxCycles:      3,
+			WorkDir:        "/tmp",
+		}
+		state := &CycleState{
+			TaskBeadID: "bead-1",
+			TaskTitle:  "implement feature",
+			Cycle:      1,
+		}
+
+		fixed, err := l.runFilterFixLoop(context.Background(), state, "build", "main.go:10:5: undefined: foo")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !fixed {
+			t.Error("expected filter fix to succeed")
+		}
+		if inv.calls != 1 {
+			t.Errorf("expected 1 coder invocation, got %d", inv.calls)
+		}
+		if state.FilterFixAttempts != 1 {
+			t.Errorf("FilterFixAttempts = %d, want 1", state.FilterFixAttempts)
+		}
+		if state.TotalCostUSD != 0.05 {
+			t.Errorf("TotalCostUSD = %v, want 0.05", state.TotalCostUSD)
+		}
+		if state.FilterFixCostUSD != 0.05 {
+			t.Errorf("FilterFixCostUSD = %v, want 0.05", state.FilterFixCostUSD)
+		}
+		// Verify the prompt was a filter fix prompt.
+		if len(inv.prompts) < 1 || !strings.Contains(inv.prompts[0], "build") {
+			t.Error("expected filter fix prompt to mention build check")
+		}
+		// Verify restricted tool set — no Bash tools.
+		if len(inv.agents) < 1 {
+			t.Fatal("expected at least 1 agent captured")
+		}
+		for _, tool := range inv.agents[0].AllowedTools {
+			if strings.HasPrefix(tool, "Bash") {
+				t.Errorf("filter fix agent should not have Bash tools, got %q", tool)
+			}
+		}
+	})
+
+	t.Run("ExhaustedRetries", func(t *testing.T) {
+		t.Parallel()
+		ff := &fakeFilterWithRunCheck{
+			checkResults: []*filter.CheckResult{
+				{Name: "build", Passed: false, Output: "still broken 1"},
+				{Name: "build", Passed: false, Output: "still broken 2"},
+			},
+		}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "attempt 1", CostUSD: 0.05},
+				{ResultText: "attempt 2", CostUSD: 0.05},
+			},
+		}
+		l := &Loop{
+			Invoker:        inv,
+			UI:             &noopUI{},
+			Filter:         ff,
+			MaxFilterFixes: 2,
+			MaxCycles:      3,
+			WorkDir:        "/tmp",
+		}
+		state := &CycleState{
+			TaskBeadID: "bead-1",
+			TaskTitle:  "implement feature",
+			Cycle:      1,
+		}
+
+		fixed, err := l.runFilterFixLoop(context.Background(), state, "build", "main.go:10:5: undefined: foo")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if fixed {
+			t.Error("expected fix to fail after exhausting retries")
+		}
+		if inv.calls != 2 {
+			t.Errorf("expected 2 coder invocations, got %d", inv.calls)
+		}
+		if state.FilterFixAttempts != 2 {
+			t.Errorf("FilterFixAttempts = %d, want 2", state.FilterFixAttempts)
+		}
+		if state.TotalCostUSD != 0.10 {
+			t.Errorf("TotalCostUSD = %v, want 0.10", state.TotalCostUSD)
+		}
+	})
+
+	t.Run("BudgetExceeded", func(t *testing.T) {
+		t.Parallel()
+		ff := &fakeFilterWithRunCheck{
+			checkResults: []*filter.CheckResult{
+				{Name: "build", Passed: false, Output: "still broken"},
+			},
+		}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "expensive fix", CostUSD: 10.0},
+			},
+		}
+		l := &Loop{
+			Invoker:        inv,
+			UI:             &recordingUI{},
+			Filter:         ff,
+			MaxFilterFixes: 3,
+			MaxBudgetUSD:   5.0,
+			MaxCycles:      3,
+			WorkDir:        "/tmp",
+		}
+		state := &CycleState{
+			TaskBeadID: "bead-1",
+			TaskTitle:  "implement feature",
+			Cycle:      1,
+		}
+
+		_, err := l.runFilterFixLoop(context.Background(), state, "build", "error output")
+		if !errors.Is(err, ErrBudgetExceeded) {
+			t.Errorf("expected ErrBudgetExceeded, got %v", err)
+		}
+	})
+
+	t.Run("CoderInvokeError", func(t *testing.T) {
+		t.Parallel()
+		ff := &fakeFilterWithRunCheck{}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{{}},
+			errors:    []error{errors.New("coder crashed")},
+		}
+		l := &Loop{
+			Invoker:        inv,
+			UI:             &noopUI{},
+			Filter:         ff,
+			MaxFilterFixes: 3,
+			MaxCycles:      3,
+			WorkDir:        "/tmp",
+		}
+		state := &CycleState{
+			TaskBeadID: "bead-1",
+			TaskTitle:  "task",
+			Cycle:      1,
+		}
+
+		_, err := l.runFilterFixLoop(context.Background(), state, "build", "error output")
+		if err == nil {
+			t.Fatal("expected error from coder invocation")
+		}
+		if !strings.Contains(err.Error(), "coder filter-fix invocation failed") {
+			t.Errorf("error = %q, want to contain 'coder filter-fix invocation failed'", err.Error())
+		}
+	})
+
+	t.Run("WithGitCommit", func(t *testing.T) {
+		t.Parallel()
+		ff := &fakeFilterWithRunCheck{
+			checkResults: []*filter.CheckResult{
+				{Name: "vet", Passed: true},
+			},
+		}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "fixed vet", CostUSD: 0.03},
+			},
+		}
+		git := &fakeGit{commitSHAs: []string{"filter-fix-sha"}}
+		l := &Loop{
+			Invoker:        inv,
+			UI:             &noopUI{},
+			Filter:         ff,
+			Git:            git,
+			MaxFilterFixes: 3,
+			MaxCycles:      3,
+			WorkDir:        "/tmp",
+		}
+		state := &CycleState{
+			TaskBeadID: "bead-1",
+			TaskTitle:  "task",
+			Cycle:      1,
+		}
+
+		fixed, err := l.runFilterFixLoop(context.Background(), state, "vet", "vet error")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !fixed {
+			t.Error("expected fix to succeed")
+		}
+		if state.lastCycleSHA != "filter-fix-sha" {
+			t.Errorf("lastCycleSHA = %q, want 'filter-fix-sha'", state.lastCycleSHA)
+		}
+	})
+
+	t.Run("FixOnSecondAttempt", func(t *testing.T) {
+		t.Parallel()
+		ff := &fakeFilterWithRunCheck{
+			checkResults: []*filter.CheckResult{
+				{Name: "test", Passed: false, Output: "still failing"},
+				{Name: "test", Passed: true}, // passes on second re-check
+			},
+		}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "attempt 1", CostUSD: 0.03},
+				{ResultText: "attempt 2", CostUSD: 0.04},
+			},
+		}
+		l := &Loop{
+			Invoker:        inv,
+			UI:             &noopUI{},
+			Filter:         ff,
+			MaxFilterFixes: 3,
+			MaxCycles:      3,
+			WorkDir:        "/tmp",
+		}
+		state := &CycleState{
+			TaskBeadID: "bead-1",
+			TaskTitle:  "task",
+			Cycle:      1,
+		}
+
+		fixed, err := l.runFilterFixLoop(context.Background(), state, "test", "test failure output")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !fixed {
+			t.Error("expected fix to succeed on second attempt")
+		}
+		if inv.calls != 2 {
+			t.Errorf("expected 2 coder invocations, got %d", inv.calls)
+		}
+		if state.FilterFixAttempts != 2 {
+			t.Errorf("FilterFixAttempts = %d, want 2", state.FilterFixAttempts)
+		}
+		if state.TotalCostUSD != 0.07 {
+			t.Errorf("TotalCostUSD = %v, want 0.07", state.TotalCostUSD)
+		}
+	})
+
+	t.Run("RunCheckError", func(t *testing.T) {
+		t.Parallel()
+		ff := &fakeFilterWithRunCheck{
+			checkErr: errors.New("check infrastructure error"),
+		}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "tried to fix", CostUSD: 0.02},
+			},
+		}
+		l := &Loop{
+			Invoker:        inv,
+			UI:             &noopUI{},
+			Filter:         ff,
+			MaxFilterFixes: 3,
+			MaxCycles:      3,
+			WorkDir:        "/tmp",
+		}
+		state := &CycleState{
+			TaskBeadID: "bead-1",
+			TaskTitle:  "task",
+			Cycle:      1,
+		}
+
+		_, err := l.runFilterFixLoop(context.Background(), state, "build", "error output")
+		if err == nil {
+			t.Fatal("expected error from RunCheck")
+		}
+		if !strings.Contains(err.Error(), "re-running check") {
+			t.Errorf("error = %q, want to contain 're-running check'", err.Error())
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// TestRunLoopWithFilterFixLoop
+// ---------------------------------------------------------------------------
+
+func TestRunLoopWithFilterFixLoop(t *testing.T) {
+	t.Parallel()
+
+	t.Run("FilterFixSucceedsProceedsToReviewer", func(t *testing.T) {
+		t.Parallel()
+		// Filter fails initially, inner fix loop fixes it, then proceeds to reviewer.
+		ff := &fakeFilterWithRunCheck{
+			results: []*filter.Result{
+				{
+					Passed: false,
+					Checks: []filter.CheckResult{
+						{Name: "build", Passed: false, Output: "main.go:5:1: undefined: x"},
+					},
+				},
+			},
+			checkResults: []*filter.CheckResult{
+				{Name: "build", Passed: true}, // passes after fix
+			},
+		}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "coded", CostUSD: 0.30},                 // coder
+				{ResultText: "fixed build error", CostUSD: 0.05},     // filter fix coder
+				{ResultText: "APPROVED: Looks good.", CostUSD: 0.20}, // reviewer
+			},
+		}
+		l := &Loop{
+			Invoker:        inv,
+			UI:             &noopUI{},
+			Filter:         ff,
+			MaxFilterFixes: 3,
+			MaxCycles:      3,
+			MaxBudgetUSD:   10.0,
+			WorkDir:        "/tmp",
+		}
+		result, err := l.runLoop(context.Background(), "bead-1", "implement feature")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.CyclesUsed != 1 {
+			t.Errorf("CyclesUsed = %d, want 1 (fixed in inner loop, no outer bounce)", result.CyclesUsed)
+		}
+		// 3 invocations: coder + filter-fix coder + reviewer.
+		if inv.calls != 3 {
+			t.Errorf("invoker calls = %d, want 3", inv.calls)
+		}
+	})
+
+	t.Run("FilterFixExhaustedBouncesToOuterCycle", func(t *testing.T) {
+		t.Parallel()
+		// Filter always fails, inner fix loop exhausted, bounces to outer cycle.
+		ff := &fakeFilterWithRunCheck{
+			results: []*filter.Result{
+				// Cycle 1: filter fails
+				{Passed: false, Checks: []filter.CheckResult{
+					{Name: "build", Passed: false, Output: "error"},
+				}},
+				// Cycle 2: filter fails again
+				{Passed: false, Checks: []filter.CheckResult{
+					{Name: "build", Passed: false, Output: "error"},
+				}},
+			},
+			checkResults: []*filter.CheckResult{
+				// All re-checks fail (MaxFilterFixes=1 per cycle, 2 cycles)
+				{Name: "build", Passed: false, Output: "still broken"},
+				{Name: "build", Passed: false, Output: "still broken"},
+			},
+		}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "coded cycle 1", CostUSD: 0.30},      // coder cycle 1
+				{ResultText: "filter fix attempt", CostUSD: 0.05}, // filter fix cycle 1
+				{ResultText: "coded cycle 2", CostUSD: 0.30},      // coder cycle 2
+				{ResultText: "filter fix attempt", CostUSD: 0.05}, // filter fix cycle 2
+			},
+		}
+		l := &Loop{
+			Invoker:        inv,
+			UI:             &recordingUI{},
+			Filter:         ff,
+			MaxFilterFixes: 1,
+			MaxCycles:      2,
+			MaxBudgetUSD:   10.0,
+			WorkDir:        "/tmp",
+		}
+		result, err := l.runLoop(context.Background(), "bead-1", "implement feature")
+		if !errors.Is(err, ErrMaxCycles) {
+			t.Errorf("expected ErrMaxCycles, got %v", err)
+		}
+		if result == nil {
+			t.Fatal("expected non-nil result")
+		}
+		// 4 invocations: (coder + filter-fix) × 2 cycles.
+		if inv.calls != 4 {
+			t.Errorf("invoker calls = %d, want 4", inv.calls)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// recordingHook captures lifecycle events for test assertions.
+// ---------------------------------------------------------------------------
+
+type recordingHook struct {
+	mu     sync.Mutex
+	events []Event
+}
+
+func (h *recordingHook) OnEvent(_ context.Context, event Event) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.events = append(h.events, event)
+}
+
+func (h *recordingHook) getEvents() []Event {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	dst := make([]Event, len(h.events))
+	copy(dst, h.events)
+	return dst
+}
+
+// ---------------------------------------------------------------------------
+// TestFilterFixLoopEmitsEvents
+// ---------------------------------------------------------------------------
+
+func TestFilterFixLoopEmitsEvents(t *testing.T) {
+	t.Parallel()
+
+	t.Run("SuccessEmitsAttemptAndResult", func(t *testing.T) {
+		t.Parallel()
+		ff := &fakeFilterWithRunCheck{
+			checkResults: []*filter.CheckResult{
+				{Name: "build", Passed: true},
+			},
+		}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "fixed it", CostUSD: 0.05, DurationMs: 1200},
+			},
+		}
+		hook := &recordingHook{}
+		l := &Loop{
+			Invoker:        inv,
+			UI:             &noopUI{},
+			Filter:         ff,
+			Hooks:          []Hook{hook},
+			MaxFilterFixes: 3,
+			MaxCycles:      3,
+			WorkDir:        "/tmp",
+		}
+		state := &CycleState{
+			TaskBeadID: "bead-ev",
+			TaskTitle:  "task",
+			Cycle:      2,
+		}
+
+		fixed, err := l.runFilterFixLoop(context.Background(), state, "build", "main.go:1: error")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !fixed {
+			t.Fatal("expected fix to succeed")
+		}
+
+		events := hook.getEvents()
+		// Expect exactly 1 attempt event + 1 result event.
+		var attempts, results []Event
+		for _, e := range events {
+			switch e.Kind {
+			case EventFilterFixAttempt:
+				attempts = append(attempts, e)
+			case EventFilterFixResult:
+				results = append(results, e)
+			}
+		}
+
+		if len(attempts) != 1 {
+			t.Fatalf("expected 1 EventFilterFixAttempt, got %d", len(attempts))
+		}
+		a := attempts[0]
+		if a.BeadID != "bead-ev" {
+			t.Errorf("attempt BeadID = %q, want %q", a.BeadID, "bead-ev")
+		}
+		if a.Cycle != 2 {
+			t.Errorf("attempt Cycle = %d, want 2", a.Cycle)
+		}
+		if a.FilterFix == nil {
+			t.Fatal("attempt FilterFix is nil")
+		}
+		if a.FilterFix.CheckName != "build" {
+			t.Errorf("attempt CheckName = %q, want %q", a.FilterFix.CheckName, "build")
+		}
+		if a.FilterFix.Attempt != 1 {
+			t.Errorf("attempt Attempt = %d, want 1", a.FilterFix.Attempt)
+		}
+		if a.FilterFix.MaxAttempts != 3 {
+			t.Errorf("attempt MaxAttempts = %d, want 3", a.FilterFix.MaxAttempts)
+		}
+		if !a.FilterFix.Fixed {
+			t.Error("attempt Fixed = false, want true (check passed)")
+		}
+		if a.FilterFix.CostUSD != 0.05 {
+			t.Errorf("attempt CostUSD = %v, want 0.05", a.FilterFix.CostUSD)
+		}
+		if a.FilterFix.DurationMs != 1200 {
+			t.Errorf("attempt DurationMs = %d, want 1200", a.FilterFix.DurationMs)
+		}
+
+		if len(results) != 1 {
+			t.Fatalf("expected 1 EventFilterFixResult, got %d", len(results))
+		}
+		r := results[0]
+		if r.FilterFix == nil {
+			t.Fatal("result FilterFix is nil")
+		}
+		if !r.FilterFix.Fixed {
+			t.Error("result Fixed = false, want true")
+		}
+		if r.FilterFix.Attempt != 1 {
+			t.Errorf("result Attempt = %d, want 1 (total attempts)", r.FilterFix.Attempt)
+		}
+		if r.FilterFix.CostUSD != 0.05 {
+			t.Errorf("result CostUSD = %v, want 0.05 (cumulative)", r.FilterFix.CostUSD)
+		}
+	})
+
+	t.Run("ExhaustedEmitsMultipleAttemptsAndFailedResult", func(t *testing.T) {
+		t.Parallel()
+		ff := &fakeFilterWithRunCheck{
+			checkResults: []*filter.CheckResult{
+				{Name: "vet", Passed: false, Output: "still broken 1"},
+				{Name: "vet", Passed: false, Output: "still broken 2"},
+			},
+		}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "attempt 1", CostUSD: 0.03, DurationMs: 500},
+				{ResultText: "attempt 2", CostUSD: 0.04, DurationMs: 600},
+			},
+		}
+		hook := &recordingHook{}
+		l := &Loop{
+			Invoker:        inv,
+			UI:             &noopUI{},
+			Filter:         ff,
+			Hooks:          []Hook{hook},
+			MaxFilterFixes: 2,
+			MaxCycles:      3,
+			WorkDir:        "/tmp",
+		}
+		state := &CycleState{
+			TaskBeadID: "bead-ex",
+			TaskTitle:  "task",
+			Cycle:      1,
+		}
+
+		fixed, err := l.runFilterFixLoop(context.Background(), state, "vet", "vet error output")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if fixed {
+			t.Fatal("expected fix to fail")
+		}
+
+		events := hook.getEvents()
+		var attempts, results []Event
+		for _, e := range events {
+			switch e.Kind {
+			case EventFilterFixAttempt:
+				attempts = append(attempts, e)
+			case EventFilterFixResult:
+				results = append(results, e)
+			}
+		}
+
+		if len(attempts) != 2 {
+			t.Fatalf("expected 2 EventFilterFixAttempt, got %d", len(attempts))
+		}
+		// Verify attempt ordering.
+		if attempts[0].FilterFix.Attempt != 1 {
+			t.Errorf("first attempt Attempt = %d, want 1", attempts[0].FilterFix.Attempt)
+		}
+		if attempts[1].FilterFix.Attempt != 2 {
+			t.Errorf("second attempt Attempt = %d, want 2", attempts[1].FilterFix.Attempt)
+		}
+		// Both should be not fixed.
+		if attempts[0].FilterFix.Fixed || attempts[1].FilterFix.Fixed {
+			t.Error("individual attempt Fixed should be false when check still fails")
+		}
+
+		if len(results) != 1 {
+			t.Fatalf("expected 1 EventFilterFixResult, got %d", len(results))
+		}
+		r := results[0]
+		if r.FilterFix.Fixed {
+			t.Error("result Fixed = true, want false (exhausted)")
+		}
+		if r.FilterFix.Attempt != 2 {
+			t.Errorf("result Attempt = %d, want 2", r.FilterFix.Attempt)
+		}
+		if r.FilterFix.CostUSD != 0.07 {
+			t.Errorf("result CostUSD = %v, want 0.07", r.FilterFix.CostUSD)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// TestBeadHookFilterFixResult
+// ---------------------------------------------------------------------------
+
+func TestBeadHookFilterFixResult(t *testing.T) {
+	t.Parallel()
+
+	t.Run("FixedComment", func(t *testing.T) {
+		t.Parallel()
+		rb := newRecordingBeads()
+		hook := newBeadHook(rb, &noopUI{})
+
+		hook.OnEvent(context.Background(), Event{
+			Kind:   EventFilterFixResult,
+			BeadID: "bead-ffr",
+			Cycle:  1,
+			FilterFix: &FilterFixData{
+				CheckName:   "build",
+				Attempt:     2,
+				MaxAttempts: 3,
+				Fixed:       true,
+				CostUSD:     0.08,
+			},
+		})
+
+		if len(rb.comments) != 1 {
+			t.Fatalf("expected 1 comment, got %d", len(rb.comments))
+		}
+		c := rb.comments[0]
+		if !strings.Contains(c, "build") {
+			t.Errorf("comment should mention check name, got %q", c)
+		}
+		if !strings.Contains(c, "fixed") {
+			t.Errorf("comment should mention fixed status, got %q", c)
+		}
+		if !strings.Contains(c, "2 attempt") {
+			t.Errorf("comment should mention attempt count, got %q", c)
+		}
+		if !strings.Contains(c, "0.0800") {
+			t.Errorf("comment should mention cost, got %q", c)
+		}
+	})
+
+	t.Run("NotFixedComment", func(t *testing.T) {
+		t.Parallel()
+		rb := newRecordingBeads()
+		hook := newBeadHook(rb, &noopUI{})
+
+		hook.OnEvent(context.Background(), Event{
+			Kind:   EventFilterFixResult,
+			BeadID: "bead-ffr2",
+			Cycle:  3,
+			FilterFix: &FilterFixData{
+				CheckName:   "test",
+				Attempt:     3,
+				MaxAttempts: 3,
+				Fixed:       false,
+				CostUSD:     0.12,
+			},
+		})
+
+		if len(rb.comments) != 1 {
+			t.Fatalf("expected 1 comment, got %d", len(rb.comments))
+		}
+		c := rb.comments[0]
+		if !strings.Contains(c, "not fixed") {
+			t.Errorf("comment should mention not fixed status, got %q", c)
+		}
+	})
+
+	t.Run("NilFilterFixNoComment", func(t *testing.T) {
+		t.Parallel()
+		rb := newRecordingBeads()
+		hook := newBeadHook(rb, &noopUI{})
+
+		hook.OnEvent(context.Background(), Event{
+			Kind:   EventFilterFixResult,
+			BeadID: "bead-nil",
+			Cycle:  1,
+			// FilterFix is nil.
+		})
+
+		if len(rb.comments) != 0 {
+			t.Errorf("expected 0 comments when FilterFix is nil, got %d", len(rb.comments))
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// TestCycleSummaryFilterFixTracking
+// ---------------------------------------------------------------------------
+
+func TestCycleSummaryFilterFixTracking(t *testing.T) {
+	t.Parallel()
+
+	t.Run("SuccessfulFilterFixVisibleInSummary", func(t *testing.T) {
+		t.Parallel()
+		// Verify that after a successful filter fix, the cycle summary
+		// shows the correct filter fix info (Issue #1: previously invisible).
+		ff := &fakeFilterWithRunCheck{
+			results: []*filter.Result{
+				{
+					Passed: false,
+					Checks: []filter.CheckResult{
+						{Name: "build", Passed: false, Output: "main.go:5:1: undefined: x"},
+					},
+				},
+			},
+			checkResults: []*filter.CheckResult{
+				{Name: "build", Passed: true},
+			},
+		}
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "coded", CostUSD: 0.30},
+				{ResultText: "fixed build error", CostUSD: 0.05},
+				{ResultText: "APPROVED: Looks good.", CostUSD: 0.20},
+			},
+		}
+		rUI := &recordingUI{}
+		l := &Loop{
+			Invoker:        inv,
+			UI:             rUI,
+			Filter:         ff,
+			MaxFilterFixes: 3,
+			MaxCycles:      3,
+			MaxBudgetUSD:   10.0,
+			WorkDir:        "/tmp",
+		}
+		_, err := l.runLoop(context.Background(), "bead-cs", "implement feature")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Find the reviewer's cycle summary (Phase == "review_complete").
+		var reviewSummary *ui.CycleSummaryData
+		for i := range rUI.cycleSummaries {
+			if rUI.cycleSummaries[i].Phase == "review_complete" {
+				reviewSummary = &rUI.cycleSummaries[i]
+				break
+			}
+		}
+		if reviewSummary == nil {
+			t.Fatal("expected a review_complete cycle summary")
+		}
+		if reviewSummary.FilterFixAttempts != 1 {
+			t.Errorf("FilterFixAttempts = %d, want 1", reviewSummary.FilterFixAttempts)
+		}
+		if reviewSummary.FilterFixCostUSD != 0.05 {
+			t.Errorf("FilterFixCostUSD = %v, want 0.05", reviewSummary.FilterFixCostUSD)
+		}
+		if !reviewSummary.FilterFixSuccess {
+			t.Error("FilterFixSuccess = false, want true")
 		}
 	})
 }

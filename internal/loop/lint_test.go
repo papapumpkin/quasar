@@ -156,8 +156,8 @@ func TestRunLintFixLoop(t *testing.T) {
 			t.Errorf("expected 1 coder invocation for lint fix, got %d", inv.calls)
 		}
 		// The coder should have received a lint-fix prompt.
-		if len(inv.prompts) < 1 || !strings.Contains(inv.prompts[0], "lint issues") {
-			t.Error("expected lint fix prompt to mention lint issues")
+		if len(inv.prompts) < 1 || !strings.Contains(inv.prompts[0], "lint") {
+			t.Error("expected lint fix prompt to mention lint")
 		}
 		// Cost should be accumulated.
 		if state.TotalCostUSD != 0.10 {
@@ -319,11 +319,8 @@ func TestBuildLintFixPrompt(t *testing.T) {
 	if !strings.Contains(prompt, "bead-42") {
 		t.Error("prompt should contain bead ID")
 	}
-	if !strings.Contains(prompt, "fix the bug") {
-		t.Error("prompt should contain task title")
-	}
-	if !strings.Contains(prompt, "lint issues") {
-		t.Error("prompt should mention lint issues")
+	if !strings.Contains(prompt, "lint") {
+		t.Error("prompt should mention lint check")
 	}
 	if !strings.Contains(prompt, "unused variable x") {
 		t.Error("prompt should contain lint output")

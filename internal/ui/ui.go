@@ -259,15 +259,18 @@ func (d FindingLifecycleData) String() string {
 // CycleSummaryData holds data needed to render a cycle summary.
 // This struct lives in the ui package to avoid circular imports with loop.
 type CycleSummaryData struct {
-	Cycle        int
-	MaxCycles    int
-	Phase        string // e.g. "code_complete", "review_complete"
-	CostUSD      float64
-	TotalCostUSD float64
-	MaxBudgetUSD float64
-	DurationMs   int64
-	Approved     bool
-	IssueCount   int
+	Cycle             int
+	MaxCycles         int
+	Phase             string // e.g. "code_complete", "review_complete"
+	CostUSD           float64
+	TotalCostUSD      float64
+	MaxBudgetUSD      float64
+	DurationMs        int64
+	Approved          bool
+	IssueCount        int
+	FilterFixAttempts int     // Number of inner fix attempts in this cycle (0 = no filter failures).
+	FilterFixCostUSD  float64 // Cost spent on filter fixes in this cycle.
+	FilterFixSuccess  bool    // True if filter was fixed via inner loop in this cycle.
 }
 
 // CycleSummary prints a structured summary after each coder/reviewer phase.
@@ -298,6 +301,16 @@ func (p *Printer) CycleSummary(d CycleSummaryData) {
 
 	// Duration line.
 	fmt.Fprintf(os.Stderr, dim+"│"+reset+"  duration: %.1fs\n", secs)
+
+	// Filter fix line (only when filter fixes were attempted).
+	if d.FilterFixAttempts > 0 {
+		outcome := yellow + "not fixed" + reset
+		if d.FilterFixSuccess {
+			outcome = green + "fixed" + reset
+		}
+		fmt.Fprintf(os.Stderr, dim+"│"+reset+"  filter fix: %d attempt(s), $%.4f, %s\n",
+			d.FilterFixAttempts, d.FilterFixCostUSD, outcome)
+	}
 
 	// Outcome line (only for reviewer).
 	if d.Phase == "review_complete" {

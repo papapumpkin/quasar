@@ -25,18 +25,35 @@ const (
 	// EventStruggleDetected is emitted when the struggle detector triggers,
 	// signaling that the phase should be decomposed.
 	EventStruggleDetected
+	// EventFilterFixAttempt is emitted at each inner fix loop iteration.
+	EventFilterFixAttempt
+	// EventFilterFixResult is emitted when the inner fix loop concludes,
+	// whether by success or retry exhaustion.
+	EventFilterFixResult
 )
 
 // Event represents a lifecycle event in the coder-reviewer loop.
 type Event struct {
-	Kind     EventKind
-	Cycle    int
-	Agent    string // "coder" or "reviewer"
-	BeadID   string
-	Result   *agent.InvocationResult
-	Findings []ReviewFinding
-	Report   *agent.ReviewReport
-	Message  string // Free-form message (e.g., refactor comment, max-cycles note).
+	Kind      EventKind
+	Cycle     int
+	Agent     string // "coder" or "reviewer"
+	BeadID    string
+	Result    *agent.InvocationResult
+	Findings  []ReviewFinding
+	Report    *agent.ReviewReport
+	Message   string         // Free-form message (e.g., refactor comment, max-cycles note).
+	FilterFix *FilterFixData // Populated for EventFilterFixAttempt and EventFilterFixResult.
+}
+
+// FilterFixData carries metadata about a filter fix attempt or result.
+type FilterFixData struct {
+	CheckName   string  // Which filter check failed ("build", "vet", "lint", "test").
+	Attempt     int     // 1-based attempt number.
+	MaxAttempts int     // Maximum attempts configured.
+	Fixed       bool    // True if the check passed after this attempt (or overall for result).
+	CostUSD     float64 // Cost of this fix invocation (attempt) or total fix cost (result).
+	ErrorCount  int     // Number of structured errors parsed from the check output.
+	DurationMs  int64   // Wall-clock time for this fix attempt.
 }
 
 // Hook receives lifecycle events from the loop. Implementations must not block.

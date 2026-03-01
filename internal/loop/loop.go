@@ -21,6 +21,7 @@ type Loop struct {
 	Filter           filter.Filter  // Optional; nil skips pre-reviewer filtering and goes straight to reviewer.
 	MaxCycles        int
 	MaxLintRetries   int // Max times coder is asked to fix lint issues per cycle. 0 uses DefaultMaxLintRetries.
+	MaxFilterFixes   int // Max inner fix attempts per filter failure. 0 uses DefaultMaxFilterFixes.
 	MaxBudgetUSD     float64
 	Model            string
 	CoderPrompt      string
@@ -118,6 +119,10 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 
 	for cycle := 1; cycle <= l.MaxCycles; cycle++ {
 		state.Cycle = cycle
+		// Reset per-cycle filter fix tracking at cycle start.
+		state.FilterFixedThisCycle = false
+		state.CycleFilterFixAttempts = 0
+		state.CycleFilterFixCostUSD = 0
 		l.UI.CycleStart(cycle, l.MaxCycles)
 
 		if err := l.runCoderPhase(ctx, state, perAgentBudget); err != nil {
@@ -132,21 +137,65 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 			return nil, err
 		}
 
-		// Run pre-reviewer filter checks. If the filter fails, bounce
-		// the failure back to the coder as findings instead of invoking
-		// the reviewer.
+		// Run pre-reviewer filter checks. If the filter fails, attempt
+		// a fast inner fix loop before burning a full outer cycle.
 		if l.Filter != nil {
 			failed, err := l.runFilterChecks(ctx, state)
 			if err != nil {
 				return nil, err
 			}
 			if failed {
-				// Filter failed — skip reviewer, continue to next cycle.
-				state.FilterHistory = append(state.FilterHistory, state.FilterCheckName)
-				l.sealCycleSHA(state)
-				l.drainRefactor(state)
-				l.emit(ctx, Event{Kind: EventCycleStart, BeadID: beadID, Cycle: cycle})
-				continue
+				// Attempt fast inner fix loop before burning a full outer cycle.
+				fixed, err := l.runFilterFixLoop(ctx, state, state.FilterCheckName, state.FilterOutput)
+				if err != nil {
+					return nil, err
+				}
+				if !fixed {
+					// Inner loop exhausted — fall through to outer cycle bounce.
+					state.FilterHistory = append(state.FilterHistory, state.FilterCheckName)
+					l.sealCycleSHA(state)
+					l.drainRefactor(state)
+					l.emit(ctx, Event{Kind: EventCycleStart, BeadID: beadID, Cycle: cycle})
+					continue
+				}
+				state.FilterFixedThisCycle = true
+				// Fixed! Re-validate the chain from the failure point onward
+				// to catch regressions the fix may have introduced.
+				var revalResult *filter.Result
+				var revalErr error
+				if chain, ok := l.Filter.(*filter.Chain); ok {
+					revalResult, revalErr = chain.RunFrom(ctx, l.WorkDir, state.FilterCheckName)
+				} else {
+					// Non-Chain filter — full re-run.
+					revalResult, revalErr = l.Filter.Run(ctx, l.WorkDir)
+				}
+				if revalErr != nil {
+					return nil, fmt.Errorf("filter re-validation failed: %w", revalErr)
+				}
+				if !revalResult.Passed {
+					// Re-validation found a new failure — bounce to outer cycle.
+					revalFail := revalResult.FirstFailure()
+					state.FilterOutput = revalFail.Output
+					state.FilterCheckName = revalFail.Name
+					state.FilterHistory = append(state.FilterHistory, state.FilterCheckName)
+					l.sealCycleSHA(state)
+					l.drainRefactor(state)
+					l.emit(ctx, Event{Kind: EventCycleStart, BeadID: beadID, Cycle: cycle})
+					continue
+				}
+
+				// Remove the synthetic finding that runFilterChecks
+				// appended so the reviewer doesn't waste tokens verifying a
+				// resolved issue and struggle detection doesn't see a phantom
+				// critical finding.
+				if len(state.AllFindings) > 0 {
+					state.AllFindings = state.AllFindings[:len(state.AllFindings)-1]
+				}
+				state.Findings = nil
+				// Clear filter state and proceed to reviewer.
+				state.FilterOutput = ""
+				state.FilterCheckName = ""
+				state.FilterFixAttempts = 0
 			}
 		}
 
@@ -356,6 +405,169 @@ func (l *Loop) runFilterChecks(ctx context.Context, state *CycleState) (failed b
 	l.emitBeadUpdate(state, "in_progress")
 
 	return true, nil
+}
+
+// DefaultMaxFilterFixes is the maximum number of inner fix attempts per
+// filter failure before falling through to the outer coder-reviewer cycle.
+const DefaultMaxFilterFixes = 3
+
+// SingleCheckRunner can execute a single named check. Defined in the loop
+// package where consumed, satisfied by *filter.Chain.
+type SingleCheckRunner interface {
+	RunCheck(ctx context.Context, workDir string, name string) (*filter.CheckResult, error)
+}
+
+// maxFilterFixes returns the effective maximum filter fix attempt count.
+func (l *Loop) maxFilterFixes() int {
+	if l.MaxFilterFixes > 0 {
+		return l.MaxFilterFixes
+	}
+	return DefaultMaxFilterFixes
+}
+
+// runFilterFixLoop attempts to fix a failing filter check via a fast inner loop.
+// It parses the error output, sends a focused fix prompt to the coder, re-runs
+// only the failing check, and repeats up to maxFilterFixes times. Returns true
+// if the check ultimately passes, false if retries are exhausted.
+//
+// Claims check failures are never short-circuited — they require coordination,
+// not code fixes, so they always fall through to the outer cycle.
+func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkName string, checkOutput string) (bool, error) {
+	// Claims failures need human/fabric coordination, not automated fixes.
+	if checkName == "claims" {
+		return false, nil
+	}
+
+	// The filter must support single-check re-runs.
+	runner, ok := l.Filter.(SingleCheckRunner)
+	if !ok {
+		return false, nil
+	}
+
+	parsed := filter.ParseCheckOutput(filter.CheckResult{
+		Name:   checkName,
+		Output: checkOutput,
+	})
+
+	maxFixes := l.maxFilterFixes()
+	fixBudget := l.filterFixBudget()
+
+	for attempt := 0; attempt < maxFixes; attempt++ {
+		l.UI.Info(fmt.Sprintf("filter check %q failed with %d error(s), attempting targeted fix (attempt %d/%d)",
+			checkName, len(parsed.Errors), attempt+1, maxFixes))
+
+		// Build a focused fix prompt and invoke the coder with restricted tools.
+		prompt := l.buildFilterFixPrompt(state, parsed)
+		sysPrompt := agent.BuildSystemPrompt(l.CoderPrompt, agent.PromptOpts{
+			FabricEnabled:  l.FabricEnabled,
+			TaskID:         l.TaskID,
+			ProjectContext: l.ProjectContext,
+		})
+		a := agent.Agent{
+			Role:         agent.RoleCoder,
+			SystemPrompt: sysPrompt,
+			Model:        l.Model,
+			MaxBudgetUSD: fixBudget,
+			AllowedTools: []string{"Read", "Edit", "Write", "Glob"},
+			MCP:          l.MCP,
+		}
+
+		result, err := l.Invoker.Invoke(ctx, a, prompt, l.WorkDir)
+		if err != nil {
+			return false, fmt.Errorf("coder filter-fix invocation failed: %w", err)
+		}
+
+		state.TotalCostUSD += result.CostUSD
+		state.FilterFixCostUSD += result.CostUSD
+		state.FilterFixAttempts++
+		state.CycleFilterFixCostUSD += result.CostUSD
+		state.CycleFilterFixAttempts++
+		l.UI.AgentDone("coder", result.CostUSD, result.DurationMs)
+
+		if err := l.checkBudget(ctx, state); err != nil {
+			return false, err
+		}
+
+		// Commit the fix if Git is available.
+		if l.Git != nil {
+			summary := l.CommitSummary
+			if summary == "" {
+				summary = firstLine(state.TaskTitle, 72)
+			}
+			sha, commitErr := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle, summary+" (filter fix)")
+			if commitErr != nil {
+				l.UI.Error(fmt.Sprintf("failed to commit filter fix: %v", commitErr))
+			} else {
+				state.lastCycleSHA = sha
+			}
+		}
+
+		// Re-run only the failing check.
+		cr, err := runner.RunCheck(ctx, l.WorkDir, checkName)
+		if err != nil {
+			return false, fmt.Errorf("re-running check %q: %w", checkName, err)
+		}
+
+		checkPassed := cr.Passed
+
+		// Emit per-attempt telemetry event.
+		l.emit(ctx, Event{
+			Kind:   EventFilterFixAttempt,
+			BeadID: state.TaskBeadID,
+			Cycle:  state.Cycle,
+			FilterFix: &FilterFixData{
+				CheckName:   checkName,
+				Attempt:     attempt + 1,
+				MaxAttempts: maxFixes,
+				Fixed:       checkPassed,
+				CostUSD:     result.CostUSD,
+				ErrorCount:  len(parsed.Errors),
+				DurationMs:  result.DurationMs,
+			},
+		})
+
+		if checkPassed {
+			l.UI.Info(fmt.Sprintf("filter check %q fixed on attempt %d", checkName, attempt+1))
+			l.emit(ctx, Event{
+				Kind:   EventFilterFixResult,
+				BeadID: state.TaskBeadID,
+				Cycle:  state.Cycle,
+				FilterFix: &FilterFixData{
+					CheckName:   checkName,
+					Attempt:     state.FilterFixAttempts,
+					MaxAttempts: maxFixes,
+					Fixed:       true,
+					CostUSD:     state.FilterFixCostUSD,
+					ErrorCount:  len(parsed.Errors),
+				},
+			})
+			return true, nil
+		}
+
+		// Still failing — update parsed errors for next iteration.
+		checkOutput = cr.Output
+		parsed = filter.ParseCheckOutput(filter.CheckResult{
+			Name:   checkName,
+			Output: checkOutput,
+		})
+	}
+
+	l.UI.Info(fmt.Sprintf("filter check %q not fixed after %d attempts, falling back to outer cycle",
+		checkName, maxFixes))
+	l.emit(ctx, Event{
+		Kind:   EventFilterFixResult,
+		BeadID: state.TaskBeadID,
+		Cycle:  state.Cycle,
+		FilterFix: &FilterFixData{
+			CheckName:   checkName,
+			Attempt:     state.FilterFixAttempts,
+			MaxAttempts: maxFixes,
+			Fixed:       false,
+			CostUSD:     state.FilterFixCostUSD,
+			ErrorCount:  len(parsed.Errors),
+		},
+	})
+	return false, nil
 }
 
 // drainRefactor checks the RefactorCh for a pending phase edit and applies it
@@ -648,15 +860,18 @@ func (l *Loop) postMaxCyclesHail(state *CycleState) {
 // emitCycleSummary sends a cycle summary to the UI for the given phase.
 func (l *Loop) emitCycleSummary(state *CycleState, phase Phase, result agent.InvocationResult) {
 	l.UI.CycleSummary(ui.CycleSummaryData{
-		Cycle:        state.Cycle,
-		MaxCycles:    l.MaxCycles,
-		Phase:        phase.String(),
-		CostUSD:      result.CostUSD,
-		TotalCostUSD: state.TotalCostUSD,
-		MaxBudgetUSD: l.MaxBudgetUSD,
-		DurationMs:   result.DurationMs,
-		Approved:     isApproved(state.ReviewOutput),
-		IssueCount:   len(state.Findings),
+		Cycle:             state.Cycle,
+		MaxCycles:         l.MaxCycles,
+		Phase:             phase.String(),
+		CostUSD:           result.CostUSD,
+		TotalCostUSD:      state.TotalCostUSD,
+		MaxBudgetUSD:      l.MaxBudgetUSD,
+		DurationMs:        result.DurationMs,
+		Approved:          isApproved(state.ReviewOutput),
+		IssueCount:        len(state.Findings),
+		FilterFixAttempts: state.CycleFilterFixAttempts,
+		FilterFixCostUSD:  state.CycleFilterFixCostUSD,
+		FilterFixSuccess:  state.FilterFixedThisCycle,
 	})
 }
 
