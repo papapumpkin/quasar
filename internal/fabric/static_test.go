@@ -227,7 +227,7 @@ func Scan(phases []Phase) error {
 		}
 	})
 
-	t.Run("multi-phase contract cross-reference", func(t *testing.T) {
+	t.Run("cross-reference skips pre-existing symbols", func(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
@@ -278,7 +278,7 @@ Build a handler that accepts User objects.
 			t.Fatalf("got %d contracts, want 2", len(contracts))
 		}
 
-		// Producer should have produces.
+		// Producer should have produces from the existing file.
 		producer := contracts[0]
 		if len(producer.Produces) == 0 {
 			t.Fatal("producer has no produces")
@@ -295,21 +295,108 @@ Build a handler that accepts User objects.
 			t.Errorf("producer missing function:NewUser; have %v", producesKeys(producer))
 		}
 
-		// Consumer should have consumes from cross-referencing.
+		// Pre-existing symbols should NOT be in NewProduces.
+		if producer.NewProduces["type:User"] {
+			t.Error("type:User should not be in NewProduces (file exists on disk)")
+		}
+		if producer.NewProduces["function:NewUser"] {
+			t.Error("function:NewUser should not be in NewProduces (file exists on disk)")
+		}
+
+		// Consumer should NOT have consumes — pre-existing symbols
+		// are already on disk and don't need fabric contract tracking.
+		consumer := contracts[1]
+		if len(consumer.Consumes) != 0 {
+			t.Errorf("consumer should have no consumes for pre-existing symbols; got %v", consumesKeys(consumer))
+		}
+	})
+
+	t.Run("cross-reference creates consumes for new inline symbols", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+
+		producerBody := `## Problem
+
+We need a new cache layer.
+
+## Solution
+
+Create the cache type:
+
+` + "```go\n" + `type Cache struct {
+    TTL time.Duration
+}
+
+func NewCache(ttl time.Duration) *Cache {
+    return &Cache{TTL: ttl}
+}
+` + "```\n" + `
+
+## Files
+
+- ` + "`internal/cache/cache.go`" + ` — Cache implementation
+`
+		consumerBody := `## Problem
+
+We need a handler that uses the Cache to store results.
+The handler should call NewCache during initialization.
+
+## Solution
+
+Build a handler that wraps Cache for HTTP caching.
+`
+
+		scanner := &StaticScanner{WorkDir: dir}
+		phases := []PhaseInput{
+			{ID: "producer", Body: producerBody},
+			{ID: "consumer", Body: consumerBody, DependsOn: []string{"producer"}},
+		}
+
+		contracts, err := scanner.Scan(phases)
+		if err != nil {
+			t.Fatalf("Scan: %v", err)
+		}
+		if len(contracts) != 2 {
+			t.Fatalf("got %d contracts, want 2", len(contracts))
+		}
+
+		// Producer should have new inline symbols.
+		producer := contracts[0]
+		producerGot := make(map[string]bool)
+		for _, p := range producer.Produces {
+			producerGot[p.Kind+":"+p.Name] = true
+		}
+		if !producerGot["type:Cache"] {
+			t.Errorf("producer missing type:Cache; have %v", producesKeys(producer))
+		}
+		if !producerGot["function:NewCache"] {
+			t.Errorf("producer missing function:NewCache; have %v", producesKeys(producer))
+		}
+
+		// Inline symbols should be in NewProduces.
+		if !producer.NewProduces["type:Cache"] {
+			t.Error("type:Cache should be in NewProduces (file does not exist)")
+		}
+		if !producer.NewProduces["function:NewCache"] {
+			t.Error("function:NewCache should be in NewProduces (file does not exist)")
+		}
+
+		// Consumer should have consumes for the new symbols.
 		consumer := contracts[1]
 		if len(consumer.Consumes) == 0 {
-			t.Fatal("consumer has no consumes — cross-reference failed")
+			t.Fatal("consumer has no consumes — cross-reference failed for new symbols")
 		}
 
 		consumerGot := make(map[string]bool)
 		for _, c := range consumer.Consumes {
 			consumerGot[c.Kind+":"+c.Name] = true
 		}
-		if !consumerGot["type:User"] {
-			t.Errorf("consumer missing consumed type:User; have %v", consumesKeys(consumer))
+		if !consumerGot["type:Cache"] {
+			t.Errorf("consumer missing consumed type:Cache; have %v", consumesKeys(consumer))
 		}
-		if !consumerGot["function:NewUser"] {
-			t.Errorf("consumer missing consumed function:NewUser; have %v", consumesKeys(consumer))
+		if !consumerGot["function:NewCache"] {
+			t.Errorf("consumer missing consumed function:NewCache; have %v", consumesKeys(consumer))
 		}
 
 		// All consumed entanglements should reference the producer.

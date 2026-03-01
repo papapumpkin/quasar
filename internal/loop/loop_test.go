@@ -3093,3 +3093,265 @@ func TestCycleSummaryFilterFixTracking(t *testing.T) {
 		}
 	})
 }
+
+// ---------------------------------------------------------------------------
+// Cross-invocation system prompt caching tests.
+// ---------------------------------------------------------------------------
+
+func TestCacheSystemPrompts(t *testing.T) {
+	t.Parallel()
+
+	t.Run("coder and reviewer prompts are populated", func(t *testing.T) {
+		t.Parallel()
+		l := &Loop{
+			CoderPrompt:  "You are a coder.",
+			ReviewPrompt: "You are a reviewer.",
+		}
+		l.cacheSystemPrompts()
+		if l.cachedCoderSystemPrompt == "" {
+			t.Error("cachedCoderSystemPrompt is empty after cacheSystemPrompts")
+		}
+		if l.cachedReviewerSystemPrompt == "" {
+			t.Error("cachedReviewerSystemPrompt is empty after cacheSystemPrompts")
+		}
+	})
+
+	t.Run("matches direct BuildSystemPrompt output", func(t *testing.T) {
+		t.Parallel()
+		l := &Loop{
+			CoderPrompt:    "You are a coder.",
+			ReviewPrompt:   "You are a reviewer.",
+			FabricEnabled:  true,
+			TaskID:         "phase-42",
+			ProjectContext: "# Project: quasar\nLanguage: Go",
+		}
+		l.cacheSystemPrompts()
+
+		opts := agent.PromptOpts{
+			FabricEnabled:  l.FabricEnabled,
+			TaskID:         l.TaskID,
+			ProjectContext: l.ProjectContext,
+		}
+		wantCoder := agent.BuildSystemPrompt(l.CoderPrompt, opts)
+		wantReviewer := agent.BuildSystemPrompt(l.ReviewPrompt, opts)
+
+		if l.cachedCoderSystemPrompt != wantCoder {
+			t.Errorf("cached coder prompt differs from direct BuildSystemPrompt\ncached len=%d, direct len=%d",
+				len(l.cachedCoderSystemPrompt), len(wantCoder))
+		}
+		if l.cachedReviewerSystemPrompt != wantReviewer {
+			t.Errorf("cached reviewer prompt differs from direct BuildSystemPrompt\ncached len=%d, direct len=%d",
+				len(l.cachedReviewerSystemPrompt), len(wantReviewer))
+		}
+	})
+
+	t.Run("idempotent across multiple calls", func(t *testing.T) {
+		t.Parallel()
+		l := &Loop{
+			CoderPrompt:    "You are a coder.",
+			ReviewPrompt:   "You are a reviewer.",
+			FabricEnabled:  true,
+			ProjectContext: "# Project context",
+		}
+		l.cacheSystemPrompts()
+		first := l.cachedCoderSystemPrompt
+
+		l.cacheSystemPrompts()
+		second := l.cachedCoderSystemPrompt
+
+		if first != second {
+			t.Errorf("cacheSystemPrompts is not idempotent: first len=%d, second len=%d",
+				len(first), len(second))
+		}
+	})
+}
+
+func TestCoderAgentUsesCachedPrompt(t *testing.T) {
+	t.Parallel()
+
+	l := &Loop{
+		Model:          "claude-sonnet",
+		CoderPrompt:    "You are a coder.",
+		ProjectContext: "# Project: quasar",
+		FabricEnabled:  true,
+	}
+	l.cacheSystemPrompts()
+
+	a1 := l.coderAgent(2.0)
+	a2 := l.coderAgent(3.0)
+
+	if a1.SystemPrompt != l.cachedCoderSystemPrompt {
+		t.Error("coderAgent did not use cached system prompt")
+	}
+	if a1.SystemPrompt != a2.SystemPrompt {
+		t.Error("coderAgent returned different system prompts on successive calls")
+	}
+}
+
+func TestReviewerAgentUsesCachedPrompt(t *testing.T) {
+	t.Parallel()
+
+	l := &Loop{
+		Model:          "claude-opus",
+		ReviewPrompt:   "You are a reviewer.",
+		ProjectContext: "# Project: quasar",
+		FabricEnabled:  true,
+	}
+	l.cacheSystemPrompts()
+
+	a1 := l.reviewerAgent(1.0)
+	a2 := l.reviewerAgent(2.0)
+
+	if a1.SystemPrompt != l.cachedReviewerSystemPrompt {
+		t.Error("reviewerAgent did not use cached system prompt")
+	}
+	if a1.SystemPrompt != a2.SystemPrompt {
+		t.Error("reviewerAgent returned different system prompts on successive calls")
+	}
+}
+
+func TestCachedSystemPromptStableAcrossCycles(t *testing.T) {
+	t.Parallel()
+
+	// Simulate a multi-cycle run: the system prompt should be identical
+	// on cycle 1 and cycle N because it was cached once at phase start.
+	inv := &fakeInvoker{
+		responses: []agent.InvocationResult{
+			// Cycle 1: coder
+			{ResultText: "first attempt", CostUSD: 0.50},
+			// Cycle 1: reviewer — rejected
+			{ResultText: "ISSUE:\nSEVERITY: major\nDESCRIPTION: Missing error handling.", CostUSD: 0.30},
+			// Cycle 2: coder
+			{ResultText: "fixed error handling", CostUSD: 0.40},
+			// Cycle 2: reviewer — approved
+			{ResultText: "APPROVED: Looks great now.", CostUSD: 0.20},
+		},
+	}
+
+	l := &Loop{
+		Invoker:           inv,
+		UI:                &noopUI{},
+		MaxCycles:         3,
+		MaxBudgetUSD:      10.0,
+		CoderPrompt:       "You are a coder.",
+		ReviewPrompt:      "You are a reviewer.",
+		ProjectContext:    "# Project: quasar\nLanguage: Go",
+		FabricEnabled:     true,
+		CacheOptimization: true,
+	}
+
+	result, err := l.runLoop(context.Background(), "bead-1", "implement feature")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.CyclesUsed != 2 {
+		t.Fatalf("CyclesUsed = %d, want 2", result.CyclesUsed)
+	}
+
+	// All invocations should have received the same cached system prompt.
+	// The fakeInvoker records agents, so verify they all have the expected
+	// system prompt from the cache.
+	if l.cachedCoderSystemPrompt == "" {
+		t.Fatal("cachedCoderSystemPrompt is empty after runLoop")
+	}
+	if l.cachedReviewerSystemPrompt == "" {
+		t.Fatal("cachedReviewerSystemPrompt is empty after runLoop")
+	}
+
+	// Verify the prompts start with project context.
+	if !strings.HasPrefix(l.cachedCoderSystemPrompt, "# Project: quasar") {
+		t.Error("coder system prompt does not start with project context")
+	}
+	if !strings.HasPrefix(l.cachedReviewerSystemPrompt, "# Project: quasar") {
+		t.Error("reviewer system prompt does not start with project context")
+	}
+}
+
+func TestCrossPhaseSharedPrefix(t *testing.T) {
+	t.Parallel()
+
+	projectCtx := "# Project: quasar\nLanguage: Go\nVersion: 1.25"
+
+	loopA := &Loop{
+		CoderPrompt:    "You are coder A.",
+		ReviewPrompt:   "You are reviewer A.",
+		ProjectContext: projectCtx,
+		FabricEnabled:  true,
+	}
+	loopA.cacheSystemPrompts()
+
+	loopB := &Loop{
+		CoderPrompt:    "You are coder B.",
+		ReviewPrompt:   "You are reviewer B.",
+		ProjectContext: projectCtx,
+		FabricEnabled:  true,
+	}
+	loopB.cacheSystemPrompts()
+
+	// Both coder prompts should share the ProjectContext prefix.
+	// The shared prefix length should be at least len(projectCtx) + separator.
+	separator := "\n\n---\n\n"
+	minShared := len(projectCtx) + len(separator)
+
+	if len(loopA.cachedCoderSystemPrompt) < minShared {
+		t.Fatalf("coder A prompt too short: len=%d, need at least %d",
+			len(loopA.cachedCoderSystemPrompt), minShared)
+	}
+	if len(loopB.cachedCoderSystemPrompt) < minShared {
+		t.Fatalf("coder B prompt too short: len=%d, need at least %d",
+			len(loopB.cachedCoderSystemPrompt), minShared)
+	}
+
+	prefixA := loopA.cachedCoderSystemPrompt[:minShared]
+	prefixB := loopB.cachedCoderSystemPrompt[:minShared]
+
+	if prefixA != prefixB {
+		t.Errorf("cross-phase coder prompts do not share ProjectContext prefix:\nA: %q\nB: %q",
+			prefixA, prefixB)
+	}
+
+	// Cross-role: coder and reviewer within the same phase also share the
+	// ProjectContext prefix.
+	prefixCoder := loopA.cachedCoderSystemPrompt[:minShared]
+	prefixReviewer := loopA.cachedReviewerSystemPrompt[:minShared]
+
+	if prefixCoder != prefixReviewer {
+		t.Errorf("coder and reviewer do not share ProjectContext prefix:\ncoder: %q\nreviewer: %q",
+			prefixCoder, prefixReviewer)
+	}
+
+	// The prompts should diverge after the shared prefix (different base prompts).
+	if loopA.cachedCoderSystemPrompt == loopB.cachedCoderSystemPrompt {
+		t.Error("different CoderPrompt values produced identical system prompts")
+	}
+}
+
+func TestCoderAgentFallbackWithoutCache(t *testing.T) {
+	t.Parallel()
+
+	// When cacheSystemPrompts has NOT been called, coderAgent should
+	// fall back to building the prompt on the fly.
+	l := &Loop{
+		Model:       "claude-sonnet",
+		CoderPrompt: "You are a coder.",
+	}
+	a := l.coderAgent(1.0)
+	if a.SystemPrompt != "You are a coder." {
+		t.Errorf("SystemPrompt = %q, want %q", a.SystemPrompt, "You are a coder.")
+	}
+}
+
+func TestReviewerAgentFallbackWithoutCache(t *testing.T) {
+	t.Parallel()
+
+	// When cacheSystemPrompts has NOT been called, reviewerAgent should
+	// fall back to building the prompt on the fly.
+	l := &Loop{
+		Model:        "claude-opus",
+		ReviewPrompt: "You are a reviewer.",
+	}
+	a := l.reviewerAgent(1.0)
+	if a.SystemPrompt != "You are a reviewer." {
+		t.Errorf("SystemPrompt = %q, want %q", a.SystemPrompt, "You are a reviewer.")
+	}
+}

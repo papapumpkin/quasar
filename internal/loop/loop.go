@@ -13,31 +13,43 @@ import (
 
 // Loop orchestrates the coder-reviewer cycle for a single task.
 type Loop struct {
-	Invoker          agent.Invoker
-	UI               ui.UI
-	Git              CycleCommitter // Optional; nil disables per-cycle commits.
-	Hooks            []Hook         // Lifecycle hooks (e.g., BeadHook for tracking).
-	Linter           Linter         // Optional; nil disables lint checks between coder and reviewer.
-	Filter           filter.Filter  // Optional; nil skips pre-reviewer filtering and goes straight to reviewer.
-	MaxCycles        int
-	MaxLintRetries   int // Max times coder is asked to fix lint issues per cycle. 0 uses DefaultMaxLintRetries.
-	MaxFilterFixes   int // Max inner fix attempts per filter failure. 0 uses DefaultMaxFilterFixes.
-	MaxBudgetUSD     float64
-	Model            string
-	CoderPrompt      string
-	ReviewPrompt     string
-	WorkDir          string
-	MCP              *agent.MCPConfig // Optional MCP server config passed to agents.
-	RefactorCh       <-chan string    // Optional channel carrying updated task descriptions from phase edits.
-	CommitSummary    string           // Short label for cycle commit messages. If empty, derived from task title.
-	Fabric           fabric.Fabric    // Optional; when set and FabricEnabled, auto-inject fabric state into prompts.
-	FabricEnabled    bool             // When true, inject fabric protocol into agent system prompts.
-	TaskID           string           // Task ID for fabric context (QUASAR_TASK_ID).
-	ProjectContext   string           // Injected into agent system prompts for prompt caching.
-	MaxContextTokens int              // Token budget for context injection. 0 = use default.
-	HailQueue        HailQueue        // Optional; when set, hails extracted during execution are posted here.
-	HailTimeout      time.Duration    // Auto-resolve timeout for hails. 0 disables auto-resolution.
-	StruggleConfig   StruggleConfig   // Optional; zero value disables struggle detection.
+	Invoker           agent.Invoker
+	UI                ui.UI
+	Git               CycleCommitter // Optional; nil disables per-cycle commits.
+	Hooks             []Hook         // Lifecycle hooks (e.g., BeadHook for tracking).
+	Linter            Linter         // Optional; nil disables lint checks between coder and reviewer.
+	Filter            filter.Filter  // Optional; nil skips pre-reviewer filtering and goes straight to reviewer.
+	MaxCycles         int
+	MaxLintRetries    int // Max times coder is asked to fix lint issues per cycle. 0 uses DefaultMaxLintRetries.
+	MaxFilterFixes    int // Max inner fix attempts per filter failure. 0 uses DefaultMaxFilterFixes.
+	MaxBudgetUSD      float64
+	Model             string
+	CoderPrompt       string
+	ReviewPrompt      string
+	WorkDir           string
+	MCP               *agent.MCPConfig // Optional MCP server config passed to agents.
+	RefactorCh        <-chan string    // Optional channel carrying updated task descriptions from phase edits.
+	CommitSummary     string           // Short label for cycle commit messages. If empty, derived from task title.
+	Fabric            fabric.Fabric    // Optional; when set and FabricEnabled, auto-inject fabric state into prompts.
+	FabricEnabled     bool             // When true, inject fabric protocol into agent system prompts.
+	TaskID            string           // Task ID for fabric context (QUASAR_TASK_ID).
+	ProjectContext    string           // Injected into agent system prompts for prompt caching.
+	MaxContextTokens  int              // Token budget for context injection. 0 = use default.
+	CacheOptimization bool             // When true, system prompts use a stable prefix for cache hits.
+	CacheVerbose      bool             // When true, log cache-related diagnostics to stderr.
+	HailQueue         HailQueue        // Optional; when set, hails extracted during execution are posted here.
+	HailTimeout       time.Duration    // Auto-resolve timeout for hails. 0 disables auto-resolution.
+	StruggleConfig    StruggleConfig   // Optional; zero value disables struggle detection.
+
+	// cachedCoderSystemPrompt is the pre-computed system prompt for the coder
+	// agent, built once at phase start via cacheSystemPrompts. It contains only
+	// stable content (ProjectContext + CoderPrompt + FabricProtocol) and must
+	// remain byte-identical across all cycles for prompt cache hits.
+	cachedCoderSystemPrompt string
+
+	// cachedReviewerSystemPrompt is the pre-computed system prompt for the
+	// reviewer agent, built once at phase start via cacheSystemPrompts.
+	cachedReviewerSystemPrompt string
 }
 
 // TaskResult holds the outcome of a completed task loop.
@@ -113,6 +125,15 @@ func (l *Loop) emit(ctx context.Context, event Event) {
 
 // runLoop is the core coder-reviewer loop extracted from RunTask.
 func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*TaskResult, error) {
+	// Pre-compute system prompts once for the entire phase. These contain
+	// only stable content (ProjectContext + basePrompt + FabricProtocol)
+	// and must remain byte-identical across all cycles for prompt cache hits.
+	// When CacheOptimization is disabled, skip pre-computation so prompts
+	// are rebuilt per cycle (legacy behavior).
+	if l.CacheOptimization {
+		l.cacheSystemPrompts()
+	}
+
 	perAgentBudget := l.perAgentBudget()
 	state := l.initCycleState(ctx, beadID, taskDescription)
 	l.emitBeadUpdate(state, "in_progress")
@@ -629,14 +650,34 @@ func (l *Loop) initCycleState(ctx context.Context, beadID, taskDescription strin
 	}
 }
 
-// coderAgent builds the agent configuration for the coder role.
-// When FabricEnabled is true, the fabric protocol is appended to the system prompt.
-func (l *Loop) coderAgent(budget float64) agent.Agent {
-	sysPrompt := agent.BuildSystemPrompt(l.CoderPrompt, agent.PromptOpts{
+// cacheSystemPrompts pre-computes and stores the system prompts for both
+// coder and reviewer agents. This must be called once at phase start (in
+// runLoop) before the cycle loop begins. By building the prompts once, we
+// guarantee byte-identical system prompts across all cycles within a phase,
+// which is critical for prompt cache hits in the Claude CLI.
+func (l *Loop) cacheSystemPrompts() {
+	opts := agent.PromptOpts{
 		FabricEnabled:  l.FabricEnabled,
 		TaskID:         l.TaskID,
 		ProjectContext: l.ProjectContext,
-	})
+	}
+	l.cachedCoderSystemPrompt = agent.BuildSystemPrompt(l.CoderPrompt, opts)
+	l.cachedReviewerSystemPrompt = agent.BuildSystemPrompt(l.ReviewPrompt, opts)
+}
+
+// coderAgent builds the agent configuration for the coder role.
+// It uses the pre-computed system prompt cached at phase start by
+// cacheSystemPrompts. If the cache is empty (e.g., in unit tests that call
+// coderAgent directly), it falls back to building the prompt on the fly.
+func (l *Loop) coderAgent(budget float64) agent.Agent {
+	sysPrompt := l.cachedCoderSystemPrompt
+	if sysPrompt == "" {
+		sysPrompt = agent.BuildSystemPrompt(l.CoderPrompt, agent.PromptOpts{
+			FabricEnabled:  l.FabricEnabled,
+			TaskID:         l.TaskID,
+			ProjectContext: l.ProjectContext,
+		})
+	}
 	return agent.Agent{
 		Role:         agent.RoleCoder,
 		SystemPrompt: sysPrompt,
@@ -651,14 +692,18 @@ func (l *Loop) coderAgent(budget float64) agent.Agent {
 }
 
 // reviewerAgent builds the agent configuration for the reviewer role.
-// When ProjectContext or FabricEnabled is set, the system prompt is built
-// through BuildSystemPrompt so both roles benefit from cached context.
+// It uses the pre-computed system prompt cached at phase start by
+// cacheSystemPrompts. If the cache is empty, it falls back to building
+// the prompt on the fly for backward compatibility.
 func (l *Loop) reviewerAgent(budget float64) agent.Agent {
-	sysPrompt := agent.BuildSystemPrompt(l.ReviewPrompt, agent.PromptOpts{
-		FabricEnabled:  l.FabricEnabled,
-		TaskID:         l.TaskID,
-		ProjectContext: l.ProjectContext,
-	})
+	sysPrompt := l.cachedReviewerSystemPrompt
+	if sysPrompt == "" {
+		sysPrompt = agent.BuildSystemPrompt(l.ReviewPrompt, agent.PromptOpts{
+			FabricEnabled:  l.FabricEnabled,
+			TaskID:         l.TaskID,
+			ProjectContext: l.ProjectContext,
+		})
+	}
 	return agent.Agent{
 		Role:         agent.RoleReviewer,
 		SystemPrompt: sysPrompt,

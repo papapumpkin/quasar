@@ -22,6 +22,29 @@ type Config struct {
 	ReviewerSystemPrompt string   `mapstructure:"reviewer_system_prompt"`
 	Verbose              bool     `mapstructure:"verbose"`
 	LintCommands         []string `mapstructure:"lint_commands"`
+
+	// CacheOptimization enables prompt cache optimization. When true, system
+	// prompts include a stable project-context prefix that is byte-identical
+	// across invocations within a phase for Anthropic prompt cache hits.
+	// Default: true.
+	CacheOptimization bool `mapstructure:"cache_optimization"`
+
+	// CacheVerbose enables detailed cache-related logging to stderr,
+	// independent of the global Verbose flag. Useful for diagnosing
+	// cache effectiveness without full verbose output.
+	// Default: false.
+	CacheVerbose bool `mapstructure:"cache_verbose"`
+
+	// ProjectContextPath overrides automatic Scanner.Scan() with a static
+	// file whose contents are used as the project context prefix. When set,
+	// the scanner is not invoked and this file is read instead.
+	// Default: "" (use Scanner.Scan()).
+	ProjectContextPath string `mapstructure:"project_context_path"`
+
+	// MaxContextTokens sets the token budget for context injection.
+	// Controls how much project context and fabric state is included.
+	// Default: 10000.
+	MaxContextTokens int `mapstructure:"max_context_tokens"`
 }
 
 // Load reads configuration from viper, applying built-in defaults for any
@@ -37,6 +60,10 @@ func Load() (Config, error) {
 	viper.SetDefault("reviewer_system_prompt", "")
 	viper.SetDefault("verbose", false)
 	viper.SetDefault("lint_commands", DefaultLintCommands)
+	viper.SetDefault("cache_optimization", true)
+	viper.SetDefault("cache_verbose", false)
+	viper.SetDefault("project_context_path", "")
+	viper.SetDefault("max_context_tokens", 10000)
 
 	var cfg Config
 	if err := viper.Unmarshal(&cfg); err != nil {
