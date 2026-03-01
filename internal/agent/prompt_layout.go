@@ -66,13 +66,13 @@ const (
 	LabelFabricProtocol = "fabric-protocol"
 
 	// Volatile suffix labels.
-	LabelTaskDescription    = "task-description"
-	LabelReviewerFindings   = "reviewer-findings"
-	LabelCoderOutput        = "coder-output"
-	LabelLintOutput         = "lint-output"
-	LabelFilterOutput       = "filter-output"
-	LabelFabricSnapshot     = "fabric-snapshot"
-	LabelHailRelay          = "hail-relay"
+	LabelTaskDescription      = "task-description"
+	LabelReviewerFindings     = "reviewer-findings"
+	LabelCoderOutput          = "coder-output"
+	LabelLintOutput           = "lint-output"
+	LabelFilterOutput         = "filter-output"
+	LabelFabricSnapshot       = "fabric-snapshot"
+	LabelHailRelay            = "hail-relay"
 	LabelRefactorInstructions = "refactor-instructions"
 )
 
