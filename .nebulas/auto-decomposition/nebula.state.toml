@@ -1,19 +1,25 @@
 version = 1
 nebula_name = 'auto-decomposition'
-total_cost_usd = 1.8917870000000003
+total_cost_usd = 4.687446750000001
 
 [phases]
 [phases.dag-insertion]
 bead_id = 'quasar-30h1'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-28T23:19:20.342678-05:00
-updated_at = 2026-02-28T23:19:20.342678-05:00
+updated_at = 2026-02-28T23:34:20.748092-05:00
 
 [phases.decomposition-architect]
 bead_id = 'quasar-7z00'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-28T23:19:19.525154-05:00
-updated_at = 2026-02-28T23:25:52.515333-05:00
+updated_at = 2026-02-28T23:34:20.737621-05:00
+
+[phases.decomposition-architect.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-structured decomposition architect extension with 22 test cases, clean separation from existing code, and proper package decoupling — one minor gap in duplicate sub-phase ID detection.'
 
 [phases.observability]
 bead_id = 'quasar-bcsk'
