@@ -191,16 +191,20 @@ func (wg *WorkerGroup) escalateAllBlocked(ctx context.Context) {
 	wg.tychoScheduler.EscalateAllBlocked(ctx, wg.markPhaseFailedWithSignal)
 }
 
-// markPhaseFailedWithSignal marks a phase as failed in the tracker and
-// emits a gate signal. This is passed as a callback to the Tycho scheduler
-// for escalation handling.
+// markPhaseFailedWithSignal marks a phase as failed in the tracker,
+// updates the persistent state, and emits a gate signal. This is passed
+// as a callback to the Tycho scheduler for escalation handling.
 func (wg *WorkerGroup) markPhaseFailedWithSignal(phaseID string) {
 	wg.mu.Lock()
 	wg.tracker.Done()[phaseID] = true
 	wg.tracker.Failed()[phaseID] = true
+	if ps := wg.State.Phases[phaseID]; ps != nil {
+		wg.State.SetPhaseState(phaseID, ps.BeadID, PhaseStatusFailed)
+	}
 	wg.gateSignals = append(wg.gateSignals, gateSignal{
 		phaseID: phaseID,
 		action:  GateActionReject,
+		reason:  "fabric escalation: all phases blocked with nothing in-flight",
 	})
 	wg.mu.Unlock()
 }

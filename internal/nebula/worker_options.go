@@ -36,6 +36,7 @@ type ProgressFunc func(completed, total, openBeads, closedBeads int, totalCostUS
 type gateSignal struct {
 	phaseID string
 	action  GateAction
+	reason  string // optional context for error messages (e.g. "fabric escalation")
 }
 
 // phaseLoopHandle tracks a running phase's refactor channel so that mid-run
