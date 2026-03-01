@@ -101,8 +101,8 @@ type CycleState struct {
 	BaseCommitSHA       string                // HEAD before first cycle (captured at task start)
 	FilterHistory       []string              // accumulated FilterCheckName per cycle (index = cycle-1)
 	CycleCommits        []string              // commit SHA per cycle (index = cycle-1)
-	FilterFixAttempts   int                   // number of inner fix attempts in the current cycle
-	FilterFixCostUSD    float64               // cost accumulated during filter fix attempts this cycle
+	FilterFixAttempts   int                   // number of inner fix attempts accumulated across the entire loop run
+	FilterFixCostUSD    float64               // cost accumulated during filter fix attempts across the entire loop run
 	lastCycleSHA        string                // transient: last commit SHA for the current cycle (sealed into CycleCommits at cycle end)
 	bridgedDiscoveryIDs map[int64]bool        // tracks fabric discovery IDs already bridged to hails, preventing duplicates across cycles
 }

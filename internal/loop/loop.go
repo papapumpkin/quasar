@@ -154,7 +154,15 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 					l.emit(ctx, Event{Kind: EventCycleStart, BeadID: beadID, Cycle: cycle})
 					continue
 				}
-				// Fixed! Clear filter state and proceed to reviewer.
+				// Fixed! Remove the synthetic finding that runFilterChecks
+				// appended so the reviewer doesn't waste tokens verifying a
+				// resolved issue and struggle detection doesn't see a phantom
+				// critical finding.
+				if len(state.AllFindings) > 0 {
+					state.AllFindings = state.AllFindings[:len(state.AllFindings)-1]
+				}
+				state.Findings = nil
+				// Clear filter state and proceed to reviewer.
 				state.FilterOutput = ""
 				state.FilterCheckName = ""
 				state.FilterFixAttempts = 0
@@ -419,12 +427,18 @@ func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkNam
 
 		// Build a focused fix prompt and invoke the coder with restricted tools.
 		prompt := l.buildFilterFixPrompt(state, parsed)
+		sysPrompt := agent.BuildSystemPrompt(l.CoderPrompt, agent.PromptOpts{
+			FabricEnabled:  l.FabricEnabled,
+			TaskID:         l.TaskID,
+			ProjectContext: l.ProjectContext,
+		})
 		a := agent.Agent{
 			Role:         agent.RoleCoder,
-			SystemPrompt: l.CoderPrompt,
+			SystemPrompt: sysPrompt,
 			Model:        l.Model,
 			MaxBudgetUSD: fixBudget,
 			AllowedTools: []string{"Read", "Edit", "Write", "Glob"},
+			MCP:          l.MCP,
 		}
 
 		result, err := l.Invoker.Invoke(ctx, a, prompt, l.WorkDir)
