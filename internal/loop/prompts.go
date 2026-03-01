@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/papapumpkin/quasar/internal/fabric"
+	"github.com/papapumpkin/quasar/internal/filter"
 	"github.com/papapumpkin/quasar/internal/snapshot"
 )
 
@@ -87,17 +88,135 @@ func (l *Loop) buildRefactorPrompt(state *CycleState) string {
 }
 
 // buildLintFixPrompt constructs the prompt sent to the coder when lint
-// commands report issues that need fixing.
+// commands report issues that need fixing. It delegates to buildFilterFixPrompt
+// when a ParseResult is available from the lint output, falling back to legacy
+// behavior otherwise.
 func (l *Loop) buildLintFixPrompt(state *CycleState) string {
+	// When lint output exists, parse it as a lint check and delegate to the
+	// shared filter fix prompt for consistency.
+	if state.LintOutput != "" {
+		parsed := filter.ParseCheckOutput(filter.CheckResult{
+			Name:   "lint",
+			Output: state.LintOutput,
+		})
+		return l.buildFilterFixPrompt(state, parsed)
+	}
+
+	// No lint output — shouldn't normally happen, but return a minimal prompt.
+	var b strings.Builder
+	fmt.Fprintf(&b, "Task (bead %s): Fix failing lint check\n\n", state.TaskBeadID)
+	b.WriteString("Your code has lint issues that need to be fixed before reviewer handoff.\n")
+	b.WriteString("\nRead each affected file, fix the listed errors, and verify your fix compiles.\n")
+	b.WriteString("Do NOT make any other changes. Stay focused on these specific errors.\n")
+	return b.String()
+}
+
+// buildFilterFixPrompt constructs a minimal prompt for the coder to fix
+// specific filter errors. It includes only the failing check name, the
+// structured errors (file, line, message), and instructions to fix them.
+// When no structured errors were parsed, it falls back to including the
+// raw output (similar to the current behavior but with tighter framing).
+func (l *Loop) buildFilterFixPrompt(state *CycleState, parsed filter.ParseResult) string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "Task (bead %s): %s\n\n", state.TaskBeadID, state.TaskTitle)
-	b.WriteString("Your code has lint issues that need to be fixed before reviewer handoff.\n\n")
-	b.WriteString("LINT OUTPUT:\n")
-	b.WriteString(truncate(state.LintOutput, 3000))
-	b.WriteString("\n\nFix all reported lint issues. Read the relevant files, apply fixes, and ensure the code is clean.")
+	// 1. Context header — minimal, just bead ID and check name.
+	fmt.Fprintf(&b, "Task (bead %s): Fix failing %s check\n\n", state.TaskBeadID, parsed.CheckName)
+	fmt.Fprintf(&b, "Your code failed the %s filter check. Fix ONLY the errors listed below.\n", parsed.CheckName)
+	b.WriteString("Do not refactor, do not add features, do not change anything unrelated to these errors.\n\n")
+
+	// 2. Error list — structured when available, raw fallback otherwise.
+	if len(parsed.Errors) > 0 {
+		writeStructuredErrors(&b, parsed.Errors)
+	} else {
+		b.WriteString("RAW OUTPUT:\n")
+		b.WriteString(truncate(parsed.RawOutput, 2000))
+		b.WriteString("\n")
+	}
+
+	// 3. Instructions.
+	b.WriteString("\nRead each affected file, fix the listed errors, and verify your fix compiles.\n")
+	b.WriteString("Do NOT make any other changes. Stay focused on these specific errors.\n")
+
+	// Budget hint.
+	if budget := l.filterFixBudget(); budget > 0 {
+		fmt.Fprintf(&b, "\nThis is a targeted fix pass. Keep your budget under $%.2f — read the affected files, apply minimal fixes, and stop.\n", budget)
+	}
 
 	return b.String()
+}
+
+// writeStructuredErrors writes the ERRORS and AFFECTED FILES sections from
+// a list of FilterErrors. Errors are grouped by file path and sorted by error
+// count descending; within each file, errors are sorted by line number ascending.
+func writeStructuredErrors(b *strings.Builder, errs []filter.FilterError) {
+	// Group errors by file.
+	type fileGroup struct {
+		File   string
+		Errors []filter.FilterError
+	}
+	byFile := make(map[string]*fileGroup, len(errs))
+	var order []string
+	for _, e := range errs {
+		g, ok := byFile[e.File]
+		if !ok {
+			g = &fileGroup{File: e.File}
+			byFile[e.File] = g
+			order = append(order, e.File)
+		}
+		g.Errors = append(g.Errors, e)
+	}
+
+	// Sort file groups by error count descending, then file name ascending for stability.
+	sort.Slice(order, func(i, j int) bool {
+		ci, cj := len(byFile[order[i]].Errors), len(byFile[order[j]].Errors)
+		if ci != cj {
+			return ci > cj
+		}
+		return order[i] < order[j]
+	})
+
+	// Sort errors within each group by line ascending.
+	for _, g := range byFile {
+		sort.Slice(g.Errors, func(i, j int) bool {
+			return g.Errors[i].Line < g.Errors[j].Line
+		})
+	}
+
+	// Write numbered error list.
+	b.WriteString("ERRORS:\n")
+	n := 0
+	for _, file := range order {
+		for _, e := range byFile[file].Errors {
+			n++
+			if e.Column > 0 {
+				fmt.Fprintf(b, "%d. %s:%d:%d — %s\n", n, e.File, e.Line, e.Column, e.Message)
+			} else {
+				fmt.Fprintf(b, "%d. %s:%d — %s\n", n, e.File, e.Line, e.Message)
+			}
+		}
+	}
+
+	// Write affected files summary.
+	b.WriteString("\nAFFECTED FILES:\n")
+	for _, file := range order {
+		count := len(byFile[file].Errors)
+		if count == 1 {
+			fmt.Fprintf(b, "- %s (1 error)\n", file)
+		} else {
+			fmt.Fprintf(b, "- %s (%d errors)\n", file, count)
+		}
+	}
+}
+
+// filterFixBudget returns a per-invocation budget for filter fix attempts.
+// It's smaller than perAgentBudget since these should be quick, mechanical fixes.
+func (l *Loop) filterFixBudget() float64 {
+	full := l.perAgentBudget()
+	if full <= 0 {
+		return 0
+	}
+	// Use 1/4 of the normal per-agent budget for targeted fixes.
+	return full / 4
 }
 
 // buildReviewerPrompt constructs the prompt sent to the reviewer agent,
