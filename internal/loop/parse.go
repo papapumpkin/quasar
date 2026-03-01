@@ -13,6 +13,8 @@ func ParseReviewFindings(output string) []ReviewFinding {
 				if f.Severity == "" {
 					f.Severity = "major"
 				}
+				f.ID = FindingID(f.Severity, f.Description)
+				f.Status = FindingStatusFound
 				findings = append(findings, f)
 			}
 			i = next

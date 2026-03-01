@@ -100,6 +100,51 @@ and wastes API budget.`,
 	}
 }
 
+func TestParseReviewFindings_IDAndStatus(t *testing.T) {
+	t.Parallel()
+
+	input := `ISSUE:
+SEVERITY: critical
+DESCRIPTION: SQL injection vulnerability in user input handler.
+
+ISSUE:
+DESCRIPTION: Missing error check on file open.`
+
+	findings := ParseReviewFindings(input)
+	if len(findings) != 2 {
+		t.Fatalf("expected 2 findings, got %d", len(findings))
+	}
+
+	// Both findings should have non-empty IDs.
+	for i, f := range findings {
+		if f.ID == "" {
+			t.Errorf("finding %d: expected non-empty ID", i)
+		}
+		if f.Status != FindingStatusFound {
+			t.Errorf("finding %d: expected status %q, got %q", i, FindingStatusFound, f.Status)
+		}
+	}
+
+	// Different findings should have different IDs.
+	if findings[0].ID == findings[1].ID {
+		t.Errorf("expected different IDs for different findings, both got %q", findings[0].ID)
+	}
+
+	// ID should be deterministic: parse the same input again.
+	findings2 := ParseReviewFindings(input)
+	for i := range findings {
+		if findings[i].ID != findings2[i].ID {
+			t.Errorf("finding %d: ID not deterministic: %q vs %q", i, findings[i].ID, findings2[i].ID)
+		}
+	}
+
+	// The finding with no severity should have defaulted to "major" before ID computation.
+	expectedID := FindingID("major", findings[1].Description)
+	if findings[1].ID != expectedID {
+		t.Errorf("finding 1: expected ID %q (computed with default severity), got %q", expectedID, findings[1].ID)
+	}
+}
+
 func TestIsApproved(t *testing.T) {
 	tests := []struct {
 		input    string

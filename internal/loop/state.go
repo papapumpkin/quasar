@@ -47,11 +47,27 @@ func (p Phase) String() string {
 	}
 }
 
+// FindingStatus represents the lifecycle state of a review finding.
+type FindingStatus string
+
+const (
+	// FindingStatusFound indicates a newly discovered finding.
+	FindingStatusFound FindingStatus = "found"
+	// FindingStatusFixed indicates the finding was resolved.
+	FindingStatusFixed FindingStatus = "fixed"
+	// FindingStatusStillPresent indicates the finding persists from a prior cycle.
+	FindingStatusStillPresent FindingStatus = "still_present"
+	// FindingStatusRegressed indicates a previously fixed finding has reappeared.
+	FindingStatusRegressed FindingStatus = "regressed"
+)
+
 // ReviewFinding represents a single issue identified by the reviewer.
 type ReviewFinding struct {
+	ID          string        // deterministic hash for cross-cycle tracking
 	Severity    string
 	Description string
-	Cycle       int // cycle in which this finding was created (set during accumulation)
+	Cycle       int           // cycle in which this finding was created (set during accumulation)
+	Status      FindingStatus // lifecycle status (set during verification)
 }
 
 // CycleState tracks the mutable state of a coder-reviewer loop across cycles.
