@@ -1,5 +1,6 @@
 version = 1
 nebula_name = 'nebula-generate'
+total_cost_usd = 3.4554187499999998
 
 [phases]
 [phases.cli-command]
@@ -10,15 +11,21 @@ updated_at = 2026-02-28T18:47:17.761766-05:00
 
 [phases.codebase-analyzer]
 bead_id = 'quasar-t6s7'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-28T18:47:14.641675-05:00
-updated_at = 2026-02-28T18:47:18.794278-05:00
+updated_at = 2026-02-28T18:57:33.973842-05:00
+
+[phases.codebase-analyzer.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean codebase analysis bridge with correct AST parsing, good error handling, comprehensive tests, and two cosmetic-only minor issues (dead code, soft budget edge case).'
 
 [phases.dependency-inference]
 bead_id = 'quasar-xvh5'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-28T18:47:15.368348-05:00
-updated_at = 2026-02-28T18:47:15.368348-05:00
+updated_at = 2026-02-28T18:57:34.024724-05:00
 
 [phases.multi-phase-architect]
 bead_id = 'quasar-qvnx'
