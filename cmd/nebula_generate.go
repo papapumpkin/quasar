@@ -119,19 +119,29 @@ func runNebulaGenerate(cmd *cobra.Command, args []string) error {
 		printer.Info(fmt.Sprintf("  warning: %s", w))
 	}
 
-	// Step 3: Handle dry-run.
+	// Step 3: Validate the generated nebula before writing to disk.
+	if result.Nebula != nil {
+		if validationErrs := nebula.Validate(result.Nebula); len(validationErrs) > 0 {
+			for _, ve := range validationErrs {
+				printer.Error(fmt.Sprintf("validation: %s", ve.Error()))
+			}
+			return fmt.Errorf("generated nebula has %d validation error(s)", len(validationErrs))
+		}
+	}
+
+	// Step 4: Handle dry-run.
 	if dryRun {
 		printDryRun(printer, result, outputDir)
 		return nil
 	}
 
-	// Step 4: Write to disk.
+	// Step 5: Write to disk.
 	if err := nebula.WriteNebula(result, outputDir, nebula.WriteOptions{Overwrite: force}); err != nil {
 		printer.Error(fmt.Sprintf("failed to write nebula: %v", err))
 		return fmt.Errorf("failed to write nebula: %w", err)
 	}
 
-	// Step 5: Print summary.
+	// Step 6: Print summary.
 	printer.Info(fmt.Sprintf("Generated %d phases in %s", len(result.Phases), outputDir))
 	printer.Info(fmt.Sprintf("Total generation cost: $%.4f", result.CostUSD))
 	printer.Info(fmt.Sprintf("Run 'quasar nebula validate %s' to verify.", outputDir))
