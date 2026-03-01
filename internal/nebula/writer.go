@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	toml "github.com/pelletier/go-toml/v2"
 )
@@ -25,8 +26,8 @@ type WriteOptions struct {
 // If the directory already exists and opts.Overwrite is false, WriteNebula
 // returns an error. On failure, any partially written directory is removed.
 func WriteNebula(result *GenerateResult, outputDir string, opts WriteOptions) error {
-	// Pre-flight: check if directory already exists.
-	if info, err := os.Stat(outputDir); err == nil && info.IsDir() {
+	// Pre-flight: check if path already exists (directory, file, or any entity).
+	if _, err := os.Stat(outputDir); err == nil {
 		if !opts.Overwrite {
 			return fmt.Errorf("%w: %s; use --force to overwrite", ErrDirExists, outputDir)
 		}
@@ -67,6 +68,9 @@ func WriteNebula(result *GenerateResult, outputDir string, opts WriteOptions) er
 
 	// Write phase files.
 	for i, phase := range sorted {
+		if strings.ContainsAny(phase.ID, "/\\") {
+			return fmt.Errorf("phase ID %q contains path separator", phase.ID)
+		}
 		filename := fmt.Sprintf("%02d-%s.md", i+1, phase.ID)
 		data, err := MarshalPhaseFile(phase)
 		if err != nil {

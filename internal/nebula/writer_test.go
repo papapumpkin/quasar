@@ -210,15 +210,10 @@ func TestWriteNebula(t *testing.T) {
 		}
 	})
 
-	t.Run("atomic cleanup on failure", func(t *testing.T) {
+	t.Run("temp directory removed after success", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		outputDir := filepath.Join(dir, "atomic-test")
-
-		// Pass nil Phases to cause a panic-free path, but create a scenario where
-		// the temp dir is cleaned up: use a result with a phase that causes
-		// MarshalPhaseFile to fail is hard, so instead verify the temp dir doesn't
-		// linger after a successful write.
 		tmpDir := outputDir + ".tmp"
 
 		result := makeResult()
@@ -229,6 +224,87 @@ func TestWriteNebula(t *testing.T) {
 		// The temp directory should not exist after success.
 		if _, err := os.Stat(tmpDir); !os.IsNotExist(err) {
 			t.Error("temp directory should be cleaned up after success")
+		}
+	})
+
+	t.Run("atomic cleanup on failure", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+
+		// Create a read-only parent so that os.MkdirAll for the temp dir fails.
+		parent := filepath.Join(dir, "readonly-parent")
+		if err := os.MkdirAll(parent, 0o755); err != nil {
+			t.Fatalf("setup: %v", err)
+		}
+		if err := os.Chmod(parent, 0o555); err != nil {
+			t.Fatalf("setup chmod: %v", err)
+		}
+		t.Cleanup(func() {
+			os.Chmod(parent, 0o755) // restore for cleanup
+		})
+
+		outputDir := filepath.Join(parent, "my-nebula")
+		tmpDir := outputDir + ".tmp"
+
+		result := makeResult()
+		err := WriteNebula(result, outputDir, WriteOptions{})
+		if err == nil {
+			t.Fatal("expected error when parent is read-only")
+		}
+
+		// Neither the output dir nor the temp dir should exist.
+		if _, statErr := os.Stat(outputDir); !os.IsNotExist(statErr) {
+			t.Error("output directory should not exist after failure")
+		}
+		if _, statErr := os.Stat(tmpDir); !os.IsNotExist(statErr) {
+			t.Error("temp directory should not exist after failure")
+		}
+	})
+
+	t.Run("path traversal in phase ID rejected", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		outputDir := filepath.Join(dir, "traversal-test")
+
+		result := &GenerateResult{
+			Manifest: makeResult().Manifest,
+			Phases: []PhaseSpec{
+				{
+					ID:       "../../../evil",
+					Title:    "Evil Phase",
+					Type:     "task",
+					Priority: 1,
+					Body:     "## Problem\n\nPath traversal.",
+				},
+			},
+		}
+
+		err := WriteNebula(result, outputDir, WriteOptions{})
+		if err == nil {
+			t.Fatal("expected error for phase ID with path separator")
+		}
+		if !strings.Contains(err.Error(), "path separator") {
+			t.Errorf("error should mention path separator: %v", err)
+		}
+	})
+
+	t.Run("overwrite protection for non-directory entity", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		outputDir := filepath.Join(dir, "a-file")
+
+		// Create a regular file at the output path.
+		if err := os.WriteFile(outputDir, []byte("not a dir"), 0o644); err != nil {
+			t.Fatalf("setup: %v", err)
+		}
+
+		result := makeResult()
+		err := WriteNebula(result, outputDir, WriteOptions{Overwrite: false})
+		if err == nil {
+			t.Fatal("expected error for existing file at output path")
+		}
+		if !errors.Is(err, ErrDirExists) {
+			t.Errorf("expected ErrDirExists, got: %v", err)
 		}
 	})
 
