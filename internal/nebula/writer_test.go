@@ -240,7 +240,7 @@ func TestWriteNebula(t *testing.T) {
 			t.Fatalf("setup chmod: %v", err)
 		}
 		t.Cleanup(func() {
-			os.Chmod(parent, 0o755) // restore for cleanup
+			_ = os.Chmod(parent, 0o755) // restore for cleanup
 		})
 
 		outputDir := filepath.Join(parent, "my-nebula")

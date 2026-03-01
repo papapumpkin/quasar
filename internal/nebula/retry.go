@@ -8,10 +8,6 @@ import (
 	"github.com/papapumpkin/quasar/internal/agent"
 )
 
-// maxCorrectionRetries is the maximum number of architect re-invocations
-// for validation error correction, to prevent budget exhaustion.
-const maxCorrectionRetries = 1
-
 // retryWithFeedback re-invokes the architect agent with validation errors
 // as additional context, asking it to produce corrected phases.
 func retryWithFeedback(

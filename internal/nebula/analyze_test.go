@@ -82,7 +82,7 @@ func TestAnalyzeCodebase(t *testing.T) {
 		}
 	})
 
-	t.Run("cancelled context", func(t *testing.T) {
+	t.Run("canceled context", func(t *testing.T) {
 		t.Parallel()
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -90,7 +90,7 @@ func TestAnalyzeCodebase(t *testing.T) {
 
 		_, err := AnalyzeCodebase(ctx, ".", 32000)
 		if err == nil {
-			t.Fatal("expected error for cancelled context")
+			t.Fatal("expected error for canceled context")
 		}
 	})
 
