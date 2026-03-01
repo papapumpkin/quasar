@@ -32,8 +32,15 @@ func (l *Loop) buildCoderPrompt(state *CycleState) string {
 	} else {
 		fmt.Fprintf(&b, "Task (bead %s): %s\n\n", state.TaskBeadID, state.TaskTitle)
 		b.WriteString("The reviewer found issues with your previous implementation. Please address them:\n\n")
-		for i, f := range state.Findings {
-			fmt.Fprintf(&b, "%d. [%s] %s\n", i+1, f.Severity, f.Description)
+		// Filter out findings already marked as fixed so the coder only
+		// works on unresolved issues.
+		n := 0
+		for _, f := range state.Findings {
+			if f.Status == FindingStatusFixed {
+				continue
+			}
+			n++
+			fmt.Fprintf(&b, "%d. [%s] %s\n", n, f.Severity, f.Description)
 		}
 		b.WriteString("\nFix these issues. Read the relevant files to understand current state before making changes.")
 	}
@@ -113,6 +120,31 @@ func (l *Loop) buildReviewerPrompt(state *CycleState) string {
 	b.WriteString("3. Check for any linting issues (`go vet`, `go fmt`). If linting problems exist, flag them as issues for the coder to fix.\n")
 	b.WriteString("4. End your review with either APPROVED: or one or more ISSUE: blocks.\n")
 
+	// Inject prior findings for verification when this is not the first cycle.
+	if len(state.AllFindings) > 0 {
+		b.WriteString("\n")
+		b.WriteString(buildPriorFindingsBlock(state.AllFindings))
+	}
+
+	return b.String()
+}
+
+// buildPriorFindingsBlock constructs the prior-findings section injected into
+// the reviewer prompt on cycles > 1. It serializes all accumulated findings
+// and adds explicit instructions for the reviewer to verify each one.
+func buildPriorFindingsBlock(findings []ReviewFinding) string {
+	var b strings.Builder
+	b.WriteString("[PRIOR FINDINGS]\n")
+	b.WriteString("The following issues were identified in previous review cycles.\n")
+	b.WriteString("You MUST verify each one against the current code and report its status.\n\n")
+	b.WriteString(SerializeFindings(findings, 200))
+	b.WriteString("\nFor EACH prior finding, include a VERIFICATION: block in your response:\n\n")
+	b.WriteString("VERIFICATION:\n")
+	b.WriteString("FINDING_ID: <id from above>\n")
+	b.WriteString("STATUS: fixed|still_present|regressed\n")
+	b.WriteString("COMMENT: Brief explanation of what you observed.\n\n")
+	b.WriteString("After verifying all prior findings, proceed with your normal review.\n")
+	b.WriteString("Report any NEW issues as ISSUE: blocks (they will get new IDs automatically).\n")
 	return b.String()
 }
 

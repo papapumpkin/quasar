@@ -151,6 +151,16 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 			return nil, err
 		}
 
+		// Apply verification results to update finding lifecycle statuses.
+		if len(state.Verifications) > 0 {
+			summary := ApplyVerifications(state.AllFindings, state.Verifications)
+			l.UI.FindingLifecycle(state.Cycle, ui.FindingLifecycleData{
+				Fixed:        summary.Fixed,
+				StillPresent: summary.StillPresent,
+				Regressed:    summary.Regressed,
+			})
+		}
+
 		// Extract hails from the reviewer's report and any fabric discoveries.
 		l.extractAndPostHails(ctx, state)
 
@@ -507,6 +517,8 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	l.UI.AgentOutput("reviewer", state.Cycle, result.ResultText)
 	l.UI.AgentDone("reviewer", result.CostUSD, result.DurationMs)
 	l.markHailsRelayed(relayIDs)
+	state.Findings = ParseReviewFindings(result.ResultText)
+	state.Verifications = ParseVerifications(result.ResultText)
 	l.emit(ctx, Event{
 		Kind:    EventAgentDone,
 		BeadID:  state.TaskBeadID,
@@ -515,7 +527,6 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 		Result:  &result,
 		Message: fmt.Sprintf("[reviewer cycle %d]\n%s", state.Cycle, truncate(result.ResultText, 2000)),
 	})
-	state.Findings = ParseReviewFindings(result.ResultText)
 	l.emitCycleSummary(state, PhaseReviewComplete, result)
 	return nil
 }

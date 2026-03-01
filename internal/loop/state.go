@@ -47,11 +47,34 @@ func (p Phase) String() string {
 	}
 }
 
+// FindingStatus represents the lifecycle state of a review finding.
+type FindingStatus string
+
+const (
+	// FindingStatusFound indicates a newly discovered finding.
+	FindingStatusFound FindingStatus = "found"
+	// FindingStatusFixed indicates the finding was resolved.
+	FindingStatusFixed FindingStatus = "fixed"
+	// FindingStatusStillPresent indicates the finding persists from a prior cycle.
+	FindingStatusStillPresent FindingStatus = "still_present"
+	// FindingStatusRegressed indicates a previously fixed finding has reappeared.
+	FindingStatusRegressed FindingStatus = "regressed"
+)
+
 // ReviewFinding represents a single issue identified by the reviewer.
 type ReviewFinding struct {
+	ID          string // deterministic hash for cross-cycle tracking
 	Severity    string
 	Description string
-	Cycle       int // cycle in which this finding was created (set during accumulation)
+	Cycle       int           // cycle in which this finding was created (set during accumulation)
+	Status      FindingStatus // lifecycle status (set during verification)
+}
+
+// FindingVerification represents the reviewer's assessment of a prior finding.
+type FindingVerification struct {
+	FindingID string        // matches ReviewFinding.ID
+	Status    FindingStatus // fixed, still_present, regressed
+	Comment   string        // reviewer's explanation
 }
 
 // CycleState tracks the mutable state of a coder-reviewer loop across cycles.
@@ -68,14 +91,15 @@ type CycleState struct {
 	FilterOutput        string // output from pre-reviewer filter on failure
 	FilterCheckName     string // name of the failing filter check (empty if passed)
 	ReviewOutput        string
-	Findings            []ReviewFinding // current cycle's findings (reset each cycle)
-	AllFindings         []ReviewFinding // accumulated findings across all cycles
-	ChildBeadIDs        []string        // accumulated child bead IDs across all cycles
-	Refactored          bool            // true when a mid-run phase edit was applied
-	OriginalDescription string          // task description before the refactor
-	RefactorDescription string          // the new description from the user edit
-	BaseCommitSHA       string          // HEAD before first cycle (captured at task start)
-	CycleCommits        []string        // commit SHA per cycle (index = cycle-1)
-	lastCycleSHA        string          // transient: last commit SHA for the current cycle (sealed into CycleCommits at cycle end)
-	bridgedDiscoveryIDs map[int64]bool  // tracks fabric discovery IDs already bridged to hails, preventing duplicates across cycles
+	Findings            []ReviewFinding       // current cycle's findings (reset each cycle)
+	Verifications       []FindingVerification // current cycle's verification results
+	AllFindings         []ReviewFinding       // accumulated findings across all cycles
+	ChildBeadIDs        []string              // accumulated child bead IDs across all cycles
+	Refactored          bool                  // true when a mid-run phase edit was applied
+	OriginalDescription string                // task description before the refactor
+	RefactorDescription string                // the new description from the user edit
+	BaseCommitSHA       string                // HEAD before first cycle (captured at task start)
+	CycleCommits        []string              // commit SHA per cycle (index = cycle-1)
+	lastCycleSHA        string                // transient: last commit SHA for the current cycle (sealed into CycleCommits at cycle end)
+	bridgedDiscoveryIDs map[int64]bool        // tracks fabric discovery IDs already bridged to hails, preventing duplicates across cycles
 }
