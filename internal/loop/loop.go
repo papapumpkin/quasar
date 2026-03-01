@@ -3,6 +3,7 @@ package loop
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/papapumpkin/quasar/internal/agent"
@@ -54,15 +55,18 @@ type Loop struct {
 
 // TaskResult holds the outcome of a completed task loop.
 type TaskResult struct {
-	TotalCostUSD   float64
-	CyclesUsed     int
-	Report         *agent.ReviewReport // From final reviewer cycle (may be nil)
-	BaseCommitSHA  string              // HEAD captured at task start
-	FinalCommitSHA string              // last cycle's sealed SHA (or current HEAD as fallback)
-	CycleCommits   []string            // per-cycle sealed commit SHAs (index = cycle-1)
-	Decompose      bool                // true if the loop exited due to a struggle signal
-	StruggleReason string              // human-readable reason from StruggleSignal.Reason
-	AllFindings    []ReviewFinding     // accumulated findings at time of decomposition
+	TotalCostUSD     float64
+	CyclesUsed       int
+	Report           *agent.ReviewReport // From final reviewer cycle (may be nil)
+	BaseCommitSHA    string              // HEAD captured at task start
+	FinalCommitSHA   string              // last cycle's sealed SHA (or current HEAD as fallback)
+	CycleCommits     []string            // per-cycle sealed commit SHAs (index = cycle-1)
+	Decompose        bool                // true if the loop exited due to a struggle signal
+	StruggleReason   string              // human-readable reason from StruggleSignal.Reason
+	AllFindings      []ReviewFinding     // accumulated findings at time of decomposition
+	CacheHitCount    int                 // Number of invocations where system prompt hash matched previous.
+	CacheMissCount   int                 // Number of invocations where system prompt hash changed.
+	TotalCachedBytes int64               // Sum of SystemPromptLen for cache-hit invocations.
 }
 
 // RunTask creates a new bead for the given task and runs the coder-reviewer loop.
@@ -276,14 +280,17 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 					Message: signal.Reason,
 				})
 				return &TaskResult{
-					TotalCostUSD:   state.TotalCostUSD,
-					CyclesUsed:     state.Cycle,
-					BaseCommitSHA:  state.BaseCommitSHA,
-					FinalCommitSHA: l.finalCommitSHA(ctx, state),
-					CycleCommits:   state.CycleCommits,
-					Decompose:      true,
-					StruggleReason: signal.Reason,
-					AllFindings:    state.AllFindings,
+					TotalCostUSD:     state.TotalCostUSD,
+					CyclesUsed:       state.Cycle,
+					BaseCommitSHA:    state.BaseCommitSHA,
+					FinalCommitSHA:   l.finalCommitSHA(ctx, state),
+					CycleCommits:     state.CycleCommits,
+					Decompose:        true,
+					StruggleReason:   signal.Reason,
+					AllFindings:      state.AllFindings,
+					CacheHitCount:    state.cacheHitCount,
+					CacheMissCount:   state.cacheMissCount,
+					TotalCachedBytes: state.totalCachedBytes,
 				}, nil
 			}
 		}
@@ -299,11 +306,14 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 		Message: fmt.Sprintf("Max cycles reached (%d). Manual review recommended.", l.MaxCycles),
 	})
 	return &TaskResult{
-		TotalCostUSD:   state.TotalCostUSD,
-		CyclesUsed:     state.Cycle,
-		BaseCommitSHA:  state.BaseCommitSHA,
-		FinalCommitSHA: l.finalCommitSHA(ctx, state),
-		CycleCommits:   state.CycleCommits,
+		TotalCostUSD:     state.TotalCostUSD,
+		CyclesUsed:       state.Cycle,
+		BaseCommitSHA:    state.BaseCommitSHA,
+		FinalCommitSHA:   l.finalCommitSHA(ctx, state),
+		CycleCommits:     state.CycleCommits,
+		CacheHitCount:    state.cacheHitCount,
+		CacheMissCount:   state.cacheMissCount,
+		TotalCachedBytes: state.totalCachedBytes,
 	}, ErrMaxCycles
 }
 
@@ -785,6 +795,7 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 		Result:  &result,
 		Message: fmt.Sprintf("[coder cycle %d]\n%s", state.Cycle, truncate(result.ResultText, 2000)),
 	})
+	l.trackCacheMetrics(ctx, state, "coder", &result)
 	return nil
 }
 
@@ -823,6 +834,7 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 		Result:  &result,
 		Message: fmt.Sprintf("[reviewer cycle %d]\n%s", state.Cycle, truncate(result.ResultText, 2000)),
 	})
+	l.trackCacheMetrics(ctx, state, "reviewer", &result)
 	l.emitCycleSummary(state, PhaseReviewComplete, result)
 	return nil
 }
@@ -926,6 +938,38 @@ func (l *Loop) emitCycleSummary(state *CycleState, phase Phase, result agent.Inv
 	})
 }
 
+// trackCacheMetrics emits a cache metrics event and updates the cycle state's
+// cache hit/miss counters. It also logs cache stability diagnostics to stderr
+// when CacheVerbose is enabled.
+func (l *Loop) trackCacheMetrics(ctx context.Context, state *CycleState, agentRole string, result *agent.InvocationResult) {
+	hash := result.SystemPromptHash
+	if state.prevSystemPromptHash != "" && hash == state.prevSystemPromptHash {
+		state.cacheHitCount++
+		state.totalCachedBytes += int64(result.SystemPromptLen)
+		if l.CacheVerbose {
+			fmt.Fprintf(os.Stderr, "[cache] %s cycle %d: system prompt STABLE (hash match, %d bytes cached)\n",
+				agentRole, state.Cycle, result.SystemPromptLen)
+		}
+	} else {
+		state.cacheMissCount++
+		if l.CacheVerbose && state.prevSystemPromptHash != "" {
+			fmt.Fprintf(os.Stderr, "[cache] %s cycle %d: system prompt CHANGED (cache miss, prev=%.8s curr=%.8s)\n",
+				agentRole, state.Cycle, state.prevSystemPromptHash, hash)
+		}
+	}
+	state.prevSystemPromptHash = hash
+
+	l.emit(ctx, Event{
+		Kind:   EventCacheMetrics,
+		BeadID: state.TaskBeadID,
+		Cycle:  state.Cycle,
+		Agent:  agentRole,
+		Result: result,
+		Message: fmt.Sprintf("sys_prompt_hash=%s sys_prompt_len=%d user_prompt_len=%d cost=%.4f",
+			hash, result.SystemPromptLen, result.UserPromptLen, result.CostUSD),
+	})
+}
+
 // checkBudget returns ErrBudgetExceeded if the total cost has reached the limit.
 func (l *Loop) checkBudget(ctx context.Context, state *CycleState) error {
 	if l.MaxBudgetUSD <= 0 || state.TotalCostUSD < l.MaxBudgetUSD {
@@ -959,12 +1003,15 @@ func (l *Loop) handleApproval(ctx context.Context, state *CycleState) (*TaskResu
 
 	l.UI.TaskComplete(state.TaskBeadID, state.TotalCostUSD)
 	return &TaskResult{
-		TotalCostUSD:   state.TotalCostUSD,
-		CyclesUsed:     state.Cycle,
-		Report:         report,
-		BaseCommitSHA:  state.BaseCommitSHA,
-		FinalCommitSHA: l.finalCommitSHA(ctx, state),
-		CycleCommits:   state.CycleCommits,
+		TotalCostUSD:     state.TotalCostUSD,
+		CyclesUsed:       state.Cycle,
+		Report:           report,
+		BaseCommitSHA:    state.BaseCommitSHA,
+		FinalCommitSHA:   l.finalCommitSHA(ctx, state),
+		CycleCommits:     state.CycleCommits,
+		CacheHitCount:    state.cacheHitCount,
+		CacheMissCount:   state.cacheMissCount,
+		TotalCachedBytes: state.totalCachedBytes,
 	}, nil
 }
 

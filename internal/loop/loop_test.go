@@ -3458,3 +3458,199 @@ func TestFilterFixLoopFallbackWithoutCache(t *testing.T) {
 		t.Errorf("SystemPrompt = %q, want %q", got, "You are a coder.")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Cache telemetry tests
+// ---------------------------------------------------------------------------
+
+func TestTrackCacheMetrics_EmitsEvent(t *testing.T) {
+	t.Parallel()
+	hook := &recordingHook{}
+	l := &Loop{
+		Invoker:   &fakeInvoker{},
+		UI:        &noopUI{},
+		MaxCycles: 3,
+		Hooks:     []Hook{hook},
+	}
+	state := &CycleState{TaskBeadID: "bead-1", Cycle: 1}
+	result := &agent.InvocationResult{
+		SystemPromptLen:  100,
+		UserPromptLen:    200,
+		SystemPromptHash: "abc123",
+		CostUSD:          0.50,
+	}
+
+	l.trackCacheMetrics(context.Background(), state, "coder", result)
+
+	events := hook.getEvents()
+	found := false
+	for _, e := range events {
+		if e.Kind == EventCacheMetrics {
+			found = true
+			if e.Agent != "coder" {
+				t.Errorf("Agent = %q, want %q", e.Agent, "coder")
+			}
+			if e.BeadID != "bead-1" {
+				t.Errorf("BeadID = %q, want %q", e.BeadID, "bead-1")
+			}
+			if e.Cycle != 1 {
+				t.Errorf("Cycle = %d, want 1", e.Cycle)
+			}
+			if e.Result == nil {
+				t.Error("Result should not be nil")
+			}
+			if !strings.Contains(e.Message, "sys_prompt_hash=abc123") {
+				t.Errorf("Message = %q, want to contain 'sys_prompt_hash=abc123'", e.Message)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected EventCacheMetrics event to be emitted")
+	}
+}
+
+func TestTrackCacheMetrics_FirstInvocationIsMiss(t *testing.T) {
+	t.Parallel()
+	l := &Loop{Invoker: &fakeInvoker{}, UI: &noopUI{}, MaxCycles: 3}
+	state := &CycleState{TaskBeadID: "bead-1", Cycle: 1}
+	result := &agent.InvocationResult{
+		SystemPromptHash: "hash-a",
+		SystemPromptLen:  50,
+	}
+
+	l.trackCacheMetrics(context.Background(), state, "coder", result)
+
+	if state.cacheHitCount != 0 {
+		t.Errorf("cacheHitCount = %d, want 0 (first invocation is a miss)", state.cacheHitCount)
+	}
+	if state.cacheMissCount != 1 {
+		t.Errorf("cacheMissCount = %d, want 1", state.cacheMissCount)
+	}
+	if state.prevSystemPromptHash != "hash-a" {
+		t.Errorf("prevSystemPromptHash = %q, want %q", state.prevSystemPromptHash, "hash-a")
+	}
+}
+
+func TestTrackCacheMetrics_CacheHitOnStablePrompt(t *testing.T) {
+	t.Parallel()
+	l := &Loop{Invoker: &fakeInvoker{}, UI: &noopUI{}, MaxCycles: 3}
+	state := &CycleState{TaskBeadID: "bead-1", Cycle: 1}
+	result := &agent.InvocationResult{
+		SystemPromptHash: "hash-stable",
+		SystemPromptLen:  100,
+	}
+
+	// First invocation — miss.
+	l.trackCacheMetrics(context.Background(), state, "coder", result)
+
+	// Second invocation with same hash — hit.
+	state.Cycle = 2
+	l.trackCacheMetrics(context.Background(), state, "coder", result)
+
+	if state.cacheHitCount != 1 {
+		t.Errorf("cacheHitCount = %d, want 1", state.cacheHitCount)
+	}
+	if state.cacheMissCount != 1 {
+		t.Errorf("cacheMissCount = %d, want 1", state.cacheMissCount)
+	}
+	if state.totalCachedBytes != 100 {
+		t.Errorf("totalCachedBytes = %d, want 100", state.totalCachedBytes)
+	}
+}
+
+func TestTrackCacheMetrics_CacheMissOnChangedPrompt(t *testing.T) {
+	t.Parallel()
+	l := &Loop{Invoker: &fakeInvoker{}, UI: &noopUI{}, MaxCycles: 3}
+	state := &CycleState{TaskBeadID: "bead-1", Cycle: 1}
+
+	// First invocation.
+	l.trackCacheMetrics(context.Background(), state, "coder", &agent.InvocationResult{
+		SystemPromptHash: "hash-1",
+		SystemPromptLen:  50,
+	})
+
+	// Second invocation with different hash — miss.
+	state.Cycle = 2
+	l.trackCacheMetrics(context.Background(), state, "coder", &agent.InvocationResult{
+		SystemPromptHash: "hash-2",
+		SystemPromptLen:  60,
+	})
+
+	if state.cacheHitCount != 0 {
+		t.Errorf("cacheHitCount = %d, want 0", state.cacheHitCount)
+	}
+	if state.cacheMissCount != 2 {
+		t.Errorf("cacheMissCount = %d, want 2", state.cacheMissCount)
+	}
+	if state.totalCachedBytes != 0 {
+		t.Errorf("totalCachedBytes = %d, want 0", state.totalCachedBytes)
+	}
+}
+
+func TestRunLoop_CacheMetricsInTaskResult(t *testing.T) {
+	t.Parallel()
+
+	// Set up an invoker that returns "APPROVED:" on the second call (reviewer).
+	inv := &fakeInvoker{
+		responses: []agent.InvocationResult{
+			{ResultText: "done coding", CostUSD: 0.20, SystemPromptLen: 100, SystemPromptHash: "stable-hash"},
+			{ResultText: "APPROVED: Looks great.", CostUSD: 0.10, SystemPromptLen: 100, SystemPromptHash: "stable-hash"},
+		},
+	}
+	l := &Loop{
+		Invoker:   inv,
+		UI:        &noopUI{},
+		MaxCycles: 3,
+	}
+
+	result, err := l.runLoop(context.Background(), "bead-test", "implement cache telemetry")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Two invocations with same hash: first is miss, second is hit.
+	if result.CacheHitCount != 1 {
+		t.Errorf("CacheHitCount = %d, want 1", result.CacheHitCount)
+	}
+	if result.CacheMissCount != 1 {
+		t.Errorf("CacheMissCount = %d, want 1", result.CacheMissCount)
+	}
+	if result.TotalCachedBytes != 100 {
+		t.Errorf("TotalCachedBytes = %d, want 100", result.TotalCachedBytes)
+	}
+}
+
+func TestRunLoop_CacheMetricsMaxCycles(t *testing.T) {
+	t.Parallel()
+
+	// 2 cycles, no approval: coder, reviewer, coder, reviewer = 4 invocations.
+	inv := &fakeInvoker{
+		responses: []agent.InvocationResult{
+			{ResultText: "coding 1", CostUSD: 0.10, SystemPromptLen: 80, SystemPromptHash: "hash-x"},
+			{ResultText: "NEEDS_WORK\n- Fix bug", CostUSD: 0.10, SystemPromptLen: 80, SystemPromptHash: "hash-x"},
+			{ResultText: "coding 2", CostUSD: 0.10, SystemPromptLen: 80, SystemPromptHash: "hash-x"},
+			{ResultText: "NEEDS_WORK\n- Still broken", CostUSD: 0.10, SystemPromptLen: 80, SystemPromptHash: "hash-x"},
+		},
+	}
+	l := &Loop{
+		Invoker:   inv,
+		UI:        &noopUI{},
+		MaxCycles: 2,
+	}
+
+	result, err := l.runLoop(context.Background(), "bead-max", "fix the bug")
+	if !errors.Is(err, ErrMaxCycles) {
+		t.Fatalf("expected ErrMaxCycles, got: %v", err)
+	}
+
+	// 4 invocations, all same hash: first is miss, remaining 3 are hits.
+	if result.CacheHitCount != 3 {
+		t.Errorf("CacheHitCount = %d, want 3", result.CacheHitCount)
+	}
+	if result.CacheMissCount != 1 {
+		t.Errorf("CacheMissCount = %d, want 1", result.CacheMissCount)
+	}
+	if result.TotalCachedBytes != 240 {
+		t.Errorf("TotalCachedBytes = %d, want 240 (3 * 80)", result.TotalCachedBytes)
+	}
+}

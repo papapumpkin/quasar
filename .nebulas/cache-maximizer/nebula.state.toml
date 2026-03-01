@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'cache-maximizer'
-total_cost_usd = 8.268450499999998
+total_cost_usd = 13.59841325
 
 [phases]
 [phases.cache-telemetry]
@@ -11,9 +11,15 @@ updated_at = 2026-03-01T13:36:19.025622-05:00
 
 [phases.config]
 bead_id = 'quasar-nr6k'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-01T12:40:37.628225-05:00
-updated_at = 2026-03-01T13:24:12.474363-05:00
+updated_at = 2026-03-01T13:38:51.561452-05:00
+
+[phases.config.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Cache config fields (CacheOptimization, CacheVerbose, ProjectContextPath, MaxContextTokens) are correctly added to Config, wired through CLI flags/viper/env, and both nebula execution paths now properly set CacheOptimization on the Loop — fixing the prior regression.'
 
 [phases.cross-invocation]
 bead_id = 'quasar-vopj'
