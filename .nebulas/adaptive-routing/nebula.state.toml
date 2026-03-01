@@ -1,0 +1,46 @@
+version = 1
+nebula_name = 'adaptive-routing'
+total_cost_usd = 4.542167750000001
+
+[phases]
+[phases.cli-override]
+bead_id = 'quasar-0qj0'
+status = 'failed'
+created_at = 2026-02-28T20:04:56.20904-05:00
+updated_at = 2026-02-28T20:15:42.374244-05:00
+
+[phases.complexity-scorer]
+bead_id = 'quasar-iyiv'
+status = 'done'
+created_at = 2026-02-28T20:04:52.976185-05:00
+updated_at = 2026-02-28T20:10:02.09839-05:00
+
+[phases.complexity-scorer.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Deterministic complexity scoring function with comprehensive tests — clean implementation matching spec exactly, all tests pass, no issues found.'
+
+[phases.model-tiers]
+bead_id = 'quasar-mo9j'
+status = 'done'
+created_at = 2026-02-28T20:04:53.807243-05:00
+updated_at = 2026-02-28T20:15:01.485259-05:00
+
+[phases.model-tiers.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = "Model-tier selection and validation code is well-structured with comprehensive boundary tests; the coder's fix correctly removed an orphaned import that was breaking the build."
+
+[phases.resolve-integration]
+bead_id = 'quasar-eirj'
+status = 'failed'
+created_at = 2026-02-28T20:04:54.712994-05:00
+updated_at = 2026-02-28T20:15:44.834411-05:00
+
+[phases.telemetry]
+bead_id = 'quasar-edgd'
+status = 'failed'
+created_at = 2026-02-28T20:04:55.482685-05:00
+updated_at = 2026-02-28T20:15:43.756738-05:00

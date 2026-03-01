@@ -48,6 +48,8 @@ const (
 	ValCatScopeOverlap ValidationCategory = "scope_overlap"
 	// ValCatBoundsViolation indicates a numeric field is out of valid range.
 	ValCatBoundsViolation ValidationCategory = "bounds_violation"
+	// ValCatInvalidRouting indicates a problem with the model routing configuration.
+	ValCatInvalidRouting ValidationCategory = "invalid_routing"
 )
 
 // ValidationError records a validation problem with source context.

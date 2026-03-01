@@ -17,13 +17,14 @@ type Manifest struct {
 
 // Execution holds default execution parameters for the nebula.
 type Execution struct {
-	MaxWorkers       int      `toml:"max_workers"`
-	MaxReviewCycles  int      `toml:"max_review_cycles"`
-	MaxBudgetUSD     float64  `toml:"max_budget_usd"`
-	MaxContextTokens int      `toml:"max_context_tokens"` // Token budget for context injection. 0 = disabled.
-	Model            string   `toml:"model"`
-	Gate             GateMode `toml:"gate"`         // Default gate mode for all phases
-	HailTimeout      string   `toml:"hail_timeout"` // Duration string for hail auto-resolve timeout (e.g. "5m"). Empty = default (5m). "0" = disabled.
+	MaxWorkers       int        `toml:"max_workers"`
+	MaxReviewCycles  int        `toml:"max_review_cycles"`
+	MaxBudgetUSD     float64    `toml:"max_budget_usd"`
+	MaxContextTokens int        `toml:"max_context_tokens"` // Token budget for context injection. 0 = disabled.
+	Model            string     `toml:"model"`
+	Gate             GateMode   `toml:"gate"`         // Default gate mode for all phases
+	HailTimeout      string     `toml:"hail_timeout"` // Duration string for hail auto-resolve timeout (e.g. "5m"). Empty = default (5m). "0" = disabled.
+	Routing          TierConfig `toml:"routing"`      // Auto-routing config. Zero-value = disabled.
 }
 
 // DefaultHailTimeout is the built-in fallback for hail auto-resolution timeout.
