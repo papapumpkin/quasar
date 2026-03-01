@@ -1,13 +1,13 @@
 version = 1
 nebula_name = 'cache-maximizer'
-total_cost_usd = 3.5740532499999995
+total_cost_usd = 8.268450499999998
 
 [phases]
 [phases.cache-telemetry]
 bead_id = 'quasar-g88t'
-status = 'skipped'
+status = 'in_progress'
 created_at = 2026-03-01T12:40:36.91539-05:00
-updated_at = 2026-03-01T13:24:12.383114-05:00
+updated_at = 2026-03-01T13:36:19.025622-05:00
 
 [phases.config]
 bead_id = 'quasar-nr6k'
@@ -17,9 +17,15 @@ updated_at = 2026-03-01T13:24:12.474363-05:00
 
 [phases.cross-invocation]
 bead_id = 'quasar-vopj'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-01T12:40:36.192775-05:00
-updated_at = 2026-03-01T13:24:12.479916-05:00
+updated_at = 2026-03-01T13:36:19.010304-05:00
+
+[phases.cross-invocation.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Four-line fix correctly applies the cached system prompt pattern to `runFilterFixLoop()`, closing the last cache-busting gap, with two focused tests covering both code paths.'
 
 [phases.prompt-audit]
 bead_id = 'quasar-ckkx'
