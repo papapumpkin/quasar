@@ -92,9 +92,6 @@ func Validate(n *Nebula) []ValidationError {
 		})
 	}
 
-	// Validate routing configuration.
-	errs = append(errs, ValidateRouting(exec.Routing)...)
-
 	// Validate manifest gate mode.
 	if exec.Gate != "" && !ValidGateModes[exec.Gate] {
 		errs = append(errs, ValidationError{

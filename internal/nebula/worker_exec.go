@@ -32,7 +32,7 @@ func (wg *WorkerGroup) executePhase(ctx context.Context, phaseID string, waveNum
 	wg.progress.ReportProgress()
 	wg.mu.Unlock()
 
-	exec := ResolveExecution(wg.GlobalCycles, wg.GlobalBudget, wg.GlobalModel, &wg.Nebula.Manifest.Execution, phase, wg.routingCtx)
+	exec := ResolveExecution(wg.GlobalCycles, wg.GlobalBudget, wg.GlobalModel, &wg.Nebula.Manifest.Execution, phase)
 	prompt := buildPhasePrompt(phase, &wg.Nebula.Manifest.Context)
 	phaseResult, err := wg.Runner.RunExistingPhase(ctx, phaseID, ps.BeadID, phase.Title, prompt, exec)
 
