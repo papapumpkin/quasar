@@ -122,8 +122,8 @@ No end marker here.
 			wantErr: "missing",
 		},
 		{
-			name: "missing newline after marker",
-			input: `PHASE_FILE: no-newline.md`,
+			name:    "missing newline after marker",
+			input:   `PHASE_FILE: no-newline.md`,
 			wantErr: "missing newline",
 		},
 		{

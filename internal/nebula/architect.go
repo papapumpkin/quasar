@@ -35,10 +35,10 @@ type ArchitectRequest struct {
 	Analysis   *CodebaseAnalysis // for generate: pre-computed codebase analysis (may be nil)
 
 	// Decomposition-specific fields (only used when Mode == ArchitectModeDecompose):
-	StruggleReason string              // human-readable summary from StruggleSignal.Reason
-	CyclesUsed     int                 // how many cycles were consumed before decomposition
-	AllFindings    []DecomposeFinding   // accumulated findings from the struggling phase
-	CostSoFar      float64             // TotalCostUSD from CycleState at time of pause
+	StruggleReason string             // human-readable summary from StruggleSignal.Reason
+	CyclesUsed     int                // how many cycles were consumed before decomposition
+	AllFindings    []DecomposeFinding // accumulated findings from the struggling phase
+	CostSoFar      float64            // TotalCostUSD from CycleState at time of pause
 }
 
 // ArchitectResult holds the parsed output from the architect agent.
