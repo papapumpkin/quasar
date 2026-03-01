@@ -1,13 +1,13 @@
 version = 1
 nebula_name = 'nebula-generate'
-total_cost_usd = 10.49351605
+total_cost_usd = 13.732836299999999
 
 [phases]
 [phases.cli-command]
 bead_id = 'quasar-zlle'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-28T18:47:17.761766-05:00
-updated_at = 2026-02-28T18:47:17.761766-05:00
+updated_at = 2026-02-28T19:28:10.081167-05:00
 
 [phases.codebase-analyzer]
 bead_id = 'quasar-t6s7'
@@ -47,9 +47,15 @@ summary = 'Solid multi-phase generation pipeline with clean architecture, thorou
 
 [phases.nebula-writer]
 bead_id = 'quasar-nsk6'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-28T18:47:17.045192-05:00
-updated_at = 2026-02-28T19:16:10.36342-05:00
+updated_at = 2026-02-28T19:28:10.063794-05:00
+
+[phases.nebula-writer.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Three targeted fixes to nebula writer (path traversal guard, non-directory overwrite protection, test rename) plus three new tests — all correct, well-tested, and minimal blast radius.'
 
 [phases.validation-integration]
 bead_id = 'quasar-8ey9'

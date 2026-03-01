@@ -53,6 +53,13 @@ var nebulaSubcmds = []nebulaSubcmd{
 		flags: addNebulaStatusFlags,
 		run:   runNebulaStatus,
 	},
+	{
+		use:   "generate <prompt>",
+		short: "Generate a complete nebula from a natural-language description",
+		args:  cobra.ExactArgs(1),
+		flags: addNebulaGenerateFlags,
+		run:   runNebulaGenerate,
+	},
 }
 
 func init() {
