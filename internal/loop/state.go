@@ -70,6 +70,13 @@ type ReviewFinding struct {
 	Status      FindingStatus // lifecycle status (set during verification)
 }
 
+// FindingVerification represents the reviewer's assessment of a prior finding.
+type FindingVerification struct {
+	FindingID string        // matches ReviewFinding.ID
+	Status    FindingStatus // fixed, still_present, regressed
+	Comment   string        // reviewer's explanation
+}
+
 // CycleState tracks the mutable state of a coder-reviewer loop across cycles.
 type CycleState struct {
 	TaskBeadID          string
@@ -84,14 +91,15 @@ type CycleState struct {
 	FilterOutput        string // output from pre-reviewer filter on failure
 	FilterCheckName     string // name of the failing filter check (empty if passed)
 	ReviewOutput        string
-	Findings            []ReviewFinding // current cycle's findings (reset each cycle)
-	AllFindings         []ReviewFinding // accumulated findings across all cycles
-	ChildBeadIDs        []string        // accumulated child bead IDs across all cycles
-	Refactored          bool            // true when a mid-run phase edit was applied
-	OriginalDescription string          // task description before the refactor
-	RefactorDescription string          // the new description from the user edit
-	BaseCommitSHA       string          // HEAD before first cycle (captured at task start)
-	CycleCommits        []string        // commit SHA per cycle (index = cycle-1)
-	lastCycleSHA        string          // transient: last commit SHA for the current cycle (sealed into CycleCommits at cycle end)
-	bridgedDiscoveryIDs map[int64]bool  // tracks fabric discovery IDs already bridged to hails, preventing duplicates across cycles
+	Findings            []ReviewFinding       // current cycle's findings (reset each cycle)
+	Verifications       []FindingVerification // current cycle's verification results
+	AllFindings         []ReviewFinding       // accumulated findings across all cycles
+	ChildBeadIDs        []string              // accumulated child bead IDs across all cycles
+	Refactored          bool                  // true when a mid-run phase edit was applied
+	OriginalDescription string                // task description before the refactor
+	RefactorDescription string                // the new description from the user edit
+	BaseCommitSHA       string                // HEAD before first cycle (captured at task start)
+	CycleCommits        []string              // commit SHA per cycle (index = cycle-1)
+	lastCycleSHA        string                // transient: last commit SHA for the current cycle (sealed into CycleCommits at cycle end)
+	bridgedDiscoveryIDs map[int64]bool        // tracks fabric discovery IDs already bridged to hails, preventing duplicates across cycles
 }

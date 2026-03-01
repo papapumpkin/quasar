@@ -65,6 +65,64 @@ func collectContinuationLines(f *ReviewFinding, lines []string, start int) int {
 	return i
 }
 
+// ParseVerifications scans reviewer output for structured VERIFICATION: blocks.
+// Each block is expected to contain FINDING_ID:, STATUS:, and optionally COMMENT: fields.
+// Unknown statuses are treated as still_present to be conservative.
+func ParseVerifications(output string) []FindingVerification {
+	var verifications []FindingVerification
+	lines := strings.Split(output, "\n")
+	for i := 0; i < len(lines); {
+		if strings.TrimSpace(lines[i]) == "VERIFICATION:" {
+			v, next := parseVerificationBlock(lines, i+1)
+			if v.FindingID != "" {
+				verifications = append(verifications, v)
+			}
+			i = next
+			continue
+		}
+		i++
+	}
+	return verifications
+}
+
+// parseVerificationBlock parses a single VERIFICATION: block starting at index start.
+// It returns the parsed verification and the index to resume scanning from.
+func parseVerificationBlock(lines []string, start int) (FindingVerification, int) {
+	v := FindingVerification{}
+	i := start
+	for i < len(lines) {
+		line := strings.TrimSpace(lines[i])
+		if line == "" || line == "VERIFICATION:" || line == "ISSUE:" || line == "REPORT:" || strings.HasPrefix(line, "APPROVED:") {
+			break
+		}
+		switch {
+		case strings.HasPrefix(line, "FINDING_ID:"):
+			v.FindingID = strings.TrimSpace(strings.TrimPrefix(line, "FINDING_ID:"))
+		case strings.HasPrefix(line, "STATUS:"):
+			v.Status = parseVerificationStatus(strings.TrimSpace(strings.TrimPrefix(line, "STATUS:")))
+		case strings.HasPrefix(line, "COMMENT:"):
+			v.Comment = strings.TrimSpace(strings.TrimPrefix(line, "COMMENT:"))
+		}
+		i++
+	}
+	return v, i
+}
+
+// parseVerificationStatus normalizes a status string into a FindingStatus.
+// Unknown values default to FindingStatusStillPresent to be conservative.
+func parseVerificationStatus(raw string) FindingStatus {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "fixed":
+		return FindingStatusFixed
+	case "still_present":
+		return FindingStatusStillPresent
+	case "regressed":
+		return FindingStatusRegressed
+	default:
+		return FindingStatusStillPresent
+	}
+}
+
 func isApproved(output string) bool {
 	for _, line := range strings.Split(output, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "APPROVED:") {

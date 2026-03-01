@@ -50,6 +50,7 @@ type UI interface {
 	AgentOutput(role string, cycle int, output string)
 	BeadUpdate(taskBeadID, title, status string, children []BeadChild)
 	RefactorApplied(phaseID string)
+	FindingLifecycle(cycle int, summary FindingLifecycleData)
 	HailReceived(h HailInfo)
 	HailResolved(id, resolution string)
 }
@@ -166,6 +167,11 @@ func (p *Printer) BeadUpdate(taskBeadID, title, status string, children []BeadCh
 // are only displayed in the TUI phase view.
 func (p *Printer) RefactorApplied(phaseID string) {}
 
+// FindingLifecycle prints the verification summary for a cycle.
+func (p *Printer) FindingLifecycle(cycle int, summary FindingLifecycleData) {
+	fmt.Fprintf(os.Stderr, dim+"  findings: %s"+reset+"\n", summary.String())
+}
+
 // HailReceived prints an attention-grabbing block to stderr when an agent
 // needs human input.
 func (p *Printer) HailReceived(h HailInfo) {
@@ -234,6 +240,20 @@ func (p *Printer) ShowStatus(maxCycles int, maxBudget float64, model string) {
 	} else {
 		fmt.Fprintf(os.Stderr, "  model:       (default)\n")
 	}
+}
+
+// FindingLifecycleData holds verification counts for a single cycle.
+// This struct lives in the ui package to avoid circular imports with loop.
+type FindingLifecycleData struct {
+	Fixed        int
+	StillPresent int
+	Regressed    int
+}
+
+// String returns a compact summary like "2 fixed, 1 still present, 0 regressed".
+func (d FindingLifecycleData) String() string {
+	return fmt.Sprintf("%d fixed, %d still present, %d regressed",
+		d.Fixed, d.StillPresent, d.Regressed)
 }
 
 // CycleSummaryData holds data needed to render a cycle summary.

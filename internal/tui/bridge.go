@@ -121,6 +121,10 @@ func (b *UIBridge) AgentOutput(role string, cycle int, output string) {
 // are only meaningful in nebula phase views where PhaseUIBridge is used.
 func (b *UIBridge) RefactorApplied(phaseID string) {}
 
+// FindingLifecycle is a no-op for the single-task UIBridge; finding lifecycle
+// data is displayed through the phase detail view.
+func (b *UIBridge) FindingLifecycle(cycle int, summary ui.FindingLifecycleData) {}
+
 // HailReceived sends MsgHailReceived when an agent posts a hail.
 func (b *UIBridge) HailReceived(h ui.HailInfo) {
 	b.program.Send(MsgHailReceived{Hail: h})
@@ -375,6 +379,10 @@ func (b *PhaseUIBridge) BeadUpdate(taskBeadID, title, status string, children []
 	root := buildBeadInfoTree(taskBeadID, title, status, children)
 	b.program.Send(MsgPhaseBeadUpdate{PhaseID: b.phaseID, TaskBeadID: taskBeadID, Root: root})
 }
+
+// FindingLifecycle is a no-op for PhaseUIBridge; finding lifecycle data is
+// surfaced through the phase detail view rather than as a standalone message.
+func (b *PhaseUIBridge) FindingLifecycle(cycle int, summary ui.FindingLifecycleData) {}
 
 // HailReceived sends MsgHailReceived tagged with this phase's ID.
 func (b *PhaseUIBridge) HailReceived(h ui.HailInfo) {

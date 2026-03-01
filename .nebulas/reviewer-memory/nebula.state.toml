@@ -1,13 +1,13 @@
 version = 1
 nebula_name = 'Reviewer Memory'
-total_cost_usd = 1.52531975
+total_cost_usd = 2.6999717499999996
 
 [phases]
 [phases.finding-lifecycle]
 bead_id = 'quasar-trjs'
-status = 'skipped'
+status = 'in_progress'
 created_at = 2026-02-28T20:25:18.152701-05:00
-updated_at = 2026-02-28T22:55:26.25873-05:00
+updated_at = 2026-02-28T23:05:29.916771-05:00
 
 [phases.finding-serialization]
 bead_id = 'quasar-0al5'
@@ -23,12 +23,18 @@ summary = 'Clean, well-tested implementation of finding ID generation, status tr
 
 [phases.prompt-injection]
 bead_id = 'quasar-3pz7'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-28T20:25:16.546975-05:00
-updated_at = 2026-02-28T23:00:54.720238-05:00
+updated_at = 2026-02-28T23:05:29.906667-05:00
+
+[phases.prompt-injection.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Reviewer prompt injection for prior findings is correctly implemented with clean architecture, good helper reuse, and thorough test coverage — no issues found.'
 
 [phases.verification-parsing]
 bead_id = 'quasar-1e81'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-02-28T20:25:17.403684-05:00
-updated_at = 2026-02-28T22:55:26.258497-05:00
+updated_at = 2026-02-28T23:05:29.917065-05:00
