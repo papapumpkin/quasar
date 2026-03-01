@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'nebula-generate'
-total_cost_usd = 17.1782637
+total_cost_usd = 21.96535645
 
 [phases]
 [phases.cli-command]
@@ -65,6 +65,12 @@ summary = 'Three targeted fixes to nebula writer (path traversal guard, non-dire
 
 [phases.validation-integration]
 bead_id = 'quasar-8ey9'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-02-28T18:47:18.488847-05:00
-updated_at = 2026-02-28T19:37:53.957378-05:00
+updated_at = 2026-02-28T19:50:39.490399-05:00
+
+[phases.validation-integration.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-structured validation auto-correction and retry pipeline with comprehensive tests; three minor issues around string-based dep extraction, stale map entries after duplicate-ID fixes, and an unused constant — none blocking.'
