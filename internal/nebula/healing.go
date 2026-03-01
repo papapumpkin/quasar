@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/papapumpkin/quasar/internal/dag"
@@ -81,13 +82,8 @@ func BuildPartialWork(ctx context.Context, result *PhaseRunnerResult, findings [
 		return &PartialWork{}, nil
 	}
 
-	var commits []string
-	if result.FinalCommitSHA != "" {
-		commits = []string{result.FinalCommitSHA}
-	}
-
 	pw := &PartialWork{
-		CommitSHAs:    commits,
+		CommitSHAs:    result.CycleCommits,
 		BaseCommitSHA: result.BaseCommitSHA,
 		CyclesUsed:    result.CyclesUsed,
 		LastFindings:  findings,
@@ -383,7 +379,15 @@ func HealingSummary(attempts map[string]int, results map[string]bool) string {
 	fmt.Fprintf(&b, "| Failed Phase | Attempts | Remediation | Outcome |\n")
 	fmt.Fprintf(&b, "|---|---|---|---|\n")
 
-	for phaseID, count := range attempts {
+	// Sort phase IDs for deterministic output.
+	ids := make([]string, 0, len(attempts))
+	for id := range attempts {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	for _, phaseID := range ids {
+		count := attempts[phaseID]
 		remID := "heal-" + phaseID
 		outcome := "pending"
 		if success, ok := results[remID]; ok {

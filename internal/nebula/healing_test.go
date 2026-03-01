@@ -1036,6 +1036,45 @@ func TestHealingSummary_MultiplePhases(t *testing.T) {
 	if !strings.Contains(got, "| 2 |") {
 		t.Error("missing attempt count 2 for phase-b")
 	}
+
+	// Verify deterministic ordering: phase-a should appear before phase-b.
+	idxA := strings.Index(got, "phase-a")
+	idxB := strings.Index(got, "phase-b")
+	if idxA >= idxB {
+		t.Errorf("expected phase-a before phase-b in sorted output, got phase-a at %d, phase-b at %d", idxA, idxB)
+	}
+}
+
+func TestHealingSummary_DeterministicOrder(t *testing.T) {
+	t.Parallel()
+
+	attempts := map[string]int{
+		"zeta":  1,
+		"alpha": 1,
+		"mu":    1,
+	}
+	results := map[string]bool{
+		"heal-alpha": true,
+		"heal-mu":    false,
+		"heal-zeta":  true,
+	}
+
+	// Run multiple times to verify deterministic output.
+	first := HealingSummary(attempts, results)
+	for i := 0; i < 10; i++ {
+		got := HealingSummary(attempts, results)
+		if got != first {
+			t.Fatalf("non-deterministic output on iteration %d:\nfirst:\n%s\ngot:\n%s", i, first, got)
+		}
+	}
+
+	// Verify alphabetical order.
+	idxAlpha := strings.Index(first, "alpha")
+	idxMu := strings.Index(first, "mu")
+	idxZeta := strings.Index(first, "zeta")
+	if !(idxAlpha < idxMu && idxMu < idxZeta) {
+		t.Errorf("expected alphabetical order (alpha < mu < zeta), got positions: alpha=%d, mu=%d, zeta=%d", idxAlpha, idxMu, idxZeta)
+	}
 }
 
 func TestHealingSkipReason(t *testing.T) {
@@ -1120,5 +1159,433 @@ func TestTruncate(t *testing.T) {
 				t.Errorf("truncate(%q, %d) = %q, want %q", tt.input, tt.maxLen, got, tt.want)
 			}
 		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// BuildPartialWork
+// ---------------------------------------------------------------------------
+
+// mockDiffLister is a test double for GitDiffLister.
+type mockDiffLister struct {
+	files []string
+	err   error
+}
+
+func (m *mockDiffLister) DiffFileList(_ context.Context, _, _ string) ([]string, error) {
+	return m.files, m.err
+}
+
+func TestBuildPartialWork_Basic(t *testing.T) {
+	t.Parallel()
+
+	result := &PhaseRunnerResult{
+		BaseCommitSHA:  "base-sha",
+		FinalCommitSHA: "final-sha",
+		CycleCommits:   []string{"sha-1", "sha-2"},
+		CyclesUsed:     2,
+	}
+	findings := []string{"missing tests", "error not wrapped"}
+	lister := &mockDiffLister{files: []string{"main.go", "util.go"}}
+
+	pw, err := BuildPartialWork(context.Background(), result, findings, lister)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if pw.BaseCommitSHA != "base-sha" {
+		t.Errorf("BaseCommitSHA = %q, want %q", pw.BaseCommitSHA, "base-sha")
+	}
+	if len(pw.CommitSHAs) != 2 || pw.CommitSHAs[0] != "sha-1" || pw.CommitSHAs[1] != "sha-2" {
+		t.Errorf("CommitSHAs = %v, want [sha-1, sha-2]", pw.CommitSHAs)
+	}
+	if pw.CyclesUsed != 2 {
+		t.Errorf("CyclesUsed = %d, want 2", pw.CyclesUsed)
+	}
+	if len(pw.FilesTouched) != 2 || pw.FilesTouched[0] != "main.go" {
+		t.Errorf("FilesTouched = %v, want [main.go, util.go]", pw.FilesTouched)
+	}
+	if len(pw.LastFindings) != 2 || pw.LastFindings[0] != "missing tests" {
+		t.Errorf("LastFindings = %v, want [missing tests, error not wrapped]", pw.LastFindings)
+	}
+}
+
+func TestBuildPartialWork_NilResult(t *testing.T) {
+	t.Parallel()
+
+	pw, err := BuildPartialWork(context.Background(), nil, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if pw == nil {
+		t.Fatal("expected non-nil PartialWork")
+	}
+	if len(pw.CommitSHAs) != 0 {
+		t.Errorf("expected empty CommitSHAs, got %v", pw.CommitSHAs)
+	}
+}
+
+func TestBuildPartialWork_EmptyBaseCommitSHA(t *testing.T) {
+	t.Parallel()
+
+	result := &PhaseRunnerResult{
+		BaseCommitSHA:  "",
+		FinalCommitSHA: "final-sha",
+		CycleCommits:   []string{"sha-1"},
+		CyclesUsed:     1,
+	}
+	lister := &mockDiffLister{files: []string{"should-not-appear.go"}}
+
+	pw, err := BuildPartialWork(context.Background(), result, nil, lister)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pw.FilesTouched) != 0 {
+		t.Errorf("expected empty FilesTouched when BaseCommitSHA is empty, got %v", pw.FilesTouched)
+	}
+}
+
+func TestBuildPartialWork_NoCycleCommits(t *testing.T) {
+	t.Parallel()
+
+	result := &PhaseRunnerResult{
+		BaseCommitSHA: "base-sha",
+		CyclesUsed:    0,
+	}
+	lister := &mockDiffLister{files: []string{"should-not-appear.go"}}
+
+	pw, err := BuildPartialWork(context.Background(), result, nil, lister)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pw.FilesTouched) != 0 {
+		t.Errorf("expected empty FilesTouched with no CycleCommits, got %v", pw.FilesTouched)
+	}
+}
+
+func TestBuildPartialWork_DiffError(t *testing.T) {
+	t.Parallel()
+
+	result := &PhaseRunnerResult{
+		BaseCommitSHA: "base-sha",
+		CycleCommits:  []string{"sha-1"},
+		CyclesUsed:    1,
+	}
+	lister := &mockDiffLister{err: fmt.Errorf("git not found")}
+
+	pw, err := BuildPartialWork(context.Background(), result, nil, lister)
+	if err == nil {
+		t.Fatal("expected error from diff failure")
+	}
+	if !strings.Contains(err.Error(), "listing files touched") {
+		t.Errorf("error = %v, want to contain 'listing files touched'", err)
+	}
+	// pw should still be returned with what we have.
+	if pw == nil {
+		t.Fatal("expected non-nil PartialWork even on diff error")
+	}
+	if pw.BaseCommitSHA != "base-sha" {
+		t.Errorf("BaseCommitSHA = %q, want %q", pw.BaseCommitSHA, "base-sha")
+	}
+}
+
+func TestBuildPartialWork_NilDiffLister(t *testing.T) {
+	t.Parallel()
+
+	result := &PhaseRunnerResult{
+		BaseCommitSHA: "base-sha",
+		CycleCommits:  []string{"sha-1"},
+		CyclesUsed:    1,
+	}
+
+	pw, err := BuildPartialWork(context.Background(), result, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pw.FilesTouched) != 0 {
+		t.Errorf("expected empty FilesTouched with nil lister, got %v", pw.FilesTouched)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// HealingContext
+// ---------------------------------------------------------------------------
+
+func TestHealingContext_WithPartialWork(t *testing.T) {
+	t.Parallel()
+
+	pw := &PartialWork{
+		CommitSHAs:   []string{"sha-1", "sha-2"},
+		FilesTouched: []string{"main.go", "util.go"},
+		LastFindings: []string{"missing error handling", "test coverage low"},
+	}
+
+	got := HealingContext(pw)
+
+	for _, want := range []string{
+		"[AUTO-HEALING CONTEXT]",
+		"[END AUTO-HEALING CONTEXT]",
+		"sha-1",
+		"sha-2",
+		"main.go, util.go",
+		"missing error handling",
+		"test coverage low",
+		"Do NOT revert existing changes",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("HealingContext missing %q", want)
+		}
+	}
+}
+
+func TestHealingContext_NilPartialWork(t *testing.T) {
+	t.Parallel()
+
+	got := HealingContext(nil)
+	if got != "" {
+		t.Errorf("expected empty string for nil PartialWork, got %q", got)
+	}
+}
+
+func TestHealingContext_NoCommits(t *testing.T) {
+	t.Parallel()
+
+	pw := &PartialWork{
+		CommitSHAs: nil,
+	}
+	got := HealingContext(pw)
+	if got != "" {
+		t.Errorf("expected empty string when no commits, got %q", got)
+	}
+}
+
+func TestHealingContext_NoFilesOrFindings(t *testing.T) {
+	t.Parallel()
+
+	pw := &PartialWork{
+		CommitSHAs: []string{"sha-1"},
+	}
+	got := HealingContext(pw)
+
+	if !strings.Contains(got, "sha-1") {
+		t.Error("expected commit SHA in output")
+	}
+	if strings.Contains(got, "Files already modified") {
+		t.Error("should not mention files when none touched")
+	}
+	if strings.Contains(got, "Unresolved reviewer findings") {
+		t.Error("should not mention findings when none present")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// BuildRemediationRequest with PartialWork
+// ---------------------------------------------------------------------------
+
+func TestBuildRemediationRequest_WithPartialWork(t *testing.T) {
+	t.Parallel()
+
+	diag := &FailureDiagnosis{
+		PhaseID:     "auth-login",
+		Kind:        FailureKindMaxCycles,
+		Healable:    true,
+		Summary:     "phase exhausted all review cycles without approval",
+		CyclesUsed:  5,
+		BudgetSpent: 2.50,
+		Findings:    []string{"missing error handling"},
+		PartialWork: &PartialWork{
+			BaseCommitSHA: "base-abc",
+			CommitSHAs:    []string{"sha-1", "sha-2"},
+			FilesTouched:  []string{"auth.go", "auth_test.go"},
+			CyclesUsed:    5,
+			LastFindings:  []string{"missing error handling"},
+		},
+	}
+	neb := &Nebula{
+		Manifest: Manifest{Nebula: Info{Name: "test-nebula"}},
+	}
+	failedSpec := &PhaseSpec{
+		ID:    "auth-login",
+		Title: "Implement Auth Login",
+	}
+
+	req := BuildRemediationRequest(diag, neb, failedSpec)
+
+	prompt := req.UserPrompt
+	for _, want := range []string{
+		"### Partial Work from Failed Phase",
+		"Base commit: base-abc",
+		"Cycle commits: sha-1, sha-2",
+		"auth.go",
+		"auth_test.go",
+		"Cycles completed: 5",
+		"missing error handling",
+		"MUST NOT revert these commits",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt missing %q", want)
+		}
+	}
+}
+
+func TestBuildRemediationRequest_NilPartialWork(t *testing.T) {
+	t.Parallel()
+
+	diag := &FailureDiagnosis{
+		PhaseID:     "some-phase",
+		Kind:        FailureKindBudget,
+		Healable:    true,
+		Summary:     "budget exceeded",
+		PartialWork: nil,
+	}
+	neb := &Nebula{
+		Manifest: Manifest{Nebula: Info{Name: "test-nebula"}},
+	}
+	failedSpec := &PhaseSpec{
+		ID:    "some-phase",
+		Title: "Some Phase",
+	}
+
+	req := BuildRemediationRequest(diag, neb, failedSpec)
+
+	prompt := req.UserPrompt
+	if strings.Contains(prompt, "### Partial Work from Failed Phase") {
+		t.Error("should not include partial work section when PartialWork is nil")
+	}
+	if strings.Contains(prompt, "MUST NOT revert") {
+		t.Error("should not include revert instruction when PartialWork is nil")
+	}
+}
+
+func TestBuildRemediationRequest_EmptyCommits(t *testing.T) {
+	t.Parallel()
+
+	diag := &FailureDiagnosis{
+		PhaseID:  "some-phase",
+		Kind:     FailureKindMaxCycles,
+		Healable: true,
+		Summary:  "max cycles",
+		PartialWork: &PartialWork{
+			CommitSHAs: nil, // no commits were made
+		},
+	}
+	neb := &Nebula{
+		Manifest: Manifest{Nebula: Info{Name: "test-nebula"}},
+	}
+	failedSpec := &PhaseSpec{
+		ID:    "some-phase",
+		Title: "Some Phase",
+	}
+
+	req := BuildRemediationRequest(diag, neb, failedSpec)
+
+	prompt := req.UserPrompt
+	if strings.Contains(prompt, "### Partial Work from Failed Phase") {
+		t.Error("should not include partial work section when CommitSHAs is empty")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// parseDiffFileNames
+// ---------------------------------------------------------------------------
+
+func TestParseDiffFileNames(t *testing.T) {
+	t.Parallel()
+
+	diff := `diff --git a/main.go b/main.go
+index abc123..def456 100644
+--- a/main.go
++++ b/main.go
+@@ -1,3 +1,4 @@
++package main
+diff --git a/util/helper.go b/util/helper.go
+index 111222..333444 100644
+--- a/util/helper.go
++++ b/util/helper.go
+@@ -10,2 +10,5 @@
++func helper() {}
+diff --git a/main.go b/main.go
+index def456..789abc 100644
+`
+
+	files := parseDiffFileNames(diff)
+
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files, got %d: %v", len(files), files)
+	}
+	if files[0] != "main.go" {
+		t.Errorf("files[0] = %q, want %q", files[0], "main.go")
+	}
+	if files[1] != "util/helper.go" {
+		t.Errorf("files[1] = %q, want %q", files[1], "util/helper.go")
+	}
+}
+
+func TestParseDiffFileNames_EmptyDiff(t *testing.T) {
+	t.Parallel()
+
+	files := parseDiffFileNames("")
+	if len(files) != 0 {
+		t.Errorf("expected empty result for empty diff, got %v", files)
+	}
+}
+
+func TestParseDiffFileNames_NoDiffHeaders(t *testing.T) {
+	t.Parallel()
+
+	diff := `--- a/main.go
++++ b/main.go
+@@ -1 +1 @@
+-old
++new
+`
+	files := parseDiffFileNames(diff)
+	if len(files) != 0 {
+		t.Errorf("expected empty result for diff without headers, got %v", files)
+	}
+}
+
+func TestParseDiffFileNames_Rename(t *testing.T) {
+	t.Parallel()
+
+	// Renamed files produce diff headers where a/ and b/ paths differ.
+	diff := `diff --git a/old_name.go b/new_name.go
+similarity index 90%
+rename from old_name.go
+rename to new_name.go
+--- a/old_name.go
++++ b/new_name.go
+@@ -1 +1 @@
+-old
++new
+diff --git a/unchanged.go b/unchanged.go
+index abc..def 100644
+`
+	files := parseDiffFileNames(diff)
+
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files, got %d: %v", len(files), files)
+	}
+	// The function extracts the a/ path (old name) for renames.
+	if files[0] != "old_name.go" {
+		t.Errorf("files[0] = %q, want %q", files[0], "old_name.go")
+	}
+	if files[1] != "unchanged.go" {
+		t.Errorf("files[1] = %q, want %q", files[1], "unchanged.go")
+	}
+}
+
+func TestParseDiffFileNames_FilesWithSpaces(t *testing.T) {
+	t.Parallel()
+
+	// Files containing spaces — the parser splits on " b/" which handles this correctly.
+	diff := "diff --git a/path with spaces/file.go b/path with spaces/file.go\n"
+	files := parseDiffFileNames(diff)
+
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d: %v", len(files), files)
+	}
+	if files[0] != "path with spaces/file.go" {
+		t.Errorf("files[0] = %q, want %q", files[0], "path with spaces/file.go")
 	}
 }

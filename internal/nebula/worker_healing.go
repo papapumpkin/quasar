@@ -17,12 +17,14 @@ func (wg *WorkerGroup) emitHealing(kind string, taskID string, data any) {
 	if wg.Metrics == nil || wg.Metrics.Telemetry == nil {
 		return
 	}
-	_ = wg.Metrics.Telemetry.Emit(telemetry.Event{
+	if err := wg.Metrics.Telemetry.Emit(telemetry.Event{
 		Timestamp: time.Now(),
 		Kind:      kind,
 		TaskID:    taskID,
 		Data:      data,
-	})
+	}); err != nil {
+		fmt.Fprintf(wg.logger(), "healing: telemetry emit %s: %v\n", kind, err)
+	}
 }
 
 // healingSkipReason returns a human-readable reason string for why healing
@@ -59,6 +61,20 @@ func (wg *WorkerGroup) attemptHealing(ctx context.Context, phaseID string, err e
 		}
 	}
 	diag := AnalyzeFailure(phaseID, err, result, fctx)
+
+	// Build partial work snapshot from the failed phase's result.
+	if result != nil && result.BaseCommitSHA != "" {
+		var diffLister GitDiffLister
+		if wg.Committer != nil {
+			diffLister = &gitCommitterDiffLister{committer: wg.Committer}
+		}
+		pw, pwErr := BuildPartialWork(ctx, result, diag.Findings, diffLister)
+		if pwErr != nil {
+			fmt.Fprintf(wg.logger(), "healing: failed to build partial work for %q: %v\n", phaseID, pwErr)
+			// pw may still be partially populated; attach it anyway.
+		}
+		diag.PartialWork = pw
+	}
 
 	// Emit healing.start telemetry.
 	wg.emitHealing(telemetry.KindHealingStart, phaseID, map[string]any{
@@ -124,6 +140,12 @@ func (wg *WorkerGroup) attemptHealing(ctx context.Context, phaseID string, err e
 	// Finalize the remediation spec.
 	archResult = FinalizeRemediationSpec(archResult, diag, failedSpec)
 	remSpec := &archResult.PhaseSpec
+
+	// Inject healing context into the remediation phase body so the coder
+	// knows about partial work and is instructed to preserve it.
+	if hctx := HealingContext(diag.PartialWork); hctx != "" {
+		remSpec.Body = hctx + "\n" + remSpec.Body
+	}
 
 	// Emit healing.plan telemetry.
 	wg.emitHealing(telemetry.KindHealingPlan, phaseID, map[string]any{
@@ -227,4 +249,45 @@ func (wg *WorkerGroup) attemptHealing(ctx context.Context, phaseID string, err e
 	}
 
 	fmt.Fprintf(wg.logger(), "healing: remediation phase %q inserted for failed %q (rewired: %s)\n", remSpec.ID, phaseID, strings.Join(rewired, ", "))
+}
+
+// gitCommitterDiffLister adapts a GitCommitter to the GitDiffLister interface
+// by parsing the full diff output for file names.
+type gitCommitterDiffLister struct {
+	committer GitCommitter
+}
+
+// DiffFileList returns the list of files changed between base and head by
+// parsing the output of GitCommitter.DiffRange for diff headers.
+func (g *gitCommitterDiffLister) DiffFileList(ctx context.Context, base, head string) ([]string, error) {
+	diff, err := g.committer.DiffRange(ctx, base, head)
+	if err != nil {
+		return nil, fmt.Errorf("diffing %s..%s: %w", base, head, err)
+	}
+	return parseDiffFileNames(diff), nil
+}
+
+// parseDiffFileNames extracts unique file paths from unified diff output
+// by scanning for "diff --git a/... b/..." headers.
+func parseDiffFileNames(diff string) []string {
+	const prefix = "diff --git a/"
+	seen := make(map[string]bool)
+	var files []string
+	for _, line := range strings.Split(diff, "\n") {
+		if !strings.HasPrefix(line, prefix) {
+			continue
+		}
+		// Format: "diff --git a/<path> b/<path>"
+		rest := line[len(prefix):]
+		spaceIdx := strings.Index(rest, " b/")
+		if spaceIdx < 0 {
+			continue
+		}
+		name := rest[:spaceIdx]
+		if !seen[name] {
+			seen[name] = true
+			files = append(files, name)
+		}
+	}
+	return files
 }
