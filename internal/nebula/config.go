@@ -1,10 +1,21 @@
 package nebula
 
+import "github.com/papapumpkin/quasar/internal/dag"
+
 // ResolvedExecution holds the fully resolved execution config for a single phase.
 type ResolvedExecution struct {
 	MaxReviewCycles int
 	MaxBudgetUSD    float64
 	Model           string
+	RoutedTier      string  // Non-empty when auto-routing selected the model.
+	ComplexityScore float64 // Zero when auto-routing was not applied.
+}
+
+// RoutingContext carries the optional data needed for adaptive model routing.
+// A nil *RoutingContext disables auto-routing (backward compatible).
+type RoutingContext struct {
+	Routing TierConfig
+	DAG     *dag.DAG // May be nil; depth signal becomes 0.
 }
 
 // DefaultMaxReviewCycles is the built-in fallback for max review cycles.

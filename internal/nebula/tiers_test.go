@@ -61,6 +61,32 @@ func TestSelectTierWithDefaults(t *testing.T) {
 	}
 }
 
+func TestSelectTierNilTiersFallsBackToDefaults(t *testing.T) {
+	t.Parallel()
+
+	// nil tiers should fall back to DefaultTiers.
+	got := SelectTier(0.10, nil)
+	if got.Name != "fast" {
+		t.Errorf("SelectTier(0.10, nil) = %q, want %q", got.Name, "fast")
+	}
+
+	got = SelectTier(0.50, nil)
+	if got.Name != "balanced" {
+		t.Errorf("SelectTier(0.50, nil) = %q, want %q", got.Name, "balanced")
+	}
+
+	got = SelectTier(0.90, nil)
+	if got.Name != "heavy" {
+		t.Errorf("SelectTier(0.90, nil) = %q, want %q", got.Name, "heavy")
+	}
+
+	// Empty (non-nil) slice should also fall back.
+	got = SelectTier(0.50, []ModelTier{})
+	if got.Name != "balanced" {
+		t.Errorf("SelectTier(0.50, []) = %q, want %q", got.Name, "balanced")
+	}
+}
+
 func TestValidateRouting(t *testing.T) {
 	t.Parallel()
 
@@ -147,6 +173,18 @@ func TestValidateRouting(t *testing.T) {
 			},
 			wantErrs:   1,
 			wantSubstr: "must be >= 1.0",
+		},
+		{
+			name: "empty tier name",
+			cfg: TierConfig{
+				Enabled: true,
+				Tiers: []ModelTier{
+					{Name: "", Model: "claude-haiku", MaxScore: 0.35},
+					{Name: "heavy", Model: "claude-opus", MaxScore: 1.00},
+				},
+			},
+			wantErrs:   1,
+			wantSubstr: "empty name",
 		},
 		{
 			name: "multiple errors",

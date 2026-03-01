@@ -16,6 +16,7 @@ type TierConfig struct {
 }
 
 // DefaultTiers provides three tiers covering the full [0.0, 1.0] score range.
+// DefaultTiers must not be modified.
 var DefaultTiers = []ModelTier{
 	{Name: "fast", Model: "claude-haiku", MaxScore: 0.35},
 	{Name: "balanced", Model: "claude-sonnet", MaxScore: 0.70},
@@ -23,9 +24,13 @@ var DefaultTiers = []ModelTier{
 }
 
 // SelectTier picks the first tier whose MaxScore >= the given complexity score.
-// Tiers must be sorted by MaxScore ascending. If no tier matches (should not
-// happen with a 1.0 ceiling), the last tier is returned as a fallback.
+// Tiers must be sorted by MaxScore ascending. If tiers is empty, DefaultTiers
+// is used. If no tier matches (should not happen with a 1.0 ceiling), the last
+// tier is returned as a fallback.
 func SelectTier(score float64, tiers []ModelTier) ModelTier {
+	if len(tiers) == 0 {
+		tiers = DefaultTiers
+	}
 	for _, t := range tiers {
 		if score <= t.MaxScore {
 			return t
@@ -63,6 +68,16 @@ func ValidateRouting(cfg TierConfig) []ValidationError {
 				SourceFile: "nebula.toml",
 				Field:      fmt.Sprintf("execution.routing.tiers[%d].model", i),
 				Err:        fmt.Errorf("tier %q has empty model", t.Name),
+			})
+		}
+
+		// Check for empty tier name.
+		if t.Name == "" {
+			errs = append(errs, ValidationError{
+				Category:   ValCatInvalidRouting,
+				SourceFile: "nebula.toml",
+				Field:      fmt.Sprintf("execution.routing.tiers[%d].name", i),
+				Err:        fmt.Errorf("tier at index %d has empty name", i),
 			})
 		}
 
