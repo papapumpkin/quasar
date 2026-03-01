@@ -267,3 +267,82 @@ func TestResolveExecution_Routing(t *testing.T) {
 		}
 	})
 }
+
+func TestResolveExecution_AutoDecompose(t *testing.T) {
+	t.Parallel()
+
+	trueVal := true
+	falseVal := false
+
+	tests := []struct {
+		name       string
+		neb        *Execution
+		phase      *PhaseSpec
+		wantDecomp bool
+	}{
+		{
+			name:       "DefaultDisabled",
+			neb:        nil,
+			phase:      &PhaseSpec{ID: "a"},
+			wantDecomp: false,
+		},
+		{
+			name:       "ManifestEnabled",
+			neb:        &Execution{AutoDecompose: true},
+			phase:      &PhaseSpec{ID: "a"},
+			wantDecomp: true,
+		},
+		{
+			name:       "ManifestDisabled",
+			neb:        &Execution{AutoDecompose: false},
+			phase:      &PhaseSpec{ID: "a"},
+			wantDecomp: false,
+		},
+		{
+			name:       "PhaseOverrideTrue",
+			neb:        &Execution{AutoDecompose: false},
+			phase:      &PhaseSpec{ID: "a", AutoDecompose: &trueVal},
+			wantDecomp: true,
+		},
+		{
+			name:       "PhaseOverrideFalse",
+			neb:        &Execution{AutoDecompose: true},
+			phase:      &PhaseSpec{ID: "a", AutoDecompose: &falseVal},
+			wantDecomp: false,
+		},
+		{
+			name:       "DecomposedPhaseBlocksEvenIfEnabled",
+			neb:        &Execution{AutoDecompose: true},
+			phase:      &PhaseSpec{ID: "a", Decomposed: true},
+			wantDecomp: false,
+		},
+		{
+			name:       "DecomposedOverridesPhaseOverride",
+			neb:        &Execution{AutoDecompose: true},
+			phase:      &PhaseSpec{ID: "a", AutoDecompose: &trueVal, Decomposed: true},
+			wantDecomp: false,
+		},
+		{
+			name:       "NilPhase",
+			neb:        &Execution{AutoDecompose: true},
+			phase:      nil,
+			wantDecomp: true,
+		},
+		{
+			name:       "NilEverything",
+			neb:        nil,
+			phase:      nil,
+			wantDecomp: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := ResolveExecution(0, 0, "", tt.neb, tt.phase, nil)
+			if r.AutoDecompose != tt.wantDecomp {
+				t.Errorf("AutoDecompose = %v, want %v", r.AutoDecompose, tt.wantDecomp)
+			}
+		})
+	}
+}

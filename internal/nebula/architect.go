@@ -21,15 +21,24 @@ const (
 	// ArchitectModeGenerate instructs the architect to produce an entire nebula
 	// (multiple phase files) from a single user prompt.
 	ArchitectModeGenerate ArchitectMode = "generate"
+	// ArchitectModeDecompose instructs the architect to split a struggling phase
+	// into 2-3 smaller sub-phases.
+	ArchitectModeDecompose ArchitectMode = "decompose"
 )
 
 // ArchitectRequest describes what the architect agent should produce.
 type ArchitectRequest struct {
-	Mode       ArchitectMode     // "create", "refactor", or "generate"
+	Mode       ArchitectMode     // "create", "refactor", "generate", or "decompose"
 	UserPrompt string            // what the user wants
 	Nebula     *Nebula           // current nebula state for context
-	PhaseID    string            // for refactor: which phase to modify
+	PhaseID    string            // for refactor/decompose: which phase to target
 	Analysis   *CodebaseAnalysis // for generate: pre-computed codebase analysis (may be nil)
+
+	// Decomposition-specific fields (only used when Mode == ArchitectModeDecompose):
+	StruggleReason string             // human-readable summary from StruggleSignal.Reason
+	CyclesUsed     int                // how many cycles were consumed before decomposition
+	AllFindings    []DecomposeFinding // accumulated findings from the struggling phase
+	CostSoFar      float64            // TotalCostUSD from CycleState at time of pause
 }
 
 // ArchitectResult holds the parsed output from the architect agent.

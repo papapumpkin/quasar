@@ -75,6 +75,29 @@ func TestNebulaSnapshot(t *testing.T) {
 		}
 	})
 
+	t.Run("deep copy of AutoDecompose pointer", func(t *testing.T) {
+		t.Parallel()
+		v := true
+		n := &Nebula{
+			Phases: []PhaseSpec{
+				{ID: "a", AutoDecompose: &v},
+				{ID: "b"}, // nil AutoDecompose
+			},
+		}
+
+		snap := n.Snapshot()
+
+		// Mutating the original's pointer value should not affect snapshot.
+		*n.Phases[0].AutoDecompose = false
+		if *snap.Phases[0].AutoDecompose != true {
+			t.Errorf("snapshot AutoDecompose = %v, want true", *snap.Phases[0].AutoDecompose)
+		}
+		// Nil should remain nil in the snapshot.
+		if snap.Phases[1].AutoDecompose != nil {
+			t.Errorf("snapshot AutoDecompose should be nil, got %v", *snap.Phases[1].AutoDecompose)
+		}
+	})
+
 	t.Run("scalar fields preserved", func(t *testing.T) {
 		t.Parallel()
 		n := &Nebula{

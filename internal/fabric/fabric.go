@@ -21,6 +21,7 @@ const (
 	StateDone          = "done"
 	StateFailed        = "failed"
 	StateHumanDecision = "human_decision"
+	StateDecomposed    = "decomposed"
 )
 
 // Entanglement kinds describing what a phase produced.

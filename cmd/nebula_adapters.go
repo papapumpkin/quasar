@@ -38,6 +38,15 @@ func (a *loopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, pha
 	}
 	a.loop.CommitSummary = phaseTitle
 
+	// Enable struggle detection when auto-decomposition is active.
+	if exec.AutoDecompose {
+		cfg := loop.DefaultStruggleConfig()
+		cfg.Enabled = true
+		a.loop.StruggleConfig = cfg
+	} else {
+		a.loop.StruggleConfig = loop.StruggleConfig{} // disabled
+	}
+
 	result, err := a.loop.RunExistingTask(ctx, beadID, phaseDescription)
 	if err != nil {
 		if result != nil {
@@ -106,6 +115,13 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 		l.Model = exec.Model
 	}
 
+	// Enable struggle detection when auto-decomposition is active.
+	if exec.AutoDecompose {
+		cfg := loop.DefaultStruggleConfig()
+		cfg.Enabled = true
+		l.StruggleConfig = cfg
+	}
+
 	result, err := l.RunExistingTask(ctx, beadID, phaseDescription)
 
 	// After the loop completes, emit fabric events if fabric is available.
@@ -160,13 +176,28 @@ func (a *tuiLoopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDe
 
 // toPhaseRunnerResult converts a loop.TaskResult to nebula.PhaseRunnerResult.
 func toPhaseRunnerResult(result *loop.TaskResult) *nebula.PhaseRunnerResult {
-	return &nebula.PhaseRunnerResult{
+	pr := &nebula.PhaseRunnerResult{
 		TotalCostUSD:   result.TotalCostUSD,
 		CyclesUsed:     result.CyclesUsed,
 		Report:         result.Report,
 		BaseCommitSHA:  result.BaseCommitSHA,
 		FinalCommitSHA: result.FinalCommitSHA,
+		Decompose:      result.Decompose,
+		StruggleReason: result.StruggleReason,
 	}
+	// Convert loop.ReviewFinding to nebula.DecomposeFinding to avoid
+	// a circular dependency between the loop and nebula packages.
+	if len(result.AllFindings) > 0 {
+		pr.AllFindings = make([]nebula.DecomposeFinding, len(result.AllFindings))
+		for i, f := range result.AllFindings {
+			pr.AllFindings[i] = nebula.DecomposeFinding{
+				Severity:    f.Severity,
+				Description: f.Description,
+				Cycle:       f.Cycle,
+			}
+		}
+	}
+	return pr
 }
 
 // fabricComponents holds initialized fabric infrastructure for passing to

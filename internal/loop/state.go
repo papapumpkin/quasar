@@ -99,6 +99,7 @@ type CycleState struct {
 	OriginalDescription string                // task description before the refactor
 	RefactorDescription string                // the new description from the user edit
 	BaseCommitSHA       string                // HEAD before first cycle (captured at task start)
+	FilterHistory       []string              // accumulated FilterCheckName per cycle (index = cycle-1)
 	CycleCommits        []string              // commit SHA per cycle (index = cycle-1)
 	lastCycleSHA        string                // transient: last commit SHA for the current cycle (sealed into CycleCommits at cycle end)
 	bridgedDiscoveryIDs map[int64]bool        // tracks fabric discovery IDs already bridged to hails, preventing duplicates across cycles

@@ -14,8 +14,11 @@ type PhaseRunnerResult struct {
 	TotalCostUSD   float64
 	CyclesUsed     int
 	Report         *agent.ReviewReport
-	BaseCommitSHA  string // HEAD at start of the phase
-	FinalCommitSHA string // last cycle's sealed SHA (or current HEAD as fallback)
+	BaseCommitSHA  string             // HEAD at start of the phase
+	FinalCommitSHA string             // last cycle's sealed SHA (or current HEAD as fallback)
+	Decompose      bool               // true if the loop exited due to a struggle signal
+	StruggleReason string             // human-readable reason from StruggleSignal.Reason
+	AllFindings    []DecomposeFinding // accumulated findings at time of decomposition
 }
 
 // PhaseRunner is the interface for executing a phase (satisfied by loop.Loop).
@@ -148,4 +151,10 @@ func WithPoller(p fabric.Poller) Option {
 // also set.
 func WithPublisher(p *fabric.Publisher) Option {
 	return func(wg *WorkerGroup) { wg.Publisher = p }
+}
+
+// WithInvoker sets the agent invoker used for architect invocations during
+// auto-decomposition. Required when Execution.AutoDecompose is enabled.
+func WithInvoker(inv agent.Invoker) Option {
+	return func(wg *WorkerGroup) { wg.Invoker = inv }
 }

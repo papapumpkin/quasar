@@ -1,0 +1,58 @@
+version = 1
+nebula_name = 'auto-decomposition'
+total_cost_usd = 18.21645175
+
+[phases]
+[phases.dag-insertion]
+bead_id = 'quasar-30h1'
+status = 'done'
+created_at = 2026-02-28T23:19:20.342678-05:00
+updated_at = 2026-02-28T23:42:59.230279-05:00
+
+[phases.dag-insertion.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Solid DAG graph surgery implementation with comprehensive tests; one minor convention violation on a discarded error in the annotation helper.'
+
+[phases.decomposition-architect]
+bead_id = 'quasar-7z00'
+status = 'done'
+created_at = 2026-02-28T23:19:19.525154-05:00
+updated_at = 2026-02-28T23:34:20.737621-05:00
+
+[phases.decomposition-architect.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-structured decomposition architect extension with 22 test cases, clean separation from existing code, and proper package decoupling — one minor gap in duplicate sub-phase ID detection.'
+
+[phases.observability]
+bead_id = 'quasar-bcsk'
+status = 'created'
+created_at = 2026-02-28T23:19:21.85957-05:00
+updated_at = 2026-03-01T00:07:31.712791-05:00
+
+[phases.struggle-detection]
+bead_id = 'quasar-080u'
+status = 'done'
+created_at = 2026-02-28T23:19:18.783866-05:00
+updated_at = 2026-02-28T23:25:52.469237-05:00
+
+[phases.struggle-detection.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Struggle detection module adds pure-functional analysis of coder-reviewer loop stagnation signals with comprehensive tests — clean implementation ready for future loop integration.'
+
+[phases.worker-integration]
+bead_id = 'quasar-iyyo'
+status = 'done'
+created_at = 2026-02-28T23:19:21.072232-05:00
+updated_at = 2026-03-01T00:04:56.624848-05:00
+
+[phases.worker-integration.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'All four prior findings (StruggleConfig plumbing, lock safety, Snapshot deep-copy, decompose fallthrough) are properly fixed with good test coverage and clean code structure.'
