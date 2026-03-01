@@ -157,6 +157,22 @@ func (d *DAG) Connected(a, b string) bool {
 	return d.HasPath(a, b) || d.HasPath(b, a)
 }
 
+// DirectDependents returns the IDs of nodes that directly depend on the given
+// node, sorted alphabetically. Returns nil if the node does not exist or has
+// no direct dependents.
+func (d *DAG) DirectDependents(id string) []string {
+	rev, ok := d.reverse[id]
+	if !ok || len(rev) == 0 {
+		return nil
+	}
+	dependents := make([]string, 0, len(rev))
+	for dep := range rev {
+		dependents = append(dependents, dep)
+	}
+	sort.Strings(dependents)
+	return dependents
+}
+
 // DepsFor returns the direct dependency IDs for the given node, sorted
 // alphabetically. Returns nil if the node does not exist or has no
 // dependencies.

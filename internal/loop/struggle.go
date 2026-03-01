@@ -191,16 +191,16 @@ func clamp01(v float64) float64 {
 // struggle signal triggered.
 func buildStruggleReason(signal StruggleSignal, cfg StruggleConfig) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("struggle detected (score=%.2f, threshold=%.2f):", signal.Score, cfg.CompositeThreshold))
+	fmt.Fprintf(&b, "struggle detected (score=%.2f, threshold=%.2f):", signal.Score, cfg.CompositeThreshold)
 
 	if signal.FilterRepeat > 0 {
-		b.WriteString(fmt.Sprintf(" filter-repeat=%d/%d;", signal.FilterRepeat, cfg.FilterRepeatThreshold))
+		fmt.Fprintf(&b, " filter-repeat=%d/%d;", signal.FilterRepeat, cfg.FilterRepeatThreshold)
 	}
 	if signal.FindingOverlap > 0 {
-		b.WriteString(fmt.Sprintf(" finding-overlap=%.0f%%/%.0f%%;", signal.FindingOverlap*100, cfg.FindingOverlapThreshold*100))
+		fmt.Fprintf(&b, " finding-overlap=%.0f%%/%.0f%%;", signal.FindingOverlap*100, cfg.FindingOverlapThreshold*100)
 	}
 	if signal.BudgetBurnRate > 0 {
-		b.WriteString(fmt.Sprintf(" budget-burn=%.2f/%.2f;", signal.BudgetBurnRate, cfg.BudgetBurnThreshold))
+		fmt.Fprintf(&b, " budget-burn=%.2f/%.2f;", signal.BudgetBurnRate, cfg.BudgetBurnThreshold)
 	}
 
 	return b.String()

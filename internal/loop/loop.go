@@ -46,6 +46,7 @@ type TaskResult struct {
 	Report         *agent.ReviewReport // From final reviewer cycle (may be nil)
 	BaseCommitSHA  string              // HEAD captured at task start
 	FinalCommitSHA string              // last cycle's sealed SHA (or current HEAD as fallback)
+	CycleCommits   []string            // per-cycle sealed commit SHAs (index = cycle-1)
 	Decompose      bool                // true if the loop exited due to a struggle signal
 	StruggleReason string              // human-readable reason from StruggleSignal.Reason
 	AllFindings    []ReviewFinding     // accumulated findings at time of decomposition
@@ -209,6 +210,7 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 					CyclesUsed:     state.Cycle,
 					BaseCommitSHA:  state.BaseCommitSHA,
 					FinalCommitSHA: l.finalCommitSHA(ctx, state),
+					CycleCommits:   state.CycleCommits,
 					Decompose:      true,
 					StruggleReason: signal.Reason,
 					AllFindings:    state.AllFindings,
@@ -231,6 +233,7 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 		CyclesUsed:     state.Cycle,
 		BaseCommitSHA:  state.BaseCommitSHA,
 		FinalCommitSHA: l.finalCommitSHA(ctx, state),
+		CycleCommits:   state.CycleCommits,
 	}, ErrMaxCycles
 }
 
@@ -695,6 +698,7 @@ func (l *Loop) handleApproval(ctx context.Context, state *CycleState) (*TaskResu
 		Report:         report,
 		BaseCommitSHA:  state.BaseCommitSHA,
 		FinalCommitSHA: l.finalCommitSHA(ctx, state),
+		CycleCommits:   state.CycleCommits,
 	}, nil
 }
 

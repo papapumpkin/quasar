@@ -17,15 +17,18 @@ type Manifest struct {
 
 // Execution holds default execution parameters for the nebula.
 type Execution struct {
-	MaxWorkers       int        `toml:"max_workers"`
-	MaxReviewCycles  int        `toml:"max_review_cycles"`
-	MaxBudgetUSD     float64    `toml:"max_budget_usd"`
-	MaxContextTokens int        `toml:"max_context_tokens"` // Token budget for context injection. 0 = disabled.
-	Model            string     `toml:"model"`
-	Gate             GateMode   `toml:"gate"`           // Default gate mode for all phases
-	HailTimeout      string     `toml:"hail_timeout"`   // Duration string for hail auto-resolve timeout (e.g. "5m"). Empty = default (5m). "0" = disabled.
-	Routing          TierConfig `toml:"routing"`        // Auto-routing config. Zero-value = disabled.
-	AutoDecompose    bool       `toml:"auto_decompose"` // Enable auto-decomposition on struggle.
+	MaxWorkers           int        `toml:"max_workers"`
+	MaxReviewCycles      int        `toml:"max_review_cycles"`
+	MaxBudgetUSD         float64    `toml:"max_budget_usd"`
+	MaxContextTokens     int        `toml:"max_context_tokens"` // Token budget for context injection. 0 = disabled.
+	Model                string     `toml:"model"`
+	Gate                 GateMode   `toml:"gate"`                   // Default gate mode for all phases
+	HailTimeout          string     `toml:"hail_timeout"`           // Duration string for hail auto-resolve timeout (e.g. "5m"). Empty = default (5m). "0" = disabled.
+	Routing              TierConfig `toml:"routing"`                // Auto-routing config. Zero-value = disabled.
+	AutoDecompose        bool       `toml:"auto_decompose"`         // Enable auto-decomposition on struggle.
+	Healing              bool       `toml:"healing"`                // Master switch for auto-healing on failure.
+	HealingMaxAttempts   int        `toml:"healing_max_attempts"`   // Per-phase healing attempts (default 1).
+	HealingBudgetReserve float64    `toml:"healing_budget_reserve"` // USD reserved from nebula budget for healing phases.
 }
 
 // DefaultHailTimeout is the built-in fallback for hail auto-resolution timeout.
@@ -46,6 +49,21 @@ func (e Execution) ParsedHailTimeout() time.Duration {
 		return DefaultHailTimeout
 	}
 	return d
+}
+
+// HealingPolicy returns the healing policy derived from the execution config.
+// When healing is disabled or max attempts is zero, the returned policy has
+// Enabled=false.
+func (e Execution) HealingPolicy() HealingPolicy {
+	maxAttempts := e.HealingMaxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = 1
+	}
+	return HealingPolicy{
+		Enabled:       e.Healing,
+		MaxAttempts:   maxAttempts,
+		BudgetReserve: e.HealingBudgetReserve,
+	}
 }
 
 // Context provides project-level information injected into agent prompts.
@@ -189,6 +207,7 @@ const (
 	PhaseStatusDone       PhaseStatus = "done"
 	PhaseStatusFailed     PhaseStatus = "failed"
 	PhaseStatusSkipped    PhaseStatus = "skipped"
+	// PhaseStatusDecomposed indicates the phase was broken into sub-phases.
 	PhaseStatusDecomposed PhaseStatus = "decomposed"
 )
 
@@ -239,4 +258,7 @@ type WorkerResult struct {
 	BeadID  string
 	Err     error
 	Report  *agent.ReviewReport
+
+	// Populated on failure for healing analysis. Nil on success.
+	TaskResult *PhaseRunnerResult
 }

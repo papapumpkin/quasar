@@ -21,7 +21,9 @@ func buildDAG(t *testing.T, nodes []string, edges []string) *dag.DAG {
 		id := parts[0]
 		priority := 0
 		if len(parts) == 2 {
-			fmt.Sscanf(parts[1], "%d", &priority)
+			if _, err := fmt.Sscanf(parts[1], "%d", &priority); err != nil {
+				t.Fatalf("Sscanf(%s): %v", parts[1], err)
+			}
 		}
 		if err := d.AddNode(id, priority); err != nil {
 			t.Fatalf("AddNode(%s): %v", id, err)

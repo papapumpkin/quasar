@@ -50,11 +50,13 @@ var allowedColocations = map[string]map[string]bool{
 	},
 	// Nebula defines gate/committer interfaces alongside their implementations.
 	// GitCommitter wraps git operations; Gater/GatePrompter implement the
-	// strategy pattern with multiple gate modes.
+	// strategy pattern with multiple gate modes. GitDiffLister is consumed by
+	// BuildPartialWork and implemented by gitCommitterDiffLister, both in nebula.
 	"nebula": {
-		"GitCommitter": true,
-		"Gater":        true,
-		"GatePrompter": true,
+		"GitCommitter":  true,
+		"GitDiffLister": true,
+		"Gater":         true,
+		"GatePrompter":  true,
 	},
 	// UI defines the UI interface alongside Printer, the sole stderr-based
 	// implementation. Consumers import ui.UI for testability.

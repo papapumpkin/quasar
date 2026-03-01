@@ -212,6 +212,11 @@ func TestEventKinds_AreDistinct(t *testing.T) {
 		KindFilterResult,
 		KindCycleStart,
 		KindCycleDone,
+		KindHealingStart,
+		KindHealingSkipped,
+		KindHealingPlan,
+		KindHealingInsert,
+		KindHealingDone,
 	}
 	seen := make(map[string]bool, len(kinds))
 	for _, k := range kinds {

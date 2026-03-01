@@ -41,6 +41,9 @@ var lineCountExceptions = map[string]int{
 	"internal/tui/bridge.go":         428,  // TODO: decompose bridge
 	"internal/tui/msg.go":            402,  // TODO: decompose message types
 	"internal/ui/dagrender.go":       614,  // TODO: split rendering helpers
+	"internal/nebula/worker_exec.go": 489,  // TODO: decompose worker execution
+	"internal/nebula/healing.go":     467,  // TODO: decompose healing logic
+	"internal/nebula/architect.go":   409,  // TODO: decompose architect
 }
 
 // allGoFilesIn returns all .go files (including test files) in the given directory,

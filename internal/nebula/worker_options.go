@@ -16,6 +16,7 @@ type PhaseRunnerResult struct {
 	Report         *agent.ReviewReport
 	BaseCommitSHA  string             // HEAD at start of the phase
 	FinalCommitSHA string             // last cycle's sealed SHA (or current HEAD as fallback)
+	CycleCommits   []string           // per-cycle sealed commit SHAs (index = cycle-1)
 	Decompose      bool               // true if the loop exited due to a struggle signal
 	StruggleReason string             // human-readable reason from StruggleSignal.Reason
 	AllFindings    []DecomposeFinding // accumulated findings at time of decomposition
@@ -157,4 +158,10 @@ func WithPublisher(p *fabric.Publisher) Option {
 // auto-decomposition. Required when Execution.AutoDecompose is enabled.
 func WithInvoker(inv agent.Invoker) Option {
 	return func(wg *WorkerGroup) { wg.Invoker = inv }
+}
+
+// WithHealingPolicy overrides the healing policy derived from the manifest.
+// This is primarily useful for testing.
+func WithHealingPolicy(p HealingPolicy) Option {
+	return func(wg *WorkerGroup) { wg.healingPolicy = p }
 }
