@@ -43,13 +43,13 @@ func TestEvaluateStruggle(t *testing.T) {
 	t.Run("NoStruggleCleanState", func(t *testing.T) {
 		t.Parallel()
 		state := &CycleState{
-			Cycle:        3,
-			MaxCycles:    10,
-			TotalCostUSD: 1.0,
-			MaxBudgetUSD: 10.0,
+			Cycle:         3,
+			MaxCycles:     10,
+			TotalCostUSD:  1.0,
+			MaxBudgetUSD:  10.0,
 			FilterHistory: []string{"", "", ""},
-			Findings:     nil,
-			AllFindings:  nil,
+			Findings:      nil,
+			AllFindings:   nil,
 		}
 		sig := EvaluateStruggle(state, enabled)
 		if sig.Triggered {
@@ -60,13 +60,13 @@ func TestEvaluateStruggle(t *testing.T) {
 	t.Run("FilterRepeatDetection", func(t *testing.T) {
 		t.Parallel()
 		state := &CycleState{
-			Cycle:        3,
-			MaxCycles:    10,
-			TotalCostUSD: 0.5,
-			MaxBudgetUSD: 10.0,
+			Cycle:         3,
+			MaxCycles:     10,
+			TotalCostUSD:  0.5,
+			MaxBudgetUSD:  10.0,
 			FilterHistory: []string{"check-imports", "check-imports", "check-imports"},
-			Findings:     nil,
-			AllFindings:  nil,
+			Findings:      nil,
+			AllFindings:   nil,
 		}
 		sig := EvaluateStruggle(state, enabled)
 		if sig.FilterRepeat != 3 {
@@ -92,10 +92,10 @@ func TestEvaluateStruggle(t *testing.T) {
 	t.Run("FindingOverlapDetection", func(t *testing.T) {
 		t.Parallel()
 		state := &CycleState{
-			Cycle:        3,
-			MaxCycles:    10,
-			TotalCostUSD: 0.5,
-			MaxBudgetUSD: 10.0,
+			Cycle:         3,
+			MaxCycles:     10,
+			TotalCostUSD:  0.5,
+			MaxBudgetUSD:  10.0,
 			FilterHistory: []string{"", "", ""},
 			Findings: []ReviewFinding{
 				{Description: "missing error handling in function foo"},
@@ -115,10 +115,10 @@ func TestEvaluateStruggle(t *testing.T) {
 	t.Run("FindingOverlapPartial", func(t *testing.T) {
 		t.Parallel()
 		state := &CycleState{
-			Cycle:        3,
-			MaxCycles:    10,
-			TotalCostUSD: 0.5,
-			MaxBudgetUSD: 10.0,
+			Cycle:         3,
+			MaxCycles:     10,
+			TotalCostUSD:  0.5,
+			MaxBudgetUSD:  10.0,
 			FilterHistory: []string{"", "", ""},
 			Findings: []ReviewFinding{
 				{Description: "missing error handling in function foo"},
@@ -140,10 +140,10 @@ func TestEvaluateStruggle(t *testing.T) {
 		// 2 cycles spent, $5 total => actual per-cycle = $2.50.
 		// burn rate = 2.50 / 1.0 = 2.50.
 		state := &CycleState{
-			Cycle:        2,
-			MaxCycles:    10,
-			TotalCostUSD: 5.0,
-			MaxBudgetUSD: 10.0,
+			Cycle:         2,
+			MaxCycles:     10,
+			TotalCostUSD:  5.0,
+			MaxBudgetUSD:  10.0,
 			FilterHistory: []string{"", ""},
 		}
 		sig := EvaluateStruggle(state, enabled)
@@ -155,10 +155,10 @@ func TestEvaluateStruggle(t *testing.T) {
 	t.Run("CompositeTriggersAboveThreshold", func(t *testing.T) {
 		t.Parallel()
 		state := &CycleState{
-			Cycle:        4,
-			MaxCycles:    10,
-			TotalCostUSD: 5.0,
-			MaxBudgetUSD: 10.0,
+			Cycle:         4,
+			MaxCycles:     10,
+			TotalCostUSD:  5.0,
+			MaxBudgetUSD:  10.0,
 			FilterHistory: []string{"check-lint", "check-lint", "check-lint", "check-lint"},
 			Findings: []ReviewFinding{
 				{Description: "the same bug keeps reappearing over and over"},
@@ -183,10 +183,10 @@ func TestEvaluateStruggle(t *testing.T) {
 	t.Run("ReasonContainsDetails", func(t *testing.T) {
 		t.Parallel()
 		state := &CycleState{
-			Cycle:        4,
-			MaxCycles:    10,
-			TotalCostUSD: 5.0,
-			MaxBudgetUSD: 10.0,
+			Cycle:         4,
+			MaxCycles:     10,
+			TotalCostUSD:  5.0,
+			MaxBudgetUSD:  10.0,
 			FilterHistory: []string{"check-lint", "check-lint", "check-lint", "check-lint"},
 			Findings: []ReviewFinding{
 				{Description: "recurring issue that never gets fixed"},
@@ -210,13 +210,13 @@ func TestEvaluateStruggle(t *testing.T) {
 	t.Run("NoFindingsNoOverlap", func(t *testing.T) {
 		t.Parallel()
 		state := &CycleState{
-			Cycle:        3,
-			MaxCycles:    10,
-			TotalCostUSD: 1.0,
-			MaxBudgetUSD: 10.0,
+			Cycle:         3,
+			MaxCycles:     10,
+			TotalCostUSD:  1.0,
+			MaxBudgetUSD:  10.0,
 			FilterHistory: []string{"", "", ""},
-			Findings:     []ReviewFinding{},
-			AllFindings:  []ReviewFinding{{Description: "old finding"}},
+			Findings:      []ReviewFinding{},
+			AllFindings:   []ReviewFinding{{Description: "old finding"}},
 		}
 		sig := EvaluateStruggle(state, enabled)
 		if sig.FindingOverlap != 0 {
@@ -227,10 +227,10 @@ func TestEvaluateStruggle(t *testing.T) {
 	t.Run("ZeroBudgetSafe", func(t *testing.T) {
 		t.Parallel()
 		state := &CycleState{
-			Cycle:        3,
-			MaxCycles:    10,
-			TotalCostUSD: 1.0,
-			MaxBudgetUSD: 0,
+			Cycle:         3,
+			MaxCycles:     10,
+			TotalCostUSD:  1.0,
+			MaxBudgetUSD:  0,
 			FilterHistory: []string{"", "", ""},
 		}
 		sig := EvaluateStruggle(state, enabled)
@@ -259,10 +259,10 @@ func TestJaccardSimilarity(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		a, b     string
-		wantMin  float64
-		wantMax  float64
+		name    string
+		a, b    string
+		wantMin float64
+		wantMax float64
 	}{
 		{
 			name:    "IdenticalStrings",

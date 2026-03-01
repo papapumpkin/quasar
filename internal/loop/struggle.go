@@ -28,9 +28,9 @@ type StruggleConfig struct {
 
 // Signal weights for composite score calculation.
 const (
-	filterRepeatWeight  = 0.35
+	filterRepeatWeight   = 0.35
 	findingOverlapWeight = 0.40
-	budgetBurnWeight    = 0.25
+	budgetBurnWeight     = 0.25
 )
 
 // Jaccard similarity threshold for finding overlap detection.
