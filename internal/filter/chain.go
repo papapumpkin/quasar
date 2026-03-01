@@ -67,6 +67,33 @@ func (c *Chain) Run(ctx context.Context, workDir string) (*Result, error) {
 	return result, nil
 }
 
+// RunCheck executes a single named check from the chain. Returns the
+// CheckResult, or an error if the check name is not found.
+func (c *Chain) RunCheck(ctx context.Context, workDir string, name string) (*CheckResult, error) {
+	for _, check := range c.Checks {
+		if check.Name != name {
+			continue
+		}
+
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("check %q canceled: %w", name, err)
+		}
+
+		start := time.Now()
+		output, err := check.Fn(ctx, workDir)
+		elapsed := time.Since(start)
+
+		cr := &CheckResult{
+			Name:    check.Name,
+			Passed:  err == nil,
+			Output:  output,
+			Elapsed: elapsed,
+		}
+		return cr, nil
+	}
+	return nil, fmt.Errorf("check %q not found in chain", name)
+}
+
 // DefaultChain returns the standard pre-reviewer filter chain:
 // build, vet, lint (if available), test, claims (if fabric present).
 func DefaultChain(fabric ClaimChecker, taskID string, modifiedFiles []string) *Chain {

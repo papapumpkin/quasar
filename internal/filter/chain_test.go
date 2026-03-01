@@ -467,6 +467,113 @@ func TestRunCommand(t *testing.T) {
 	})
 }
 
+func TestChainRunCheck(t *testing.T) {
+	t.Parallel()
+
+	t.Run("FoundAndPasses", func(t *testing.T) {
+		t.Parallel()
+		chain := &Chain{
+			Checks: []Check{
+				{Name: "build", Fn: func(_ context.Context, _ string) (string, error) {
+					return "", nil
+				}},
+				{Name: "vet", Fn: func(_ context.Context, _ string) (string, error) {
+					return "", nil
+				}},
+			},
+		}
+		cr, err := chain.RunCheck(context.Background(), "/tmp", "vet")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !cr.Passed {
+			t.Error("expected check to pass")
+		}
+		if cr.Name != "vet" {
+			t.Errorf("Name = %q, want 'vet'", cr.Name)
+		}
+	})
+
+	t.Run("FoundAndFails", func(t *testing.T) {
+		t.Parallel()
+		chain := &Chain{
+			Checks: []Check{
+				{Name: "build", Fn: func(_ context.Context, _ string) (string, error) {
+					return "compile error", errors.New("build failed")
+				}},
+			},
+		}
+		cr, err := chain.RunCheck(context.Background(), "/tmp", "build")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cr.Passed {
+			t.Error("expected check to fail")
+		}
+		if cr.Output != "compile error" {
+			t.Errorf("Output = %q, want 'compile error'", cr.Output)
+		}
+	})
+
+	t.Run("NotFound", func(t *testing.T) {
+		t.Parallel()
+		chain := &Chain{
+			Checks: []Check{
+				{Name: "build", Fn: func(_ context.Context, _ string) (string, error) {
+					return "", nil
+				}},
+			},
+		}
+		_, err := chain.RunCheck(context.Background(), "/tmp", "nonexistent")
+		if err == nil {
+			t.Fatal("expected error for missing check")
+		}
+		if !strings.Contains(err.Error(), "not found") {
+			t.Errorf("error = %q, want to contain 'not found'", err.Error())
+		}
+	})
+
+	t.Run("CanceledContext", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		chain := &Chain{
+			Checks: []Check{
+				{Name: "build", Fn: func(_ context.Context, _ string) (string, error) {
+					return "", nil
+				}},
+			},
+		}
+		_, err := chain.RunCheck(ctx, "/tmp", "build")
+		if err == nil {
+			t.Fatal("expected error for canceled context")
+		}
+		if !strings.Contains(err.Error(), "canceled") {
+			t.Errorf("error = %q, want to contain 'canceled'", err.Error())
+		}
+	})
+
+	t.Run("ElapsedTracked", func(t *testing.T) {
+		t.Parallel()
+		chain := &Chain{
+			Checks: []Check{
+				{Name: "slow", Fn: func(_ context.Context, _ string) (string, error) {
+					time.Sleep(10 * time.Millisecond)
+					return "", nil
+				}},
+			},
+		}
+		cr, err := chain.RunCheck(context.Background(), "/tmp", "slow")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cr.Elapsed < 10*time.Millisecond {
+			t.Errorf("elapsed = %v, want >= 10ms", cr.Elapsed)
+		}
+	})
+}
+
 // writeFile is a test helper that creates a file with the given content.
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
