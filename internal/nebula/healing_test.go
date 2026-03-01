@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/papapumpkin/quasar/internal/dag"
 )
 
 func TestAnalyzeFailure_MaxCycles(t *testing.T) {
@@ -804,6 +806,145 @@ func TestFinalizeRemediationSpec_EmptyLabels(t *testing.T) {
 	}
 	if got.PhaseSpec.Labels[0] != "auto-healing" {
 		t.Errorf("labels[0] = %q, want %q", got.PhaseSpec.Labels[0], "auto-healing")
+	}
+}
+
+func TestInsertRemediationPhase_Diamond(t *testing.T) {
+	t.Parallel()
+
+	//     a
+	//    / \
+	//   b   c
+	//    \ /
+	//     d
+	// Fail "d". Remediation "heal-d" should take d's place for b and c.
+	d := dag.New()
+	_ = d.AddNode("d", 1)
+	_ = d.AddNode("b", 1)
+	_ = d.AddNode("c", 1)
+	_ = d.AddNode("a", 1)
+	_ = d.AddEdge("b", "d")
+	_ = d.AddEdge("c", "d")
+	_ = d.AddEdge("a", "b")
+	_ = d.AddEdge("a", "c")
+
+	remediation := &PhaseSpec{ID: "heal-d", Priority: 2}
+	rewired, err := InsertRemediationPhase(d, "d", remediation)
+	if err != nil {
+		t.Fatalf("InsertRemediationPhase: %v", err)
+	}
+
+	// b and c should have been rewired.
+	if len(rewired) != 2 {
+		t.Fatalf("rewired = %v, want 2 items", rewired)
+	}
+	if rewired[0] != "b" || rewired[1] != "c" {
+		t.Errorf("rewired = %v, want [b, c]", rewired)
+	}
+
+	// b and c should now depend on heal-d, not d.
+	bDeps := d.DepsFor("b")
+	if len(bDeps) != 1 || bDeps[0] != "heal-d" {
+		t.Errorf("DepsFor(b) = %v, want [heal-d]", bDeps)
+	}
+	cDeps := d.DepsFor("c")
+	if len(cDeps) != 1 || cDeps[0] != "heal-d" {
+		t.Errorf("DepsFor(c) = %v, want [heal-d]", cDeps)
+	}
+
+	// heal-d should have no dependencies.
+	healDeps := d.DepsFor("heal-d")
+	if healDeps != nil {
+		t.Errorf("DepsFor(heal-d) = %v, want nil", healDeps)
+	}
+
+	// No cycles introduced.
+	_, err = d.TopologicalSort()
+	if err != nil {
+		t.Errorf("TopologicalSort after insertion: %v", err)
+	}
+}
+
+func TestInsertRemediationPhase_LinearChain(t *testing.T) {
+	t.Parallel()
+
+	// a → b → c (a depends on b, b depends on c)
+	// Fail "c". Only b should be rewired.
+	d := dag.New()
+	_ = d.AddNode("c", 1)
+	_ = d.AddNode("b", 1)
+	_ = d.AddNode("a", 1)
+	_ = d.AddEdge("b", "c")
+	_ = d.AddEdge("a", "b")
+
+	remediation := &PhaseSpec{ID: "heal-c", Priority: 1}
+	rewired, err := InsertRemediationPhase(d, "c", remediation)
+	if err != nil {
+		t.Fatalf("InsertRemediationPhase: %v", err)
+	}
+
+	if len(rewired) != 1 || rewired[0] != "b" {
+		t.Errorf("rewired = %v, want [b]", rewired)
+	}
+
+	bDeps := d.DepsFor("b")
+	if len(bDeps) != 1 || bDeps[0] != "heal-c" {
+		t.Errorf("DepsFor(b) = %v, want [heal-c]", bDeps)
+	}
+
+	_, err = d.TopologicalSort()
+	if err != nil {
+		t.Errorf("TopologicalSort after insertion: %v", err)
+	}
+}
+
+func TestInsertRemediationPhase_NoDependents(t *testing.T) {
+	t.Parallel()
+
+	// a → b (a depends on b). Fail "a" which has no dependents.
+	d := dag.New()
+	_ = d.AddNode("b", 1)
+	_ = d.AddNode("a", 1)
+	_ = d.AddEdge("a", "b")
+
+	remediation := &PhaseSpec{ID: "heal-a", Priority: 1}
+	rewired, err := InsertRemediationPhase(d, "a", remediation)
+	if err != nil {
+		t.Fatalf("InsertRemediationPhase: %v", err)
+	}
+
+	if len(rewired) != 0 {
+		t.Errorf("rewired = %v, want empty", rewired)
+	}
+
+	// heal-a should exist with no deps.
+	if d.Node("heal-a") == nil {
+		t.Error("heal-a node not found in DAG")
+	}
+	healDeps := d.DepsFor("heal-a")
+	if healDeps != nil {
+		t.Errorf("DepsFor(heal-a) = %v, want nil", healDeps)
+	}
+
+	_, err = d.TopologicalSort()
+	if err != nil {
+		t.Errorf("TopologicalSort after insertion: %v", err)
+	}
+}
+
+func TestInsertRemediationPhase_FailedNodeNotFound(t *testing.T) {
+	t.Parallel()
+
+	d := dag.New()
+	_ = d.AddNode("a", 1)
+
+	remediation := &PhaseSpec{ID: "heal-x", Priority: 1}
+	_, err := InsertRemediationPhase(d, "nonexistent", remediation)
+	if err == nil {
+		t.Fatal("expected error for nonexistent failed phase, got nil")
+	}
+	if !strings.Contains(err.Error(), "node not found") {
+		t.Errorf("error = %v, want to contain 'node not found'", err)
 	}
 }
 

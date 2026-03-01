@@ -51,7 +51,7 @@ func (wg *WorkerGroup) executePhase(ctx context.Context, phaseID string, waveNum
 			if decompErr != nil {
 				fmt.Fprintf(wg.logger(), "decomposition failed for %s: %v\n", phaseID, decompErr)
 				// Fall through to record the phase as failed.
-				wg.recordResult(phaseID, ps, phaseResult, fmt.Errorf("decomposition failed: %w", decompErr), done, failed, inFlight)
+				wg.recordResult(ctx, phaseID, ps, phaseResult, fmt.Errorf("decomposition failed: %w", decompErr), done, failed, inFlight)
 				return
 			}
 			// Mark original phase as decomposed and enqueue sub-phases.
@@ -74,7 +74,7 @@ func (wg *WorkerGroup) executePhase(ctx context.Context, phaseID string, waveNum
 		// The loop exited early due to a struggle signal, but decomposition
 		// is not enabled for this phase. Mark as failed — the phase did not
 		// complete its review cycle.
-		wg.recordResult(phaseID, ps, phaseResult, fmt.Errorf("phase %q exited due to struggle but auto-decomposition is disabled", phaseID), done, failed, inFlight)
+		wg.recordResult(ctx, phaseID, ps, phaseResult, fmt.Errorf("phase %q exited due to struggle but auto-decomposition is disabled", phaseID), done, failed, inFlight)
 		return
 	}
 
@@ -102,7 +102,7 @@ func (wg *WorkerGroup) executePhase(ctx context.Context, phaseID string, waveNum
 		case GateActionAccept:
 			// Fall through to recordResult.
 		case GateActionReject:
-			wg.recordResult(phaseID, ps, phaseResult, fmt.Errorf("phase %q rejected at gate", phaseID), done, failed, inFlight)
+			wg.recordResult(ctx, phaseID, ps, phaseResult, fmt.Errorf("phase %q rejected at gate", phaseID), done, failed, inFlight)
 			wg.mu.Lock()
 			wg.gateSignals = append(wg.gateSignals, gateSignal{phaseID: phaseID, action: GateActionReject})
 			wg.mu.Unlock()
@@ -116,7 +116,7 @@ func (wg *WorkerGroup) executePhase(ctx context.Context, phaseID string, waveNum
 			wg.mu.Unlock()
 			return
 		case GateActionSkip:
-			wg.recordResult(phaseID, ps, phaseResult, nil, done, failed, inFlight)
+			wg.recordResult(ctx, phaseID, ps, phaseResult, nil, done, failed, inFlight)
 			wg.mu.Lock()
 			wg.gateSignals = append(wg.gateSignals, gateSignal{phaseID: phaseID, action: GateActionSkip})
 			wg.mu.Unlock()
@@ -124,7 +124,7 @@ func (wg *WorkerGroup) executePhase(ctx context.Context, phaseID string, waveNum
 		}
 	}
 
-	wg.recordResult(phaseID, ps, phaseResult, err, done, failed, inFlight)
+	wg.recordResult(ctx, phaseID, ps, phaseResult, err, done, failed, inFlight)
 
 	// Publish entanglements and update fabric state on successful completion.
 	if err == nil {
@@ -135,6 +135,7 @@ func (wg *WorkerGroup) executePhase(ctx context.Context, phaseID string, waveNum
 // recordResult updates state maps and persists state after a phase execution.
 // Must NOT be called with wg.mu held.
 func (wg *WorkerGroup) recordResult(
+	ctx context.Context,
 	phaseID string,
 	ps *PhaseState,
 	phaseResult *PhaseRunnerResult,
@@ -153,12 +154,21 @@ func (wg *WorkerGroup) recordResult(
 		wr.Report = phaseResult.Report
 		ps.Report = phaseResult.Report
 	}
+	// Populate failure context for healing analysis.
+	if err != nil && phaseResult != nil {
+		wr.TaskResult = phaseResult
+	}
 	wg.results = append(wg.results, wr)
 
 	if err != nil {
 		failed[phaseID] = true
 		done[phaseID] = true
 		wg.State.SetPhaseState(phaseID, ps.BeadID, PhaseStatusFailed)
+
+		// Trigger healing asynchronously when policy allows.
+		if wg.healingPolicy.Enabled && phaseResult != nil {
+			go wg.attemptHealing(ctx, phaseID, err, phaseResult)
+		}
 	} else {
 		done[phaseID] = true
 		wg.State.SetPhaseState(phaseID, ps.BeadID, PhaseStatusDone)

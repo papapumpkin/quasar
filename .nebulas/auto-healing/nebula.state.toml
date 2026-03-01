@@ -1,13 +1,13 @@
 version = 1
 nebula_name = 'auto-healing'
-total_cost_usd = 3.5003959999999994
+total_cost_usd = 5.696930999999999
 
 [phases]
 [phases.dag-insertion]
 bead_id = 'quasar-tvyv'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-01T00:13:42.36618-05:00
-updated_at = 2026-03-01T00:13:42.36618-05:00
+updated_at = 2026-03-01T00:32:25.282492-05:00
 
 [phases.failure-analyzer]
 bead_id = 'quasar-c79w'
@@ -35,6 +35,12 @@ updated_at = 2026-03-01T00:13:43.241475-05:00
 
 [phases.remediation-architect]
 bead_id = 'quasar-1ysq'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-01T00:13:41.520764-05:00
-updated_at = 2026-03-01T00:26:06.306881-05:00
+updated_at = 2026-03-01T00:32:25.271625-05:00
+
+[phases.remediation-architect.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Adds `ArchitectModeRemediate` with `BuildRemediationRequest` and `FinalizeRemediationSpec` for auto-healing — clean implementation with thorough tests, no issues found.'

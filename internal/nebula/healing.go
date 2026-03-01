@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/papapumpkin/quasar/internal/dag"
 )
 
 // Sentinel errors used by AnalyzeFailure for failure classification.
@@ -210,6 +212,35 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen]
+}
+
+// InsertRemediationPhase adds a remediation phase into the live DAG, rewiring
+// edges so that dependents of the failed phase now depend on the remediation
+// phase instead. The remediation phase has no dependencies of its own (the
+// failed phase's deps are already satisfied).
+//
+// Returns the list of phase IDs whose dependency edges were rewired.
+// Returns an error if the failed phase ID does not exist in the DAG or if
+// the remediation node cannot be inserted.
+func InsertRemediationPhase(d *dag.DAG, failedID string, remediation *PhaseSpec) ([]string, error) {
+	if d.Node(failedID) == nil {
+		return nil, fmt.Errorf("inserting remediation phase: %w: %s", dag.ErrNodeNotFound, failedID)
+	}
+
+	if err := d.AddNode(remediation.ID, remediation.Priority); err != nil {
+		return nil, fmt.Errorf("inserting remediation node %s: %w", remediation.ID, err)
+	}
+
+	dependents := d.DirectDependents(failedID)
+	rewired := make([]string, 0, len(dependents))
+	for _, dep := range dependents {
+		d.RemoveEdge(dep, failedID)
+		if err := d.AddEdge(dep, remediation.ID); err != nil {
+			return rewired, fmt.Errorf("rewiring edge %s → %s: %w", dep, remediation.ID, err)
+		}
+		rewired = append(rewired, dep)
+	}
+	return rewired, nil
 }
 
 // BuildRemediationRequest constructs an ArchitectRequest from a failure diagnosis.

@@ -158,3 +158,9 @@ func WithPublisher(p *fabric.Publisher) Option {
 func WithInvoker(inv agent.Invoker) Option {
 	return func(wg *WorkerGroup) { wg.Invoker = inv }
 }
+
+// WithHealingPolicy overrides the healing policy derived from the manifest.
+// This is primarily useful for testing.
+func WithHealingPolicy(p HealingPolicy) Option {
+	return func(wg *WorkerGroup) { wg.healingPolicy = p }
+}

@@ -1199,6 +1199,95 @@ func TestDepsFor(t *testing.T) {
 	})
 }
 
+func TestDirectDependents(t *testing.T) {
+	t.Parallel()
+
+	t.Run("linear chain", func(t *testing.T) {
+		t.Parallel()
+		// a → b → c (a depends on b, b depends on c)
+		d := buildDAG(t, []nodeSpec{
+			{"c", 1, nil},
+			{"b", 1, []string{"c"}},
+			{"a", 1, []string{"b"}},
+		})
+		// c is depended on by b only (direct).
+		deps := d.DirectDependents("c")
+		if len(deps) != 1 || deps[0] != "b" {
+			t.Errorf("DirectDependents(c) = %v, want [b]", deps)
+		}
+		// b is depended on by a only (direct). c is transitive, not direct.
+		deps = d.DirectDependents("b")
+		if len(deps) != 1 || deps[0] != "a" {
+			t.Errorf("DirectDependents(b) = %v, want [a]", deps)
+		}
+	})
+
+	t.Run("diamond", func(t *testing.T) {
+		t.Parallel()
+		//     a
+		//    / \
+		//   b   c
+		//    \ /
+		//     d
+		d := buildDAG(t, []nodeSpec{
+			{"d", 1, nil},
+			{"b", 1, []string{"d"}},
+			{"c", 1, []string{"d"}},
+			{"a", 1, []string{"b", "c"}},
+		})
+		// d is directly depended on by b and c.
+		deps := d.DirectDependents("d")
+		if len(deps) != 2 {
+			t.Fatalf("DirectDependents(d) = %v, want 2 items", deps)
+		}
+		if deps[0] != "b" || deps[1] != "c" {
+			t.Errorf("DirectDependents(d) = %v, want [b, c]", deps)
+		}
+		// a is NOT a direct dependent of d (it's transitive via b and c).
+	})
+
+	t.Run("no dependents", func(t *testing.T) {
+		t.Parallel()
+		d := buildDAG(t, []nodeSpec{
+			{"b", 1, nil},
+			{"a", 1, []string{"b"}},
+		})
+		deps := d.DirectDependents("a")
+		if deps != nil {
+			t.Errorf("DirectDependents(a) = %v, want nil", deps)
+		}
+	})
+
+	t.Run("nonexistent node", func(t *testing.T) {
+		t.Parallel()
+		d := New()
+		deps := d.DirectDependents("x")
+		if deps != nil {
+			t.Errorf("DirectDependents(x) = %v, want nil", deps)
+		}
+	})
+
+	t.Run("sorted alphabetically", func(t *testing.T) {
+		t.Parallel()
+		d := buildDAG(t, []nodeSpec{
+			{"root", 1, nil},
+			{"z", 1, []string{"root"}},
+			{"m", 1, []string{"root"}},
+			{"a", 1, []string{"root"}},
+		})
+		deps := d.DirectDependents("root")
+		want := []string{"a", "m", "z"}
+		if len(deps) != len(want) {
+			t.Fatalf("DirectDependents(root) = %v, want %v", deps, want)
+		}
+		for i, id := range want {
+			if deps[i] != id {
+				t.Errorf("deps[%d] = %q, want %q", i, deps[i], id)
+			}
+		}
+	})
+}
+
 func TestAddNodeIdempotent(t *testing.T) {
 	t.Parallel()
 
