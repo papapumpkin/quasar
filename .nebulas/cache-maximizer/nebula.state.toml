@@ -1,0 +1,33 @@
+version = 1
+nebula_name = 'cache-maximizer'
+
+[phases]
+[phases.cache-telemetry]
+bead_id = 'quasar-g88t'
+status = 'created'
+created_at = 2026-03-01T12:40:36.91539-05:00
+updated_at = 2026-03-01T12:40:36.91539-05:00
+
+[phases.config]
+bead_id = 'quasar-nr6k'
+status = 'created'
+created_at = 2026-03-01T12:40:37.628225-05:00
+updated_at = 2026-03-01T12:40:37.628225-05:00
+
+[phases.cross-invocation]
+bead_id = 'quasar-1vw2'
+status = 'created'
+created_at = 2026-03-01T12:40:36.192775-05:00
+updated_at = 2026-03-01T12:40:36.192775-05:00
+
+[phases.prompt-audit]
+bead_id = 'quasar-ckkx'
+status = 'in_progress'
+created_at = 2026-03-01T12:40:34.643202-05:00
+updated_at = 2026-03-01T12:40:37.703588-05:00
+
+[phases.stable-prefix]
+bead_id = 'quasar-1mxf'
+status = 'created'
+created_at = 2026-03-01T12:40:35.418008-05:00
+updated_at = 2026-03-01T12:40:35.418008-05:00
