@@ -137,6 +137,7 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 			}
 			if failed {
 				// Filter failed — skip reviewer, continue to next cycle.
+				state.FilterHistory = append(state.FilterHistory, state.FilterCheckName)
 				l.sealCycleSHA(state)
 				l.drainRefactor(state)
 				l.emit(ctx, Event{Kind: EventCycleStart, BeadID: beadID, Cycle: cycle})
@@ -167,6 +168,9 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 		if isApproved(state.ReviewOutput) {
 			return l.handleApproval(ctx, state)
 		}
+
+		// Record this cycle's filter check name (empty if filter passed or was nil).
+		state.FilterHistory = append(state.FilterHistory, state.FilterCheckName)
 
 		// Seal the cycle's final SHA into CycleCommits before moving on.
 		l.sealCycleSHA(state)
