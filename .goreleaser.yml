@@ -49,5 +49,18 @@ changelog:
       - '^test'
       - '^style'
 
+brews:
+  - name: quasar
+    repository:
+      owner: papapumpkin
+      name: homebrew-tap
+    homepage: "https://github.com/papapumpkin/quasar"
+    description: "Astral themed agent orchestration system inspired by Gas Town"
+    license: "MIT"
+    install: |
+      bin.install "quasar"
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/quasar version")
+
 snapshot:
   name_template: "{{ .Version }}-next"
