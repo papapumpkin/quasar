@@ -106,18 +106,25 @@ func Generate(ctx context.Context, invoker agent.Invoker, req GenerateRequest) (
 	}
 
 	validationErrs := Validate(neb)
-	for _, ve := range validationErrs {
-		warnings = append(warnings, ve.Error())
-	}
 
-	return &GenerateResult{
+	result := &GenerateResult{
 		Nebula:      neb,
 		Manifest:    manifest,
 		Phases:      phases,
 		InferResult: inferResult,
 		Errors:      warnings,
 		CostUSD:     invResult.CostUSD,
-	}, nil
+	}
+
+	// Step 8: Auto-correct validation errors and retry if needed.
+	if len(validationErrs) > 0 {
+		result, err = CorrectAndRetry(ctx, invoker, req, result, validationErrs)
+		if err != nil {
+			return nil, fmt.Errorf("correction failed: %w", err)
+		}
+	}
+
+	return result, nil
 }
 
 // parseMultiPhaseOutput extracts multiple phase files from architect output.

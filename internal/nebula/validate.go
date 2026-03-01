@@ -14,6 +14,7 @@ func Validate(n *Nebula) []ValidationError {
 
 	if n.Manifest.Nebula.Name == "" {
 		errs = append(errs, ValidationError{
+			Category:   ValCatMissingField,
 			SourceFile: "nebula.toml",
 			Field:      "nebula.name",
 			Err:        fmt.Errorf("%w: nebula.name", ErrMissingField),
@@ -27,6 +28,7 @@ func Validate(n *Nebula) []ValidationError {
 		// Required fields.
 		if p.ID == "" {
 			errs = append(errs, ValidationError{
+				Category:   ValCatMissingField,
 				SourceFile: p.SourceFile,
 				Field:      "id",
 				Err:        fmt.Errorf("%w: id", ErrMissingField),
@@ -35,6 +37,7 @@ func Validate(n *Nebula) []ValidationError {
 		}
 		if p.Title == "" {
 			errs = append(errs, ValidationError{
+				Category:   ValCatMissingField,
 				PhaseID:    p.ID,
 				SourceFile: p.SourceFile,
 				Field:      "title",
@@ -45,6 +48,7 @@ func Validate(n *Nebula) []ValidationError {
 		// Duplicate IDs.
 		if prev, ok := seen[p.ID]; ok {
 			errs = append(errs, ValidationError{
+				Category:   ValCatDuplicateID,
 				PhaseID:    p.ID,
 				SourceFile: p.SourceFile,
 				Err:        fmt.Errorf("%w: %q already defined in %s", ErrDuplicateID, p.ID, prev),
@@ -59,6 +63,7 @@ func Validate(n *Nebula) []ValidationError {
 		for _, dep := range p.DependsOn {
 			if !ids[dep] {
 				errs = append(errs, ValidationError{
+					Category:   ValCatUnknownDep,
 					PhaseID:    p.ID,
 					SourceFile: p.SourceFile,
 					Field:      "depends_on",
@@ -72,6 +77,7 @@ func Validate(n *Nebula) []ValidationError {
 	exec := n.Manifest.Execution
 	if exec.MaxReviewCycles < 0 {
 		errs = append(errs, ValidationError{
+			Category:   ValCatBoundsViolation,
 			SourceFile: "nebula.toml",
 			Field:      "execution.max_review_cycles",
 			Err:        fmt.Errorf("execution.max_review_cycles must be >= 0, got %d", exec.MaxReviewCycles),
@@ -79,6 +85,7 @@ func Validate(n *Nebula) []ValidationError {
 	}
 	if exec.MaxBudgetUSD < 0 {
 		errs = append(errs, ValidationError{
+			Category:   ValCatBoundsViolation,
 			SourceFile: "nebula.toml",
 			Field:      "execution.max_budget_usd",
 			Err:        fmt.Errorf("execution.max_budget_usd must be >= 0, got %f", exec.MaxBudgetUSD),
@@ -88,6 +95,7 @@ func Validate(n *Nebula) []ValidationError {
 	// Validate manifest gate mode.
 	if exec.Gate != "" && !ValidGateModes[exec.Gate] {
 		errs = append(errs, ValidationError{
+			Category:   ValCatInvalidGate,
 			SourceFile: "nebula.toml",
 			Field:      "execution.gate",
 			Err:        fmt.Errorf("%w: %q", ErrInvalidGate, exec.Gate),
@@ -98,6 +106,7 @@ func Validate(n *Nebula) []ValidationError {
 	for _, p := range n.Phases {
 		if p.MaxReviewCycles < 0 {
 			errs = append(errs, ValidationError{
+				Category:   ValCatBoundsViolation,
 				PhaseID:    p.ID,
 				SourceFile: p.SourceFile,
 				Field:      "max_review_cycles",
@@ -106,6 +115,7 @@ func Validate(n *Nebula) []ValidationError {
 		}
 		if p.MaxBudgetUSD < 0 {
 			errs = append(errs, ValidationError{
+				Category:   ValCatBoundsViolation,
 				PhaseID:    p.ID,
 				SourceFile: p.SourceFile,
 				Field:      "max_budget_usd",
@@ -114,6 +124,7 @@ func Validate(n *Nebula) []ValidationError {
 		}
 		if p.Gate != "" && !ValidGateModes[p.Gate] {
 			errs = append(errs, ValidationError{
+				Category:   ValCatInvalidGate,
 				PhaseID:    p.ID,
 				SourceFile: p.SourceFile,
 				Field:      "gate",
@@ -126,6 +137,7 @@ func Validate(n *Nebula) []ValidationError {
 	for _, dep := range n.Manifest.Dependencies.RequiresBeads {
 		if dep == "" {
 			errs = append(errs, ValidationError{
+				Category:   ValCatMissingField,
 				SourceFile: "nebula.toml",
 				Field:      "dependencies.requires_beads",
 				Err:        fmt.Errorf("requires_beads entries must be non-empty strings"),
@@ -135,6 +147,7 @@ func Validate(n *Nebula) []ValidationError {
 	for _, dep := range n.Manifest.Dependencies.RequiresNebulae {
 		if dep == "" {
 			errs = append(errs, ValidationError{
+				Category:   ValCatMissingField,
 				SourceFile: "nebula.toml",
 				Field:      "dependencies.requires_nebulae",
 				Err:        fmt.Errorf("requires_nebulae entries must be non-empty strings"),
@@ -149,6 +162,7 @@ func Validate(n *Nebula) []ValidationError {
 		d, err = phasesToDAG(n.Phases)
 		if err != nil {
 			errs = append(errs, ValidationError{
+				Category:   ValCatCycle,
 				SourceFile: "nebula.toml",
 				Err:        err,
 			})
@@ -175,6 +189,7 @@ func ValidateHotAdd(phase PhaseSpec, existingIDs map[string]bool, d *dag.DAG) []
 
 	if phase.ID == "" {
 		errs = append(errs, ValidationError{
+			Category:   ValCatMissingField,
 			SourceFile: phase.SourceFile,
 			Field:      "id",
 			Err:        fmt.Errorf("%w: id", ErrMissingField),
@@ -183,6 +198,7 @@ func ValidateHotAdd(phase PhaseSpec, existingIDs map[string]bool, d *dag.DAG) []
 	}
 	if phase.Title == "" {
 		errs = append(errs, ValidationError{
+			Category:   ValCatMissingField,
 			PhaseID:    phase.ID,
 			SourceFile: phase.SourceFile,
 			Field:      "title",
@@ -191,6 +207,7 @@ func ValidateHotAdd(phase PhaseSpec, existingIDs map[string]bool, d *dag.DAG) []
 	}
 	if existingIDs[phase.ID] {
 		errs = append(errs, ValidationError{
+			Category:   ValCatDuplicateID,
 			PhaseID:    phase.ID,
 			SourceFile: phase.SourceFile,
 			Err:        fmt.Errorf("%w: %q", ErrDuplicateID, phase.ID),
@@ -206,6 +223,7 @@ func ValidateHotAdd(phase PhaseSpec, existingIDs map[string]bool, d *dag.DAG) []
 		if err := d.AddEdge(phase.ID, dep); err != nil {
 			if errors.Is(err, dag.ErrCycle) {
 				errs = append(errs, ValidationError{
+					Category:   ValCatCycle,
 					PhaseID:    phase.ID,
 					SourceFile: phase.SourceFile,
 					Err:        fmt.Errorf("%w: adding %q would create a cycle", ErrDependencyCycle, phase.ID),
@@ -219,6 +237,7 @@ func ValidateHotAdd(phase PhaseSpec, existingIDs map[string]bool, d *dag.DAG) []
 		if err := d.AddEdge(blocked, phase.ID); err != nil {
 			if errors.Is(err, dag.ErrCycle) {
 				errs = append(errs, ValidationError{
+					Category:   ValCatCycle,
 					PhaseID:    phase.ID,
 					SourceFile: phase.SourceFile,
 					Err:        fmt.Errorf("%w: adding %q would create a cycle", ErrDependencyCycle, phase.ID),
