@@ -182,6 +182,7 @@ func toPhaseRunnerResult(result *loop.TaskResult) *nebula.PhaseRunnerResult {
 		Report:         result.Report,
 		BaseCommitSHA:  result.BaseCommitSHA,
 		FinalCommitSHA: result.FinalCommitSHA,
+		CycleCommits:   result.CycleCommits,
 		Decompose:      result.Decompose,
 		StruggleReason: result.StruggleReason,
 	}

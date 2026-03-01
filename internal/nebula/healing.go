@@ -81,8 +81,13 @@ func BuildPartialWork(ctx context.Context, result *PhaseRunnerResult, findings [
 		return &PartialWork{}, nil
 	}
 
+	var commits []string
+	if result.FinalCommitSHA != "" {
+		commits = []string{result.FinalCommitSHA}
+	}
+
 	pw := &PartialWork{
-		CommitSHAs:    result.CycleCommits,
+		CommitSHAs:    commits,
 		BaseCommitSHA: result.BaseCommitSHA,
 		CyclesUsed:    result.CyclesUsed,
 		LastFindings:  findings,
@@ -328,6 +333,27 @@ func BuildRemediationRequest(diag *FailureDiagnosis, neb *Nebula, failedSpec *Ph
 		b.WriteString("\n")
 	}
 
+	if diag.PartialWork != nil && len(diag.PartialWork.CommitSHAs) > 0 {
+		b.WriteString("### Partial Work from Failed Phase\n")
+		fmt.Fprintf(&b, "- Base commit: %s\n", diag.PartialWork.BaseCommitSHA)
+		fmt.Fprintf(&b, "- Cycle commits: %s\n", strings.Join(diag.PartialWork.CommitSHAs, ", "))
+		if len(diag.PartialWork.FilesTouched) > 0 {
+			b.WriteString("- Files touched:\n")
+			for _, f := range diag.PartialWork.FilesTouched {
+				fmt.Fprintf(&b, "  - %s\n", f)
+			}
+		}
+		fmt.Fprintf(&b, "- Cycles completed: %d\n", diag.PartialWork.CyclesUsed)
+		if len(diag.PartialWork.LastFindings) > 0 {
+			b.WriteString("- Unresolved findings:\n")
+			for _, f := range diag.PartialWork.LastFindings {
+				fmt.Fprintf(&b, "  - %s\n", f)
+			}
+		}
+		b.WriteString("\nThe remediation phase MUST NOT revert these commits. Build on the existing\n")
+		b.WriteString("changes and address only the unresolved findings listed above.\n\n")
+	}
+
 	b.WriteString("### Instructions\n")
 	b.WriteString("Generate a remediation phase that:\n")
 	b.WriteString("1. Addresses the root cause identified above\n")
@@ -369,6 +395,38 @@ func HealingSummary(attempts map[string]int, results map[string]bool) string {
 		}
 		fmt.Fprintf(&b, "| %s | %d | %s | %s |\n", phaseID, count, remID, outcome)
 	}
+	return b.String()
+}
+
+// HealingContext returns a project-context supplement for remediation phases.
+// The returned block instructs the coder to preserve existing commits and
+// focus on unresolved findings. Returns an empty string when pw is nil or
+// contains no commits.
+func HealingContext(pw *PartialWork) string {
+	if pw == nil || len(pw.CommitSHAs) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("[AUTO-HEALING CONTEXT]\n")
+	b.WriteString("This phase remediates a prior failure. The following commits contain partial\n")
+	b.WriteString("work that you MUST preserve and build upon:\n")
+	for _, sha := range pw.CommitSHAs {
+		fmt.Fprintf(&b, "- %s\n", sha)
+	}
+	if len(pw.FilesTouched) > 0 {
+		b.WriteString("Files already modified: ")
+		b.WriteString(strings.Join(pw.FilesTouched, ", "))
+		b.WriteString("\n")
+	}
+	if len(pw.LastFindings) > 0 {
+		b.WriteString("Unresolved reviewer findings from the failed attempt:\n")
+		for _, f := range pw.LastFindings {
+			fmt.Fprintf(&b, "- %s\n", f)
+		}
+	}
+	b.WriteString("Do NOT revert existing changes. Focus on resolving the listed findings.\n")
+	b.WriteString("[END AUTO-HEALING CONTEXT]\n")
 	return b.String()
 }
 
