@@ -207,6 +207,7 @@ const (
 	PhaseStatusDone       PhaseStatus = "done"
 	PhaseStatusFailed     PhaseStatus = "failed"
 	PhaseStatusSkipped    PhaseStatus = "skipped"
+	// PhaseStatusDecomposed indicates the phase was broken into sub-phases.
 	PhaseStatusDecomposed PhaseStatus = "decomposed"
 )
 

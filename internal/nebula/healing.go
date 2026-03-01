@@ -164,7 +164,7 @@ func AnalyzeFailure(phaseID string, err error, result *PhaseRunnerResult, fctx *
 	// Classify the failure.
 	// Order matters: sentinel errors take precedence over filter-context inspection.
 	// Context cancellation is checked before filter to avoid misclassifying a
-	// cancelled phase that has stale filter fields from a prior cycle.
+	// canceled phase that has stale filter fields from a prior cycle.
 	switch {
 	case isMaxCyclesErr(err):
 		diag.Kind = FailureKindMaxCycles
@@ -184,7 +184,7 @@ func AnalyzeFailure(phaseID string, err error, result *PhaseRunnerResult, fctx *
 	case errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded):
 		diag.Kind = FailureKindUnhealable
 		diag.Healable = false
-		diag.Summary = "phase cancelled or timed out"
+		diag.Summary = "phase canceled or timed out"
 
 	case isFilterFailure(fctx):
 		diag.Kind = FailureKindFilter

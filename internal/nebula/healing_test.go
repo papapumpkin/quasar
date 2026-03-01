@@ -184,7 +184,7 @@ func TestAnalyzeFailure_Unhealable_ContextCanceled(t *testing.T) {
 	if diag.Healable {
 		t.Error("expected healable = false for context.Canceled")
 	}
-	if !strings.Contains(diag.Summary, "cancelled") {
+	if !strings.Contains(diag.Summary, "canceled") {
 		t.Errorf("summary = %q, expected to contain 'cancelled'", diag.Summary)
 	}
 }
@@ -315,7 +315,7 @@ func TestAnalyzeFailure_ContextCanceledWithStaleFilterFields(t *testing.T) {
 	if diag.Healable {
 		t.Error("expected healable = false for context.Canceled even with filter fields populated")
 	}
-	if !strings.Contains(diag.Summary, "cancelled") {
+	if !strings.Contains(diag.Summary, "canceled") {
 		t.Errorf("summary = %q, expected to contain 'cancelled'", diag.Summary)
 	}
 }
@@ -1072,7 +1072,7 @@ func TestHealingSummary_DeterministicOrder(t *testing.T) {
 	idxAlpha := strings.Index(first, "alpha")
 	idxMu := strings.Index(first, "mu")
 	idxZeta := strings.Index(first, "zeta")
-	if !(idxAlpha < idxMu && idxMu < idxZeta) {
+	if idxAlpha >= idxMu || idxMu >= idxZeta {
 		t.Errorf("expected alphabetical order (alpha < mu < zeta), got positions: alpha=%d, mu=%d, zeta=%d", idxAlpha, idxMu, idxZeta)
 	}
 }

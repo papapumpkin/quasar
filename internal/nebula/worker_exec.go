@@ -434,7 +434,6 @@ func (wg *WorkerGroup) decomposePhase(ctx context.Context, phaseID string, resul
 	type beadResult struct {
 		specID string
 		beadID string
-		body   string
 		ok     bool
 	}
 	var beadResults []beadResult
