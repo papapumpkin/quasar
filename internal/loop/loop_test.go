@@ -39,7 +39,7 @@ func (n *noopUI) Info(string)                                       {}
 func (n *noopUI) AgentOutput(string, int, string)                   {}
 func (n *noopUI) BeadUpdate(string, string, string, []ui.BeadChild) {}
 func (n *noopUI) RefactorApplied(string)                            {}
-func (n *noopUI) FindingLifecycle(int, ui.FindingLifecycleData)      {}
+func (n *noopUI) FindingLifecycle(int, ui.FindingLifecycleData)     {}
 func (n *noopUI) HailReceived(ui.HailInfo)                          {}
 func (n *noopUI) HailResolved(string, string)                       {}
 

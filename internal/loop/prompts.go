@@ -32,8 +32,15 @@ func (l *Loop) buildCoderPrompt(state *CycleState) string {
 	} else {
 		fmt.Fprintf(&b, "Task (bead %s): %s\n\n", state.TaskBeadID, state.TaskTitle)
 		b.WriteString("The reviewer found issues with your previous implementation. Please address them:\n\n")
-		for i, f := range state.Findings {
-			fmt.Fprintf(&b, "%d. [%s] %s\n", i+1, f.Severity, f.Description)
+		// Filter out findings already marked as fixed so the coder only
+		// works on unresolved issues.
+		n := 0
+		for _, f := range state.Findings {
+			if f.Status == FindingStatusFixed {
+				continue
+			}
+			n++
+			fmt.Fprintf(&b, "%d. [%s] %s\n", n, f.Severity, f.Description)
 		}
 		b.WriteString("\nFix these issues. Read the relevant files to understand current state before making changes.")
 	}
