@@ -322,6 +322,79 @@ func TestBuildArchitectPrompt(t *testing.T) {
 		}
 	})
 
+	t.Run("generate mode", func(t *testing.T) {
+		t.Parallel()
+
+		analysis := &CodebaseAnalysis{
+			ModulePath: "github.com/example/project",
+			Packages: []PackageSummary{
+				{ImportPath: "github.com/example/project/internal/api", RelativePath: "internal/api"},
+			},
+		}
+
+		genNebula := &Nebula{
+			Manifest: Manifest{
+				Nebula:   Info{Name: "gen-test"},
+				Defaults: Defaults{Type: "task", Priority: 2},
+			},
+		}
+
+		req := ArchitectRequest{
+			Mode:       ArchitectModeGenerate,
+			UserPrompt: "Build a REST API for users",
+			Nebula:     genNebula,
+			Analysis:   analysis,
+		}
+
+		prompt, err := buildArchitectPrompt(req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		checks := []string{
+			"Generate a Complete Nebula",
+			"Build a REST API for users",
+			"Codebase Context",
+			"3-15 focused phases",
+			"PHASE_FILE/END_PHASE_FILE",
+			"scope",
+		}
+		for _, check := range checks {
+			if !strings.Contains(prompt, check) {
+				t.Errorf("prompt missing %q", check)
+			}
+		}
+	})
+
+	t.Run("generate mode without analysis", func(t *testing.T) {
+		t.Parallel()
+
+		genNebula := &Nebula{
+			Manifest: Manifest{
+				Nebula:   Info{Name: "gen-no-analysis"},
+				Defaults: Defaults{Type: "task", Priority: 2},
+			},
+		}
+
+		req := ArchitectRequest{
+			Mode:       ArchitectModeGenerate,
+			UserPrompt: "Add logging everywhere",
+			Nebula:     genNebula,
+		}
+
+		prompt, err := buildArchitectPrompt(req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if strings.Contains(prompt, "Codebase Context") {
+			t.Error("prompt should not include codebase context when analysis is nil")
+		}
+		if !strings.Contains(prompt, "Generate a Complete Nebula") {
+			t.Error("prompt missing generate header")
+		}
+	})
+
 	t.Run("unknown mode", func(t *testing.T) {
 		t.Parallel()
 
