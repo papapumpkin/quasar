@@ -1,12 +1,19 @@
 version = 1
 nebula_name = 'code-reorg'
+total_cost_usd = 2.799879
 
 [phases]
 [phases.consolidate-loop]
 bead_id = 'quasar-pym4'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-02T14:32:38.777286-05:00
-updated_at = 2026-03-02T14:32:43.551378-05:00
+updated_at = 2026-03-02T14:42:12.014247-05:00
+
+[phases.consolidate-loop.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean structural consolidation of finding-related code and sentinel errors into their natural homes; all code faithfully merged with passing build/tests; only pending item is deleting the 7 empty stub files.'
 
 [phases.consolidate-nebula]
 bead_id = 'quasar-9fmj'
@@ -40,9 +47,9 @@ updated_at = 2026-03-02T14:32:43.186449-05:00
 
 [phases.split-loop]
 bead_id = 'quasar-gnah'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-02T14:32:41.008505-05:00
-updated_at = 2026-03-02T14:32:41.008505-05:00
+updated_at = 2026-03-02T14:42:12.029415-05:00
 
 [phases.split-nebula-healing]
 bead_id = 'quasar-e3gx'
