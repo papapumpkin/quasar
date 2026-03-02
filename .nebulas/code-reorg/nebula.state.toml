@@ -1,0 +1,51 @@
+version = 1
+nebula_name = 'code-reorg'
+
+[phases]
+[phases.consolidate-loop]
+bead_id = 'quasar-pym4'
+status = 'in_progress'
+created_at = 2026-03-02T14:32:38.777286-05:00
+updated_at = 2026-03-02T14:32:43.551378-05:00
+
+[phases.consolidate-nebula]
+bead_id = 'quasar-9fmj'
+status = 'created'
+created_at = 2026-03-02T14:32:39.538227-05:00
+updated_at = 2026-03-02T14:32:39.538227-05:00
+
+[phases.consolidate-tui]
+bead_id = 'quasar-7l8n'
+status = 'created'
+created_at = 2026-03-02T14:32:40.291084-05:00
+updated_at = 2026-03-02T14:32:40.291084-05:00
+
+[phases.delete-dead-code]
+bead_id = 'quasar-0dkf'
+status = 'in_progress'
+created_at = 2026-03-02T14:32:38.052247-05:00
+updated_at = 2026-03-02T14:32:43.557298-05:00
+
+[phases.extract-worker-subpackage]
+bead_id = 'quasar-z17b'
+status = 'created'
+created_at = 2026-03-02T14:32:42.459017-05:00
+updated_at = 2026-03-02T14:32:42.459017-05:00
+
+[phases.final-verification]
+bead_id = 'quasar-8ibx'
+status = 'created'
+created_at = 2026-03-02T14:32:43.186449-05:00
+updated_at = 2026-03-02T14:32:43.186449-05:00
+
+[phases.split-loop]
+bead_id = 'quasar-gnah'
+status = 'created'
+created_at = 2026-03-02T14:32:41.008505-05:00
+updated_at = 2026-03-02T14:32:41.008505-05:00
+
+[phases.split-nebula-healing]
+bead_id = 'quasar-e3gx'
+status = 'created'
+created_at = 2026-03-02T14:32:41.715964-05:00
+updated_at = 2026-03-02T14:32:41.715964-05:00

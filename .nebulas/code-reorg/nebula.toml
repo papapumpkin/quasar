@@ -1,0 +1,33 @@
+[nebula]
+name = "code-reorg"
+description = "Reorganize internal/ package structure: delete dead code, consolidate micro-files, split oversized files, and extract nebula/worker sub-package. No behavior changes — all existing tests must continue to pass."
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["refactor", "organization"]
+
+[execution]
+max_workers = 3
+max_review_cycles = 5
+max_budget_usd = 60.0
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Delete dead code (board/, empty placeholders)",
+    "Consolidate tiny related files into their natural parents",
+    "Split oversized files (loop.go, healing.go) into focused units",
+    "Extract internal/nebula/worker/ sub-package for execution-time orchestration",
+    "Resolve naming ambiguities (nebula/config.go vs config/config.go)",
+]
+constraints = [
+    "All existing tests must pass: go test ./...",
+    "No behavior changes — purely structural reorganization",
+    "go vet ./... must pass",
+    "Maintain all existing exported APIs (types may move packages but must remain accessible)",
+    "No circular imports — verify with go build ./...",
+    "Follow Go conventions: goimports applied to all modified files",
+]
