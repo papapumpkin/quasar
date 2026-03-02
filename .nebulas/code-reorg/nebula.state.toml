@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'code-reorg'
-total_cost_usd = 14.063313
+total_cost_usd = 18.85478175
 
 [phases]
 [phases.consolidate-loop]
@@ -23,9 +23,15 @@ updated_at = 2026-03-02T14:54:51.28996-05:00
 
 [phases.consolidate-tui]
 bead_id = 'quasar-7l8n'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-02T14:32:40.291084-05:00
-updated_at = 2026-03-02T14:54:51.289219-05:00
+updated_at = 2026-03-02T15:13:23.323265-05:00
+
+[phases.consolidate-tui.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Empty stub files `logo.go`/`logo_test.go` successfully deleted; all logo code was already merged into `banner.go`/`banner_test.go` — build, vet, and tests pass cleanly.'
 
 [phases.delete-dead-code]
 bead_id = 'quasar-0dkf'
