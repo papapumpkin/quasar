@@ -60,12 +60,12 @@ type Checkpoint struct {
 	ChildBeadIDs  []string `toml:"child_bead_ids"`
 	Refactored    bool     `toml:"refactored"`
 
-	Findings    []CheckpointFinding `toml:"findings"`
-	AllFindings []CheckpointFinding `toml:"all_findings"`
+	Findings    []Finding `toml:"findings"`
+	AllFindings []Finding `toml:"all_findings"`
 }
 
-// CheckpointFinding is the TOML-serializable form of loop.ReviewFinding.
-type CheckpointFinding struct {
+// Finding is the TOML-serializable form of loop.ReviewFinding.
+type Finding struct {
 	ID          string `toml:"id"`
 	Severity    string `toml:"severity"`
 	Description string `toml:"description"`
@@ -155,9 +155,9 @@ func (c *Checkpoint) ToCycleState() *loop.CycleState {
 	return cs
 }
 
-// FindingFromReview converts a single loop.ReviewFinding to CheckpointFinding.
-func FindingFromReview(f loop.ReviewFinding) CheckpointFinding {
-	return CheckpointFinding{
+// FindingFromReview converts a single loop.ReviewFinding to Finding.
+func FindingFromReview(f loop.ReviewFinding) Finding {
+	return Finding{
 		ID:          f.ID,
 		Severity:    f.Severity,
 		Description: f.Description,
@@ -166,8 +166,8 @@ func FindingFromReview(f loop.ReviewFinding) CheckpointFinding {
 	}
 }
 
-// ToReviewFinding converts a CheckpointFinding back to loop.ReviewFinding.
-func (f CheckpointFinding) ToReviewFinding() loop.ReviewFinding {
+// ToReviewFinding converts a Finding back to loop.ReviewFinding.
+func (f Finding) ToReviewFinding() loop.ReviewFinding {
 	return loop.ReviewFinding{
 		ID:          f.ID,
 		Severity:    f.Severity,
@@ -177,20 +177,20 @@ func (f CheckpointFinding) ToReviewFinding() loop.ReviewFinding {
 	}
 }
 
-// findingsFromReview converts a slice of ReviewFinding to CheckpointFinding.
-func findingsFromReview(fs []loop.ReviewFinding) []CheckpointFinding {
+// findingsFromReview converts a slice of ReviewFinding to Finding.
+func findingsFromReview(fs []loop.ReviewFinding) []Finding {
 	if len(fs) == 0 {
 		return nil
 	}
-	out := make([]CheckpointFinding, len(fs))
+	out := make([]Finding, len(fs))
 	for i, f := range fs {
 		out[i] = FindingFromReview(f)
 	}
 	return out
 }
 
-// findingsToReview converts a slice of CheckpointFinding to ReviewFinding.
-func findingsToReview(fs []CheckpointFinding) []loop.ReviewFinding {
+// findingsToReview converts a slice of Finding to ReviewFinding.
+func findingsToReview(fs []Finding) []loop.ReviewFinding {
 	if len(fs) == 0 {
 		return nil
 	}
@@ -204,10 +204,10 @@ func findingsToReview(fs []CheckpointFinding) []loop.ReviewFinding {
 // checkpointPrefix is the common prefix for checkpoint file names.
 const checkpointPrefix = "checkpoint."
 
-// CheckpointPath returns the file path for a checkpoint in the given directory.
+// Path returns the file path for a checkpoint in the given directory.
 // When phaseID is non-empty the file is named checkpoint.<phaseID>.toml;
 // otherwise it is simply checkpoint.toml.
-func CheckpointPath(dir, phaseID string) string {
+func Path(dir, phaseID string) string {
 	if phaseID == "" {
 		return filepath.Join(dir, "checkpoint.toml")
 	}
@@ -223,7 +223,7 @@ func Save(dir string, cp *Checkpoint) error {
 		return fmt.Errorf("marshaling checkpoint: %w", err)
 	}
 
-	path := CheckpointPath(dir, cp.PhaseID)
+	path := Path(dir, cp.PhaseID)
 	tmp := path + ".tmp"
 
 	if err := os.WriteFile(tmp, data, 0644); err != nil {
@@ -241,7 +241,7 @@ func Save(dir string, cp *Checkpoint) error {
 // Load reads a checkpoint file from the given directory for the specified phase.
 // Returns nil, nil if no checkpoint file exists (not an error, just nothing to resume).
 func Load(dir, phaseID string) (*Checkpoint, error) {
-	path := CheckpointPath(dir, phaseID)
+	path := Path(dir, phaseID)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -338,7 +338,7 @@ func Validate(cp *Checkpoint, currentGitSHA string) error {
 // Remove deletes the checkpoint file for the given phase. It returns nil if
 // the file does not exist (already cleaned up).
 func Remove(dir, phaseID string) error {
-	path := CheckpointPath(dir, phaseID)
+	path := Path(dir, phaseID)
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("removing checkpoint %s: %w", path, err)
 	}

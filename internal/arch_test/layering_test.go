@@ -26,7 +26,8 @@ var layers = map[string]int{
 
 	"loop": 3,
 
-	"nebula": 4,
+	"checkpoint": 4,
+	"nebula":     4,
 
 	"ui": 5,
 

@@ -470,7 +470,7 @@ func TestLoad(t *testing.T) {
 			MaxCycles:  5,
 			Phase:      int(loop.PhaseCoding),
 		}
-		writeCheckpointFile(t, CheckpointPath(dir, "build-step"), want)
+		writeCheckpointFile(t, Path(dir, "build-step"), want)
 
 		got, err := Load(dir, "build-step")
 		if err != nil {
@@ -500,7 +500,7 @@ func TestLoad(t *testing.T) {
 			Cycle:   1,
 			Phase:   int(loop.PhaseReviewing),
 		}
-		writeCheckpointFile(t, CheckpointPath(dir, ""), want)
+		writeCheckpointFile(t, Path(dir, ""), want)
 
 		got, err := Load(dir, "")
 		if err != nil {
@@ -517,7 +517,7 @@ func TestLoad(t *testing.T) {
 	t.Run("returns error for corrupt TOML", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		path := CheckpointPath(dir, "corrupt")
+		path := Path(dir, "corrupt")
 		if err := os.WriteFile(path, []byte("{{not valid toml"), 0o644); err != nil {
 			t.Fatalf("write: %v", err)
 		}
@@ -563,9 +563,9 @@ func TestLoadAll(t *testing.T) {
 		cp2 := &Checkpoint{Version: Version, PhaseID: "beta", GitSHA: "sha-b", Cycle: 2, Phase: int(loop.PhaseReviewing)}
 		cp3 := &Checkpoint{Version: Version, GitSHA: "sha-standalone", Cycle: 1, Phase: int(loop.PhaseIdle)}
 
-		writeCheckpointFile(t, CheckpointPath(dir, "alpha"), cp1)
-		writeCheckpointFile(t, CheckpointPath(dir, "beta"), cp2)
-		writeCheckpointFile(t, CheckpointPath(dir, ""), cp3)
+		writeCheckpointFile(t, Path(dir, "alpha"), cp1)
+		writeCheckpointFile(t, Path(dir, "beta"), cp2)
+		writeCheckpointFile(t, Path(dir, ""), cp3)
 
 		// Write a non-checkpoint file to ensure it's skipped.
 		if err := os.WriteFile(filepath.Join(dir, "other.toml"), []byte("x = 1"), 0o644); err != nil {
@@ -722,14 +722,14 @@ func TestRemove(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		cp := &Checkpoint{Version: Version, Cycle: 1, Phase: int(loop.PhaseCoding)}
-		writeCheckpointFile(t, CheckpointPath(dir, "rm-test"), cp)
+		writeCheckpointFile(t, Path(dir, "rm-test"), cp)
 
 		if err := Remove(dir, "rm-test"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
 		// Verify file is gone.
-		if _, err := os.Stat(CheckpointPath(dir, "rm-test")); !errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(Path(dir, "rm-test")); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("expected file to be removed, got err: %v", err)
 		}
 	})
@@ -748,7 +748,7 @@ func TestCheckpointPath(t *testing.T) {
 
 	t.Run("with phase ID", func(t *testing.T) {
 		t.Parallel()
-		got := CheckpointPath("/tmp/nebula", "build-step")
+		got := Path("/tmp/nebula", "build-step")
 		want := filepath.Join("/tmp/nebula", "checkpoint.build-step.toml")
 		if got != want {
 			t.Errorf("got %q, want %q", got, want)
@@ -757,7 +757,7 @@ func TestCheckpointPath(t *testing.T) {
 
 	t.Run("empty phase ID", func(t *testing.T) {
 		t.Parallel()
-		got := CheckpointPath("/tmp/nebula", "")
+		got := Path("/tmp/nebula", "")
 		want := filepath.Join("/tmp/nebula", "checkpoint.toml")
 		if got != want {
 			t.Errorf("got %q, want %q", got, want)

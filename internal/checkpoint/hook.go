@@ -10,12 +10,12 @@ import (
 )
 
 // Compile-time interface compliance check.
-var _ loop.Hook = (*CheckpointHook)(nil)
+var _ loop.Hook = (*Hook)(nil)
 
-// CheckpointHook writes a checkpoint file on significant loop events.
+// Hook writes a checkpoint file on significant loop events.
 // It satisfies the loop.Hook interface. Checkpoint write errors are logged
 // to stderr but do not halt the loop (non-fatal).
-type CheckpointHook struct {
+type Hook struct {
 	Dir        string                  // directory to write checkpoint files
 	PhaseID    string                  // nebula phase ID (may be empty for standalone)
 	NebulaName string                  // nebula name (may be empty for standalone)
@@ -26,7 +26,7 @@ type CheckpointHook struct {
 // OnEvent handles a loop lifecycle event. It writes a checkpoint on
 // EventReviewComplete, EventTaskSuccess, and EventTaskFailed. All other
 // event kinds are ignored. Errors are logged to stderr and do not propagate.
-func (h *CheckpointHook) OnEvent(ctx context.Context, event loop.Event) {
+func (h *Hook) OnEvent(ctx context.Context, event loop.Event) {
 	switch event.Kind {
 	case loop.EventReviewComplete, loop.EventTaskSuccess, loop.EventTaskFailed:
 		// These are the significant transition points worth checkpointing.

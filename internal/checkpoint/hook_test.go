@@ -43,7 +43,7 @@ func TestCheckpointHookWritesOnReviewComplete(t *testing.T) {
 	dir := t.TempDir()
 	state := makeState()
 
-	hook := &CheckpointHook{
+	hook := &Hook{
 		Dir:        dir,
 		PhaseID:    "test-phase",
 		NebulaName: "test-nebula",
@@ -80,7 +80,7 @@ func TestCheckpointHookWritesOnTaskSuccess(t *testing.T) {
 	dir := t.TempDir()
 	state := makeState()
 
-	hook := &CheckpointHook{
+	hook := &Hook{
 		Dir:        dir,
 		PhaseID:    "success-phase",
 		NebulaName: "success-nebula",
@@ -104,7 +104,7 @@ func TestCheckpointHookWritesOnTaskFailed(t *testing.T) {
 	dir := t.TempDir()
 	state := makeState()
 
-	hook := &CheckpointHook{
+	hook := &Hook{
 		Dir:        dir,
 		PhaseID:    "failed-phase",
 		NebulaName: "failed-nebula",
@@ -129,7 +129,7 @@ func TestCheckpointHookSkipsCycleStart(t *testing.T) {
 	dir := t.TempDir()
 	state := makeState()
 
-	hook := &CheckpointHook{
+	hook := &Hook{
 		Dir:        dir,
 		PhaseID:    "skip-phase",
 		NebulaName: "skip-nebula",
@@ -142,7 +142,7 @@ func TestCheckpointHookSkipsCycleStart(t *testing.T) {
 		Cycle: 1,
 	})
 
-	path := CheckpointPath(dir, "skip-phase")
+	path := Path(dir, "skip-phase")
 	if _, err := os.Stat(path); err == nil {
 		t.Error("checkpoint should not be written on EventCycleStart")
 	}
@@ -154,7 +154,7 @@ func TestCheckpointHookSkipsAgentDone(t *testing.T) {
 	dir := t.TempDir()
 	state := makeState()
 
-	hook := &CheckpointHook{
+	hook := &Hook{
 		Dir:        dir,
 		PhaseID:    "agent-done-phase",
 		NebulaName: "agent-done-nebula",
@@ -167,7 +167,7 @@ func TestCheckpointHookSkipsAgentDone(t *testing.T) {
 		Agent: "coder",
 	})
 
-	path := CheckpointPath(dir, "agent-done-phase")
+	path := Path(dir, "agent-done-phase")
 	if _, err := os.Stat(path); err == nil {
 		t.Error("checkpoint should not be written on EventAgentDone")
 	}
@@ -179,7 +179,7 @@ func TestCheckpointHookStandaloneNoPhaseID(t *testing.T) {
 	dir := t.TempDir()
 	state := makeState()
 
-	hook := &CheckpointHook{
+	hook := &Hook{
 		Dir:        dir,
 		PhaseID:    "",
 		NebulaName: "",
@@ -192,7 +192,7 @@ func TestCheckpointHookStandaloneNoPhaseID(t *testing.T) {
 	})
 
 	// Standalone checkpoint has no phase ID → checkpoint.toml
-	path := CheckpointPath(dir, "")
+	path := Path(dir, "")
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("expected checkpoint.toml to exist: %v", err)
 	}
@@ -209,7 +209,7 @@ func TestCheckpointHookNilGitSHAFunc(t *testing.T) {
 	dir := t.TempDir()
 	state := makeState()
 
-	hook := &CheckpointHook{
+	hook := &Hook{
 		Dir:        dir,
 		PhaseID:    "nil-sha",
 		NebulaName: "nil-sha-nebula",
@@ -232,7 +232,7 @@ func TestCheckpointHookNilStateFuncLogsAndSkips(t *testing.T) {
 
 	dir := t.TempDir()
 
-	hook := &CheckpointHook{
+	hook := &Hook{
 		Dir:        dir,
 		PhaseID:    "nil-statefunc",
 		NebulaName: "nil-statefunc-nebula",
@@ -245,7 +245,7 @@ func TestCheckpointHookNilStateFuncLogsAndSkips(t *testing.T) {
 		Kind: loop.EventTaskSuccess,
 	})
 
-	path := CheckpointPath(dir, "nil-statefunc")
+	path := Path(dir, "nil-statefunc")
 	if _, err := os.Stat(path); err == nil {
 		t.Error("checkpoint should not be written when StateFunc is nil")
 	}
@@ -256,7 +256,7 @@ func TestCheckpointHookNilStateLogsAndSkips(t *testing.T) {
 
 	dir := t.TempDir()
 
-	hook := &CheckpointHook{
+	hook := &Hook{
 		Dir:        dir,
 		PhaseID:    "nil-state",
 		NebulaName: "nil-state-nebula",
@@ -269,7 +269,7 @@ func TestCheckpointHookNilStateLogsAndSkips(t *testing.T) {
 		Kind: loop.EventTaskSuccess,
 	})
 
-	path := CheckpointPath(dir, "nil-state")
+	path := Path(dir, "nil-state")
 	if _, err := os.Stat(path); err == nil {
 		t.Error("checkpoint should not be written when StateFunc returns nil")
 	}
@@ -279,7 +279,7 @@ func TestCheckpointHookNilStateLogsAndSkips(t *testing.T) {
 func loadCheckpoint(t *testing.T, dir, phaseID string) *Checkpoint {
 	t.Helper()
 
-	path := CheckpointPath(dir, phaseID)
+	path := Path(dir, phaseID)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("reading checkpoint: %v", err)
@@ -305,7 +305,7 @@ func TestSaveAtomicWrite(t *testing.T) {
 	}
 
 	// Verify the file exists and no .tmp file remains.
-	path := CheckpointPath(dir, "atomic-phase")
+	path := Path(dir, "atomic-phase")
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("checkpoint file should exist: %v", err)
 	}
@@ -362,19 +362,19 @@ func TestSaveOverwritesExistingCheckpoint(t *testing.T) {
 func TestCheckpointPathWithPhaseID(t *testing.T) {
 	t.Parallel()
 
-	got := CheckpointPath("/tmp/dir", "my-phase")
+	got := Path("/tmp/dir", "my-phase")
 	want := filepath.Join("/tmp/dir", "checkpoint.my-phase.toml")
 	if got != want {
-		t.Errorf("CheckpointPath = %q, want %q", got, want)
+		t.Errorf("Path = %q, want %q", got, want)
 	}
 }
 
 func TestCheckpointPathWithoutPhaseID(t *testing.T) {
 	t.Parallel()
 
-	got := CheckpointPath("/tmp/dir", "")
+	got := Path("/tmp/dir", "")
 	want := filepath.Join("/tmp/dir", "checkpoint.toml")
 	if got != want {
-		t.Errorf("CheckpointPath = %q, want %q", got, want)
+		t.Errorf("Path = %q, want %q", got, want)
 	}
 }
