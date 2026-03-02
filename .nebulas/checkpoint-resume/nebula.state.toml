@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'checkpoint-resume'
-total_cost_usd = 12.257211999999999
+total_cost_usd = 19.136332
 
 [phases]
 [phases.checkpoint-format]
@@ -65,6 +65,12 @@ summary = 'Minimal test data fix (5 strings: "APPROVED" → "APPROVED: ...") to 
 
 [phases.nebula-resume]
 bead_id = 'quasar-r5ee'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-01T22:55:07.869099-05:00
-updated_at = 2026-03-02T13:10:04.458985-05:00
+updated_at = 2026-03-02T13:33:14.68673-05:00
+
+[phases.nebula-resume.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Extracted `resumeOptions` helper to fix missing checkpoint/resume support in chained nebula execution — clean, minimal fix with correct directory propagation at both call sites.'
