@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'code-reorg'
-total_cost_usd = 18.85478175
+total_cost_usd = 35.68527175
 
 [phases]
 [phases.consolidate-loop]
@@ -17,9 +17,15 @@ summary = 'Clean structural consolidation of finding-related code and sentinel e
 
 [phases.consolidate-nebula]
 bead_id = 'quasar-9fmj'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-02T14:32:39.538227-05:00
-updated_at = 2026-03-02T14:54:51.28996-05:00
+updated_at = 2026-03-02T15:42:40.104377-05:00
+
+[phases.consolidate-nebula.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'All 7 file consolidation/rename operations correctly performed with clean merges, passing tests, and proper size exceptions; only the sandbox-limited `git rm` of 11 stub files remains for the user to execute.'
 
 [phases.consolidate-tui]
 bead_id = 'quasar-7l8n'
@@ -47,9 +53,9 @@ summary = 'Correct deletion of 15 dead/empty stub files with no live references;
 
 [phases.extract-worker-subpackage]
 bead_id = 'quasar-z17b'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-02T14:32:42.459017-05:00
-updated_at = 2026-03-02T14:32:42.459017-05:00
+updated_at = 2026-03-02T15:42:40.128763-05:00
 
 [phases.final-verification]
 bead_id = 'quasar-8ibx'
