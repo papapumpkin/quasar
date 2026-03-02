@@ -258,4 +258,3 @@ func ValidateHotAdd(phase PhaseSpec, existingIDs map[string]bool, d *dag.DAG) []
 func rollbackHotAdd(d *dag.DAG, phase PhaseSpec) {
 	_ = d.Remove(phase.ID)
 }
-

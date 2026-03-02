@@ -327,4 +327,3 @@ func unslugify(id string) string {
 	}
 	return strings.Join(words, " ")
 }
-
