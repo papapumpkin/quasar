@@ -21,20 +21,21 @@ type Checkpoint struct {
 	GitSHA     string    `toml:"git_sha"`     // HEAD at checkpoint time
 
 	// CycleState fields (mirrored from loop.CycleState).
-	TaskBeadID    string  `toml:"task_bead_id"`
-	TaskTitle     string  `toml:"task_title"`
-	Cycle         int     `toml:"cycle"`
-	MaxCycles     int     `toml:"max_cycles"`
-	Phase         int     `toml:"phase"` // loop.Phase as int
-	TotalCostUSD  float64 `toml:"total_cost_usd"`
-	MaxBudgetUSD  float64 `toml:"max_budget_usd"`
-	CoderOutput   string  `toml:"coder_output"`
-	ReviewOutput  string  `toml:"review_output"`
-	LintOutput    string  `toml:"lint_output"`
-	BaseCommitSHA string  `toml:"base_commit_sha"`
+	TaskBeadID    string   `toml:"task_bead_id"`
+	TaskTitle     string   `toml:"task_title"`
+	Cycle         int      `toml:"cycle"`
+	MaxCycles     int      `toml:"max_cycles"`
+	Phase         int      `toml:"phase"` // loop.Phase as int
+	TotalCostUSD  float64  `toml:"total_cost_usd"`
+	MaxBudgetUSD  float64  `toml:"max_budget_usd"`
+	CoderOutput   string   `toml:"coder_output"`
+	ReviewOutput  string   `toml:"review_output"`
+	LintOutput    string   `toml:"lint_output"`
+	BaseCommitSHA string   `toml:"base_commit_sha"`
 	CycleCommits  []string `toml:"cycle_commits"`
+	FilterHistory []string `toml:"filter_history"` // accumulated FilterCheckName per cycle (index = cycle-1)
 	ChildBeadIDs  []string `toml:"child_bead_ids"`
-	Refactored    bool    `toml:"refactored"`
+	Refactored    bool     `toml:"refactored"`
 
 	Findings    []CheckpointFinding `toml:"findings"`
 	AllFindings []CheckpointFinding `toml:"all_findings"`
@@ -78,6 +79,10 @@ func FromCycleState(cs *loop.CycleState, phaseID, nebulaName, gitSHA string) *Ch
 		cp.CycleCommits = make([]string, len(cs.CycleCommits))
 		copy(cp.CycleCommits, cs.CycleCommits)
 	}
+	if len(cs.FilterHistory) > 0 {
+		cp.FilterHistory = make([]string, len(cs.FilterHistory))
+		copy(cp.FilterHistory, cs.FilterHistory)
+	}
 	if len(cs.ChildBeadIDs) > 0 {
 		cp.ChildBeadIDs = make([]string, len(cs.ChildBeadIDs))
 		copy(cp.ChildBeadIDs, cs.ChildBeadIDs)
@@ -111,6 +116,10 @@ func (c *Checkpoint) ToCycleState() *loop.CycleState {
 	if len(c.CycleCommits) > 0 {
 		cs.CycleCommits = make([]string, len(c.CycleCommits))
 		copy(cs.CycleCommits, c.CycleCommits)
+	}
+	if len(c.FilterHistory) > 0 {
+		cs.FilterHistory = make([]string, len(c.FilterHistory))
+		copy(cs.FilterHistory, c.FilterHistory)
 	}
 	if len(c.ChildBeadIDs) > 0 {
 		cs.ChildBeadIDs = make([]string, len(c.ChildBeadIDs))

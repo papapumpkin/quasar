@@ -66,6 +66,7 @@ func TestFromCycleStateToCycleStateRoundTrip(t *testing.T) {
 				},
 				BaseCommitSHA: "abc123",
 				CycleCommits:  []string{"commit1"},
+				FilterHistory: []string{"check-lint"},
 				ChildBeadIDs:  []string{"child-1", "child-2"},
 				Refactored:    true,
 			},
@@ -88,6 +89,7 @@ func TestFromCycleStateToCycleStateRoundTrip(t *testing.T) {
 				LintOutput:    "all clear",
 				BaseCommitSHA: "aaa111",
 				CycleCommits:  []string{"commit-a", "commit-b", "commit-c"},
+				FilterHistory: []string{"", "check-lint", "check-lint"},
 				ChildBeadIDs:  []string{},
 				Findings:      nil,
 				AllFindings: []loop.ReviewFinding{
@@ -162,6 +164,7 @@ func TestTOMLRoundTrip(t *testing.T) {
 		LintOutput:    "",
 		BaseCommitSHA: "sha-toml",
 		CycleCommits:  []string{"c1", "c2"},
+		FilterHistory: []string{"check-build"},
 		ChildBeadIDs:  []string{"child-toml"},
 		Findings: []loop.ReviewFinding{
 			{
@@ -295,8 +298,9 @@ func TestFromCycleStateSliceIsolation(t *testing.T) {
 	t.Parallel()
 
 	cs := &loop.CycleState{
-		CycleCommits: []string{"c1", "c2"},
-		ChildBeadIDs: []string{"b1"},
+		CycleCommits:  []string{"c1", "c2"},
+		FilterHistory: []string{"check-lint", "check-build"},
+		ChildBeadIDs:  []string{"b1"},
 		Findings: []loop.ReviewFinding{
 			{ID: "f1", Severity: "high", Description: "issue", Cycle: 1, Status: loop.FindingStatusFound},
 		},
@@ -306,11 +310,15 @@ func TestFromCycleStateSliceIsolation(t *testing.T) {
 
 	// Mutate originals — checkpoint should not be affected.
 	cs.CycleCommits[0] = "MUTATED"
+	cs.FilterHistory[0] = "MUTATED"
 	cs.ChildBeadIDs[0] = "MUTATED"
 	cs.Findings[0].Description = "MUTATED"
 
 	if cp.CycleCommits[0] == "MUTATED" {
 		t.Error("CycleCommits should be isolated from source")
+	}
+	if cp.FilterHistory[0] == "MUTATED" {
+		t.Error("FilterHistory should be isolated from source")
 	}
 	if cp.ChildBeadIDs[0] == "MUTATED" {
 		t.Error("ChildBeadIDs should be isolated from source")
@@ -364,6 +372,7 @@ func assertCycleStateEqual(t *testing.T, want, got *loop.CycleState) {
 
 	// Compare slices.
 	assertStringSliceEqual(t, "CycleCommits", want.CycleCommits, got.CycleCommits)
+	assertStringSliceEqual(t, "FilterHistory", want.FilterHistory, got.FilterHistory)
 	assertStringSliceEqual(t, "ChildBeadIDs", want.ChildBeadIDs, got.ChildBeadIDs)
 	assertFindingsEqual(t, "Findings", want.Findings, got.Findings)
 	assertFindingsEqual(t, "AllFindings", want.AllFindings, got.AllFindings)
