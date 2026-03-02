@@ -46,8 +46,8 @@ var lineCountExceptions = map[string]int{
 	"internal/nebula/worker_exec.go": 489,  // TODO: decompose worker execution
 	"internal/nebula/healing.go":     467,  // TODO: decompose healing logic
 	"internal/nebula/architect.go":   409,  // TODO: decompose architect
-	"internal/nebula/validate.go":   458,  // absorbed scope.go (scope overlap helpers)
-	"internal/nebula/correct.go":    435,  // absorbed retry.go (retry-with-feedback logic)
+	"internal/nebula/validate.go":    458,  // absorbed scope.go (scope overlap helpers)
+	"internal/nebula/correct.go":     435,  // absorbed retry.go (retry-with-feedback logic)
 }
 
 // allGoFilesIn returns all .go files (including test files) in the given directory,
