@@ -38,7 +38,16 @@ func (wg *WorkerGroup) executePhase(ctx context.Context, phaseID string, waveNum
 
 	exec := ResolveExecution(wg.GlobalCycles, wg.GlobalBudget, wg.GlobalModel, &wg.Nebula.Manifest.Execution, phase, wg.routingCtx)
 	prompt := buildPhasePrompt(phase, &wg.Nebula.Manifest.Context)
-	phaseResult, err := wg.Runner.RunExistingPhase(ctx, phaseID, ps.BeadID, phase.Title, prompt, exec)
+
+	// When resume is enabled, attempt to load a checkpoint and route through
+	// RunFromCheckpoint instead of starting a fresh loop.
+	var phaseResult *PhaseRunnerResult
+	var err error
+	if cp := wg.tryLoadCheckpoint(ctx, phaseID); cp != nil {
+		phaseResult, err = wg.Runner.RunFromCheckpoint(ctx, cp, phaseID, ps.BeadID, phase.Title, prompt, exec)
+	} else {
+		phaseResult, err = wg.Runner.RunExistingPhase(ctx, phaseID, ps.BeadID, phase.Title, prompt, exec)
+	}
 
 	if phaseResult != nil {
 		wg.progress.RecordPhaseComplete(phaseID, *phaseResult)
@@ -498,4 +507,61 @@ func (wg *WorkerGroup) decomposePhase(ctx context.Context, phaseID string, resul
 	fmt.Fprintf(wg.logger(), "phase %q decomposed into %d sub-phases: %s\n", phaseID, len(subIDs), strings.Join(subIDs, ", "))
 
 	return subIDs, nil
+}
+
+// tryLoadCheckpoint attempts to load and validate a checkpoint for the given
+// phase. Returns the opaque checkpoint data if valid, or nil if no checkpoint
+// exists, validation fails, or resume is not enabled.
+//
+// When the phase is already done or failed (stale checkpoint), the checkpoint
+// file is removed and nil is returned.
+func (wg *WorkerGroup) tryLoadCheckpoint(ctx context.Context, phaseID string) any {
+	if !wg.ResumeEnabled || wg.CheckpointDir == "" || wg.CheckpointLoader == nil {
+		return nil
+	}
+
+	// Check phase state — only in-progress phases are candidates for resume.
+	// Done or failed phases have stale checkpoints that should be cleaned up.
+	ps := wg.State.Phases[phaseID]
+	if ps != nil && (ps.Status == PhaseStatusDone || ps.Status == PhaseStatusFailed) {
+		wg.removeCheckpoint(phaseID)
+		return nil
+	}
+
+	cp, err := wg.CheckpointLoader(wg.CheckpointDir, phaseID)
+	if err != nil {
+		fmt.Fprintf(wg.logger(), "warning: failed to load checkpoint for %q: %v\n", phaseID, err)
+		return nil
+	}
+	if cp == nil {
+		return nil // no checkpoint exists
+	}
+
+	// Validate the checkpoint against the current git SHA.
+	if wg.CheckpointValidator != nil && wg.GitSHAFunc != nil {
+		gitSHA, shaErr := wg.GitSHAFunc(ctx)
+		if shaErr != nil {
+			fmt.Fprintf(wg.logger(), "warning: failed to get git SHA for checkpoint validation of %q: %v\n", phaseID, shaErr)
+			wg.removeCheckpoint(phaseID)
+			return nil
+		}
+		if valErr := wg.CheckpointValidator(cp, gitSHA); valErr != nil {
+			fmt.Fprintf(wg.logger(), "warning: checkpoint for %q is invalid, starting fresh: %v\n", phaseID, valErr)
+			wg.removeCheckpoint(phaseID)
+			return nil
+		}
+	}
+
+	fmt.Fprintf(wg.logger(), "resuming phase %q from checkpoint\n", phaseID)
+	return cp
+}
+
+// removeCheckpoint removes a stale checkpoint file, logging any errors.
+func (wg *WorkerGroup) removeCheckpoint(phaseID string) {
+	if wg.CheckpointRemover == nil || wg.CheckpointDir == "" {
+		return
+	}
+	if err := wg.CheckpointRemover(wg.CheckpointDir, phaseID); err != nil {
+		fmt.Fprintf(wg.logger(), "warning: failed to remove stale checkpoint for %q: %v\n", phaseID, err)
+	}
 }

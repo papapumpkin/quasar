@@ -59,8 +59,12 @@ type WorkerGroup struct {
 	Invoker      agent.Invoker                            // optional; required for auto-decomposition
 	Metrics      *Metrics                                 // optional; nil = no collection
 	Logger        io.Writer // optional; nil = os.Stderr
-	ResumeEnabled bool     // When true, load existing checkpoints to skip completed phases.
-	CheckpointDir string   // Directory for checkpoint files. Empty disables checkpoint load/cleanup.
+	ResumeEnabled    bool                                 // When true, load existing checkpoints to skip completed phases.
+	CheckpointDir    string                               // Directory for checkpoint files. Empty disables checkpoint load/cleanup.
+	CheckpointLoader func(dir, phaseID string) (any, error) // Loads a checkpoint; returns nil, nil if not found. Set from cmd/ to avoid import cycles.
+	CheckpointValidator func(cp any, gitSHA string) error    // Validates a loaded checkpoint. Set from cmd/.
+	CheckpointRemover   func(dir, phaseID string) error      // Removes a stale checkpoint file. Set from cmd/.
+	GitSHAFunc          func(ctx context.Context) (string, error) // Returns current HEAD SHA for checkpoint validation.
 
 	mu          sync.Mutex
 	outputMu    sync.Mutex // serializes checkpoint + dashboard output in watch mode

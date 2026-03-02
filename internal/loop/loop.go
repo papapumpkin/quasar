@@ -47,6 +47,11 @@ type Loop struct {
 	HailTimeout       time.Duration    // Auto-resolve timeout for hails. 0 disables auto-resolution.
 	StruggleConfig    StruggleConfig   // Optional; zero value disables struggle detection.
 	CheckpointDir     string           // Directory for checkpoint files. Empty disables checkpointing.
+	// NewCheckpointHook, when non-nil, is called by RunTask and RunExistingTask
+	// to create a checkpoint hook that is prepended to Hooks. The function
+	// receives a state accessor (returning the current *CycleState) and must
+	// return a Hook. This avoids a circular import between loop and checkpoint.
+	NewCheckpointHook func(stateFunc func() *CycleState) Hook
 
 	// cachedCoderSystemPrompt is the pre-computed system prompt for the coder
 	// agent, built once at phase start via cacheSystemPrompts. It contains only
@@ -101,6 +106,239 @@ func (l *Loop) RunExistingTask(ctx context.Context, beadID, taskDescription stri
 	return l.runLoop(ctx, beadID, taskDescription)
 }
 
+// RunFromCheckpoint resumes a coder-reviewer loop from a previously saved
+// checkpoint. The caller is responsible for loading, validating, and converting
+// the checkpoint to a CycleState (via checkpoint.ToCycleState) before calling
+// this method. The checkpointPhase determines where to resume:
+//   - PhaseReviewComplete or PhaseApproved: the completed cycle's results are
+//     already captured, so the loop advances to cycle N+1.
+//   - PhaseCoding, PhaseReviewing, or any other in-progress phase: the current
+//     cycle is restarted from the beginning (agent output may be incomplete).
+//
+// On successful task completion, cleanup is called to remove the checkpoint
+// file. If cleanup is nil it is skipped.
+func (l *Loop) RunFromCheckpoint(ctx context.Context, cs *CycleState, checkpointPhase Phase, cleanup CheckpointCleanupFunc) (*TaskResult, error) {
+	// Determine the resume cycle based on the checkpoint's phase.
+	resumeCycle := cs.Cycle
+	switch checkpointPhase {
+	case PhaseReviewComplete, PhaseApproved:
+		// Completed cycle — advance to the next one.
+		resumeCycle = cs.Cycle + 1
+	default:
+		// In-progress phase — restart the same cycle. Clear potentially
+		// incomplete agent output so the coder starts fresh.
+		cs.CoderOutput = ""
+		cs.ReviewOutput = ""
+		cs.LintOutput = ""
+		cs.Findings = nil
+		cs.Verifications = nil
+	}
+	cs.Cycle = resumeCycle
+
+	// Emit a resume event so hooks/TUI can indicate we're resuming.
+	l.emit(ctx, Event{
+		Kind:    EventResumed,
+		BeadID:  cs.TaskBeadID,
+		Cycle:   resumeCycle,
+		Message: "resumed from checkpoint",
+	})
+
+	result, err := l.resumeLoop(ctx, cs)
+	if err != nil {
+		return result, err
+	}
+
+	// Successful completion — remove the checkpoint.
+	if cleanup != nil {
+		if cleanupErr := cleanup(); cleanupErr != nil {
+			l.UI.Error(fmt.Sprintf("failed to remove checkpoint: %v", cleanupErr))
+		}
+	}
+
+	return result, nil
+}
+
+// resumeLoop enters the coder-reviewer loop with a pre-populated CycleState,
+// starting from cs.Cycle. It shares the core logic with runLoop but skips
+// the initial state creation (already done by the caller).
+//
+// NOTE: The cycle body is intentionally duplicated from runLoop rather than
+// extracted into a shared helper. Extracting would require threading many
+// local variables (perAgentBudget, etc.) through parameters, adding complexity
+// with limited benefit. If the cycle body evolves significantly, consider
+// extracting a shared cycleBody method.
+func (l *Loop) resumeLoop(ctx context.Context, cs *CycleState) (*TaskResult, error) {
+	if l.CacheOptimization {
+		l.cacheSystemPrompts()
+	}
+
+	// Auto-wire checkpoint hook for resumed loops too.
+	l.wireCheckpointHook(func() *CycleState { return cs })
+
+	perAgentBudget := l.perAgentBudget()
+	l.UI.TaskStarted(cs.TaskBeadID, cs.TaskTitle)
+	l.emitBeadUpdate(cs, "in_progress")
+
+	for cycle := cs.Cycle; cycle <= l.MaxCycles; cycle++ {
+		cs.Cycle = cycle
+		cs.FilterFixedThisCycle = false
+		cs.CycleFilterFixAttempts = 0
+		cs.CycleFilterFixCostUSD = 0
+		l.UI.CycleStart(cycle, l.MaxCycles)
+
+		if err := l.runCoderPhase(ctx, cs, perAgentBudget); err != nil {
+			return nil, err
+		}
+		if err := l.checkBudget(ctx, cs); err != nil {
+			return nil, err
+		}
+
+		if err := l.runLintFixLoop(ctx, cs, perAgentBudget); err != nil {
+			return nil, err
+		}
+
+		if l.Filter != nil {
+			failed, err := l.runFilterChecks(ctx, cs)
+			if err != nil {
+				return nil, err
+			}
+			if failed {
+				fixed, err := l.runFilterFixLoop(ctx, cs, cs.FilterCheckName, cs.FilterOutput)
+				if err != nil {
+					return nil, err
+				}
+				if !fixed {
+					cs.FilterHistory = append(cs.FilterHistory, cs.FilterCheckName)
+					l.sealCycleSHA(cs)
+					l.drainRefactor(cs)
+					l.emit(ctx, Event{Kind: EventCycleStart, BeadID: cs.TaskBeadID, Cycle: cycle})
+					continue
+				}
+				cs.FilterFixedThisCycle = true
+				var revalResult *filter.Result
+				var revalErr error
+				if chain, ok := l.Filter.(*filter.Chain); ok {
+					revalResult, revalErr = chain.RunFrom(ctx, l.WorkDir, cs.FilterCheckName)
+				} else {
+					revalResult, revalErr = l.Filter.Run(ctx, l.WorkDir)
+				}
+				if revalErr != nil {
+					return nil, fmt.Errorf("filter re-validation failed: %w", revalErr)
+				}
+				if !revalResult.Passed {
+					revalFail := revalResult.FirstFailure()
+					cs.FilterOutput = revalFail.Output
+					cs.FilterCheckName = revalFail.Name
+					cs.FilterHistory = append(cs.FilterHistory, cs.FilterCheckName)
+					l.sealCycleSHA(cs)
+					l.drainRefactor(cs)
+					l.emit(ctx, Event{Kind: EventCycleStart, BeadID: cs.TaskBeadID, Cycle: cycle})
+					continue
+				}
+				if len(cs.AllFindings) > 0 {
+					cs.AllFindings = cs.AllFindings[:len(cs.AllFindings)-1]
+				}
+				cs.Findings = nil
+				cs.FilterOutput = ""
+				cs.FilterCheckName = ""
+				cs.FilterFixAttempts = 0
+			}
+		}
+
+		if err := l.runReviewerPhase(ctx, cs, perAgentBudget); err != nil {
+			return nil, err
+		}
+		if err := l.checkBudget(ctx, cs); err != nil {
+			return nil, err
+		}
+
+		if len(cs.Verifications) > 0 {
+			summary := ApplyVerifications(cs.AllFindings, cs.Verifications)
+			l.UI.FindingLifecycle(cs.Cycle, ui.FindingLifecycleData{
+				Fixed:        summary.Fixed,
+				StillPresent: summary.StillPresent,
+				Regressed:    summary.Regressed,
+			})
+		}
+
+		l.extractAndPostHails(ctx, cs)
+
+		if isApproved(cs.ReviewOutput) {
+			return l.handleApproval(ctx, cs)
+		}
+
+		cs.FilterHistory = append(cs.FilterHistory, cs.FilterCheckName)
+		l.sealCycleSHA(cs)
+		l.drainRefactor(cs)
+
+		l.UI.IssuesFound(len(cs.Findings))
+		cs.Phase = PhaseResolvingIssues
+		for i := range cs.Findings {
+			cs.Findings[i].Cycle = cs.Cycle
+		}
+		newChildIDs := l.createFindingBeads(ctx, cs)
+		cs.ChildBeadIDs = append(cs.ChildBeadIDs, newChildIDs...)
+		cs.AllFindings = append(cs.AllFindings, cs.Findings...)
+		l.emitBeadUpdate(cs, "in_progress")
+
+		if l.StruggleConfig.Enabled {
+			signal := EvaluateStruggle(cs, l.StruggleConfig)
+			if signal.Triggered {
+				l.emit(ctx, Event{
+					Kind:    EventStruggleDetected,
+					BeadID:  cs.TaskBeadID,
+					Cycle:   cycle,
+					Message: signal.Reason,
+				})
+				return &TaskResult{
+					TotalCostUSD:     cs.TotalCostUSD,
+					CyclesUsed:       cs.Cycle,
+					BaseCommitSHA:    cs.BaseCommitSHA,
+					FinalCommitSHA:   l.finalCommitSHA(ctx, cs),
+					CycleCommits:     cs.CycleCommits,
+					Decompose:        true,
+					StruggleReason:   signal.Reason,
+					AllFindings:      cs.AllFindings,
+					CacheHitCount:    cs.cacheHitCount,
+					CacheMissCount:   cs.cacheMissCount,
+					TotalCachedBytes: cs.totalCachedBytes,
+				}, nil
+			}
+		}
+
+		l.emit(ctx, Event{Kind: EventCycleStart, BeadID: cs.TaskBeadID, Cycle: cycle})
+	}
+
+	l.UI.MaxCyclesReached(l.MaxCycles)
+	l.postMaxCyclesHail(cs)
+	l.emit(ctx, Event{
+		Kind:    EventTaskFailed,
+		BeadID:  cs.TaskBeadID,
+		Message: fmt.Sprintf("Max cycles reached (%d). Manual review recommended.", l.MaxCycles),
+	})
+	return &TaskResult{
+		TotalCostUSD:     cs.TotalCostUSD,
+		CyclesUsed:       cs.Cycle,
+		BaseCommitSHA:    cs.BaseCommitSHA,
+		FinalCommitSHA:   l.finalCommitSHA(ctx, cs),
+		CycleCommits:     cs.CycleCommits,
+		CacheHitCount:    cs.cacheHitCount,
+		CacheMissCount:   cs.cacheMissCount,
+		TotalCachedBytes: cs.totalCachedBytes,
+	}, ErrMaxCycles
+}
+
+// wireCheckpointHook prepends a checkpoint hook to l.Hooks when both
+// CheckpointDir is set and NewCheckpointHook is provided. This is a no-op
+// when either condition is false, preserving existing behavior.
+func (l *Loop) wireCheckpointHook(stateFunc func() *CycleState) {
+	if l.CheckpointDir == "" || l.NewCheckpointHook == nil {
+		return
+	}
+	hook := l.NewCheckpointHook(stateFunc)
+	l.Hooks = append([]Hook{hook}, l.Hooks...)
+}
+
 // GenerateCheckpoint asks the coder to summarize its current progress for resumption.
 func (l *Loop) GenerateCheckpoint(ctx context.Context, beadID, taskDescription string) (string, error) {
 	a := agent.Agent{
@@ -146,6 +384,11 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 
 	perAgentBudget := l.perAgentBudget()
 	state := l.initCycleState(ctx, beadID, taskDescription)
+
+	// Auto-wire checkpoint hook when CheckpointDir is set and a factory
+	// is provided. The hook is prepended so it runs before other hooks.
+	l.wireCheckpointHook(func() *CycleState { return state })
+
 	l.emitBeadUpdate(state, "in_progress")
 
 	for cycle := 1; cycle <= l.MaxCycles; cycle++ {

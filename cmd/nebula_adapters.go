@@ -14,6 +14,7 @@ import (
 
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/checkpoint"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/loop"
 	"github.com/papapumpkin/quasar/internal/nebula"
@@ -61,6 +62,48 @@ func (a *loopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDescr
 	return a.loop.GenerateCheckpoint(ctx, beadID, phaseDescription)
 }
 
+func (a *loopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData any, phaseID, beadID, phaseTitle, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
+	cp, ok := checkpointData.(*checkpoint.Checkpoint)
+	if !ok {
+		return nil, fmt.Errorf("invalid checkpoint data type for phase %s: expected *checkpoint.Checkpoint", phaseID)
+	}
+
+	// Apply per-phase execution overrides to the loop.
+	if exec.MaxReviewCycles > 0 {
+		a.loop.MaxCycles = exec.MaxReviewCycles
+	}
+	if exec.MaxBudgetUSD > 0 {
+		a.loop.MaxBudgetUSD = exec.MaxBudgetUSD
+	}
+	if exec.Model != "" {
+		a.loop.Model = exec.Model
+	}
+	a.loop.CommitSummary = phaseTitle
+
+	if exec.AutoDecompose {
+		cfg := loop.DefaultStruggleConfig()
+		cfg.Enabled = true
+		a.loop.StruggleConfig = cfg
+	} else {
+		a.loop.StruggleConfig = loop.StruggleConfig{}
+	}
+
+	// Restore cycle state from checkpoint and resume.
+	cycleState := cp.ToCycleState()
+	checkpointPhase := loop.Phase(cp.Phase)
+	cleanup := func() error {
+		return checkpoint.Remove(a.loop.CheckpointDir, phaseID)
+	}
+	result, err := a.loop.RunFromCheckpoint(ctx, cycleState, checkpointPhase, cleanup)
+	if err != nil {
+		if result != nil {
+			return toPhaseRunnerResult(result), err
+		}
+		return nil, err
+	}
+	return toPhaseRunnerResult(result), nil
+}
+
 // tuiLoopAdapter creates a fresh loop per phase with a phase-specific PhaseUIBridge.
 // This ensures each nebula phase sends UI messages tagged with its phase ID,
 // enabling the TUI to track per-phase cycle timelines independently.
@@ -79,6 +122,7 @@ type tuiLoopAdapter struct {
 	fabric           fabric.Fabric // nil when fabric is not configured
 	projectContext   string        // Deterministic project snapshot for prompt caching.
 	maxContextTokens int           // Token budget for context injection. 0 = use default.
+	checkpointDir    string        // Directory for checkpoint files. Empty disables checkpointing.
 }
 
 func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, phaseTitle, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
@@ -103,6 +147,7 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 		ProjectContext:    a.projectContext,
 		MaxContextTokens:  a.maxContextTokens,
 		CacheOptimization: true,
+		CheckpointDir:     a.checkpointDir,
 	}
 
 	// Apply per-phase execution overrides.
@@ -153,6 +198,71 @@ func (a *tuiLoopAdapter) emitFabricEvents(ctx context.Context, phaseID string, p
 			phaseUI.DiscoveryPosted(d)
 		}
 	}
+}
+
+func (a *tuiLoopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData any, phaseID, beadID, phaseTitle, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
+	cp, ok := checkpointData.(*checkpoint.Checkpoint)
+	if !ok {
+		return nil, fmt.Errorf("invalid checkpoint data type for phase %s: expected *checkpoint.Checkpoint", phaseID)
+	}
+
+	phaseUI := tui.NewPhaseUIBridge(a.program, phaseID, a.workDir)
+
+	l := &loop.Loop{
+		Invoker:           a.invoker,
+		UI:                phaseUI,
+		Git:               a.git,
+		Hooks:             []loop.Hook{&loop.BeadHook{Beads: a.beads, UI: phaseUI}},
+		Linter:            a.linter,
+		MaxCycles:         a.maxCycles,
+		MaxBudgetUSD:      a.maxBudget,
+		Model:             a.model,
+		CoderPrompt:       a.coderPrompt,
+		ReviewPrompt:      a.reviewPrompt,
+		WorkDir:           a.workDir,
+		CommitSummary:     phaseTitle,
+		Fabric:            a.fabric,
+		FabricEnabled:     a.fabric != nil,
+		ProjectContext:    a.projectContext,
+		MaxContextTokens:  a.maxContextTokens,
+		CacheOptimization: true,
+		CheckpointDir:     a.checkpointDir,
+	}
+
+	// Apply per-phase execution overrides.
+	if exec.MaxReviewCycles > 0 {
+		l.MaxCycles = exec.MaxReviewCycles
+	}
+	if exec.MaxBudgetUSD > 0 {
+		l.MaxBudgetUSD = exec.MaxBudgetUSD
+	}
+	if exec.Model != "" {
+		l.Model = exec.Model
+	}
+
+	if exec.AutoDecompose {
+		cfg := loop.DefaultStruggleConfig()
+		cfg.Enabled = true
+		l.StruggleConfig = cfg
+	}
+
+	cycleState := cp.ToCycleState()
+	checkpointPhase := loop.Phase(cp.Phase)
+	cleanup := func() error {
+		return checkpoint.Remove(a.checkpointDir, phaseID)
+	}
+	result, err := l.RunFromCheckpoint(ctx, cycleState, checkpointPhase, cleanup)
+
+	// After the loop completes, emit fabric events if fabric is available.
+	a.emitFabricEvents(ctx, phaseID, phaseUI)
+
+	if err != nil {
+		if result != nil {
+			return toPhaseRunnerResult(result), err
+		}
+		return nil, err
+	}
+	return toPhaseRunnerResult(result), nil
 }
 
 func (a *tuiLoopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error) {

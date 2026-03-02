@@ -26,6 +26,11 @@ type PhaseRunnerResult struct {
 type PhaseRunner interface {
 	RunExistingPhase(ctx context.Context, phaseID, beadID, phaseTitle, phaseDescription string, exec ResolvedExecution) (*PhaseRunnerResult, error)
 	GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error)
+	// RunFromCheckpoint resumes a phase from a previously saved checkpoint.
+	// The checkpointData parameter is an opaque *checkpoint.Checkpoint passed
+	// as any to avoid an import cycle (nebula → checkpoint → loop → ui → nebula).
+	// Implementations must type-assert to *checkpoint.Checkpoint.
+	RunFromCheckpoint(ctx context.Context, checkpointData any, phaseID, beadID, phaseTitle, phaseDescription string, exec ResolvedExecution) (*PhaseRunnerResult, error)
 }
 
 // ProgressFunc is called after each phase status change to report progress.
@@ -165,4 +170,34 @@ func WithInvoker(inv agent.Invoker) Option {
 // This is primarily useful for testing.
 func WithHealingPolicy(p HealingPolicy) Option {
 	return func(wg *WorkerGroup) { wg.healingPolicy = p }
+}
+
+// WithResumeEnabled activates checkpoint-based resume, loading existing
+// checkpoints to skip completed phases on startup.
+func WithResumeEnabled(enabled bool) Option {
+	return func(wg *WorkerGroup) { wg.ResumeEnabled = enabled }
+}
+
+// WithCheckpointDir sets the directory for reading and cleaning up checkpoint
+// files. An empty value disables checkpoint load/cleanup.
+func WithCheckpointDir(dir string) Option {
+	return func(wg *WorkerGroup) { wg.CheckpointDir = dir }
+}
+
+// WithCheckpointLoader sets the function used to load checkpoint files.
+// The function should return (nil, nil) when no checkpoint exists for a phase.
+// This indirection avoids an import cycle between nebula and checkpoint.
+func WithCheckpointLoader(fn func(dir, phaseID string) (any, error)) Option {
+	return func(wg *WorkerGroup) { wg.CheckpointLoader = fn }
+}
+
+// WithCheckpointValidator sets the function used to validate a loaded checkpoint.
+// It receives the opaque checkpoint and the current git SHA.
+func WithCheckpointValidator(fn func(cp any, gitSHA string) error) Option {
+	return func(wg *WorkerGroup) { wg.CheckpointValidator = fn }
+}
+
+// WithCheckpointRemover sets the function used to remove stale checkpoint files.
+func WithCheckpointRemover(fn func(dir, phaseID string) error) Option {
+	return func(wg *WorkerGroup) { wg.CheckpointRemover = fn }
 }

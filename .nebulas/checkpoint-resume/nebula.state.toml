@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'checkpoint-resume'
-total_cost_usd = 4.14849375
+total_cost_usd = 7.056668999999999
 
 [phases]
 [phases.checkpoint-format]
@@ -29,9 +29,15 @@ summary = 'Checkpoint loader adds Load, LoadAll, Validate, and Remove functions 
 
 [phases.checkpoint-writer]
 bead_id = 'quasar-62zv'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-01T22:55:05.471423-05:00
-updated_at = 2026-03-01T23:03:13.66135-05:00
+updated_at = 2026-03-01T23:11:34.085668-05:00
+
+[phases.checkpoint-writer.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Single-line nil guard added for `StateFunc` in checkpoint hook, fixing a potential nil pointer dereference while maintaining the established non-fatal error pattern — clean, well-tested fix.'
 
 [phases.cli-flag]
 bead_id = 'quasar-rrn7'

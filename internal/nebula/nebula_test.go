@@ -633,6 +633,16 @@ func (m *mockRunner) GenerateCheckpoint(ctx context.Context, beadID, phaseDescri
 	return "checkpoint summary", nil
 }
 
+func (m *mockRunner) RunFromCheckpoint(ctx context.Context, checkpointData any, phaseID, beadID, phaseTitle, phaseDescription string, exec ResolvedExecution) (*PhaseRunnerResult, error) {
+	m.mu.Lock()
+	m.calls = append(m.calls, beadID)
+	m.mu.Unlock()
+	if m.resultFunc != nil {
+		return m.resultFunc(beadID), m.err
+	}
+	return m.result, m.err
+}
+
 func TestWorkerGroup_ExecutesDependencyOrder(t *testing.T) {
 	n := &Nebula{
 		Dir:      t.TempDir(),
