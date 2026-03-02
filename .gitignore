@@ -30,3 +30,7 @@ Thumbs.db
 # Runtime state (fabric DB, telemetry)
 .quasar/
 **/.quasar/
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
