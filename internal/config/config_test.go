@@ -34,6 +34,10 @@ func TestLoad_Defaults(t *testing.T) {
 		{"CoderSystemPrompt", cfg.CoderSystemPrompt, ""},
 		{"ReviewerSystemPrompt", cfg.ReviewerSystemPrompt, ""},
 		{"Verbose", cfg.Verbose, false},
+		{"CacheOptimization", cfg.CacheOptimization, true},
+		{"CacheVerbose", cfg.CacheVerbose, false},
+		{"ProjectContextPath", cfg.ProjectContextPath, ""},
+		{"MaxContextTokens", cfg.MaxContextTokens, 10000},
 	}
 
 	for _, tt := range tests {
@@ -104,6 +108,34 @@ func TestLoad_EnvOverrides(t *testing.T) {
 			field:  func(c Config) any { return c.Verbose },
 			want:   true,
 		},
+		{
+			name:   "cache_optimization_disabled",
+			envKey: "QUASAR_CACHE_OPTIMIZATION",
+			envVal: "false",
+			field:  func(c Config) any { return c.CacheOptimization },
+			want:   false,
+		},
+		{
+			name:   "cache_verbose",
+			envKey: "QUASAR_CACHE_VERBOSE",
+			envVal: "true",
+			field:  func(c Config) any { return c.CacheVerbose },
+			want:   true,
+		},
+		{
+			name:   "project_context_path",
+			envKey: "QUASAR_PROJECT_CONTEXT_PATH",
+			envVal: "/tmp/my-context.md",
+			field:  func(c Config) any { return c.ProjectContextPath },
+			want:   "/tmp/my-context.md",
+		},
+		{
+			name:   "max_context_tokens",
+			envKey: "QUASAR_MAX_CONTEXT_TOKENS",
+			envVal: "20000",
+			field:  func(c Config) any { return c.MaxContextTokens },
+			want:   20000,
+		},
 	}
 
 	for _, tt := range tests {
@@ -150,5 +182,11 @@ func TestLoad_DefaultsAreNotZero(t *testing.T) {
 	}
 	if cfg.MaxBudgetUSD == 0 {
 		t.Error("MaxBudgetUSD should not be zero")
+	}
+	if !cfg.CacheOptimization {
+		t.Error("CacheOptimization should default to true")
+	}
+	if cfg.MaxContextTokens == 0 {
+		t.Error("MaxContextTokens should not be zero")
 	}
 }

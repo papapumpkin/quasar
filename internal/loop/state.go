@@ -108,4 +108,8 @@ type CycleState struct {
 	CycleFilterFixCostUSD  float64               // filter fix cost for the current cycle; reset at cycle start
 	lastCycleSHA           string                // transient: last commit SHA for the current cycle (sealed into CycleCommits at cycle end)
 	bridgedDiscoveryIDs    map[int64]bool        // tracks fabric discovery IDs already bridged to hails, preventing duplicates across cycles
+	prevSystemPromptHash   string                // transient: tracks system prompt hash from previous invocation for cache hit detection
+	cacheHitCount          int                   // number of invocations where system prompt hash matched previous
+	cacheMissCount         int                   // number of invocations where system prompt hash changed (or first invocation)
+	totalCachedBytes       int64                 // sum of SystemPromptLen for cache-hit invocations
 }

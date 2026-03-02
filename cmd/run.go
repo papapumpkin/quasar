@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
@@ -36,8 +37,16 @@ func init() {
 	runCmd.Flags().Bool("auto", false, "run a single task from stdin and exit (non-interactive)")
 	runCmd.Flags().Bool("no-tui", false, "disable TUI even on a TTY (use stderr printer)")
 	runCmd.Flags().Bool("no-splash", false, "skip the startup splash animation")
-	runCmd.Flags().Bool("project-context", false, "scan and inject project context into agent prompts for caching")
-	runCmd.Flags().Int("max-context-tokens", 0, "token budget for injected context (0 = use default 10000)")
+	runCmd.Flags().Bool("cache-optimization", true, "enable prompt cache optimization (stable system prompt prefix)")
+	runCmd.Flags().Bool("cache-verbose", false, "log cache hit/miss details to stderr")
+	runCmd.Flags().String("project-context-path", "", "path to static project context file (overrides scanner)")
+	runCmd.Flags().Int("max-context-tokens", 0, "token budget for context injection (0 = use default 10000)")
+
+	// Bind cache-related flags to viper for config precedence: flags > env > file > defaults.
+	_ = viper.BindPFlag("cache_optimization", runCmd.Flags().Lookup("cache-optimization"))
+	_ = viper.BindPFlag("cache_verbose", runCmd.Flags().Lookup("cache-verbose"))
+	_ = viper.BindPFlag("project_context_path", runCmd.Flags().Lookup("project-context-path"))
+	_ = viper.BindPFlag("max_context_tokens", runCmd.Flags().Lookup("max-context-tokens"))
 
 	rootCmd.AddCommand(runCmd)
 }
@@ -59,12 +68,10 @@ func runRun(cmd *cobra.Command, args []string) error {
 	auto, _ := cmd.Flags().GetBool("auto")
 	noTUI, _ := cmd.Flags().GetBool("no-tui")
 	noSplash, _ := cmd.Flags().GetBool("no-splash")
-	useProjectCtx, _ := cmd.Flags().GetBool("project-context")
-	maxContextTokens, _ := cmd.Flags().GetInt("max-context-tokens")
 
 	// TUI path: auto mode on a TTY without --no-tui.
 	if auto && !noTUI && isStderrTTY() {
-		return runAutoTUI(cfg, printer, coderPrompt, reviewerPrompt, noSplash, useProjectCtx, maxContextTokens, args)
+		return runAutoTUI(cfg, printer, coderPrompt, reviewerPrompt, noSplash, args)
 	}
 
 	taskLoop, err := buildLoop(&cfg, printer, coderPrompt, reviewerPrompt)
@@ -72,16 +79,9 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Opt-in project context scanning for prompt caching.
-	if useProjectCtx {
-		s := &snapshot.Scanner{WorkDir: taskLoop.WorkDir}
-		if scanned, scanErr := s.Scan(context.Background()); scanErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: project context scan failed: %v\n", scanErr)
-		} else {
-			taskLoop.ProjectContext = scanned
-		}
+	if err := loadProjectContext(&cfg, taskLoop); err != nil {
+		return err
 	}
-	taskLoop.MaxContextTokens = maxContextTokens
 
 	ctx, cancel := setupSignalContext(printer)
 	defer cancel()
@@ -93,7 +93,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 }
 
 // runAutoTUI launches the BubbleTea TUI for a single auto-mode task.
-func runAutoTUI(cfg config.Config, printer *ui.Printer, coderPrompt, reviewerPrompt string, noSplash, useProjectCtx bool, maxContextTokens int, args []string) error {
+func runAutoTUI(cfg config.Config, printer *ui.Printer, coderPrompt, reviewerPrompt string, noSplash bool, args []string) error {
 	task := strings.Join(args, " ")
 	if task == "" {
 		scanner := bufio.NewScanner(os.Stdin)
@@ -118,16 +118,9 @@ func runAutoTUI(cfg config.Config, printer *ui.Printer, coderPrompt, reviewerPro
 		return err
 	}
 
-	// Opt-in project context scanning for prompt caching.
-	if useProjectCtx {
-		s := &snapshot.Scanner{WorkDir: taskLoop.WorkDir}
-		if scanned, scanErr := s.Scan(context.Background()); scanErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: project context scan failed: %v\n", scanErr)
-		} else {
-			taskLoop.ProjectContext = scanned
-		}
+	if err := loadProjectContext(&cfg, taskLoop); err != nil {
+		return err
 	}
-	taskLoop.MaxContextTokens = maxContextTokens
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -192,6 +185,37 @@ func loadPrompts(cmd *cobra.Command, cfg *config.Config) (coder, reviewer string
 		reviewer = string(data)
 	}
 	return coder, reviewer, nil
+}
+
+// loadProjectContext resolves the project context string and wires it,
+// along with cache-related config, into the Loop. When CacheOptimization
+// is enabled, it reads a static file or runs Scanner.Scan() to produce the
+// project context prefix for prompt caching.
+func loadProjectContext(cfg *config.Config, taskLoop *loop.Loop) error {
+	taskLoop.CacheOptimization = cfg.CacheOptimization
+	taskLoop.CacheVerbose = cfg.CacheVerbose
+	taskLoop.MaxContextTokens = cfg.MaxContextTokens
+
+	if !cfg.CacheOptimization {
+		return nil
+	}
+
+	if cfg.ProjectContextPath != "" {
+		data, err := os.ReadFile(cfg.ProjectContextPath)
+		if err != nil {
+			return fmt.Errorf("failed to read project context file: %w", err)
+		}
+		taskLoop.ProjectContext = string(data)
+		return nil
+	}
+
+	s := &snapshot.Scanner{WorkDir: taskLoop.WorkDir}
+	if scanned, scanErr := s.Scan(context.Background()); scanErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: project context scan failed: %v\n", scanErr)
+	} else {
+		taskLoop.ProjectContext = scanned
+	}
+	return nil
 }
 
 // buildLoop validates dependencies, resolves the working directory, and

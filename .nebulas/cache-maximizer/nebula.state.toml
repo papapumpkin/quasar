@@ -1,0 +1,64 @@
+version = 1
+nebula_name = 'cache-maximizer'
+total_cost_usd = 18.476104749999998
+
+[phases]
+[phases.cache-telemetry]
+bead_id = 'quasar-g88t'
+status = 'done'
+created_at = 2026-03-01T12:40:36.91539-05:00
+updated_at = 2026-03-01T13:47:03.475429-05:00
+
+[phases.cache-telemetry.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Cache telemetry added to InvocationResult, CycleState, and TaskResult with SHA-256 hash tracking, hit/miss counters, verbose logging, and comprehensive tests — clean implementation with no issues found.'
+
+[phases.config]
+bead_id = 'quasar-nr6k'
+status = 'done'
+created_at = 2026-03-01T12:40:37.628225-05:00
+updated_at = 2026-03-01T13:38:51.561452-05:00
+
+[phases.config.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Cache config fields (CacheOptimization, CacheVerbose, ProjectContextPath, MaxContextTokens) are correctly added to Config, wired through CLI flags/viper/env, and both nebula execution paths now properly set CacheOptimization on the Loop — fixing the prior regression.'
+
+[phases.cross-invocation]
+bead_id = 'quasar-vopj'
+status = 'done'
+created_at = 2026-03-01T12:40:36.192775-05:00
+updated_at = 2026-03-01T13:36:19.010304-05:00
+
+[phases.cross-invocation.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Four-line fix correctly applies the cached system prompt pattern to `runFilterFixLoop()`, closing the last cache-busting gap, with two focused tests covering both code paths.'
+
+[phases.prompt-audit]
+bead_id = 'quasar-ckkx'
+status = 'done'
+created_at = 2026-03-01T12:40:34.643202-05:00
+updated_at = 2026-03-01T12:44:58.56538-05:00
+
+[phases.prompt-audit.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Adds well-documented PromptZone classification types and PromptManifest struct for prompt cache optimization, with comprehensive tests — all passing, no issues found.'
+
+[phases.stable-prefix]
+bead_id = 'quasar-1mxf'
+status = 'done'
+created_at = 2026-03-01T12:40:35.418008-05:00
+updated_at = 2026-03-01T12:50:01.36176-05:00
+
+[phases.stable-prefix.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean refactor separating stable project context (system prompt) from volatile fabric state (user prompt) to enable prompt cache hits, with comprehensive tests and backward compatibility preserved.'

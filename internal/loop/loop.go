@@ -3,6 +3,7 @@ package loop
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/papapumpkin/quasar/internal/agent"
@@ -13,44 +14,59 @@ import (
 
 // Loop orchestrates the coder-reviewer cycle for a single task.
 type Loop struct {
-	Invoker          agent.Invoker
-	UI               ui.UI
-	Git              CycleCommitter // Optional; nil disables per-cycle commits.
-	Hooks            []Hook         // Lifecycle hooks (e.g., BeadHook for tracking).
-	Linter           Linter         // Optional; nil disables lint checks between coder and reviewer.
-	Filter           filter.Filter  // Optional; nil skips pre-reviewer filtering and goes straight to reviewer.
-	MaxCycles        int
-	MaxLintRetries   int // Max times coder is asked to fix lint issues per cycle. 0 uses DefaultMaxLintRetries.
-	MaxFilterFixes   int // Max inner fix attempts per filter failure. 0 uses DefaultMaxFilterFixes.
-	MaxBudgetUSD     float64
-	Model            string
-	CoderPrompt      string
-	ReviewPrompt     string
-	WorkDir          string
-	MCP              *agent.MCPConfig // Optional MCP server config passed to agents.
-	RefactorCh       <-chan string    // Optional channel carrying updated task descriptions from phase edits.
-	CommitSummary    string           // Short label for cycle commit messages. If empty, derived from task title.
-	Fabric           fabric.Fabric    // Optional; when set and FabricEnabled, auto-inject fabric state into prompts.
-	FabricEnabled    bool             // When true, inject fabric protocol into agent system prompts.
-	TaskID           string           // Task ID for fabric context (QUASAR_TASK_ID).
-	ProjectContext   string           // Injected into agent system prompts for prompt caching.
-	MaxContextTokens int              // Token budget for context injection. 0 = use default.
-	HailQueue        HailQueue        // Optional; when set, hails extracted during execution are posted here.
-	HailTimeout      time.Duration    // Auto-resolve timeout for hails. 0 disables auto-resolution.
-	StruggleConfig   StruggleConfig   // Optional; zero value disables struggle detection.
+	Invoker           agent.Invoker
+	UI                ui.UI
+	Git               CycleCommitter // Optional; nil disables per-cycle commits.
+	Hooks             []Hook         // Lifecycle hooks (e.g., BeadHook for tracking).
+	Linter            Linter         // Optional; nil disables lint checks between coder and reviewer.
+	Filter            filter.Filter  // Optional; nil skips pre-reviewer filtering and goes straight to reviewer.
+	MaxCycles         int
+	MaxLintRetries    int // Max times coder is asked to fix lint issues per cycle. 0 uses DefaultMaxLintRetries.
+	MaxFilterFixes    int // Max inner fix attempts per filter failure. 0 uses DefaultMaxFilterFixes.
+	MaxBudgetUSD      float64
+	Model             string
+	CoderPrompt       string
+	ReviewPrompt      string
+	WorkDir           string
+	MCP               *agent.MCPConfig // Optional MCP server config passed to agents.
+	RefactorCh        <-chan string    // Optional channel carrying updated task descriptions from phase edits.
+	CommitSummary     string           // Short label for cycle commit messages. If empty, derived from task title.
+	Fabric            fabric.Fabric    // Optional; when set and FabricEnabled, auto-inject fabric state into prompts.
+	FabricEnabled     bool             // When true, inject fabric protocol into agent system prompts.
+	TaskID            string           // Task ID for fabric context (QUASAR_TASK_ID).
+	ProjectContext    string           // Injected into agent system prompts for prompt caching.
+	MaxContextTokens  int              // Token budget for context injection. 0 = use default.
+	CacheOptimization bool             // When true, system prompts use a stable prefix for cache hits.
+	CacheVerbose      bool             // When true, log cache-related diagnostics to stderr.
+	HailQueue         HailQueue        // Optional; when set, hails extracted during execution are posted here.
+	HailTimeout       time.Duration    // Auto-resolve timeout for hails. 0 disables auto-resolution.
+	StruggleConfig    StruggleConfig   // Optional; zero value disables struggle detection.
+
+	// cachedCoderSystemPrompt is the pre-computed system prompt for the coder
+	// agent, built once at phase start via cacheSystemPrompts. It contains only
+	// stable content (ProjectContext + CoderPrompt + FabricProtocol) and must
+	// remain byte-identical across all cycles for prompt cache hits.
+	cachedCoderSystemPrompt string
+
+	// cachedReviewerSystemPrompt is the pre-computed system prompt for the
+	// reviewer agent, built once at phase start via cacheSystemPrompts.
+	cachedReviewerSystemPrompt string
 }
 
 // TaskResult holds the outcome of a completed task loop.
 type TaskResult struct {
-	TotalCostUSD   float64
-	CyclesUsed     int
-	Report         *agent.ReviewReport // From final reviewer cycle (may be nil)
-	BaseCommitSHA  string              // HEAD captured at task start
-	FinalCommitSHA string              // last cycle's sealed SHA (or current HEAD as fallback)
-	CycleCommits   []string            // per-cycle sealed commit SHAs (index = cycle-1)
-	Decompose      bool                // true if the loop exited due to a struggle signal
-	StruggleReason string              // human-readable reason from StruggleSignal.Reason
-	AllFindings    []ReviewFinding     // accumulated findings at time of decomposition
+	TotalCostUSD     float64
+	CyclesUsed       int
+	Report           *agent.ReviewReport // From final reviewer cycle (may be nil)
+	BaseCommitSHA    string              // HEAD captured at task start
+	FinalCommitSHA   string              // last cycle's sealed SHA (or current HEAD as fallback)
+	CycleCommits     []string            // per-cycle sealed commit SHAs (index = cycle-1)
+	Decompose        bool                // true if the loop exited due to a struggle signal
+	StruggleReason   string              // human-readable reason from StruggleSignal.Reason
+	AllFindings      []ReviewFinding     // accumulated findings at time of decomposition
+	CacheHitCount    int                 // Number of invocations where system prompt hash matched previous.
+	CacheMissCount   int                 // Number of invocations where system prompt hash changed.
+	TotalCachedBytes int64               // Sum of SystemPromptLen for cache-hit invocations.
 }
 
 // RunTask creates a new bead for the given task and runs the coder-reviewer loop.
@@ -113,6 +129,15 @@ func (l *Loop) emit(ctx context.Context, event Event) {
 
 // runLoop is the core coder-reviewer loop extracted from RunTask.
 func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*TaskResult, error) {
+	// Pre-compute system prompts once for the entire phase. These contain
+	// only stable content (ProjectContext + basePrompt + FabricProtocol)
+	// and must remain byte-identical across all cycles for prompt cache hits.
+	// When CacheOptimization is disabled, skip pre-computation so prompts
+	// are rebuilt per cycle (legacy behavior).
+	if l.CacheOptimization {
+		l.cacheSystemPrompts()
+	}
+
 	perAgentBudget := l.perAgentBudget()
 	state := l.initCycleState(ctx, beadID, taskDescription)
 	l.emitBeadUpdate(state, "in_progress")
@@ -255,14 +280,17 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 					Message: signal.Reason,
 				})
 				return &TaskResult{
-					TotalCostUSD:   state.TotalCostUSD,
-					CyclesUsed:     state.Cycle,
-					BaseCommitSHA:  state.BaseCommitSHA,
-					FinalCommitSHA: l.finalCommitSHA(ctx, state),
-					CycleCommits:   state.CycleCommits,
-					Decompose:      true,
-					StruggleReason: signal.Reason,
-					AllFindings:    state.AllFindings,
+					TotalCostUSD:     state.TotalCostUSD,
+					CyclesUsed:       state.Cycle,
+					BaseCommitSHA:    state.BaseCommitSHA,
+					FinalCommitSHA:   l.finalCommitSHA(ctx, state),
+					CycleCommits:     state.CycleCommits,
+					Decompose:        true,
+					StruggleReason:   signal.Reason,
+					AllFindings:      state.AllFindings,
+					CacheHitCount:    state.cacheHitCount,
+					CacheMissCount:   state.cacheMissCount,
+					TotalCachedBytes: state.totalCachedBytes,
 				}, nil
 			}
 		}
@@ -278,11 +306,14 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 		Message: fmt.Sprintf("Max cycles reached (%d). Manual review recommended.", l.MaxCycles),
 	})
 	return &TaskResult{
-		TotalCostUSD:   state.TotalCostUSD,
-		CyclesUsed:     state.Cycle,
-		BaseCommitSHA:  state.BaseCommitSHA,
-		FinalCommitSHA: l.finalCommitSHA(ctx, state),
-		CycleCommits:   state.CycleCommits,
+		TotalCostUSD:     state.TotalCostUSD,
+		CyclesUsed:       state.Cycle,
+		BaseCommitSHA:    state.BaseCommitSHA,
+		FinalCommitSHA:   l.finalCommitSHA(ctx, state),
+		CycleCommits:     state.CycleCommits,
+		CacheHitCount:    state.cacheHitCount,
+		CacheMissCount:   state.cacheMissCount,
+		TotalCachedBytes: state.totalCachedBytes,
 	}, ErrMaxCycles
 }
 
@@ -457,12 +488,18 @@ func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkNam
 			checkName, len(parsed.Errors), attempt+1, maxFixes))
 
 		// Build a focused fix prompt and invoke the coder with restricted tools.
+		// Use the pre-computed system prompt for cache hits. Fall back to
+		// building on the fly when the cache is empty (e.g., unit tests
+		// calling runFilterFixLoop directly without cacheSystemPrompts).
 		prompt := l.buildFilterFixPrompt(state, parsed)
-		sysPrompt := agent.BuildSystemPrompt(l.CoderPrompt, agent.PromptOpts{
-			FabricEnabled:  l.FabricEnabled,
-			TaskID:         l.TaskID,
-			ProjectContext: l.ProjectContext,
-		})
+		sysPrompt := l.cachedCoderSystemPrompt
+		if sysPrompt == "" {
+			sysPrompt = agent.BuildSystemPrompt(l.CoderPrompt, agent.PromptOpts{
+				FabricEnabled:  l.FabricEnabled,
+				TaskID:         l.TaskID,
+				ProjectContext: l.ProjectContext,
+			})
+		}
 		a := agent.Agent{
 			Role:         agent.RoleCoder,
 			SystemPrompt: sysPrompt,
@@ -629,14 +666,34 @@ func (l *Loop) initCycleState(ctx context.Context, beadID, taskDescription strin
 	}
 }
 
-// coderAgent builds the agent configuration for the coder role.
-// When FabricEnabled is true, the fabric protocol is appended to the system prompt.
-func (l *Loop) coderAgent(budget float64) agent.Agent {
-	sysPrompt := agent.BuildSystemPrompt(l.CoderPrompt, agent.PromptOpts{
+// cacheSystemPrompts pre-computes and stores the system prompts for both
+// coder and reviewer agents. This must be called once at phase start (in
+// runLoop) before the cycle loop begins. By building the prompts once, we
+// guarantee byte-identical system prompts across all cycles within a phase,
+// which is critical for prompt cache hits in the Claude CLI.
+func (l *Loop) cacheSystemPrompts() {
+	opts := agent.PromptOpts{
 		FabricEnabled:  l.FabricEnabled,
 		TaskID:         l.TaskID,
 		ProjectContext: l.ProjectContext,
-	})
+	}
+	l.cachedCoderSystemPrompt = agent.BuildSystemPrompt(l.CoderPrompt, opts)
+	l.cachedReviewerSystemPrompt = agent.BuildSystemPrompt(l.ReviewPrompt, opts)
+}
+
+// coderAgent builds the agent configuration for the coder role.
+// It uses the pre-computed system prompt cached at phase start by
+// cacheSystemPrompts. If the cache is empty (e.g., in unit tests that call
+// coderAgent directly), it falls back to building the prompt on the fly.
+func (l *Loop) coderAgent(budget float64) agent.Agent {
+	sysPrompt := l.cachedCoderSystemPrompt
+	if sysPrompt == "" {
+		sysPrompt = agent.BuildSystemPrompt(l.CoderPrompt, agent.PromptOpts{
+			FabricEnabled:  l.FabricEnabled,
+			TaskID:         l.TaskID,
+			ProjectContext: l.ProjectContext,
+		})
+	}
 	return agent.Agent{
 		Role:         agent.RoleCoder,
 		SystemPrompt: sysPrompt,
@@ -651,14 +708,18 @@ func (l *Loop) coderAgent(budget float64) agent.Agent {
 }
 
 // reviewerAgent builds the agent configuration for the reviewer role.
-// When ProjectContext or FabricEnabled is set, the system prompt is built
-// through BuildSystemPrompt so both roles benefit from cached context.
+// It uses the pre-computed system prompt cached at phase start by
+// cacheSystemPrompts. If the cache is empty, it falls back to building
+// the prompt on the fly for backward compatibility.
 func (l *Loop) reviewerAgent(budget float64) agent.Agent {
-	sysPrompt := agent.BuildSystemPrompt(l.ReviewPrompt, agent.PromptOpts{
-		FabricEnabled:  l.FabricEnabled,
-		TaskID:         l.TaskID,
-		ProjectContext: l.ProjectContext,
-	})
+	sysPrompt := l.cachedReviewerSystemPrompt
+	if sysPrompt == "" {
+		sysPrompt = agent.BuildSystemPrompt(l.ReviewPrompt, agent.PromptOpts{
+			FabricEnabled:  l.FabricEnabled,
+			TaskID:         l.TaskID,
+			ProjectContext: l.ProjectContext,
+		})
+	}
 	return agent.Agent{
 		Role:         agent.RoleReviewer,
 		SystemPrompt: sysPrompt,
@@ -689,7 +750,7 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	if relayBlock != "" {
 		prompt = relayBlock + "\n" + prompt
 	}
-	prompt = l.composeContextPrefix(ctx, prompt)
+	prompt = l.composeVolatilePrefix(ctx, prompt)
 
 	result, err := l.Invoker.Invoke(ctx, l.coderAgent(perAgentBudget), prompt, l.WorkDir)
 	if err != nil {
@@ -734,6 +795,7 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 		Result:  &result,
 		Message: fmt.Sprintf("[coder cycle %d]\n%s", state.Cycle, truncate(result.ResultText, 2000)),
 	})
+	l.trackCacheMetrics(ctx, state, "coder", &result)
 	return nil
 }
 
@@ -748,7 +810,7 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	if relayBlock != "" {
 		prompt = relayBlock + "\n" + prompt
 	}
-	prompt = l.composeContextPrefix(ctx, prompt)
+	prompt = l.composeVolatilePrefix(ctx, prompt)
 
 	result, err := l.Invoker.Invoke(ctx, l.reviewerAgent(perAgentBudget), prompt, l.WorkDir)
 	if err != nil {
@@ -772,6 +834,7 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 		Result:  &result,
 		Message: fmt.Sprintf("[reviewer cycle %d]\n%s", state.Cycle, truncate(result.ResultText, 2000)),
 	})
+	l.trackCacheMetrics(ctx, state, "reviewer", &result)
 	l.emitCycleSummary(state, PhaseReviewComplete, result)
 	return nil
 }
@@ -875,6 +938,38 @@ func (l *Loop) emitCycleSummary(state *CycleState, phase Phase, result agent.Inv
 	})
 }
 
+// trackCacheMetrics emits a cache metrics event and updates the cycle state's
+// cache hit/miss counters. It also logs cache stability diagnostics to stderr
+// when CacheVerbose is enabled.
+func (l *Loop) trackCacheMetrics(ctx context.Context, state *CycleState, agentRole string, result *agent.InvocationResult) {
+	hash := result.SystemPromptHash
+	if state.prevSystemPromptHash != "" && hash == state.prevSystemPromptHash {
+		state.cacheHitCount++
+		state.totalCachedBytes += int64(result.SystemPromptLen)
+		if l.CacheVerbose {
+			fmt.Fprintf(os.Stderr, "[cache] %s cycle %d: system prompt STABLE (hash match, %d bytes cached)\n",
+				agentRole, state.Cycle, result.SystemPromptLen)
+		}
+	} else {
+		state.cacheMissCount++
+		if l.CacheVerbose && state.prevSystemPromptHash != "" {
+			fmt.Fprintf(os.Stderr, "[cache] %s cycle %d: system prompt CHANGED (cache miss, prev=%.8s curr=%.8s)\n",
+				agentRole, state.Cycle, state.prevSystemPromptHash, hash)
+		}
+	}
+	state.prevSystemPromptHash = hash
+
+	l.emit(ctx, Event{
+		Kind:   EventCacheMetrics,
+		BeadID: state.TaskBeadID,
+		Cycle:  state.Cycle,
+		Agent:  agentRole,
+		Result: result,
+		Message: fmt.Sprintf("sys_prompt_hash=%s sys_prompt_len=%d user_prompt_len=%d cost=%.4f",
+			hash, result.SystemPromptLen, result.UserPromptLen, result.CostUSD),
+	})
+}
+
 // checkBudget returns ErrBudgetExceeded if the total cost has reached the limit.
 func (l *Loop) checkBudget(ctx context.Context, state *CycleState) error {
 	if l.MaxBudgetUSD <= 0 || state.TotalCostUSD < l.MaxBudgetUSD {
@@ -908,12 +1003,15 @@ func (l *Loop) handleApproval(ctx context.Context, state *CycleState) (*TaskResu
 
 	l.UI.TaskComplete(state.TaskBeadID, state.TotalCostUSD)
 	return &TaskResult{
-		TotalCostUSD:   state.TotalCostUSD,
-		CyclesUsed:     state.Cycle,
-		Report:         report,
-		BaseCommitSHA:  state.BaseCommitSHA,
-		FinalCommitSHA: l.finalCommitSHA(ctx, state),
-		CycleCommits:   state.CycleCommits,
+		TotalCostUSD:     state.TotalCostUSD,
+		CyclesUsed:       state.Cycle,
+		Report:           report,
+		BaseCommitSHA:    state.BaseCommitSHA,
+		FinalCommitSHA:   l.finalCommitSHA(ctx, state),
+		CycleCommits:     state.CycleCommits,
+		CacheHitCount:    state.cacheHitCount,
+		CacheMissCount:   state.cacheMissCount,
+		TotalCachedBytes: state.totalCachedBytes,
 	}, nil
 }
 

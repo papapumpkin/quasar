@@ -414,6 +414,99 @@ func TestBuildEnv_StripsCLAUDECODE(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// sha256Hex tests
+// ---------------------------------------------------------------------------
+
+func TestSHA256Hex_KnownDigest(t *testing.T) {
+	// SHA-256 of the empty string is a well-known constant.
+	got := sha256Hex("")
+	want := "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	if got != want {
+		t.Errorf("sha256Hex(%q) = %q, want %q", "", got, want)
+	}
+}
+
+func TestSHA256Hex_DeterministicAndDistinct(t *testing.T) {
+	a := sha256Hex("hello")
+	b := sha256Hex("hello")
+	c := sha256Hex("world")
+
+	if a != b {
+		t.Errorf("sha256Hex is not deterministic: %q != %q", a, b)
+	}
+	if a == c {
+		t.Errorf("sha256Hex returned same hash for different inputs: %q", a)
+	}
+	// SHA-256 hex is always 64 characters.
+	if len(a) != 64 {
+		t.Errorf("sha256Hex length = %d, want 64", len(a))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Invoke prompt metrics tests
+// ---------------------------------------------------------------------------
+
+func TestInvoke_PopulatesPromptMetrics(t *testing.T) {
+	resp := CLIResponse{
+		Result:       "ok",
+		SessionID:    "sess-metrics",
+		TotalCostUSD: 0.10,
+		DurationMs:   500,
+	}
+	jsonBytes, _ := json.Marshal(resp)
+
+	dir := t.TempDir()
+	script := writeScript(t, dir, "claude", "printf '%s' '"+string(jsonBytes)+"'")
+
+	inv := newTestInvoker("claude", false, fakeExecContextWith(script), nil)
+	sysPrompt := "You are a helpful assistant."
+	a := agent.Agent{SystemPrompt: sysPrompt}
+	userPrompt := "Write a hello world program."
+	result, err := inv.Invoke(context.Background(), a, userPrompt, dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.SystemPromptLen != len(sysPrompt) {
+		t.Errorf("SystemPromptLen = %d, want %d", result.SystemPromptLen, len(sysPrompt))
+	}
+	if result.UserPromptLen != len(userPrompt) {
+		t.Errorf("UserPromptLen = %d, want %d", result.UserPromptLen, len(userPrompt))
+	}
+	wantHash := sha256Hex(sysPrompt)
+	if result.SystemPromptHash != wantHash {
+		t.Errorf("SystemPromptHash = %q, want %q", result.SystemPromptHash, wantHash)
+	}
+}
+
+func TestInvoke_EmptySystemPrompt(t *testing.T) {
+	resp := CLIResponse{
+		Result:    "ok",
+		SessionID: "sess-empty",
+	}
+	jsonBytes, _ := json.Marshal(resp)
+
+	dir := t.TempDir()
+	script := writeScript(t, dir, "claude", "printf '%s' '"+string(jsonBytes)+"'")
+
+	inv := newTestInvoker("claude", false, fakeExecContextWith(script), nil)
+	a := agent.Agent{} // no system prompt
+	result, err := inv.Invoke(context.Background(), a, "do stuff", dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.SystemPromptLen != 0 {
+		t.Errorf("SystemPromptLen = %d, want 0", result.SystemPromptLen)
+	}
+	// Hash of empty string should still be populated.
+	if result.SystemPromptHash == "" {
+		t.Error("SystemPromptHash should be non-empty even for empty system prompt")
+	}
+}
+
 func TestBuildEnv_SuppressesMCPPopups(t *testing.T) {
 	base := []string{"PATH=/usr/bin", "HOME=/home/user"}
 	env := buildEnv(base)

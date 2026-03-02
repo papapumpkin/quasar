@@ -146,3 +146,34 @@ func TestFabricProtocolContent(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildSystemPromptDeterministic(t *testing.T) {
+	t.Parallel()
+
+	// BuildSystemPrompt must produce byte-identical output when called
+	// with the same inputs. This is critical for prompt cache stability.
+	opts := PromptOpts{
+		FabricEnabled:  true,
+		TaskID:         "phase-42",
+		ProjectContext: "# Project: quasar\nLanguage: Go\nVersion: 1.25",
+	}
+	base := "You are a senior software engineer working as the CODER."
+
+	first := BuildSystemPrompt(base, opts)
+	second := BuildSystemPrompt(base, opts)
+
+	if first != second {
+		t.Errorf("BuildSystemPrompt is not deterministic:\nfirst len=%d\nsecond len=%d",
+			len(first), len(second))
+	}
+
+	// Verify byte-level equality, not just string equality.
+	if len(first) != len(second) {
+		t.Fatalf("length mismatch: %d vs %d", len(first), len(second))
+	}
+	for i := range first {
+		if first[i] != second[i] {
+			t.Fatalf("byte mismatch at offset %d: %q vs %q", i, first[i], second[i])
+		}
+	}
+}

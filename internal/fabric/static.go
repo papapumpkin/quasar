@@ -28,10 +28,11 @@ type PhaseInput struct {
 
 // PhaseContract represents the statically-derived inputs and outputs of a phase.
 type PhaseContract struct {
-	PhaseID  string
-	Produces []Entanglement // what this phase is expected to create
-	Consumes []Entanglement // what this phase expects to find
-	Scope    []string       // resolved file paths from scope globs
+	PhaseID     string
+	Produces    []Entanglement  // what this phase is expected to create
+	Consumes    []Entanglement  // what this phase expects to find
+	Scope       []string        // resolved file paths from scope globs
+	NewProduces map[string]bool // keys (kind:name) of symbols from files not yet on disk
 }
 
 // StaticScanner extracts expected entanglements from phase spec bodies
@@ -66,7 +67,10 @@ func (s *StaticScanner) Scan(phases []PhaseInput) ([]PhaseContract, error) {
 
 // scanPhase extracts produces and scope for a single phase.
 func (s *StaticScanner) scanPhase(p *PhaseInput) (PhaseContract, error) {
-	c := PhaseContract{PhaseID: p.ID}
+	c := PhaseContract{
+		PhaseID:     p.ID,
+		NewProduces: make(map[string]bool),
+	}
 
 	// Strategy 1: scope-based extraction.
 	scopeFiles, err := s.resolveScope(p.Scope)
@@ -129,6 +133,7 @@ func (s *StaticScanner) scanPhase(p *PhaseInput) (PhaseContract, error) {
 				key := sym.Kind + ":" + sym.Name
 				if !seen[key] {
 					c.Produces = append(c.Produces, sym)
+					c.NewProduces[key] = true
 					seen[key] = true
 				}
 			}
@@ -429,6 +434,14 @@ func (s *StaticScanner) crossReference(contracts []PhaseContract, phases []Phase
 			producer := &contracts[depIdx]
 
 			for _, prod := range producer.Produces {
+				// Only create consumed entanglements for genuinely new
+				// symbols (from files not yet on disk). Pre-existing
+				// symbols are already available and don't need fabric
+				// contract tracking — the DAG dependency already
+				// enforces execution ordering.
+				if !producer.NewProduces[prod.Kind+":"+prod.Name] {
+					continue
+				}
 				if containsSymbolRef(consumerBody, prod.Name) {
 					consumer.Consumes = append(consumer.Consumes, Entanglement{
 						Producer: depID,

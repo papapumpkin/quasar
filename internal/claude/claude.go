@@ -3,6 +3,8 @@ package claude
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -106,10 +108,13 @@ func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, wo
 	}
 
 	return agent.InvocationResult{
-		ResultText: resp.Result,
-		CostUSD:    resp.TotalCostUSD,
-		DurationMs: resp.DurationMs,
-		SessionID:  resp.SessionID,
+		ResultText:       resp.Result,
+		CostUSD:          resp.TotalCostUSD,
+		DurationMs:       resp.DurationMs,
+		SessionID:        resp.SessionID,
+		SystemPromptLen:  len(a.SystemPrompt),
+		UserPromptLen:    len(prompt),
+		SystemPromptHash: sha256Hex(a.SystemPrompt),
 	}, nil
 }
 
@@ -125,4 +130,10 @@ func (inv *Invoker) Validate() error {
 		fmt.Fprintf(os.Stderr, "[claude] version: %s", string(out))
 	}
 	return nil
+}
+
+// sha256Hex returns the SHA-256 hex digest of s.
+func sha256Hex(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:])
 }

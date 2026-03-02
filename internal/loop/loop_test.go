@@ -3093,3 +3093,564 @@ func TestCycleSummaryFilterFixTracking(t *testing.T) {
 		}
 	})
 }
+
+// ---------------------------------------------------------------------------
+// Cross-invocation system prompt caching tests.
+// ---------------------------------------------------------------------------
+
+func TestCacheSystemPrompts(t *testing.T) {
+	t.Parallel()
+
+	t.Run("coder and reviewer prompts are populated", func(t *testing.T) {
+		t.Parallel()
+		l := &Loop{
+			CoderPrompt:  "You are a coder.",
+			ReviewPrompt: "You are a reviewer.",
+		}
+		l.cacheSystemPrompts()
+		if l.cachedCoderSystemPrompt == "" {
+			t.Error("cachedCoderSystemPrompt is empty after cacheSystemPrompts")
+		}
+		if l.cachedReviewerSystemPrompt == "" {
+			t.Error("cachedReviewerSystemPrompt is empty after cacheSystemPrompts")
+		}
+	})
+
+	t.Run("matches direct BuildSystemPrompt output", func(t *testing.T) {
+		t.Parallel()
+		l := &Loop{
+			CoderPrompt:    "You are a coder.",
+			ReviewPrompt:   "You are a reviewer.",
+			FabricEnabled:  true,
+			TaskID:         "phase-42",
+			ProjectContext: "# Project: quasar\nLanguage: Go",
+		}
+		l.cacheSystemPrompts()
+
+		opts := agent.PromptOpts{
+			FabricEnabled:  l.FabricEnabled,
+			TaskID:         l.TaskID,
+			ProjectContext: l.ProjectContext,
+		}
+		wantCoder := agent.BuildSystemPrompt(l.CoderPrompt, opts)
+		wantReviewer := agent.BuildSystemPrompt(l.ReviewPrompt, opts)
+
+		if l.cachedCoderSystemPrompt != wantCoder {
+			t.Errorf("cached coder prompt differs from direct BuildSystemPrompt\ncached len=%d, direct len=%d",
+				len(l.cachedCoderSystemPrompt), len(wantCoder))
+		}
+		if l.cachedReviewerSystemPrompt != wantReviewer {
+			t.Errorf("cached reviewer prompt differs from direct BuildSystemPrompt\ncached len=%d, direct len=%d",
+				len(l.cachedReviewerSystemPrompt), len(wantReviewer))
+		}
+	})
+
+	t.Run("idempotent across multiple calls", func(t *testing.T) {
+		t.Parallel()
+		l := &Loop{
+			CoderPrompt:    "You are a coder.",
+			ReviewPrompt:   "You are a reviewer.",
+			FabricEnabled:  true,
+			ProjectContext: "# Project context",
+		}
+		l.cacheSystemPrompts()
+		first := l.cachedCoderSystemPrompt
+
+		l.cacheSystemPrompts()
+		second := l.cachedCoderSystemPrompt
+
+		if first != second {
+			t.Errorf("cacheSystemPrompts is not idempotent: first len=%d, second len=%d",
+				len(first), len(second))
+		}
+	})
+}
+
+func TestCoderAgentUsesCachedPrompt(t *testing.T) {
+	t.Parallel()
+
+	l := &Loop{
+		Model:          "claude-sonnet",
+		CoderPrompt:    "You are a coder.",
+		ProjectContext: "# Project: quasar",
+		FabricEnabled:  true,
+	}
+	l.cacheSystemPrompts()
+
+	a1 := l.coderAgent(2.0)
+	a2 := l.coderAgent(3.0)
+
+	if a1.SystemPrompt != l.cachedCoderSystemPrompt {
+		t.Error("coderAgent did not use cached system prompt")
+	}
+	if a1.SystemPrompt != a2.SystemPrompt {
+		t.Error("coderAgent returned different system prompts on successive calls")
+	}
+}
+
+func TestReviewerAgentUsesCachedPrompt(t *testing.T) {
+	t.Parallel()
+
+	l := &Loop{
+		Model:          "claude-opus",
+		ReviewPrompt:   "You are a reviewer.",
+		ProjectContext: "# Project: quasar",
+		FabricEnabled:  true,
+	}
+	l.cacheSystemPrompts()
+
+	a1 := l.reviewerAgent(1.0)
+	a2 := l.reviewerAgent(2.0)
+
+	if a1.SystemPrompt != l.cachedReviewerSystemPrompt {
+		t.Error("reviewerAgent did not use cached system prompt")
+	}
+	if a1.SystemPrompt != a2.SystemPrompt {
+		t.Error("reviewerAgent returned different system prompts on successive calls")
+	}
+}
+
+func TestCachedSystemPromptStableAcrossCycles(t *testing.T) {
+	t.Parallel()
+
+	// Simulate a multi-cycle run: the system prompt should be identical
+	// on cycle 1 and cycle N because it was cached once at phase start.
+	inv := &fakeInvoker{
+		responses: []agent.InvocationResult{
+			// Cycle 1: coder
+			{ResultText: "first attempt", CostUSD: 0.50},
+			// Cycle 1: reviewer — rejected
+			{ResultText: "ISSUE:\nSEVERITY: major\nDESCRIPTION: Missing error handling.", CostUSD: 0.30},
+			// Cycle 2: coder
+			{ResultText: "fixed error handling", CostUSD: 0.40},
+			// Cycle 2: reviewer — approved
+			{ResultText: "APPROVED: Looks great now.", CostUSD: 0.20},
+		},
+	}
+
+	l := &Loop{
+		Invoker:           inv,
+		UI:                &noopUI{},
+		MaxCycles:         3,
+		MaxBudgetUSD:      10.0,
+		CoderPrompt:       "You are a coder.",
+		ReviewPrompt:      "You are a reviewer.",
+		ProjectContext:    "# Project: quasar\nLanguage: Go",
+		FabricEnabled:     true,
+		CacheOptimization: true,
+	}
+
+	result, err := l.runLoop(context.Background(), "bead-1", "implement feature")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.CyclesUsed != 2 {
+		t.Fatalf("CyclesUsed = %d, want 2", result.CyclesUsed)
+	}
+
+	// All invocations should have received the same cached system prompt.
+	// The fakeInvoker records agents, so verify they all have the expected
+	// system prompt from the cache.
+	if l.cachedCoderSystemPrompt == "" {
+		t.Fatal("cachedCoderSystemPrompt is empty after runLoop")
+	}
+	if l.cachedReviewerSystemPrompt == "" {
+		t.Fatal("cachedReviewerSystemPrompt is empty after runLoop")
+	}
+
+	// Verify the prompts start with project context.
+	if !strings.HasPrefix(l.cachedCoderSystemPrompt, "# Project: quasar") {
+		t.Error("coder system prompt does not start with project context")
+	}
+	if !strings.HasPrefix(l.cachedReviewerSystemPrompt, "# Project: quasar") {
+		t.Error("reviewer system prompt does not start with project context")
+	}
+}
+
+func TestCrossPhaseSharedPrefix(t *testing.T) {
+	t.Parallel()
+
+	projectCtx := "# Project: quasar\nLanguage: Go\nVersion: 1.25"
+
+	loopA := &Loop{
+		CoderPrompt:    "You are coder A.",
+		ReviewPrompt:   "You are reviewer A.",
+		ProjectContext: projectCtx,
+		FabricEnabled:  true,
+	}
+	loopA.cacheSystemPrompts()
+
+	loopB := &Loop{
+		CoderPrompt:    "You are coder B.",
+		ReviewPrompt:   "You are reviewer B.",
+		ProjectContext: projectCtx,
+		FabricEnabled:  true,
+	}
+	loopB.cacheSystemPrompts()
+
+	// Both coder prompts should share the ProjectContext prefix.
+	// The shared prefix length should be at least len(projectCtx) + separator.
+	separator := "\n\n---\n\n"
+	minShared := len(projectCtx) + len(separator)
+
+	if len(loopA.cachedCoderSystemPrompt) < minShared {
+		t.Fatalf("coder A prompt too short: len=%d, need at least %d",
+			len(loopA.cachedCoderSystemPrompt), minShared)
+	}
+	if len(loopB.cachedCoderSystemPrompt) < minShared {
+		t.Fatalf("coder B prompt too short: len=%d, need at least %d",
+			len(loopB.cachedCoderSystemPrompt), minShared)
+	}
+
+	prefixA := loopA.cachedCoderSystemPrompt[:minShared]
+	prefixB := loopB.cachedCoderSystemPrompt[:minShared]
+
+	if prefixA != prefixB {
+		t.Errorf("cross-phase coder prompts do not share ProjectContext prefix:\nA: %q\nB: %q",
+			prefixA, prefixB)
+	}
+
+	// Cross-role: coder and reviewer within the same phase also share the
+	// ProjectContext prefix.
+	prefixCoder := loopA.cachedCoderSystemPrompt[:minShared]
+	prefixReviewer := loopA.cachedReviewerSystemPrompt[:minShared]
+
+	if prefixCoder != prefixReviewer {
+		t.Errorf("coder and reviewer do not share ProjectContext prefix:\ncoder: %q\nreviewer: %q",
+			prefixCoder, prefixReviewer)
+	}
+
+	// The prompts should diverge after the shared prefix (different base prompts).
+	if loopA.cachedCoderSystemPrompt == loopB.cachedCoderSystemPrompt {
+		t.Error("different CoderPrompt values produced identical system prompts")
+	}
+}
+
+func TestCoderAgentFallbackWithoutCache(t *testing.T) {
+	t.Parallel()
+
+	// When cacheSystemPrompts has NOT been called, coderAgent should
+	// fall back to building the prompt on the fly.
+	l := &Loop{
+		Model:       "claude-sonnet",
+		CoderPrompt: "You are a coder.",
+	}
+	a := l.coderAgent(1.0)
+	if a.SystemPrompt != "You are a coder." {
+		t.Errorf("SystemPrompt = %q, want %q", a.SystemPrompt, "You are a coder.")
+	}
+}
+
+func TestReviewerAgentFallbackWithoutCache(t *testing.T) {
+	t.Parallel()
+
+	// When cacheSystemPrompts has NOT been called, reviewerAgent should
+	// fall back to building the prompt on the fly.
+	l := &Loop{
+		Model:        "claude-opus",
+		ReviewPrompt: "You are a reviewer.",
+	}
+	a := l.reviewerAgent(1.0)
+	if a.SystemPrompt != "You are a reviewer." {
+		t.Errorf("SystemPrompt = %q, want %q", a.SystemPrompt, "You are a reviewer.")
+	}
+}
+
+func TestFilterFixLoopUsesCachedPrompt(t *testing.T) {
+	t.Parallel()
+
+	// When cacheSystemPrompts has been called, runFilterFixLoop should
+	// use the cached coder system prompt rather than rebuilding it.
+	ff := &fakeFilterWithRunCheck{
+		checkResults: []*filter.CheckResult{
+			{Name: "build", Passed: true},
+		},
+	}
+	inv := &fakeInvoker{
+		responses: []agent.InvocationResult{
+			{ResultText: "fixed the error", CostUSD: 0.03},
+		},
+	}
+	l := &Loop{
+		Invoker:        inv,
+		UI:             &noopUI{},
+		Filter:         ff,
+		MaxFilterFixes: 3,
+		MaxCycles:      3,
+		WorkDir:        "/tmp",
+		CoderPrompt:    "You are a coder.",
+		ProjectContext: "# Project: quasar",
+		FabricEnabled:  true,
+	}
+	l.cacheSystemPrompts()
+
+	state := &CycleState{
+		TaskBeadID: "bead-1",
+		TaskTitle:  "implement feature",
+		Cycle:      1,
+	}
+
+	fixed, err := l.runFilterFixLoop(context.Background(), state, "build", "main.go:10:5: undefined: foo")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !fixed {
+		t.Error("expected filter fix to succeed")
+	}
+
+	// The agent passed to Invoke must carry the cached system prompt.
+	if len(inv.agents) < 1 {
+		t.Fatal("expected at least one agent invocation")
+	}
+	got := inv.agents[0].SystemPrompt
+	if got != l.cachedCoderSystemPrompt {
+		t.Errorf("runFilterFixLoop did not use cached system prompt\ngot len=%d, cached len=%d",
+			len(got), len(l.cachedCoderSystemPrompt))
+	}
+}
+
+func TestFilterFixLoopFallbackWithoutCache(t *testing.T) {
+	t.Parallel()
+
+	// When cacheSystemPrompts has NOT been called, runFilterFixLoop should
+	// fall back to building the prompt on the fly (backward compatibility).
+	ff := &fakeFilterWithRunCheck{
+		checkResults: []*filter.CheckResult{
+			{Name: "build", Passed: true},
+		},
+	}
+	inv := &fakeInvoker{
+		responses: []agent.InvocationResult{
+			{ResultText: "fixed the error", CostUSD: 0.03},
+		},
+	}
+	l := &Loop{
+		Invoker:        inv,
+		UI:             &noopUI{},
+		Filter:         ff,
+		MaxFilterFixes: 3,
+		MaxCycles:      3,
+		WorkDir:        "/tmp",
+		CoderPrompt:    "You are a coder.",
+	}
+	// Deliberately do NOT call l.cacheSystemPrompts().
+
+	state := &CycleState{
+		TaskBeadID: "bead-1",
+		TaskTitle:  "implement feature",
+		Cycle:      1,
+	}
+
+	fixed, err := l.runFilterFixLoop(context.Background(), state, "build", "main.go:5: error")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !fixed {
+		t.Error("expected filter fix to succeed")
+	}
+
+	// Without caching, the prompt should still be built correctly.
+	if len(inv.agents) < 1 {
+		t.Fatal("expected at least one agent invocation")
+	}
+	got := inv.agents[0].SystemPrompt
+	if got != "You are a coder." {
+		t.Errorf("SystemPrompt = %q, want %q", got, "You are a coder.")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Cache telemetry tests
+// ---------------------------------------------------------------------------
+
+func TestTrackCacheMetrics_EmitsEvent(t *testing.T) {
+	t.Parallel()
+	hook := &recordingHook{}
+	l := &Loop{
+		Invoker:   &fakeInvoker{},
+		UI:        &noopUI{},
+		MaxCycles: 3,
+		Hooks:     []Hook{hook},
+	}
+	state := &CycleState{TaskBeadID: "bead-1", Cycle: 1}
+	result := &agent.InvocationResult{
+		SystemPromptLen:  100,
+		UserPromptLen:    200,
+		SystemPromptHash: "abc123",
+		CostUSD:          0.50,
+	}
+
+	l.trackCacheMetrics(context.Background(), state, "coder", result)
+
+	events := hook.getEvents()
+	found := false
+	for _, e := range events {
+		if e.Kind == EventCacheMetrics {
+			found = true
+			if e.Agent != "coder" {
+				t.Errorf("Agent = %q, want %q", e.Agent, "coder")
+			}
+			if e.BeadID != "bead-1" {
+				t.Errorf("BeadID = %q, want %q", e.BeadID, "bead-1")
+			}
+			if e.Cycle != 1 {
+				t.Errorf("Cycle = %d, want 1", e.Cycle)
+			}
+			if e.Result == nil {
+				t.Error("Result should not be nil")
+			}
+			if !strings.Contains(e.Message, "sys_prompt_hash=abc123") {
+				t.Errorf("Message = %q, want to contain 'sys_prompt_hash=abc123'", e.Message)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected EventCacheMetrics event to be emitted")
+	}
+}
+
+func TestTrackCacheMetrics_FirstInvocationIsMiss(t *testing.T) {
+	t.Parallel()
+	l := &Loop{Invoker: &fakeInvoker{}, UI: &noopUI{}, MaxCycles: 3}
+	state := &CycleState{TaskBeadID: "bead-1", Cycle: 1}
+	result := &agent.InvocationResult{
+		SystemPromptHash: "hash-a",
+		SystemPromptLen:  50,
+	}
+
+	l.trackCacheMetrics(context.Background(), state, "coder", result)
+
+	if state.cacheHitCount != 0 {
+		t.Errorf("cacheHitCount = %d, want 0 (first invocation is a miss)", state.cacheHitCount)
+	}
+	if state.cacheMissCount != 1 {
+		t.Errorf("cacheMissCount = %d, want 1", state.cacheMissCount)
+	}
+	if state.prevSystemPromptHash != "hash-a" {
+		t.Errorf("prevSystemPromptHash = %q, want %q", state.prevSystemPromptHash, "hash-a")
+	}
+}
+
+func TestTrackCacheMetrics_CacheHitOnStablePrompt(t *testing.T) {
+	t.Parallel()
+	l := &Loop{Invoker: &fakeInvoker{}, UI: &noopUI{}, MaxCycles: 3}
+	state := &CycleState{TaskBeadID: "bead-1", Cycle: 1}
+	result := &agent.InvocationResult{
+		SystemPromptHash: "hash-stable",
+		SystemPromptLen:  100,
+	}
+
+	// First invocation — miss.
+	l.trackCacheMetrics(context.Background(), state, "coder", result)
+
+	// Second invocation with same hash — hit.
+	state.Cycle = 2
+	l.trackCacheMetrics(context.Background(), state, "coder", result)
+
+	if state.cacheHitCount != 1 {
+		t.Errorf("cacheHitCount = %d, want 1", state.cacheHitCount)
+	}
+	if state.cacheMissCount != 1 {
+		t.Errorf("cacheMissCount = %d, want 1", state.cacheMissCount)
+	}
+	if state.totalCachedBytes != 100 {
+		t.Errorf("totalCachedBytes = %d, want 100", state.totalCachedBytes)
+	}
+}
+
+func TestTrackCacheMetrics_CacheMissOnChangedPrompt(t *testing.T) {
+	t.Parallel()
+	l := &Loop{Invoker: &fakeInvoker{}, UI: &noopUI{}, MaxCycles: 3}
+	state := &CycleState{TaskBeadID: "bead-1", Cycle: 1}
+
+	// First invocation.
+	l.trackCacheMetrics(context.Background(), state, "coder", &agent.InvocationResult{
+		SystemPromptHash: "hash-1",
+		SystemPromptLen:  50,
+	})
+
+	// Second invocation with different hash — miss.
+	state.Cycle = 2
+	l.trackCacheMetrics(context.Background(), state, "coder", &agent.InvocationResult{
+		SystemPromptHash: "hash-2",
+		SystemPromptLen:  60,
+	})
+
+	if state.cacheHitCount != 0 {
+		t.Errorf("cacheHitCount = %d, want 0", state.cacheHitCount)
+	}
+	if state.cacheMissCount != 2 {
+		t.Errorf("cacheMissCount = %d, want 2", state.cacheMissCount)
+	}
+	if state.totalCachedBytes != 0 {
+		t.Errorf("totalCachedBytes = %d, want 0", state.totalCachedBytes)
+	}
+}
+
+func TestRunLoop_CacheMetricsInTaskResult(t *testing.T) {
+	t.Parallel()
+
+	// Set up an invoker that returns "APPROVED:" on the second call (reviewer).
+	inv := &fakeInvoker{
+		responses: []agent.InvocationResult{
+			{ResultText: "done coding", CostUSD: 0.20, SystemPromptLen: 100, SystemPromptHash: "stable-hash"},
+			{ResultText: "APPROVED: Looks great.", CostUSD: 0.10, SystemPromptLen: 100, SystemPromptHash: "stable-hash"},
+		},
+	}
+	l := &Loop{
+		Invoker:   inv,
+		UI:        &noopUI{},
+		MaxCycles: 3,
+	}
+
+	result, err := l.runLoop(context.Background(), "bead-test", "implement cache telemetry")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Two invocations with same hash: first is miss, second is hit.
+	if result.CacheHitCount != 1 {
+		t.Errorf("CacheHitCount = %d, want 1", result.CacheHitCount)
+	}
+	if result.CacheMissCount != 1 {
+		t.Errorf("CacheMissCount = %d, want 1", result.CacheMissCount)
+	}
+	if result.TotalCachedBytes != 100 {
+		t.Errorf("TotalCachedBytes = %d, want 100", result.TotalCachedBytes)
+	}
+}
+
+func TestRunLoop_CacheMetricsMaxCycles(t *testing.T) {
+	t.Parallel()
+
+	// 2 cycles, no approval: coder, reviewer, coder, reviewer = 4 invocations.
+	inv := &fakeInvoker{
+		responses: []agent.InvocationResult{
+			{ResultText: "coding 1", CostUSD: 0.10, SystemPromptLen: 80, SystemPromptHash: "hash-x"},
+			{ResultText: "NEEDS_WORK\n- Fix bug", CostUSD: 0.10, SystemPromptLen: 80, SystemPromptHash: "hash-x"},
+			{ResultText: "coding 2", CostUSD: 0.10, SystemPromptLen: 80, SystemPromptHash: "hash-x"},
+			{ResultText: "NEEDS_WORK\n- Still broken", CostUSD: 0.10, SystemPromptLen: 80, SystemPromptHash: "hash-x"},
+		},
+	}
+	l := &Loop{
+		Invoker:   inv,
+		UI:        &noopUI{},
+		MaxCycles: 2,
+	}
+
+	result, err := l.runLoop(context.Background(), "bead-max", "fix the bug")
+	if !errors.Is(err, ErrMaxCycles) {
+		t.Fatalf("expected ErrMaxCycles, got: %v", err)
+	}
+
+	// 4 invocations, all same hash: first is miss, remaining 3 are hits.
+	if result.CacheHitCount != 3 {
+		t.Errorf("CacheHitCount = %d, want 3", result.CacheHitCount)
+	}
+	if result.CacheMissCount != 1 {
+		t.Errorf("CacheMissCount = %d, want 1", result.CacheMissCount)
+	}
+	if result.TotalCachedBytes != 240 {
+		t.Errorf("TotalCachedBytes = %d, want 240 (3 * 80)", result.TotalCachedBytes)
+	}
+}

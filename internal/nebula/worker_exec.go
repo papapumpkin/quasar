@@ -320,6 +320,9 @@ func (wg *WorkerGroup) processGateSignals() (stop bool, err error) {
 			wg.tracker.MarkRemainingSkipped(wg.Nebula.Phases, wg.State)
 			wg.progress.SaveState()
 			wg.mu.Unlock()
+			if sig.reason != "" {
+				return true, fmt.Errorf("phase %q failed: %s", sig.phaseID, sig.reason)
+			}
 			return true, fmt.Errorf("phase %q rejected at gate", sig.phaseID)
 
 		case GateActionSkip:

@@ -30,6 +30,9 @@ const (
 	// EventFilterFixResult is emitted when the inner fix loop concludes,
 	// whether by success or retry exhaustion.
 	EventFilterFixResult
+	// EventCacheMetrics is emitted after each agent invocation with prompt
+	// size and hash information for tracking prompt cache effectiveness.
+	EventCacheMetrics
 )
 
 // Event represents a lifecycle event in the coder-reviewer loop.

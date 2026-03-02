@@ -608,6 +608,10 @@ func TestEscalateAllBlocked(t *testing.T) {
 		phases := []PhaseSpec{{ID: "a"}, {ID: "b"}}
 		wg, mf, _, logBuf := newFabricTestWorkerGroup(phases)
 
+		// Seed persistent state so markPhaseFailedWithSignal can update it.
+		wg.State.SetPhaseState("a", "bead-a", PhaseStatusCreated)
+		wg.State.SetPhaseState("b", "bead-b", PhaseStatusCreated)
+
 		wg.blockedTracker.Block("a", fabric.PollResult{Decision: fabric.PollNeedInfo, Reason: "need X"})
 		wg.blockedTracker.Block("b", fabric.PollResult{Decision: fabric.PollConflict, Reason: "conflict Z"})
 
@@ -639,12 +643,25 @@ func TestEscalateAllBlocked(t *testing.T) {
 			t.Error("expected both phases to be marked as done")
 		}
 
-		// Gate signals should be emitted.
+		// Persistent state must also reflect the failure.
+		if wg.State.Phases["a"].Status != PhaseStatusFailed {
+			t.Errorf("expected persistent state for a = %q, got %q", PhaseStatusFailed, wg.State.Phases["a"].Status)
+		}
+		if wg.State.Phases["b"].Status != PhaseStatusFailed {
+			t.Errorf("expected persistent state for b = %q, got %q", PhaseStatusFailed, wg.State.Phases["b"].Status)
+		}
+
+		// Gate signals should be emitted with a reason.
 		wg.mu.Lock()
 		signals := wg.gateSignals
 		wg.mu.Unlock()
 		if len(signals) < 2 {
 			t.Errorf("expected at least 2 gate signals, got %d", len(signals))
+		}
+		for _, sig := range signals {
+			if sig.reason == "" {
+				t.Errorf("gate signal for %q should have a reason", sig.phaseID)
+			}
 		}
 
 		// Log should contain escalation messages.

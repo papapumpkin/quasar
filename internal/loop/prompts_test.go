@@ -1,9 +1,11 @@
 package loop
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/filter"
 )
 
@@ -515,5 +517,152 @@ func TestBuildLintFixPrompt_EmptyLintOutput(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "lint") {
 		t.Error("prompt should reference lint")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TestComposeVolatilePrefix
+// ---------------------------------------------------------------------------
+
+func TestComposeVolatilePrefix(t *testing.T) {
+	t.Parallel()
+
+	t.Run("FabricDisabled_ReturnsTaskPromptUnchanged", func(t *testing.T) {
+		t.Parallel()
+		l := &Loop{FabricEnabled: false}
+		got := l.composeVolatilePrefix(context.Background(), "do the task")
+		if got != "do the task" {
+			t.Errorf("expected unchanged task prompt, got: %s", got)
+		}
+	})
+
+	t.Run("FabricNil_ReturnsTaskPromptUnchanged", func(t *testing.T) {
+		t.Parallel()
+		l := &Loop{FabricEnabled: true, Fabric: nil}
+		got := l.composeVolatilePrefix(context.Background(), "do the task")
+		if got != "do the task" {
+			t.Errorf("expected unchanged task prompt, got: %s", got)
+		}
+	})
+
+	t.Run("FabricEnabled_PrependsFabricState", func(t *testing.T) {
+		t.Parallel()
+		mf := &mockFabric{
+			entanglements: []fabric.Entanglement{
+				{Producer: "phase-a", Kind: "interface", Name: "Foo", Package: "pkg/foo"},
+			},
+			claims: []fabric.Claim{
+				{Filepath: "internal/bar.go", OwnerTask: "phase-b"},
+			},
+			phaseStates: map[string]string{
+				"phase-a": fabric.StateDone,
+			},
+		}
+		l := &Loop{
+			FabricEnabled: true,
+			Fabric:        mf,
+			UI:            &noopUI{},
+		}
+		got := l.composeVolatilePrefix(context.Background(), "implement X")
+
+		if !strings.HasPrefix(got, "## Current Fabric State") {
+			t.Error("expected fabric state header at start")
+		}
+		if !strings.Contains(got, "implement X") {
+			t.Error("expected task prompt to be preserved")
+		}
+		if !strings.Contains(got, "phase-a") {
+			t.Error("expected entanglement producer in fabric state")
+		}
+		if !strings.Contains(got, "internal/bar.go") {
+			t.Error("expected file claim in fabric state")
+		}
+	})
+
+	t.Run("DoesNotIncludeProjectContext", func(t *testing.T) {
+		t.Parallel()
+		mf := &mockFabric{}
+		l := &Loop{
+			FabricEnabled:  true,
+			Fabric:         mf,
+			ProjectContext: "## Project\nThis is the project context.",
+			UI:             &noopUI{},
+		}
+		got := l.composeVolatilePrefix(context.Background(), "implement Y")
+
+		if strings.Contains(got, "Project\nThis is the project context") {
+			t.Error("project context must NOT appear in volatile prefix (it belongs in system prompt)")
+		}
+		if !strings.Contains(got, "implement Y") {
+			t.Error("expected task prompt to be preserved")
+		}
+	})
+
+	t.Run("EmptyFabric_StillPrependsHeader", func(t *testing.T) {
+		t.Parallel()
+		mf := &mockFabric{}
+		l := &Loop{
+			FabricEnabled: true,
+			Fabric:        mf,
+			UI:            &noopUI{},
+		}
+		got := l.composeVolatilePrefix(context.Background(), "task Z")
+
+		if !strings.HasPrefix(got, "## Current Fabric State") {
+			t.Error("expected fabric state header even with empty snapshot")
+		}
+		if !strings.Contains(got, "task Z") {
+			t.Error("expected task prompt to be preserved")
+		}
+	})
+
+	t.Run("BackwardCompat_FabricDisabledEmptyProjectContext", func(t *testing.T) {
+		t.Parallel()
+		l := &Loop{
+			FabricEnabled:  false,
+			ProjectContext: "",
+		}
+		got := l.composeVolatilePrefix(context.Background(), "original task")
+		if got != "original task" {
+			t.Errorf("expected task prompt unchanged when fabric disabled and no project context, got: %s", got)
+		}
+	})
+}
+
+// TestSystemPromptStableAcrossCycles verifies that the system prompt built
+// for the coder agent is byte-identical between cycle 1 and cycle 2 of the
+// same phase, confirming prompt cache stability.
+func TestSystemPromptStableAcrossCycles(t *testing.T) {
+	t.Parallel()
+
+	l := &Loop{
+		CoderPrompt:    "You are a senior engineer.",
+		ReviewPrompt:   "You are a code reviewer.",
+		FabricEnabled:  true,
+		TaskID:         "phase-42",
+		ProjectContext: "## Project\nquasar - dual agent coordinator\n\n## Structure\ncmd/ internal/",
+	}
+
+	// Simulate cycle 1 and cycle 2 by building agents.
+	coderCycle1 := l.coderAgent(5.0)
+	coderCycle2 := l.coderAgent(5.0)
+
+	if coderCycle1.SystemPrompt != coderCycle2.SystemPrompt {
+		t.Error("coder system prompt must be identical between cycle 1 and cycle 2")
+	}
+
+	reviewerCycle1 := l.reviewerAgent(5.0)
+	reviewerCycle2 := l.reviewerAgent(5.0)
+
+	if reviewerCycle1.SystemPrompt != reviewerCycle2.SystemPrompt {
+		t.Error("reviewer system prompt must be identical between cycle 1 and cycle 2")
+	}
+
+	// Cross-role check: coder and reviewer should share the same stable prefix
+	// (ProjectContext) even though their base prompts differ.
+	coderPrefix := strings.SplitN(coderCycle1.SystemPrompt, "---", 2)[0]
+	reviewerPrefix := strings.SplitN(reviewerCycle1.SystemPrompt, "---", 2)[0]
+	if coderPrefix != reviewerPrefix {
+		t.Error("coder and reviewer system prompts should share the same project context prefix")
 	}
 }

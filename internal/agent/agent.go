@@ -31,10 +31,13 @@ type Agent struct {
 
 // InvocationResult holds the output and cost metrics from a single agent invocation.
 type InvocationResult struct {
-	ResultText string
-	CostUSD    float64
-	DurationMs int64
-	SessionID  string
+	ResultText       string
+	CostUSD          float64
+	DurationMs       int64
+	SessionID        string
+	SystemPromptLen  int    // Length of the system prompt in bytes.
+	UserPromptLen    int    // Length of the user prompt in bytes.
+	SystemPromptHash string // SHA-256 hex digest of the system prompt for cache identity tracking.
 }
 
 // ReviewReport captures structured metadata from the reviewer's REPORT: block.

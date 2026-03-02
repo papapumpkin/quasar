@@ -8,7 +8,6 @@ import (
 
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/filter"
-	"github.com/papapumpkin/quasar/internal/snapshot"
 )
 
 // buildCoderPrompt constructs the prompt sent to the coder agent for a given
@@ -341,42 +340,16 @@ func (l *Loop) buildFabricSnapshot(ctx context.Context) fabric.Snapshot {
 	}
 }
 
-// composeContextPrefix uses ContextBudget to assemble context layers and prepend
-// them to the task prompt. When MaxContextTokens is 0, it falls back to the
-// legacy PrependFabricContext behavior for backward compatibility.
-func (l *Loop) composeContextPrefix(ctx context.Context, taskPrompt string) string {
-	maxTokens := l.MaxContextTokens
-
-	// When budget is explicitly 0 and no project context, fall back to legacy
-	// fabric-only injection for backward compatibility.
-	if maxTokens == 0 && l.ProjectContext == "" {
-		if l.FabricEnabled && l.Fabric != nil {
-			return PrependFabricContext(taskPrompt, l.buildFabricSnapshot(ctx))
-		}
+// composeVolatilePrefix prepends volatile context (fabric snapshot) to the task
+// prompt. Stable content (project context) is handled exclusively by
+// BuildSystemPrompt and must NOT be duplicated here. This separation ensures
+// the system prompt has a byte-identical prefix across cycles for prompt cache
+// hits, while volatile per-cycle data (fabric state) lives in the user prompt.
+func (l *Loop) composeVolatilePrefix(ctx context.Context, taskPrompt string) string {
+	if !l.FabricEnabled || l.Fabric == nil {
 		return taskPrompt
 	}
 
-	// Use default budget when not explicitly configured.
-	if maxTokens == 0 {
-		maxTokens = snapshot.DefaultMaxContextTokens
-	}
-
-	budget := &snapshot.ContextBudget{MaxTokens: maxTokens}
-
-	var fabricState string
-	if l.FabricEnabled && l.Fabric != nil {
-		snap := l.buildFabricSnapshot(ctx)
-		var b strings.Builder
-		b.WriteString("## Current Fabric State\n\n")
-		b.WriteString(fabric.RenderSnapshot(snap))
-		fabricState = b.String()
-	}
-
-	// Prior work is not yet sourced — reserved for future neutron archive injection.
-	composed := budget.Compose(l.ProjectContext, fabricState, "")
-	if composed == "" {
-		return taskPrompt
-	}
-
-	return composed + "\n\n---\n\n" + taskPrompt
+	snap := l.buildFabricSnapshot(ctx)
+	return PrependFabricContext(taskPrompt, snap)
 }
