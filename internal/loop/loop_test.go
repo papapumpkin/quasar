@@ -3654,3 +3654,367 @@ func TestRunLoop_CacheMetricsMaxCycles(t *testing.T) {
 		t.Errorf("TotalCachedBytes = %d, want 240 (3 * 80)", result.TotalCachedBytes)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// TestRunFromCheckpoint
+// ---------------------------------------------------------------------------
+
+func TestRunFromCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ResumeFromReviewComplete_StartsNextCycle", func(t *testing.T) {
+		t.Parallel()
+
+		// Checkpoint says cycle 2 completed review → resume at cycle 3.
+		// Provide responses for cycle 3 coder + reviewer (approved).
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "coding cycle 3", CostUSD: 0.10},
+				{ResultText: "APPROVED: Looks good.", CostUSD: 0.05},
+			},
+		}
+		rUI := &recordingUI{}
+		hook := &recordingHook{}
+		l := &Loop{
+			Invoker:   inv,
+			UI:        rUI,
+			MaxCycles: 5,
+			Hooks:     []Hook{hook},
+		}
+
+		cs := &CycleState{
+			TaskBeadID:    "bead-resume",
+			TaskTitle:     "resume task",
+			Phase:         PhaseReviewComplete,
+			Cycle:         2,
+			MaxCycles:     5,
+			TotalCostUSD:  1.0,
+			BaseCommitSHA: "abc123",
+			CycleCommits:  []string{"sha-1", "sha-2"},
+			CoderOutput:   "old coder output",
+			ReviewOutput:  "old review output",
+		}
+
+		var cleanupCalled bool
+		cleanup := func() error {
+			cleanupCalled = true
+			return nil
+		}
+
+		result, err := l.RunFromCheckpoint(context.Background(), cs, PhaseReviewComplete, cleanup)
+		if err != nil {
+			t.Fatalf("RunFromCheckpoint returned error: %v", err)
+		}
+
+		// Should have started at cycle 3 (2+1).
+		if rUI.cycleStarts[0] != 3 {
+			t.Errorf("first cycle start = %d, want 3", rUI.cycleStarts[0])
+		}
+
+		// Result should reflect the resumed run.
+		if result.CyclesUsed != 3 {
+			t.Errorf("CyclesUsed = %d, want 3", result.CyclesUsed)
+		}
+
+		// Cleanup should have been called on success.
+		if !cleanupCalled {
+			t.Error("cleanup was not called after successful completion")
+		}
+
+		// Verify EventResumed was emitted.
+		events := hook.getEvents()
+		foundResumed := false
+		for _, e := range events {
+			if e.Kind == EventResumed {
+				foundResumed = true
+				if e.Cycle != 3 {
+					t.Errorf("EventResumed.Cycle = %d, want 3", e.Cycle)
+				}
+				if e.BeadID != "bead-resume" {
+					t.Errorf("EventResumed.BeadID = %q, want %q", e.BeadID, "bead-resume")
+				}
+				if e.Message != "resumed from checkpoint" {
+					t.Errorf("EventResumed.Message = %q, want %q", e.Message, "resumed from checkpoint")
+				}
+			}
+		}
+		if !foundResumed {
+			t.Error("EventResumed was not emitted")
+		}
+	})
+
+	t.Run("ResumeFromApproved_StartsNextCycle", func(t *testing.T) {
+		t.Parallel()
+
+		// PhaseApproved also increments the cycle (same as PhaseReviewComplete).
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "coding", CostUSD: 0.10},
+				{ResultText: "APPROVED: LGTM.", CostUSD: 0.05},
+			},
+		}
+		rUI := &recordingUI{}
+		l := &Loop{
+			Invoker:   inv,
+			UI:        rUI,
+			MaxCycles: 5,
+			Hooks:     []Hook{},
+		}
+
+		cs := &CycleState{
+			TaskBeadID: "bead-approved",
+			TaskTitle:  "approved task",
+			Phase:      PhaseApproved,
+			Cycle:      1,
+			MaxCycles:  5,
+		}
+
+		result, err := l.RunFromCheckpoint(context.Background(), cs, PhaseApproved, nil)
+		if err != nil {
+			t.Fatalf("RunFromCheckpoint returned error: %v", err)
+		}
+
+		// Should start at cycle 2 (1+1).
+		if rUI.cycleStarts[0] != 2 {
+			t.Errorf("first cycle start = %d, want 2", rUI.cycleStarts[0])
+		}
+		if result.CyclesUsed != 2 {
+			t.Errorf("CyclesUsed = %d, want 2", result.CyclesUsed)
+		}
+	})
+
+	t.Run("ResumeFromCoding_RestartsSameCycle", func(t *testing.T) {
+		t.Parallel()
+
+		// PhaseCoding restarts the same cycle; agent outputs should be cleared.
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "fresh coding", CostUSD: 0.10},
+				{ResultText: "APPROVED: Looks good.", CostUSD: 0.05},
+			},
+		}
+		rUI := &recordingUI{}
+		l := &Loop{
+			Invoker:   inv,
+			UI:        rUI,
+			MaxCycles: 5,
+			Hooks:     []Hook{},
+		}
+
+		cs := &CycleState{
+			TaskBeadID:   "bead-coding",
+			TaskTitle:    "coding task",
+			Phase:        PhaseCoding,
+			Cycle:        3,
+			MaxCycles:    5,
+			CoderOutput:  "incomplete coder output",
+			ReviewOutput: "stale review output",
+			LintOutput:   "stale lint output",
+		}
+
+		result, err := l.RunFromCheckpoint(context.Background(), cs, PhaseCoding, nil)
+		if err != nil {
+			t.Fatalf("RunFromCheckpoint returned error: %v", err)
+		}
+
+		// Should restart at cycle 3.
+		if rUI.cycleStarts[0] != 3 {
+			t.Errorf("first cycle start = %d, want 3", rUI.cycleStarts[0])
+		}
+		if result.CyclesUsed != 3 {
+			t.Errorf("CyclesUsed = %d, want 3", result.CyclesUsed)
+		}
+	})
+
+	t.Run("ResumeFromReviewing_RestartsSameCycle", func(t *testing.T) {
+		t.Parallel()
+
+		// PhaseReviewing also restarts the same cycle (incomplete review).
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "recoding", CostUSD: 0.10},
+				{ResultText: "APPROVED: Looks good.", CostUSD: 0.05},
+			},
+		}
+		l := &Loop{
+			Invoker:   inv,
+			UI:        &noopUI{},
+			MaxCycles: 5,
+			Hooks:     []Hook{},
+		}
+
+		cs := &CycleState{
+			TaskBeadID:   "bead-reviewing",
+			TaskTitle:    "reviewing task",
+			Phase:        PhaseReviewing,
+			Cycle:        2,
+			MaxCycles:    5,
+			CoderOutput:  "incomplete",
+			ReviewOutput: "incomplete",
+		}
+
+		result, err := l.RunFromCheckpoint(context.Background(), cs, PhaseReviewing, nil)
+		if err != nil {
+			t.Fatalf("RunFromCheckpoint returned error: %v", err)
+		}
+
+		// Should restart at cycle 2.
+		if result.CyclesUsed != 2 {
+			t.Errorf("CyclesUsed = %d, want 2", result.CyclesUsed)
+		}
+	})
+
+	t.Run("CleanupNotCalledOnFailure", func(t *testing.T) {
+		t.Parallel()
+
+		// Resume at cycle 5 with MaxCycles=5 and reviewer doesn't approve.
+		// This should exhaust cycles and NOT call cleanup.
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "coding", CostUSD: 0.10},
+				{ResultText: "NEEDS_WORK\n- Not good", CostUSD: 0.05},
+			},
+		}
+		l := &Loop{
+			Invoker:   inv,
+			UI:        &noopUI{},
+			MaxCycles: 5,
+			Hooks:     []Hook{},
+		}
+
+		cs := &CycleState{
+			TaskBeadID: "bead-fail",
+			TaskTitle:  "failing task",
+			Phase:      PhaseReviewComplete,
+			Cycle:      4,
+			MaxCycles:  5,
+		}
+
+		var cleanupCalled bool
+		cleanup := func() error {
+			cleanupCalled = true
+			return nil
+		}
+
+		_, err := l.RunFromCheckpoint(context.Background(), cs, PhaseReviewComplete, cleanup)
+		if !errors.Is(err, ErrMaxCycles) {
+			t.Errorf("expected ErrMaxCycles, got %v", err)
+		}
+
+		if cleanupCalled {
+			t.Error("cleanup should not be called on failure")
+		}
+	})
+
+	t.Run("NilCleanupDoesNotPanic", func(t *testing.T) {
+		t.Parallel()
+
+		inv := &fakeInvoker{
+			responses: []agent.InvocationResult{
+				{ResultText: "coding", CostUSD: 0.10},
+				{ResultText: "APPROVED: OK.", CostUSD: 0.05},
+			},
+		}
+		l := &Loop{
+			Invoker:   inv,
+			UI:        &noopUI{},
+			MaxCycles: 5,
+			Hooks:     []Hook{},
+		}
+
+		cs := &CycleState{
+			TaskBeadID: "bead-nil-cleanup",
+			TaskTitle:  "nil cleanup task",
+			Phase:      PhaseCoding,
+			Cycle:      1,
+			MaxCycles:  5,
+		}
+
+		// nil cleanup should not panic.
+		_, err := l.RunFromCheckpoint(context.Background(), cs, PhaseCoding, nil)
+		if err != nil {
+			t.Fatalf("RunFromCheckpoint returned error: %v", err)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// TestWireCheckpointHook
+// ---------------------------------------------------------------------------
+
+func TestWireCheckpointHook(t *testing.T) {
+	t.Parallel()
+
+	t.Run("WiresHookWhenCheckpointDirSet", func(t *testing.T) {
+		t.Parallel()
+
+		var factoryCalled bool
+		existingHook := &recordingHook{}
+
+		l := &Loop{
+			Invoker:       &fakeInvoker{},
+			UI:            &noopUI{},
+			MaxCycles:     1,
+			CheckpointDir: "/tmp/checkpoints",
+			Hooks:         []Hook{existingHook},
+			NewCheckpointHook: func(stateFunc func() *CycleState) Hook {
+				factoryCalled = true
+				return HookFunc(func(_ context.Context, _ Event) {})
+			},
+		}
+
+		cs := &CycleState{TaskBeadID: "test"}
+		l.wireCheckpointHook(func() *CycleState { return cs })
+
+		if !factoryCalled {
+			t.Error("NewCheckpointHook factory was not called")
+		}
+		// The hook should be prepended, so Hooks should have 2 elements.
+		if len(l.Hooks) != 2 {
+			t.Errorf("Hooks length = %d, want 2", len(l.Hooks))
+		}
+	})
+
+	t.Run("NoOpWhenCheckpointDirEmpty", func(t *testing.T) {
+		t.Parallel()
+
+		l := &Loop{
+			Invoker:       &fakeInvoker{},
+			UI:            &noopUI{},
+			MaxCycles:     1,
+			CheckpointDir: "", // empty
+			Hooks:         []Hook{},
+			NewCheckpointHook: func(stateFunc func() *CycleState) Hook {
+				t.Error("factory should not be called when CheckpointDir is empty")
+				return nil
+			},
+		}
+
+		cs := &CycleState{TaskBeadID: "test"}
+		l.wireCheckpointHook(func() *CycleState { return cs })
+
+		if len(l.Hooks) != 0 {
+			t.Errorf("Hooks length = %d, want 0", len(l.Hooks))
+		}
+	})
+
+	t.Run("NoOpWhenFactoryNil", func(t *testing.T) {
+		t.Parallel()
+
+		l := &Loop{
+			Invoker:           &fakeInvoker{},
+			UI:                &noopUI{},
+			MaxCycles:         1,
+			CheckpointDir:     "/tmp/checkpoints",
+			Hooks:             []Hook{},
+			NewCheckpointHook: nil,
+		}
+
+		cs := &CycleState{TaskBeadID: "test"}
+		l.wireCheckpointHook(func() *CycleState { return cs })
+
+		if len(l.Hooks) != 0 {
+			t.Errorf("Hooks length = %d, want 0", len(l.Hooks))
+		}
+	})
+}

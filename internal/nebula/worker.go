@@ -35,30 +35,36 @@ func NewWorkerGroup(n *Nebula, state *State, opts ...Option) *WorkerGroup {
 // It delegates phase state tracking to PhaseTracker, progress/metrics to
 // ProgressReporter, and hot-reload concerns to HotReloader.
 type WorkerGroup struct {
-	Runner       PhaseRunner
-	Nebula       *Nebula
-	State        *State
-	MaxWorkers   int
-	Watcher      *Watcher          // nil = no in-flight editing
-	Committer    GitCommitter      // nil = no phase-boundary commits
-	Gater        Gater             // nil = built from Prompter + manifest at Run time
-	Prompter     GatePrompter      // used to build Gater if Gater is nil
-	Dashboard    *Dashboard        // nil = no dashboard; used to coordinate watch-mode output
-	BeadsClient  beads.Client      // nil = hot-added phases cannot create beads
-	Fabric       fabric.Fabric     // nil = no fabric (legacy behavior)
-	Poller       fabric.Poller     // nil = skip polling (legacy behavior)
-	Publisher    *fabric.Publisher // nil = no entanglement publishing
-	GlobalCycles int
-	GlobalBudget float64
-	GlobalModel  string
-	OnProgress   ProgressFunc                             // optional progress callback
-	OnRefactor   func(phaseID string, pending bool)       // optional callback for refactor notifications
-	OnHotAdd     HotAddFunc                               // optional callback for hot-added phases
-	OnHail       func(phaseID string, d fabric.Discovery) // optional callback for hail surfacing
-	OnScanning   func(phaseID string)                     // optional callback for fabric scanning notifications
-	Invoker      agent.Invoker                            // optional; required for auto-decomposition
-	Metrics      *Metrics                                 // optional; nil = no collection
-	Logger       io.Writer                                // optional; nil = os.Stderr
+	Runner              PhaseRunner
+	Nebula              *Nebula
+	State               *State
+	MaxWorkers          int
+	Watcher             *Watcher          // nil = no in-flight editing
+	Committer           GitCommitter      // nil = no phase-boundary commits
+	Gater               Gater             // nil = built from Prompter + manifest at Run time
+	Prompter            GatePrompter      // used to build Gater if Gater is nil
+	Dashboard           *Dashboard        // nil = no dashboard; used to coordinate watch-mode output
+	BeadsClient         beads.Client      // nil = hot-added phases cannot create beads
+	Fabric              fabric.Fabric     // nil = no fabric (legacy behavior)
+	Poller              fabric.Poller     // nil = skip polling (legacy behavior)
+	Publisher           *fabric.Publisher // nil = no entanglement publishing
+	GlobalCycles        int
+	GlobalBudget        float64
+	GlobalModel         string
+	OnProgress          ProgressFunc                              // optional progress callback
+	OnRefactor          func(phaseID string, pending bool)        // optional callback for refactor notifications
+	OnHotAdd            HotAddFunc                                // optional callback for hot-added phases
+	OnHail              func(phaseID string, d fabric.Discovery)  // optional callback for hail surfacing
+	OnScanning          func(phaseID string)                      // optional callback for fabric scanning notifications
+	Invoker             agent.Invoker                             // optional; required for auto-decomposition
+	Metrics             *Metrics                                  // optional; nil = no collection
+	Logger              io.Writer                                 // optional; nil = os.Stderr
+	ResumeEnabled       bool                                      // When true, load existing checkpoints to skip completed phases.
+	CheckpointDir       string                                    // Directory for checkpoint files. Empty disables checkpoint load/cleanup.
+	CheckpointLoader    func(dir, phaseID string) (any, error)    // Loads a checkpoint; returns nil, nil if not found. Set from cmd/ to avoid import cycles.
+	CheckpointValidator func(cp any, gitSHA string) error         // Validates a loaded checkpoint. Set from cmd/.
+	CheckpointRemover   func(dir, phaseID string) error           // Removes a stale checkpoint file. Set from cmd/.
+	GitSHAFunc          func(ctx context.Context) (string, error) // Returns current HEAD SHA for checkpoint validation.
 
 	mu          sync.Mutex
 	outputMu    sync.Mutex // serializes checkpoint + dashboard output in watch mode

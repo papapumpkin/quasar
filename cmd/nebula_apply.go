@@ -14,6 +14,7 @@ import (
 
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/checkpoint"
 	"github.com/papapumpkin/quasar/internal/claude"
 	"github.com/papapumpkin/quasar/internal/config"
 	"github.com/papapumpkin/quasar/internal/fabric"
@@ -32,6 +33,7 @@ func addNebulaApplyFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("no-tui", false, "disable TUI even on a TTY (use stderr output)")
 	cmd.Flags().Bool("no-splash", false, "skip the startup splash animation")
 	cmd.Flags().Int("max-context-tokens", 0, "token budget for injected context (0 = use default 10000)")
+	cmd.Flags().Bool("resume", false, "resume from checkpoints if available (with --auto)")
 }
 
 func runNebulaApply(cmd *cobra.Command, args []string) error {
@@ -118,8 +120,22 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 
 	// --auto: start workers.
 	auto, _ := cmd.Flags().GetBool("auto")
+	resume, _ := cmd.Flags().GetBool("resume")
+	if resume && !auto {
+		fmt.Fprintf(os.Stderr, "warning: --resume requires --auto; ignoring\n")
+		resume = false
+	}
 	if !auto {
 		return nil
+	}
+
+	// Load existing checkpoints for resume status reporting.
+	var checkpointCount int
+	if resume {
+		if cps, loadErr := checkpoint.LoadAll(dir); loadErr == nil {
+			checkpointCount = len(cps)
+		}
+		printer.Info(fmt.Sprintf("resume mode: found %d checkpoint(s)", checkpointCount))
 	}
 
 	maxWorkers, _ := cmd.Flags().GetInt("max-workers")
@@ -185,7 +201,9 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		nebula.WithGlobalBudget(cfg.MaxBudgetUSD),
 		nebula.WithGlobalModel(cfg.Model),
 		nebula.WithCommitter(phaseCommitter),
+		nebula.WithCheckpointDir(dir),
 	}
+	wgOpts = append(wgOpts, resumeOptions(resume, workDir)...)
 	wgOpts = append(wgOpts, fc.WorkerGroupOptions()...)
 	wg := nebula.NewWorkerGroup(n, state, wgOpts...)
 
@@ -221,6 +239,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			fabric:           wg.Fabric, // nil-safe — emitFabricEvents checks for nil
 			projectContext:   projectCtx,
 			maxContextTokens: maxContextTokens,
+			checkpointDir:    dir,
 		}
 		wg.Logger = io.Discard
 		wg.Prompter = tui.NewGater(tuiProgram)
@@ -275,6 +294,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			MaxContextTokens:  maxContextTokens,
 			CacheOptimization: cfg.CacheOptimization,
 			CacheVerbose:      cfg.CacheVerbose,
+			CheckpointDir:     dir,
 		}
 		wg.Runner = &loopAdapter{loop: taskLoop}
 		// Stderr path: use dashboard and terminal gater.
@@ -314,8 +334,17 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			prog := tuiProgram
 			br := branchName
 			wd := workDir
+			cpDir := dir // checkpoint directory for this nebula
+			isResume := resume
 			go func() {
+				if isResume {
+					prog.Send(tui.MsgInfo{Msg: fmt.Sprintf("resume mode: found %d checkpoint(s)", checkpointCount)})
+				}
 				results, runErr := wg.Run(ctx)
+				// Clean up checkpoint files on success to prevent stale data.
+				if runErr == nil && cpDir != "" {
+					cleanupCheckpoints(cpDir)
+				}
 				prog.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
 				// Post-completion git workflow: commit+push, checkout main only on success.
 				if br != "" {
@@ -423,7 +452,9 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					nebula.WithGlobalModel(cfg.Model),
 					nebula.WithLogger(io.Discard),
 					nebula.WithCommitter(nextPhaseCommitter),
+					nebula.WithCheckpointDir(nextDir),
 				}
+				nextWgOpts = append(nextWgOpts, resumeOptions(resume, nextWorkDir)...)
 				nextWgOpts = append(nextWgOpts, fc.WorkerGroupOptions()...)
 				wg = nebula.NewWorkerGroup(nextN, nextState, nextWgOpts...)
 				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, noSplash)
@@ -442,6 +473,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					fabric:           wg.Fabric, // nil-safe
 					projectContext:   projectCtx,
 					maxContextTokens: maxContextTokens,
+					checkpointDir:    nextDir,
 				}
 				wg.Prompter = tui.NewGater(tuiProgram)
 				// Re-wire OnHail for the next nebula's TUI program.
@@ -475,6 +507,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 
 				branchName = nextBranchName
 				workDir = nextWorkDir
+				dir = nextDir
 				continue
 			}
 
@@ -510,6 +543,9 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 
 	printer.NebulaWorkerResults(results)
 
+	// Clean up checkpoint files on success to prevent stale data.
+	cleanupCheckpoints(dir)
+
 	// Post-completion git workflow for stderr path (only reached on success).
 	if branchName != "" {
 		gitResult := nebula.PostCompletion(context.Background(), workDir, branchName, true)
@@ -529,4 +565,47 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// resumeOptions returns nebula.Option values that enable checkpoint-based
+// resume for a WorkerGroup. When resume is false it returns nil.
+// workDir is used in the GitSHA closure so each nebula gets the correct
+// working directory for HEAD resolution.
+func resumeOptions(resume bool, workDir string) []nebula.Option {
+	if !resume {
+		return nil
+	}
+	return []nebula.Option{
+		nebula.WithResumeEnabled(true),
+		nebula.WithCheckpointLoader(func(cpDir, phaseID string) (any, error) {
+			return checkpoint.Load(cpDir, phaseID)
+		}),
+		nebula.WithCheckpointValidator(func(cp any, gitSHA string) error {
+			typed, ok := cp.(*checkpoint.Checkpoint)
+			if !ok {
+				return fmt.Errorf("invalid checkpoint type: expected *checkpoint.Checkpoint")
+			}
+			return checkpoint.Validate(typed, gitSHA)
+		}),
+		nebula.WithCheckpointRemover(checkpoint.Remove),
+		nebula.WithGitSHAFunc(func(ctx context.Context) (string, error) {
+			return checkpoint.CurrentGitSHA(ctx, workDir)
+		}),
+	}
+}
+
+// cleanupCheckpoints removes all checkpoint files in the given directory.
+// This is called after a successful nebula run to prevent stale checkpoints
+// from affecting future --resume invocations.
+func cleanupCheckpoints(dir string) {
+	cps, err := checkpoint.LoadAll(dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to list checkpoints for cleanup: %v\n", err)
+		return
+	}
+	for phaseID := range cps {
+		if rmErr := checkpoint.Remove(dir, phaseID); rmErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to remove checkpoint for %s: %v\n", phaseID, rmErr)
+		}
+	}
 }

@@ -33,6 +33,9 @@ const (
 	// EventCacheMetrics is emitted after each agent invocation with prompt
 	// size and hash information for tracking prompt cache effectiveness.
 	EventCacheMetrics
+	// EventResumed is emitted when the loop resumes from a checkpoint,
+	// before re-entering the coder-reviewer cycle.
+	EventResumed
 )
 
 // Event represents a lifecycle event in the coder-reviewer loop.
