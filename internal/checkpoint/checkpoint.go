@@ -3,9 +3,32 @@
 package checkpoint
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 
+	toml "github.com/pelletier/go-toml/v2"
+
 	"github.com/papapumpkin/quasar/internal/loop"
+)
+
+var (
+	// ErrIncompatibleVersion indicates the checkpoint was written by a newer
+	// or older schema version that this code does not support.
+	ErrIncompatibleVersion = errors.New("checkpoint version not supported")
+
+	// ErrGitSHAMismatch indicates the checkpoint's git SHA does not match the
+	// current HEAD, meaning the repository has changed since the checkpoint.
+	ErrGitSHAMismatch = errors.New("checkpoint git SHA does not match current HEAD")
+
+	// ErrInvalidCheckpoint indicates the checkpoint contains internally
+	// inconsistent data (e.g. cycle < 1 or invalid phase).
+	ErrInvalidCheckpoint = errors.New("checkpoint state is invalid")
 )
 
 // Version is the current checkpoint schema version.
@@ -176,4 +199,160 @@ func findingsToReview(fs []CheckpointFinding) []loop.ReviewFinding {
 		out[i] = f.ToReviewFinding()
 	}
 	return out
+}
+
+// checkpointPrefix is the common prefix for checkpoint file names.
+const checkpointPrefix = "checkpoint."
+
+// CheckpointPath returns the file path for a checkpoint in the given directory.
+// When phaseID is non-empty the file is named checkpoint.<phaseID>.toml;
+// otherwise it is simply checkpoint.toml.
+func CheckpointPath(dir, phaseID string) string {
+	if phaseID == "" {
+		return filepath.Join(dir, "checkpoint.toml")
+	}
+	return filepath.Join(dir, checkpointPrefix+phaseID+".toml")
+}
+
+// Save atomically writes the checkpoint to the given directory.
+// The file is named checkpoint.<phaseID>.toml (or checkpoint.toml if phaseID is empty).
+// It uses a write-tmp-then-rename pattern to prevent partial writes.
+func Save(dir string, cp *Checkpoint) error {
+	data, err := toml.Marshal(cp)
+	if err != nil {
+		return fmt.Errorf("marshaling checkpoint: %w", err)
+	}
+
+	path := CheckpointPath(dir, cp.PhaseID)
+	tmp := path + ".tmp"
+
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return fmt.Errorf("writing temp checkpoint file: %w", err)
+	}
+
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("renaming checkpoint file: %w", err)
+	}
+
+	return nil
+}
+
+// Load reads a checkpoint file from the given directory for the specified phase.
+// Returns nil, nil if no checkpoint file exists (not an error, just nothing to resume).
+func Load(dir, phaseID string) (*Checkpoint, error) {
+	path := CheckpointPath(dir, phaseID)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("reading checkpoint %s: %w", path, err)
+	}
+
+	var cp Checkpoint
+	if err := toml.Unmarshal(data, &cp); err != nil {
+		return nil, fmt.Errorf("parsing checkpoint %s: %w", path, err)
+	}
+
+	return &cp, nil
+}
+
+// LoadAll returns all checkpoint files found in the given directory, keyed by
+// phase ID. Used by nebula-level resume to discover which phases have
+// in-flight checkpoints. A checkpoint without a phase ID (standalone) is
+// stored under the empty string key.
+func LoadAll(dir string) (map[string]*Checkpoint, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("listing checkpoint directory %s: %w", dir, err)
+	}
+
+	result := make(map[string]*Checkpoint)
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasPrefix(name, checkpointPrefix) || !strings.HasSuffix(name, ".toml") {
+			continue
+		}
+
+		// Extract phase ID from "checkpoint.<phaseID>.toml" or "" from "checkpoint.toml".
+		phaseID := extractPhaseID(name)
+
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			return nil, fmt.Errorf("reading checkpoint %s: %w", name, err)
+		}
+
+		var cp Checkpoint
+		if err := toml.Unmarshal(data, &cp); err != nil {
+			return nil, fmt.Errorf("parsing checkpoint %s: %w", name, err)
+		}
+
+		result[phaseID] = &cp
+	}
+
+	return result, nil
+}
+
+// extractPhaseID derives the phase ID from a checkpoint file name.
+// "checkpoint.toml" -> "", "checkpoint.my-phase.toml" -> "my-phase".
+func extractPhaseID(name string) string {
+	// Strip "checkpoint." prefix and ".toml" suffix.
+	trimmed := strings.TrimPrefix(name, checkpointPrefix)
+	trimmed = strings.TrimSuffix(trimmed, ".toml")
+	// "checkpoint.toml" → trimmed becomes "toml" → standalone.
+	if trimmed == "toml" {
+		return ""
+	}
+	return trimmed
+}
+
+// Validate checks whether a checkpoint is safe to resume from.
+// It verifies version compatibility, git SHA match, and internal consistency.
+func Validate(cp *Checkpoint, currentGitSHA string) error {
+	if cp.Version != Version {
+		return fmt.Errorf("%w: got %d, want %d", ErrIncompatibleVersion, cp.Version, Version)
+	}
+
+	if cp.GitSHA != currentGitSHA {
+		return fmt.Errorf("%w: checkpoint=%s, current=%s", ErrGitSHAMismatch, cp.GitSHA, currentGitSHA)
+	}
+
+	if cp.Cycle < 1 {
+		return fmt.Errorf("%w: cycle must be >= 1, got %d", ErrInvalidCheckpoint, cp.Cycle)
+	}
+
+	phase := loop.Phase(cp.Phase)
+	if phase < loop.PhaseIdle || phase > loop.PhaseError {
+		return fmt.Errorf("%w: phase %d is out of range [%d, %d]",
+			ErrInvalidCheckpoint, cp.Phase, int(loop.PhaseIdle), int(loop.PhaseError))
+	}
+
+	return nil
+}
+
+// Remove deletes the checkpoint file for the given phase. It returns nil if
+// the file does not exist (already cleaned up).
+func Remove(dir, phaseID string) error {
+	path := CheckpointPath(dir, phaseID)
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("removing checkpoint %s: %w", path, err)
+	}
+	return nil
+}
+
+// CurrentGitSHA returns HEAD's SHA in the given working directory.
+// It uses exec.CommandContext for cancellation support.
+func CurrentGitSHA(ctx context.Context, workDir string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
+	cmd.Dir = workDir
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }

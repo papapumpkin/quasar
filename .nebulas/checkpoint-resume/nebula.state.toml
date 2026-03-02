@@ -1,24 +1,31 @@
 version = 1
 nebula_name = 'checkpoint-resume'
+total_cost_usd = 2.2739174999999996
 
 [phases]
 [phases.checkpoint-format]
 bead_id = 'quasar-yfo8'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-01T22:55:04.713922-05:00
-updated_at = 2026-03-01T22:55:08.814295-05:00
+updated_at = 2026-03-01T23:03:13.649595-05:00
+
+[phases.checkpoint-format.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = '`FilterHistory` field correctly added to `Checkpoint` with faithful round-trip conversion, defensive slice copying, and comprehensive test coverage — clean, consistent change.'
 
 [phases.checkpoint-loader]
 bead_id = 'quasar-96l2'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-01T22:55:06.305362-05:00
-updated_at = 2026-03-01T22:55:06.305362-05:00
+updated_at = 2026-03-01T23:03:13.661673-05:00
 
 [phases.checkpoint-writer]
 bead_id = 'quasar-62zv'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-01T22:55:05.471423-05:00
-updated_at = 2026-03-01T22:55:05.471423-05:00
+updated_at = 2026-03-01T23:03:13.66135-05:00
 
 [phases.cli-flag]
 bead_id = 'quasar-rrn7'

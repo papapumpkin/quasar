@@ -1,6 +1,9 @@
 package checkpoint
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -420,5 +423,369 @@ func assertFindingsEqual(t *testing.T, field string, want, got []loop.ReviewFind
 		if got[i].Status != want[i].Status {
 			t.Errorf("%s[%d].Status = %q, want %q", field, i, got[i].Status, want[i].Status)
 		}
+	}
+}
+
+// --- Load / LoadAll / Validate / Remove tests ---
+
+// writeCheckpointFile is a test helper that serializes a Checkpoint to TOML
+// and writes it to the given path.
+func writeCheckpointFile(t *testing.T, path string, cp *Checkpoint) {
+	t.Helper()
+	data, err := toml.Marshal(cp)
+	if err != nil {
+		t.Fatalf("marshal checkpoint: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write checkpoint file: %v", err)
+	}
+}
+
+func TestLoad(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no file returns nil nil", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		cp, err := Load(dir, "nonexistent")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cp != nil {
+			t.Fatalf("expected nil checkpoint, got %+v", cp)
+		}
+	})
+
+	t.Run("loads existing checkpoint with phase ID", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+
+		want := &Checkpoint{
+			Version:    Version,
+			PhaseID:    "build-step",
+			NebulaName: "test-nebula",
+			CreatedAt:  time.Now().Truncate(time.Second),
+			GitSHA:     "abc123",
+			Cycle:      2,
+			MaxCycles:  5,
+			Phase:      int(loop.PhaseCoding),
+		}
+		writeCheckpointFile(t, CheckpointPath(dir, "build-step"), want)
+
+		got, err := Load(dir, "build-step")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got == nil {
+			t.Fatal("expected checkpoint, got nil")
+		}
+		if got.PhaseID != want.PhaseID {
+			t.Errorf("PhaseID = %q, want %q", got.PhaseID, want.PhaseID)
+		}
+		if got.GitSHA != want.GitSHA {
+			t.Errorf("GitSHA = %q, want %q", got.GitSHA, want.GitSHA)
+		}
+		if got.Cycle != want.Cycle {
+			t.Errorf("Cycle = %d, want %d", got.Cycle, want.Cycle)
+		}
+	})
+
+	t.Run("loads standalone checkpoint (empty phase ID)", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+
+		want := &Checkpoint{
+			Version: Version,
+			GitSHA:  "standalone-sha",
+			Cycle:   1,
+			Phase:   int(loop.PhaseReviewing),
+		}
+		writeCheckpointFile(t, CheckpointPath(dir, ""), want)
+
+		got, err := Load(dir, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got == nil {
+			t.Fatal("expected checkpoint, got nil")
+		}
+		if got.GitSHA != want.GitSHA {
+			t.Errorf("GitSHA = %q, want %q", got.GitSHA, want.GitSHA)
+		}
+	})
+
+	t.Run("returns error for corrupt TOML", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		path := CheckpointPath(dir, "corrupt")
+		if err := os.WriteFile(path, []byte("{{not valid toml"), 0o644); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+
+		_, err := Load(dir, "corrupt")
+		if err == nil {
+			t.Fatal("expected error for corrupt TOML, got nil")
+		}
+	})
+}
+
+func TestLoadAll(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty directory returns empty map", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		result, err := LoadAll(dir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result) != 0 {
+			t.Fatalf("expected empty map, got %d entries", len(result))
+		}
+	})
+
+	t.Run("nonexistent directory returns nil nil", func(t *testing.T) {
+		t.Parallel()
+		result, err := LoadAll(filepath.Join(t.TempDir(), "no-such-dir"))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result != nil {
+			t.Fatalf("expected nil, got %v", result)
+		}
+	})
+
+	t.Run("discovers multiple checkpoint files", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+
+		cp1 := &Checkpoint{Version: Version, PhaseID: "alpha", GitSHA: "sha-a", Cycle: 1, Phase: int(loop.PhaseCoding)}
+		cp2 := &Checkpoint{Version: Version, PhaseID: "beta", GitSHA: "sha-b", Cycle: 2, Phase: int(loop.PhaseReviewing)}
+		cp3 := &Checkpoint{Version: Version, GitSHA: "sha-standalone", Cycle: 1, Phase: int(loop.PhaseIdle)}
+
+		writeCheckpointFile(t, CheckpointPath(dir, "alpha"), cp1)
+		writeCheckpointFile(t, CheckpointPath(dir, "beta"), cp2)
+		writeCheckpointFile(t, CheckpointPath(dir, ""), cp3)
+
+		// Write a non-checkpoint file to ensure it's skipped.
+		if err := os.WriteFile(filepath.Join(dir, "other.toml"), []byte("x = 1"), 0o644); err != nil {
+			t.Fatalf("write other file: %v", err)
+		}
+
+		result, err := LoadAll(dir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(result) != 3 {
+			t.Fatalf("expected 3 checkpoints, got %d", len(result))
+		}
+
+		if result["alpha"] == nil || result["alpha"].GitSHA != "sha-a" {
+			t.Errorf("alpha checkpoint missing or wrong: %+v", result["alpha"])
+		}
+		if result["beta"] == nil || result["beta"].GitSHA != "sha-b" {
+			t.Errorf("beta checkpoint missing or wrong: %+v", result["beta"])
+		}
+		if result[""] == nil || result[""].GitSHA != "sha-standalone" {
+			t.Errorf("standalone checkpoint missing or wrong: %+v", result[""])
+		}
+	})
+
+	t.Run("skips directories and non-checkpoint files", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+
+		// Create a subdirectory named like a checkpoint.
+		if err := os.Mkdir(filepath.Join(dir, "checkpoint.fake.toml"), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		// Create a non-matching file.
+		if err := os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("hello"), 0o644); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+
+		result, err := LoadAll(dir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result) != 0 {
+			t.Fatalf("expected 0 checkpoints, got %d", len(result))
+		}
+	})
+}
+
+func TestValidate(t *testing.T) {
+	t.Parallel()
+
+	validCP := &Checkpoint{
+		Version: Version,
+		GitSHA:  "match-sha",
+		Cycle:   1,
+		Phase:   int(loop.PhaseCoding),
+	}
+
+	t.Run("valid checkpoint passes", func(t *testing.T) {
+		t.Parallel()
+		if err := Validate(validCP, "match-sha"); err != nil {
+			t.Fatalf("expected nil, got %v", err)
+		}
+	})
+
+	t.Run("incompatible version", func(t *testing.T) {
+		t.Parallel()
+		cp := &Checkpoint{Version: 99, GitSHA: "sha", Cycle: 1, Phase: int(loop.PhaseCoding)}
+		err := Validate(cp, "sha")
+		if err == nil {
+			t.Fatal("expected error for incompatible version")
+		}
+		if !errors.Is(err, ErrIncompatibleVersion) {
+			t.Errorf("expected ErrIncompatibleVersion, got %v", err)
+		}
+	})
+
+	t.Run("git SHA mismatch", func(t *testing.T) {
+		t.Parallel()
+		cp := &Checkpoint{Version: Version, GitSHA: "old-sha", Cycle: 1, Phase: int(loop.PhaseCoding)}
+		err := Validate(cp, "new-sha")
+		if err == nil {
+			t.Fatal("expected error for SHA mismatch")
+		}
+		if !errors.Is(err, ErrGitSHAMismatch) {
+			t.Errorf("expected ErrGitSHAMismatch, got %v", err)
+		}
+	})
+
+	t.Run("invalid cycle zero", func(t *testing.T) {
+		t.Parallel()
+		cp := &Checkpoint{Version: Version, GitSHA: "sha", Cycle: 0, Phase: int(loop.PhaseCoding)}
+		err := Validate(cp, "sha")
+		if err == nil {
+			t.Fatal("expected error for cycle 0")
+		}
+		if !errors.Is(err, ErrInvalidCheckpoint) {
+			t.Errorf("expected ErrInvalidCheckpoint, got %v", err)
+		}
+	})
+
+	t.Run("invalid negative cycle", func(t *testing.T) {
+		t.Parallel()
+		cp := &Checkpoint{Version: Version, GitSHA: "sha", Cycle: -1, Phase: int(loop.PhaseCoding)}
+		err := Validate(cp, "sha")
+		if err == nil {
+			t.Fatal("expected error for negative cycle")
+		}
+		if !errors.Is(err, ErrInvalidCheckpoint) {
+			t.Errorf("expected ErrInvalidCheckpoint, got %v", err)
+		}
+	})
+
+	t.Run("invalid phase too high", func(t *testing.T) {
+		t.Parallel()
+		cp := &Checkpoint{Version: Version, GitSHA: "sha", Cycle: 1, Phase: 999}
+		err := Validate(cp, "sha")
+		if err == nil {
+			t.Fatal("expected error for invalid phase")
+		}
+		if !errors.Is(err, ErrInvalidCheckpoint) {
+			t.Errorf("expected ErrInvalidCheckpoint, got %v", err)
+		}
+	})
+
+	t.Run("invalid phase negative", func(t *testing.T) {
+		t.Parallel()
+		cp := &Checkpoint{Version: Version, GitSHA: "sha", Cycle: 1, Phase: -1}
+		err := Validate(cp, "sha")
+		if err == nil {
+			t.Fatal("expected error for negative phase")
+		}
+		if !errors.Is(err, ErrInvalidCheckpoint) {
+			t.Errorf("expected ErrInvalidCheckpoint, got %v", err)
+		}
+	})
+
+	t.Run("all valid phases pass", func(t *testing.T) {
+		t.Parallel()
+		for phase := loop.PhaseIdle; phase <= loop.PhaseError; phase++ {
+			cp := &Checkpoint{Version: Version, GitSHA: "sha", Cycle: 1, Phase: int(phase)}
+			if err := Validate(cp, "sha"); err != nil {
+				t.Errorf("phase %d (%s): unexpected error: %v", phase, phase, err)
+			}
+		}
+	})
+}
+
+func TestRemove(t *testing.T) {
+	t.Parallel()
+
+	t.Run("removes existing file", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		cp := &Checkpoint{Version: Version, Cycle: 1, Phase: int(loop.PhaseCoding)}
+		writeCheckpointFile(t, CheckpointPath(dir, "rm-test"), cp)
+
+		if err := Remove(dir, "rm-test"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Verify file is gone.
+		if _, err := os.Stat(CheckpointPath(dir, "rm-test")); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("expected file to be removed, got err: %v", err)
+		}
+	})
+
+	t.Run("no error if file already absent", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		if err := Remove(dir, "nonexistent"); err != nil {
+			t.Fatalf("expected nil error for missing file, got %v", err)
+		}
+	})
+}
+
+func TestCheckpointPath(t *testing.T) {
+	t.Parallel()
+
+	t.Run("with phase ID", func(t *testing.T) {
+		t.Parallel()
+		got := CheckpointPath("/tmp/nebula", "build-step")
+		want := filepath.Join("/tmp/nebula", "checkpoint.build-step.toml")
+		if got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("empty phase ID", func(t *testing.T) {
+		t.Parallel()
+		got := CheckpointPath("/tmp/nebula", "")
+		want := filepath.Join("/tmp/nebula", "checkpoint.toml")
+		if got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+}
+
+func TestExtractPhaseID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		filename string
+		want     string
+	}{
+		{"standalone", "checkpoint.toml", ""},
+		{"simple phase", "checkpoint.build.toml", "build"},
+		{"hyphenated phase", "checkpoint.build-step.toml", "build-step"},
+		{"dotted phase", "checkpoint.a.b.toml", "a.b"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := extractPhaseID(tc.filename)
+			if got != tc.want {
+				t.Errorf("extractPhaseID(%q) = %q, want %q", tc.filename, got, tc.want)
+			}
+		})
 	}
 }
