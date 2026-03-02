@@ -9,15 +9,18 @@ import (
 	"github.com/papapumpkin/quasar/internal/loop"
 )
 
+// Compile-time interface compliance check.
+var _ loop.Hook = (*CheckpointHook)(nil)
+
 // CheckpointHook writes a checkpoint file on significant loop events.
 // It satisfies the loop.Hook interface. Checkpoint write errors are logged
 // to stderr but do not halt the loop (non-fatal).
 type CheckpointHook struct {
-	Dir        string                      // directory to write checkpoint files
-	PhaseID    string                      // nebula phase ID (may be empty for standalone)
-	NebulaName string                      // nebula name (may be empty for standalone)
-	GitSHAFunc func() string              // returns current HEAD SHA
-	StateFunc  func() *loop.CycleState    // returns current loop cycle state
+	Dir        string                  // directory to write checkpoint files
+	PhaseID    string                  // nebula phase ID (may be empty for standalone)
+	NebulaName string                  // nebula name (may be empty for standalone)
+	GitSHAFunc func() string           // returns current HEAD SHA
+	StateFunc  func() *loop.CycleState // returns current loop cycle state
 }
 
 // OnEvent handles a loop lifecycle event. It writes a checkpoint on
