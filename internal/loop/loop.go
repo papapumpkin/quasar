@@ -566,320 +566,6 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 	}, ErrMaxCycles
 }
 
-// maxLintRetries returns the effective maximum lint retry count.
-func (l *Loop) maxLintRetries() int {
-	if l.MaxLintRetries > 0 {
-		return l.MaxLintRetries
-	}
-	return DefaultMaxLintRetries
-}
-
-// runLintFixLoop runs lint commands after the coder pass. If issues are found,
-// it feeds them back to the coder for fixing, up to maxLintRetries times.
-// After the retry limit, any remaining lint output is preserved in state so
-// the reviewer can flag it. A nil Linter makes this a no-op.
-func (l *Loop) runLintFixLoop(ctx context.Context, state *CycleState, perAgentBudget float64) error {
-	if l.Linter == nil {
-		return nil
-	}
-
-	maxRetries := l.maxLintRetries()
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		state.Phase = PhaseLinting
-		l.UI.Info("running lint checks…")
-
-		output, err := l.Linter.Run(ctx)
-		if err != nil {
-			// Lint execution error is non-fatal; log and continue to reviewer.
-			l.UI.Error(fmt.Sprintf("lint execution error: %v", err))
-			state.LintOutput = ""
-			return nil
-		}
-
-		if output == "" {
-			// Clean lint pass — proceed to reviewer.
-			state.LintOutput = ""
-			l.UI.Info("lint checks passed")
-			return nil
-		}
-
-		state.LintOutput = output
-
-		if attempt == maxRetries {
-			// Max retries reached — let the reviewer see what's left.
-			l.UI.Info(fmt.Sprintf("lint issues remain after %d retries, proceeding to reviewer", maxRetries))
-			return nil
-		}
-
-		// Feed lint issues back to the coder.
-		l.UI.Info(fmt.Sprintf("lint issues found (attempt %d/%d), sending back to coder", attempt+1, maxRetries))
-		lintPrompt := l.buildLintFixPrompt(state)
-		result, err := l.Invoker.Invoke(ctx, l.coderAgent(perAgentBudget), lintPrompt, l.WorkDir)
-		if err != nil {
-			return fmt.Errorf("coder lint-fix invocation failed: %w", err)
-		}
-
-		state.CoderOutput = result.ResultText
-		state.TotalCostUSD += result.CostUSD
-		l.UI.AgentDone("coder", result.CostUSD, result.DurationMs)
-
-		if err := l.checkBudget(ctx, state); err != nil {
-			return err
-		}
-
-		// Re-commit after lint fixes so the reviewer sees clean state.
-		// Overwrites lastCycleSHA so only the final commit is sealed.
-		if l.Git != nil {
-			summary := l.CommitSummary
-			if summary == "" {
-				summary = firstLine(state.TaskTitle, 72)
-			}
-			sha, commitErr := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle, summary+" (lint fix)")
-			if commitErr != nil {
-				l.UI.Error(fmt.Sprintf("failed to commit lint fix: %v", commitErr))
-			} else {
-				state.lastCycleSHA = sha
-			}
-		}
-	}
-
-	return nil
-}
-
-// runFilterChecks runs the pre-reviewer filter chain. If the filter fails, it
-// records a synthetic finding from the failing check and returns true to signal
-// the caller should skip the reviewer and bounce to the next coder cycle.
-// Returns (false, nil) when the filter passes or is nil.
-func (l *Loop) runFilterChecks(ctx context.Context, state *CycleState) (failed bool, err error) {
-	state.Phase = PhaseFiltering
-	l.UI.Info("running pre-reviewer filter checks…")
-
-	result, err := l.Filter.Run(ctx, l.WorkDir)
-	if err != nil {
-		// Infrastructure error (e.g. context canceled) is fatal.
-		return false, fmt.Errorf("filter execution failed: %w", err)
-	}
-
-	if result.Passed {
-		state.FilterOutput = ""
-		state.FilterCheckName = ""
-		l.UI.Info("filter checks passed")
-		return false, nil
-	}
-
-	// Filter failed — build a synthetic finding from the first failure.
-	failure := result.FirstFailure()
-	state.FilterOutput = failure.Output
-	state.FilterCheckName = failure.Name
-	l.UI.Info(fmt.Sprintf("filter check %q failed (%s), bouncing to coder", failure.Name, failure.Elapsed))
-
-	// Surface the failure as a finding so the coder sees it next cycle.
-	state.Findings = []ReviewFinding{{
-		Severity:    "critical",
-		Description: fmt.Sprintf("[filter:%s] %s", failure.Name, truncate(failure.Output, 3000)),
-		Cycle:       state.Cycle,
-	}}
-	l.UI.IssuesFound(1)
-	state.Phase = PhaseResolvingIssues
-	state.AllFindings = append(state.AllFindings, state.Findings...)
-	l.emitBeadUpdate(state, "in_progress")
-
-	return true, nil
-}
-
-// DefaultMaxFilterFixes is the maximum number of inner fix attempts per
-// filter failure before falling through to the outer coder-reviewer cycle.
-const DefaultMaxFilterFixes = 3
-
-// SingleCheckRunner can execute a single named check. Defined in the loop
-// package where consumed, satisfied by *filter.Chain.
-type SingleCheckRunner interface {
-	RunCheck(ctx context.Context, workDir string, name string) (*filter.CheckResult, error)
-}
-
-// maxFilterFixes returns the effective maximum filter fix attempt count.
-func (l *Loop) maxFilterFixes() int {
-	if l.MaxFilterFixes > 0 {
-		return l.MaxFilterFixes
-	}
-	return DefaultMaxFilterFixes
-}
-
-// runFilterFixLoop attempts to fix a failing filter check via a fast inner loop.
-// It parses the error output, sends a focused fix prompt to the coder, re-runs
-// only the failing check, and repeats up to maxFilterFixes times. Returns true
-// if the check ultimately passes, false if retries are exhausted.
-//
-// Claims check failures are never short-circuited — they require coordination,
-// not code fixes, so they always fall through to the outer cycle.
-func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkName string, checkOutput string) (bool, error) {
-	// Claims failures need human/fabric coordination, not automated fixes.
-	if checkName == "claims" {
-		return false, nil
-	}
-
-	// The filter must support single-check re-runs.
-	runner, ok := l.Filter.(SingleCheckRunner)
-	if !ok {
-		return false, nil
-	}
-
-	parsed := filter.ParseCheckOutput(filter.CheckResult{
-		Name:   checkName,
-		Output: checkOutput,
-	})
-
-	maxFixes := l.maxFilterFixes()
-	fixBudget := l.filterFixBudget()
-
-	for attempt := 0; attempt < maxFixes; attempt++ {
-		l.UI.Info(fmt.Sprintf("filter check %q failed with %d error(s), attempting targeted fix (attempt %d/%d)",
-			checkName, len(parsed.Errors), attempt+1, maxFixes))
-
-		// Build a focused fix prompt and invoke the coder with restricted tools.
-		// Use the pre-computed system prompt for cache hits. Fall back to
-		// building on the fly when the cache is empty (e.g., unit tests
-		// calling runFilterFixLoop directly without cacheSystemPrompts).
-		prompt := l.buildFilterFixPrompt(state, parsed)
-		sysPrompt := l.cachedCoderSystemPrompt
-		if sysPrompt == "" {
-			sysPrompt = agent.BuildSystemPrompt(l.CoderPrompt, agent.PromptOpts{
-				FabricEnabled:  l.FabricEnabled,
-				TaskID:         l.TaskID,
-				ProjectContext: l.ProjectContext,
-			})
-		}
-		a := agent.Agent{
-			Role:         agent.RoleCoder,
-			SystemPrompt: sysPrompt,
-			Model:        l.Model,
-			MaxBudgetUSD: fixBudget,
-			AllowedTools: []string{"Read", "Edit", "Write", "Glob"},
-			MCP:          l.MCP,
-		}
-
-		result, err := l.Invoker.Invoke(ctx, a, prompt, l.WorkDir)
-		if err != nil {
-			return false, fmt.Errorf("coder filter-fix invocation failed: %w", err)
-		}
-
-		state.TotalCostUSD += result.CostUSD
-		state.FilterFixCostUSD += result.CostUSD
-		state.FilterFixAttempts++
-		state.CycleFilterFixCostUSD += result.CostUSD
-		state.CycleFilterFixAttempts++
-		l.UI.AgentDone("coder", result.CostUSD, result.DurationMs)
-
-		if err := l.checkBudget(ctx, state); err != nil {
-			return false, err
-		}
-
-		// Commit the fix if Git is available.
-		if l.Git != nil {
-			summary := l.CommitSummary
-			if summary == "" {
-				summary = firstLine(state.TaskTitle, 72)
-			}
-			sha, commitErr := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle, summary+" (filter fix)")
-			if commitErr != nil {
-				l.UI.Error(fmt.Sprintf("failed to commit filter fix: %v", commitErr))
-			} else {
-				state.lastCycleSHA = sha
-			}
-		}
-
-		// Re-run only the failing check.
-		cr, err := runner.RunCheck(ctx, l.WorkDir, checkName)
-		if err != nil {
-			return false, fmt.Errorf("re-running check %q: %w", checkName, err)
-		}
-
-		checkPassed := cr.Passed
-
-		// Emit per-attempt telemetry event.
-		l.emit(ctx, Event{
-			Kind:   EventFilterFixAttempt,
-			BeadID: state.TaskBeadID,
-			Cycle:  state.Cycle,
-			FilterFix: &FilterFixData{
-				CheckName:   checkName,
-				Attempt:     attempt + 1,
-				MaxAttempts: maxFixes,
-				Fixed:       checkPassed,
-				CostUSD:     result.CostUSD,
-				ErrorCount:  len(parsed.Errors),
-				DurationMs:  result.DurationMs,
-			},
-		})
-
-		if checkPassed {
-			l.UI.Info(fmt.Sprintf("filter check %q fixed on attempt %d", checkName, attempt+1))
-			l.emit(ctx, Event{
-				Kind:   EventFilterFixResult,
-				BeadID: state.TaskBeadID,
-				Cycle:  state.Cycle,
-				FilterFix: &FilterFixData{
-					CheckName:   checkName,
-					Attempt:     state.FilterFixAttempts,
-					MaxAttempts: maxFixes,
-					Fixed:       true,
-					CostUSD:     state.FilterFixCostUSD,
-					ErrorCount:  len(parsed.Errors),
-				},
-			})
-			return true, nil
-		}
-
-		// Still failing — update parsed errors for next iteration.
-		checkOutput = cr.Output
-		parsed = filter.ParseCheckOutput(filter.CheckResult{
-			Name:   checkName,
-			Output: checkOutput,
-		})
-	}
-
-	l.UI.Info(fmt.Sprintf("filter check %q not fixed after %d attempts, falling back to outer cycle",
-		checkName, maxFixes))
-	l.emit(ctx, Event{
-		Kind:   EventFilterFixResult,
-		BeadID: state.TaskBeadID,
-		Cycle:  state.Cycle,
-		FilterFix: &FilterFixData{
-			CheckName:   checkName,
-			Attempt:     state.FilterFixAttempts,
-			MaxAttempts: maxFixes,
-			Fixed:       false,
-			CostUSD:     state.FilterFixCostUSD,
-			ErrorCount:  len(parsed.Errors),
-		},
-	})
-	return false, nil
-}
-
-// drainRefactor checks the RefactorCh for a pending phase edit and applies it
-// to the cycle state. The current cycle always completes before the new
-// description takes effect. Only the most recent value on the channel wins.
-func (l *Loop) drainRefactor(state *CycleState) {
-	if l.RefactorCh == nil {
-		return
-	}
-	var latest string
-	for {
-		select {
-		case body := <-l.RefactorCh:
-			latest = body
-		default:
-			if latest != "" {
-				state.OriginalDescription = state.TaskTitle
-				state.RefactorDescription = latest
-				state.TaskTitle = latest
-				state.Refactored = true
-			}
-			return
-		}
-	}
-}
-
 // perAgentBudget computes the per-invocation budget by splitting the total
 // evenly between coder and reviewer across all cycles.
 func (l *Loop) perAgentBudget() float64 {
@@ -913,310 +599,6 @@ func (l *Loop) initCycleState(ctx context.Context, beadID, taskDescription strin
 		MaxBudgetUSD:  l.MaxBudgetUSD,
 		BaseCommitSHA: baseSHA,
 	}
-}
-
-// cacheSystemPrompts pre-computes and stores the system prompts for both
-// coder and reviewer agents. This must be called once at phase start (in
-// runLoop) before the cycle loop begins. By building the prompts once, we
-// guarantee byte-identical system prompts across all cycles within a phase,
-// which is critical for prompt cache hits in the Claude CLI.
-func (l *Loop) cacheSystemPrompts() {
-	opts := agent.PromptOpts{
-		FabricEnabled:  l.FabricEnabled,
-		TaskID:         l.TaskID,
-		ProjectContext: l.ProjectContext,
-	}
-	l.cachedCoderSystemPrompt = agent.BuildSystemPrompt(l.CoderPrompt, opts)
-	l.cachedReviewerSystemPrompt = agent.BuildSystemPrompt(l.ReviewPrompt, opts)
-}
-
-// coderAgent builds the agent configuration for the coder role.
-// It uses the pre-computed system prompt cached at phase start by
-// cacheSystemPrompts. If the cache is empty (e.g., in unit tests that call
-// coderAgent directly), it falls back to building the prompt on the fly.
-func (l *Loop) coderAgent(budget float64) agent.Agent {
-	sysPrompt := l.cachedCoderSystemPrompt
-	if sysPrompt == "" {
-		sysPrompt = agent.BuildSystemPrompt(l.CoderPrompt, agent.PromptOpts{
-			FabricEnabled:  l.FabricEnabled,
-			TaskID:         l.TaskID,
-			ProjectContext: l.ProjectContext,
-		})
-	}
-	return agent.Agent{
-		Role:         agent.RoleCoder,
-		SystemPrompt: sysPrompt,
-		Model:        l.Model,
-		MaxBudgetUSD: budget,
-		AllowedTools: []string{
-			"Read", "Edit", "Write", "Glob", "Grep",
-			"Bash(go *)", "Bash(git diff *)", "Bash(git status)", "Bash(git log *)",
-		},
-		MCP: l.MCP,
-	}
-}
-
-// reviewerAgent builds the agent configuration for the reviewer role.
-// It uses the pre-computed system prompt cached at phase start by
-// cacheSystemPrompts. If the cache is empty, it falls back to building
-// the prompt on the fly for backward compatibility.
-func (l *Loop) reviewerAgent(budget float64) agent.Agent {
-	sysPrompt := l.cachedReviewerSystemPrompt
-	if sysPrompt == "" {
-		sysPrompt = agent.BuildSystemPrompt(l.ReviewPrompt, agent.PromptOpts{
-			FabricEnabled:  l.FabricEnabled,
-			TaskID:         l.TaskID,
-			ProjectContext: l.ProjectContext,
-		})
-	}
-	return agent.Agent{
-		Role:         agent.RoleReviewer,
-		SystemPrompt: sysPrompt,
-		Model:        l.Model,
-		MaxBudgetUSD: budget,
-		AllowedTools: []string{
-			"Read", "Glob", "Grep",
-			"Bash(go vet *)", "Bash(git diff *)", "Bash(git log *)",
-		},
-		MCP: l.MCP,
-	}
-}
-
-// runCoderPhase invokes the coder agent, updates state and UI, and emits
-// lifecycle events. When a refactor is pending, it emits a refactor event
-// before building the prompt (which clears the refactor flag).
-func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBudget float64) error {
-	state.Phase = PhaseCoding
-	l.UI.AgentStart("coder")
-
-	// Capture refactor state before buildCoderPrompt clears the flag.
-	wasRefactored := state.Refactored
-	origDesc := state.OriginalDescription
-	refactorDesc := state.RefactorDescription
-
-	prompt := l.buildCoderPrompt(state)
-	relayBlock, relayIDs := l.pendingHailRelay()
-	if relayBlock != "" {
-		prompt = relayBlock + "\n" + prompt
-	}
-	prompt = l.composeVolatilePrefix(ctx, prompt)
-
-	result, err := l.Invoker.Invoke(ctx, l.coderAgent(perAgentBudget), prompt, l.WorkDir)
-	if err != nil {
-		state.Phase = PhaseError
-		return fmt.Errorf("coder invocation failed: %w", err)
-	}
-
-	state.CoderOutput = result.ResultText
-	state.TotalCostUSD += result.CostUSD
-	state.Phase = PhaseCodeComplete
-	l.UI.AgentOutput("coder", state.Cycle, result.ResultText)
-	l.UI.AgentDone("coder", result.CostUSD, result.DurationMs)
-	l.emitCycleSummary(state, PhaseCodeComplete, result)
-	l.markHailsRelayed(relayIDs)
-
-	// Commit the coder's changes for this cycle.
-	// The SHA is stored in lastCycleSHA and sealed into CycleCommits at cycle end.
-	if l.Git != nil {
-		summary := l.CommitSummary
-		if summary == "" {
-			summary = firstLine(state.TaskTitle, 72)
-		}
-		sha, err := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle, summary)
-		if err != nil {
-			l.UI.Error(fmt.Sprintf("failed to commit cycle %d: %v", state.Cycle, err))
-		} else {
-			state.lastCycleSHA = sha
-		}
-	}
-
-	if wasRefactored {
-		comment := fmt.Sprintf("[refactor cycle %d] User updated task description mid-execution.\nOriginal: %s\nUpdated: %s",
-			state.Cycle, truncate(origDesc, 500), truncate(refactorDesc, 500))
-		l.emit(ctx, Event{Kind: EventRefactored, BeadID: state.TaskBeadID, Cycle: state.Cycle, Message: comment})
-		l.UI.RefactorApplied(state.TaskBeadID)
-	}
-	l.emit(ctx, Event{
-		Kind:    EventAgentDone,
-		BeadID:  state.TaskBeadID,
-		Cycle:   state.Cycle,
-		Agent:   "coder",
-		Result:  &result,
-		Message: fmt.Sprintf("[coder cycle %d]\n%s", state.Cycle, truncate(result.ResultText, 2000)),
-	})
-	l.trackCacheMetrics(ctx, state, "coder", &result)
-	return nil
-}
-
-// runReviewerPhase invokes the reviewer agent, updates state and UI, parses
-// findings, and emits lifecycle events.
-func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgentBudget float64) error {
-	state.Phase = PhaseReviewing
-	l.UI.AgentStart("reviewer")
-
-	prompt := l.buildReviewerPrompt(state)
-	relayBlock, relayIDs := l.pendingHailRelay()
-	if relayBlock != "" {
-		prompt = relayBlock + "\n" + prompt
-	}
-	prompt = l.composeVolatilePrefix(ctx, prompt)
-
-	result, err := l.Invoker.Invoke(ctx, l.reviewerAgent(perAgentBudget), prompt, l.WorkDir)
-	if err != nil {
-		state.Phase = PhaseError
-		return fmt.Errorf("reviewer invocation failed: %w", err)
-	}
-
-	state.ReviewOutput = result.ResultText
-	state.TotalCostUSD += result.CostUSD
-	state.Phase = PhaseReviewComplete
-	l.UI.AgentOutput("reviewer", state.Cycle, result.ResultText)
-	l.UI.AgentDone("reviewer", result.CostUSD, result.DurationMs)
-	l.markHailsRelayed(relayIDs)
-	state.Findings = ParseReviewFindings(result.ResultText)
-	state.Verifications = ParseVerifications(result.ResultText)
-	l.emit(ctx, Event{
-		Kind:    EventAgentDone,
-		BeadID:  state.TaskBeadID,
-		Cycle:   state.Cycle,
-		Agent:   "reviewer",
-		Result:  &result,
-		Message: fmt.Sprintf("[reviewer cycle %d]\n%s", state.Cycle, truncate(result.ResultText, 2000)),
-	})
-	l.trackCacheMetrics(ctx, state, "reviewer", &result)
-	l.emitCycleSummary(state, PhaseReviewComplete, result)
-	return nil
-}
-
-// extractAndPostHails parses the reviewer's report and queries fabric
-// discoveries, converting them into Hail objects posted to l.HailQueue.
-// It also applies escalation rules: critical findings and high-risk/low-
-// satisfaction reports generate additional hails. A nil HailQueue makes
-// this a no-op.
-func (l *Loop) extractAndPostHails(ctx context.Context, state *CycleState) {
-	if l.HailQueue == nil {
-		return
-	}
-
-	phaseID := l.TaskID
-
-	// 1. Extract hails from the reviewer's report (NEEDS_HUMAN_REVIEW flag).
-	report := ParseReviewReport(state.ReviewOutput)
-	for _, h := range extractReviewerHails(report, state, phaseID) {
-		if err := l.HailQueue.Post(h); err != nil {
-			l.UI.Error(fmt.Sprintf("failed to post reviewer hail: %v", err))
-		}
-	}
-
-	// 2. Escalate critical-severity findings to blocker hails.
-	for _, h := range escalateCriticalFindings(state.Findings, state, phaseID) {
-		if err := l.HailQueue.Post(h); err != nil {
-			l.UI.Error(fmt.Sprintf("failed to post critical finding hail: %v", err))
-		}
-	}
-
-	// 3. Escalate high risk + low satisfaction to a decision-needed hail.
-	if h := escalateHighRiskLowSatisfaction(report, state, phaseID); h != nil {
-		if err := l.HailQueue.Post(*h); err != nil {
-			l.UI.Error(fmt.Sprintf("failed to post risk escalation hail: %v", err))
-		}
-	}
-
-	// 4. Bridge fabric discoveries to hails, skipping any already bridged
-	//    in previous cycles to avoid duplicate hails.
-	if l.FabricEnabled && l.Fabric != nil {
-		discoveries, err := l.Fabric.UnresolvedDiscoveries(ctx)
-		if err != nil {
-			l.UI.Error(fmt.Sprintf("failed to fetch fabric discoveries: %v", err))
-			return
-		}
-
-		// Filter out discoveries already bridged in earlier cycles.
-		var newDiscoveries []fabric.Discovery
-		for _, d := range discoveries {
-			if !state.bridgedDiscoveryIDs[d.ID] {
-				newDiscoveries = append(newDiscoveries, d)
-			}
-		}
-
-		for _, h := range bridgeDiscoveryHails(newDiscoveries, phaseID, state.Cycle) {
-			if err := l.HailQueue.Post(h); err != nil {
-				l.UI.Error(fmt.Sprintf("failed to post discovery hail: %v", err))
-			}
-		}
-
-		// Record all new discovery IDs as bridged so subsequent cycles skip them.
-		if len(newDiscoveries) > 0 {
-			if state.bridgedDiscoveryIDs == nil {
-				state.bridgedDiscoveryIDs = make(map[int64]bool)
-			}
-			for _, d := range newDiscoveries {
-				state.bridgedDiscoveryIDs[d.ID] = true
-			}
-		}
-	}
-}
-
-// postMaxCyclesHail creates and posts a blocker hail when the loop exhausts
-// its maximum cycle count without approval. A nil HailQueue makes this a no-op.
-func (l *Loop) postMaxCyclesHail(state *CycleState) {
-	if l.HailQueue == nil {
-		return
-	}
-	h := buildMaxCyclesHail(state, l.TaskID)
-	if err := l.HailQueue.Post(h); err != nil {
-		l.UI.Error(fmt.Sprintf("failed to post max-cycles hail: %v", err))
-	}
-}
-
-// emitCycleSummary sends a cycle summary to the UI for the given phase.
-func (l *Loop) emitCycleSummary(state *CycleState, phase Phase, result agent.InvocationResult) {
-	l.UI.CycleSummary(ui.CycleSummaryData{
-		Cycle:             state.Cycle,
-		MaxCycles:         l.MaxCycles,
-		Phase:             phase.String(),
-		CostUSD:           result.CostUSD,
-		TotalCostUSD:      state.TotalCostUSD,
-		MaxBudgetUSD:      l.MaxBudgetUSD,
-		DurationMs:        result.DurationMs,
-		Approved:          isApproved(state.ReviewOutput),
-		IssueCount:        len(state.Findings),
-		FilterFixAttempts: state.CycleFilterFixAttempts,
-		FilterFixCostUSD:  state.CycleFilterFixCostUSD,
-		FilterFixSuccess:  state.FilterFixedThisCycle,
-	})
-}
-
-// trackCacheMetrics emits a cache metrics event and updates the cycle state's
-// cache hit/miss counters. It also logs cache stability diagnostics to stderr
-// when CacheVerbose is enabled.
-func (l *Loop) trackCacheMetrics(ctx context.Context, state *CycleState, agentRole string, result *agent.InvocationResult) {
-	hash := result.SystemPromptHash
-	if state.prevSystemPromptHash != "" && hash == state.prevSystemPromptHash {
-		state.cacheHitCount++
-		state.totalCachedBytes += int64(result.SystemPromptLen)
-		if l.CacheVerbose {
-			fmt.Fprintf(os.Stderr, "[cache] %s cycle %d: system prompt STABLE (hash match, %d bytes cached)\n",
-				agentRole, state.Cycle, result.SystemPromptLen)
-		}
-	} else {
-		state.cacheMissCount++
-		if l.CacheVerbose && state.prevSystemPromptHash != "" {
-			fmt.Fprintf(os.Stderr, "[cache] %s cycle %d: system prompt CHANGED (cache miss, prev=%.8s curr=%.8s)\n",
-				agentRole, state.Cycle, state.prevSystemPromptHash, hash)
-		}
-	}
-	state.prevSystemPromptHash = hash
-
-	l.emit(ctx, Event{
-		Kind:   EventCacheMetrics,
-		BeadID: state.TaskBeadID,
-		Cycle:  state.Cycle,
-		Agent:  agentRole,
-		Result: result,
-		Message: fmt.Sprintf("sys_prompt_hash=%s sys_prompt_len=%d user_prompt_len=%d cost=%.4f",
-			hash, result.SystemPromptLen, result.UserPromptLen, result.CostUSD),
-	})
 }
 
 // checkBudget returns ErrBudgetExceeded if the total cost has reached the limit.
@@ -1291,47 +673,73 @@ func (l *Loop) finalCommitSHA(ctx context.Context, state *CycleState) string {
 	return ""
 }
 
-// emitBeadUpdate sends the current bead hierarchy to the UI.
-// It uses AllFindings (accumulated across cycles) to match ChildBeadIDs,
-// so that children from earlier cycles are preserved in the hierarchy.
-// When the parent task is closed (approved), all children are marked closed
-// since we don't track per-child status independently.
-func (l *Loop) emitBeadUpdate(state *CycleState, status string) {
-	// When the task is closed, all child issues are considered resolved.
-	childStatus := "open"
-	if status == "closed" {
-		childStatus = "closed"
+// cacheSystemPrompts pre-computes and stores the system prompts for both
+// coder and reviewer agents. This must be called once at phase start (in
+// runLoop) before the cycle loop begins. By building the prompts once, we
+// guarantee byte-identical system prompts across all cycles within a phase,
+// which is critical for prompt cache hits in the Claude CLI.
+func (l *Loop) cacheSystemPrompts() {
+	opts := agent.PromptOpts{
+		FabricEnabled:  l.FabricEnabled,
+		TaskID:         l.TaskID,
+		ProjectContext: l.ProjectContext,
 	}
-	var children []ui.BeadChild
-	for i, id := range state.ChildBeadIDs {
-		title := "review finding"
-		severity := "major"
-		cycle := 0
-		if i < len(state.AllFindings) {
-			title = firstLine(state.AllFindings[i].Description, 80)
-			severity = state.AllFindings[i].Severity
-			cycle = state.AllFindings[i].Cycle
-		}
-		children = append(children, ui.BeadChild{
-			ID:       id,
-			Title:    title,
-			Status:   childStatus,
-			Severity: severity,
-			Cycle:    cycle,
-		})
-	}
-	l.UI.BeadUpdate(state.TaskBeadID, state.TaskTitle, status, children)
+	l.cachedCoderSystemPrompt = agent.BuildSystemPrompt(l.CoderPrompt, opts)
+	l.cachedReviewerSystemPrompt = agent.BuildSystemPrompt(l.ReviewPrompt, opts)
 }
 
-// createFindingBeads delegates to hooks that implement FindingCreator to
-// create child beads for each review finding. Returns the IDs of
-// successfully created beads.
-func (l *Loop) createFindingBeads(ctx context.Context, state *CycleState) []string {
-	var ids []string
-	for _, h := range l.Hooks {
-		if fc, ok := h.(FindingCreator); ok {
-			ids = append(ids, fc.CreateFindingChildIDs(ctx, state.TaskBeadID, state.Findings)...)
+// trackCacheMetrics emits a cache metrics event and updates the cycle state's
+// cache hit/miss counters. It also logs cache stability diagnostics to stderr
+// when CacheVerbose is enabled.
+func (l *Loop) trackCacheMetrics(ctx context.Context, state *CycleState, agentRole string, result *agent.InvocationResult) {
+	hash := result.SystemPromptHash
+	if state.prevSystemPromptHash != "" && hash == state.prevSystemPromptHash {
+		state.cacheHitCount++
+		state.totalCachedBytes += int64(result.SystemPromptLen)
+		if l.CacheVerbose {
+			fmt.Fprintf(os.Stderr, "[cache] %s cycle %d: system prompt STABLE (hash match, %d bytes cached)\n",
+				agentRole, state.Cycle, result.SystemPromptLen)
+		}
+	} else {
+		state.cacheMissCount++
+		if l.CacheVerbose && state.prevSystemPromptHash != "" {
+			fmt.Fprintf(os.Stderr, "[cache] %s cycle %d: system prompt CHANGED (cache miss, prev=%.8s curr=%.8s)\n",
+				agentRole, state.Cycle, state.prevSystemPromptHash, hash)
 		}
 	}
-	return ids
+	state.prevSystemPromptHash = hash
+
+	l.emit(ctx, Event{
+		Kind:   EventCacheMetrics,
+		BeadID: state.TaskBeadID,
+		Cycle:  state.Cycle,
+		Agent:  agentRole,
+		Result: result,
+		Message: fmt.Sprintf("sys_prompt_hash=%s sys_prompt_len=%d user_prompt_len=%d cost=%.4f",
+			hash, result.SystemPromptLen, result.UserPromptLen, result.CostUSD),
+	})
+}
+
+// drainRefactor checks the RefactorCh for a pending phase edit and applies it
+// to the cycle state. The current cycle always completes before the new
+// description takes effect. Only the most recent value on the channel wins.
+func (l *Loop) drainRefactor(state *CycleState) {
+	if l.RefactorCh == nil {
+		return
+	}
+	var latest string
+	for {
+		select {
+		case body := <-l.RefactorCh:
+			latest = body
+		default:
+			if latest != "" {
+				state.OriginalDescription = state.TaskTitle
+				state.RefactorDescription = latest
+				state.TaskTitle = latest
+				state.Refactored = true
+			}
+			return
+		}
+	}
 }
