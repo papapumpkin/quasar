@@ -3,7 +3,7 @@ id = "final-verification"
 title = "Final verification: full test suite, vet, and architecture check"
 type = "task"
 priority = 1
-depends_on = ["extract-worker-subpackage", "split-loop"]
+depends_on = ["fix-external-imports", "split-loop"]
 scope = ["internal/", "cmd/"]
 +++
 
@@ -53,8 +53,8 @@ The architecture tests may need updates if they check package counts, import pat
 
 ### 6. Verify no circular imports
 The `go build` already catches this, but explicitly verify:
-- `internal/nebula/worker` imports `internal/nebula` ✓
-- `internal/nebula` does NOT import `internal/nebula/worker` ✓
+- `internal/nebula/worker` imports `internal/nebula` — OK
+- `internal/nebula` does NOT import `internal/nebula/worker` — OK
 
 ### 7. Verify no dead imports
 Check that no file imports packages it doesn't use (goimports handles this, but verify).

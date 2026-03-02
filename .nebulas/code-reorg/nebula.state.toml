@@ -52,16 +52,28 @@ needs_human_review = false
 summary = 'Correct deletion of 15 dead/empty stub files with no live references; purely structural cleanup with zero behavioral impact.'
 
 [phases.extract-worker-subpackage]
-bead_id = 'quasar-o13k'
-status = 'in_progress'
+bead_id = 'quasar-wiis'
+status = 'failed'
 created_at = 2026-03-02T14:32:42.459017-05:00
-updated_at = 2026-03-02T18:24:20.817841-05:00
+updated_at = 2026-03-02T18:53:59.269221-05:00
 
 [phases.final-verification]
-bead_id = 'quasar-soy3'
+bead_id = 'quasar-t7vi'
 status = 'created'
 created_at = 2026-03-02T14:32:43.186449-05:00
-updated_at = 2026-03-02T18:24:20.426151-05:00
+updated_at = 2026-03-02T18:52:08.688479-05:00
+
+[phases.fix-external-imports]
+bead_id = 'quasar-qag5'
+status = 'in_progress'
+created_at = 2026-03-02T18:52:08.931879-05:00
+updated_at = 2026-03-02T18:52:09.086057-05:00
+
+[phases.fix-worker-compilation]
+bead_id = 'quasar-6ij1'
+status = 'created'
+created_at = 2026-03-02T18:52:08.812961-05:00
+updated_at = 2026-03-02T18:52:08.812961-05:00
 
 [phases.split-loop]
 bead_id = 'quasar-gnah'
@@ -76,7 +88,7 @@ needs_human_review = false
 summary = 'Clean structural split of loop.go into 4 focused files with all prior findings addressed; loop.go remains above the 500-line target due to pre-existing duplicated resumeLoop body, but all planned extractions were completed correctly.'
 
 [phases.split-nebula-healing]
-bead_id = 'quasar-10e7'
-status = 'created'
+bead_id = 'quasar-m01i'
+status = 'in_progress'
 created_at = 2026-03-02T14:32:41.715964-05:00
-updated_at = 2026-03-02T18:24:20.166748-05:00
+updated_at = 2026-03-02T18:53:59.270377-05:00

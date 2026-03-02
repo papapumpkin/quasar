@@ -11,7 +11,7 @@ labels = ["refactor", "organization"]
 max_workers = 3
 max_review_cycles = 5
 max_budget_usd = 60.0
-gate = "review"
+gate = "trust"
 
 [context]
 repo = "github.com/papapumpkin/quasar"
