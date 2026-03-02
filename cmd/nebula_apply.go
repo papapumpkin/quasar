@@ -454,6 +454,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					nebula.WithCommitter(nextPhaseCommitter),
 					nebula.WithCheckpointDir(nextDir),
 				}
+				nextWgOpts = append(nextWgOpts, resumeOptions(resume, nextWorkDir)...)
 				nextWgOpts = append(nextWgOpts, fc.WorkerGroupOptions()...)
 				wg = nebula.NewWorkerGroup(nextN, nextState, nextWgOpts...)
 				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, noSplash)
