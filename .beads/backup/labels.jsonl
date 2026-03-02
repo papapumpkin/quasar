@@ -358,6 +358,8 @@
 {"issue_id":"quasar-6ad4","label":"quasar"}
 {"issue_id":"quasar-6bf","label":"cosmetic"}
 {"issue_id":"quasar-6bf","label":"refactor"}
+{"issue_id":"quasar-6ij1","label":"organization"}
+{"issue_id":"quasar-6ij1","label":"refactor"}
 {"issue_id":"quasar-70z","label":"dag"}
 {"issue_id":"quasar-70z","label":"refactor"}
 {"issue_id":"quasar-70z.1","label":"quasar"}
@@ -890,6 +892,8 @@
 {"issue_id":"quasar-lixc","label":"cost-optimization"}
 {"issue_id":"quasar-lixc","label":"filter"}
 {"issue_id":"quasar-lixc","label":"quasar"}
+{"issue_id":"quasar-m01i","label":"organization"}
+{"issue_id":"quasar-m01i","label":"refactor"}
 {"issue_id":"quasar-m6di","label":"documentation"}
 {"issue_id":"quasar-m6di","label":"onboarding"}
 {"issue_id":"quasar-m6di","label":"quasar"}
@@ -964,6 +968,14 @@
 {"issue_id":"quasar-o13k.1","label":"quasar"}
 {"issue_id":"quasar-o13k.1","label":"refactor"}
 {"issue_id":"quasar-o13k.1","label":"review-finding"}
+{"issue_id":"quasar-o13k.2","label":"organization"}
+{"issue_id":"quasar-o13k.2","label":"quasar"}
+{"issue_id":"quasar-o13k.2","label":"refactor"}
+{"issue_id":"quasar-o13k.2","label":"review-finding"}
+{"issue_id":"quasar-o13k.3","label":"organization"}
+{"issue_id":"quasar-o13k.3","label":"quasar"}
+{"issue_id":"quasar-o13k.3","label":"refactor"}
+{"issue_id":"quasar-o13k.3","label":"review-finding"}
 {"issue_id":"quasar-opk6","label":"quasar"}
 {"issue_id":"quasar-opk6","label":"tui"}
 {"issue_id":"quasar-opk6.1","label":"quasar"}
@@ -1009,6 +1021,8 @@
 {"issue_id":"quasar-q41","label":"refactor"}
 {"issue_id":"quasar-q7m","label":"cosmetic"}
 {"issue_id":"quasar-q7m","label":"refactor"}
+{"issue_id":"quasar-qag5","label":"organization"}
+{"issue_id":"quasar-qag5","label":"refactor"}
 {"issue_id":"quasar-qao","label":"cosmetic"}
 {"issue_id":"quasar-qao","label":"refactor"}
 {"issue_id":"quasar-qao.1","label":"quasar"}
@@ -1114,6 +1128,8 @@
 {"issue_id":"quasar-t7s4.1","label":"review-finding"}
 {"issue_id":"quasar-t7s4.2","label":"quasar"}
 {"issue_id":"quasar-t7s4.2","label":"review-finding"}
+{"issue_id":"quasar-t7vi","label":"organization"}
+{"issue_id":"quasar-t7vi","label":"refactor"}
 {"issue_id":"quasar-tesb","label":"cost-optimization"}
 {"issue_id":"quasar-tesb","label":"performance"}
 {"issue_id":"quasar-tesb","label":"quasar"}
@@ -1205,6 +1221,8 @@
 {"issue_id":"quasar-wbas","label":"quasar"}
 {"issue_id":"quasar-wch","label":"fabric"}
 {"issue_id":"quasar-wch","label":"quasar"}
+{"issue_id":"quasar-wiis","label":"organization"}
+{"issue_id":"quasar-wiis","label":"refactor"}
 {"issue_id":"quasar-wpov","label":"architecture"}
 {"issue_id":"quasar-wpov","label":"quasar"}
 {"issue_id":"quasar-wpov","label":"testing"}
