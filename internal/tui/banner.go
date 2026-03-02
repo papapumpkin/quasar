@@ -112,12 +112,6 @@ var (
 	styleFade      = lipgloss.NewStyle().Foreground(colorMuted)
 )
 
-// Logo style definitions for the TUI status bar logo.
-var (
-	styleLogoJet  = lipgloss.NewStyle().Foreground(colorMutedLight)
-	styleLogoCore = lipgloss.NewStyle().Foreground(colorMutedLight)
-)
-
 // Banner holds terminal dimensions and provides styled quasar ASCII art views.
 type Banner struct {
 	Width  int
@@ -372,3 +366,4 @@ func colorDopplerLine(line string) string {
 func isFadeChar(r rune) bool {
 	return r == '.' || r == '·' || r == ':'
 }
+
