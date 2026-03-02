@@ -59,6 +59,8 @@
 {"issue_id":"quasar-0sz3","label":"quasar"}
 {"issue_id":"quasar-0u1j","label":"docs"}
 {"issue_id":"quasar-0u1j","label":"quasar"}
+{"issue_id":"quasar-10e7","label":"organization"}
+{"issue_id":"quasar-10e7","label":"refactor"}
 {"issue_id":"quasar-17p","label":"concurrency"}
 {"issue_id":"quasar-17p","label":"contracts"}
 {"issue_id":"quasar-17p","label":"nebula"}
@@ -956,6 +958,12 @@
 {"issue_id":"quasar-nv4h","label":"context"}
 {"issue_id":"quasar-nv4h","label":"cost-optimization"}
 {"issue_id":"quasar-nv4h","label":"quasar"}
+{"issue_id":"quasar-o13k","label":"organization"}
+{"issue_id":"quasar-o13k","label":"refactor"}
+{"issue_id":"quasar-o13k.1","label":"organization"}
+{"issue_id":"quasar-o13k.1","label":"quasar"}
+{"issue_id":"quasar-o13k.1","label":"refactor"}
+{"issue_id":"quasar-o13k.1","label":"review-finding"}
 {"issue_id":"quasar-opk6","label":"quasar"}
 {"issue_id":"quasar-opk6","label":"tui"}
 {"issue_id":"quasar-opk6.1","label":"quasar"}
@@ -1084,6 +1092,8 @@
 {"issue_id":"quasar-sdrp.2","label":"review-finding"}
 {"issue_id":"quasar-sdrp.3","label":"quasar"}
 {"issue_id":"quasar-sdrp.3","label":"review-finding"}
+{"issue_id":"quasar-soy3","label":"organization"}
+{"issue_id":"quasar-soy3","label":"refactor"}
 {"issue_id":"quasar-t36","label":"bugfix"}
 {"issue_id":"quasar-t36","label":"quasar"}
 {"issue_id":"quasar-t36","label":"tui"}
