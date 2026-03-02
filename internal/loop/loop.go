@@ -41,6 +41,7 @@ type Loop struct {
 	HailQueue         HailQueue        // Optional; when set, hails extracted during execution are posted here.
 	HailTimeout       time.Duration    // Auto-resolve timeout for hails. 0 disables auto-resolution.
 	StruggleConfig    StruggleConfig   // Optional; zero value disables struggle detection.
+	CheckpointDir     string           // Directory for checkpoint files. Empty disables checkpointing.
 
 	// cachedCoderSystemPrompt is the pre-computed system prompt for the coder
 	// agent, built once at phase start via cacheSystemPrompts. It contains only

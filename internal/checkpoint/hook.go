@@ -20,7 +20,7 @@ type CheckpointHook struct {
 	PhaseID    string                  // nebula phase ID (may be empty for standalone)
 	NebulaName string                  // nebula name (may be empty for standalone)
 	GitSHAFunc func() string           // returns current HEAD SHA
-	StateFunc  func() *loop.CycleState // returns current loop cycle state
+	StateFunc  func() *loop.CycleState // returns current loop cycle state; if nil, OnEvent logs and skips
 }
 
 // OnEvent handles a loop lifecycle event. It writes a checkpoint on
@@ -31,6 +31,11 @@ func (h *CheckpointHook) OnEvent(ctx context.Context, event loop.Event) {
 	case loop.EventReviewComplete, loop.EventTaskSuccess, loop.EventTaskFailed:
 		// These are the significant transition points worth checkpointing.
 	default:
+		return
+	}
+
+	if h.StateFunc == nil {
+		fmt.Fprintf(os.Stderr, "checkpoint: StateFunc not configured, skipping\n")
 		return
 	}
 

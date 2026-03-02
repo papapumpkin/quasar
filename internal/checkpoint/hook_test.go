@@ -227,6 +227,30 @@ func TestCheckpointHookNilGitSHAFunc(t *testing.T) {
 	}
 }
 
+func TestCheckpointHookNilStateFuncLogsAndSkips(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	hook := &CheckpointHook{
+		Dir:        dir,
+		PhaseID:    "nil-statefunc",
+		NebulaName: "nil-statefunc-nebula",
+		GitSHAFunc: func() string { return "sha-nil" },
+		StateFunc:  nil, // no state provider
+	}
+
+	// Should not panic; logs to stderr and skips.
+	hook.OnEvent(context.Background(), loop.Event{
+		Kind: loop.EventTaskSuccess,
+	})
+
+	path := CheckpointPath(dir, "nil-statefunc")
+	if _, err := os.Stat(path); err == nil {
+		t.Error("checkpoint should not be written when StateFunc is nil")
+	}
+}
+
 func TestCheckpointHookNilStateLogsAndSkips(t *testing.T) {
 	t.Parallel()
 
