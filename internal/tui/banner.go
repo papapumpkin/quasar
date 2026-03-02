@@ -112,6 +112,12 @@ var (
 	styleFade      = lipgloss.NewStyle().Foreground(colorMuted)
 )
 
+// Logo style definitions for the TUI status bar logo.
+var (
+	styleLogoJet  = lipgloss.NewStyle().Foreground(colorMutedLight)
+	styleLogoCore = lipgloss.NewStyle().Foreground(colorMutedLight)
+)
+
 // Banner holds terminal dimensions and provides styled quasar ASCII art views.
 type Banner struct {
 	Width  int
@@ -367,3 +373,19 @@ func isFadeChar(r rune) bool {
 	return r == '.' || r == '·' || r == ':'
 }
 
+// Logo returns a styled single-line quasar logo for the TUI status bar.
+// The design evokes a quasar's bright core with radiating jets.
+// Background is inherited from the parent status bar container.
+func Logo() string {
+	sp := styleLogoJet.Render(" ")
+	return styleLogoJet.Render("━━╋━━") +
+		sp +
+		styleLogoCore.Render("QUASAR") +
+		sp +
+		styleLogoJet.Render("━━╋━━")
+}
+
+// LogoPlain returns the unstyled ASCII logo text for use in README and plain contexts.
+func LogoPlain() string {
+	return "━━╋━━ QUASAR ━━╋━━"
+}

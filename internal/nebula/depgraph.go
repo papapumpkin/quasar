@@ -1,6 +1,7 @@
 package nebula
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
