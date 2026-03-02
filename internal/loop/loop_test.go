@@ -3670,7 +3670,7 @@ func TestRunFromCheckpoint(t *testing.T) {
 		inv := &fakeInvoker{
 			responses: []agent.InvocationResult{
 				{ResultText: "coding cycle 3", CostUSD: 0.10},
-				{ResultText: "APPROVED", CostUSD: 0.05},
+				{ResultText: "APPROVED: Looks good.", CostUSD: 0.05},
 			},
 		}
 		rUI := &recordingUI{}
@@ -3750,7 +3750,7 @@ func TestRunFromCheckpoint(t *testing.T) {
 		inv := &fakeInvoker{
 			responses: []agent.InvocationResult{
 				{ResultText: "coding", CostUSD: 0.10},
-				{ResultText: "APPROVED", CostUSD: 0.05},
+				{ResultText: "APPROVED: LGTM.", CostUSD: 0.05},
 			},
 		}
 		rUI := &recordingUI{}
@@ -3790,7 +3790,7 @@ func TestRunFromCheckpoint(t *testing.T) {
 		inv := &fakeInvoker{
 			responses: []agent.InvocationResult{
 				{ResultText: "fresh coding", CostUSD: 0.10},
-				{ResultText: "APPROVED", CostUSD: 0.05},
+				{ResultText: "APPROVED: Looks good.", CostUSD: 0.05},
 			},
 		}
 		rUI := &recordingUI{}
@@ -3833,7 +3833,7 @@ func TestRunFromCheckpoint(t *testing.T) {
 		inv := &fakeInvoker{
 			responses: []agent.InvocationResult{
 				{ResultText: "recoding", CostUSD: 0.10},
-				{ResultText: "APPROVED", CostUSD: 0.05},
+				{ResultText: "APPROVED: Looks good.", CostUSD: 0.05},
 			},
 		}
 		l := &Loop{

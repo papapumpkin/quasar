@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"testing"
 )
@@ -292,6 +293,187 @@ func TestTryLoadCheckpoint(t *testing.T) {
 		result := wg.tryLoadCheckpoint(context.Background(), "phase-1")
 		if result != sentinel {
 			t.Fatalf("expected valid checkpoint, got %v", result)
+		}
+	})
+}
+
+// TestExecutePhase_ResumeRouting verifies that executePhase routes through
+// RunFromCheckpoint when a valid checkpoint is found, and through
+// RunExistingPhase when resume is disabled or no checkpoint exists.
+func TestExecutePhase_ResumeRouting(t *testing.T) {
+	t.Parallel()
+
+	makeNebula := func() *Nebula {
+		return &Nebula{
+			Dir:      t.TempDir(),
+			Manifest: Manifest{Nebula: Info{Name: "test"}},
+			Phases:   []PhaseSpec{{ID: "phase-1", Title: "Test Phase"}},
+		}
+	}
+
+	t.Run("ResumeEnabled_ValidCheckpoint_CallsRunFromCheckpoint", func(t *testing.T) {
+		t.Parallel()
+		n := makeNebula()
+		state := &State{
+			Version: 1,
+			Phases: map[string]*PhaseState{
+				"phase-1": {BeadID: "bead-1", Status: PhaseStatusInProgress},
+			},
+		}
+		runner := &resumeMockRunner{
+			result: &PhaseRunnerResult{TotalCostUSD: 0.01},
+		}
+		wg := NewWorkerGroup(n, state,
+			WithRunner(runner),
+			WithMaxWorkers(1),
+			WithLogger(io.Discard),
+			WithResumeEnabled(true),
+			WithCheckpointDir("/tmp/test-cp"),
+			WithCheckpointLoader(func(dir, phaseID string) (any, error) {
+				return "mock-checkpoint", nil
+			}),
+		)
+		wg.ensureGater()
+		wg.tracker = NewPhaseTracker(n.Phases, state)
+		wg.progress = NewProgressReporter(n, state, nil, nil, io.Discard)
+
+		wg.executePhase(context.Background(), "phase-1", 0)
+
+		resumeCalls := runner.getResumeCalls()
+		existingCalls := runner.getExistingCalls()
+		if len(resumeCalls) != 1 || resumeCalls[0] != "phase-1" {
+			t.Fatalf("expected RunFromCheckpoint called for phase-1, got resume=%v existing=%v", resumeCalls, existingCalls)
+		}
+		if len(existingCalls) != 0 {
+			t.Fatalf("expected no RunExistingPhase calls, got %v", existingCalls)
+		}
+	})
+
+	t.Run("ResumeEnabled_NoCheckpoint_CallsRunExistingPhase", func(t *testing.T) {
+		t.Parallel()
+		n := makeNebula()
+		state := &State{
+			Version: 1,
+			Phases: map[string]*PhaseState{
+				"phase-1": {BeadID: "bead-1", Status: PhaseStatusInProgress},
+			},
+		}
+		runner := &resumeMockRunner{
+			result: &PhaseRunnerResult{TotalCostUSD: 0.01},
+		}
+		wg := NewWorkerGroup(n, state,
+			WithRunner(runner),
+			WithMaxWorkers(1),
+			WithLogger(io.Discard),
+			WithResumeEnabled(true),
+			WithCheckpointDir("/tmp/test-cp"),
+			WithCheckpointLoader(func(dir, phaseID string) (any, error) {
+				return nil, nil // no checkpoint found
+			}),
+		)
+		wg.ensureGater()
+		wg.tracker = NewPhaseTracker(n.Phases, state)
+		wg.progress = NewProgressReporter(n, state, nil, nil, io.Discard)
+
+		wg.executePhase(context.Background(), "phase-1", 0)
+
+		resumeCalls := runner.getResumeCalls()
+		existingCalls := runner.getExistingCalls()
+		if len(existingCalls) != 1 || existingCalls[0] != "phase-1" {
+			t.Fatalf("expected RunExistingPhase called for phase-1, got existing=%v resume=%v", existingCalls, resumeCalls)
+		}
+		if len(resumeCalls) != 0 {
+			t.Fatalf("expected no RunFromCheckpoint calls, got %v", resumeCalls)
+		}
+	})
+
+	t.Run("ResumeDisabled_SkipsCheckpoint_CallsRunExistingPhase", func(t *testing.T) {
+		t.Parallel()
+		n := makeNebula()
+		state := &State{
+			Version: 1,
+			Phases: map[string]*PhaseState{
+				"phase-1": {BeadID: "bead-1", Status: PhaseStatusInProgress},
+			},
+		}
+		runner := &resumeMockRunner{
+			result: &PhaseRunnerResult{TotalCostUSD: 0.01},
+		}
+		wg := NewWorkerGroup(n, state,
+			WithRunner(runner),
+			WithMaxWorkers(1),
+			WithLogger(io.Discard),
+			// ResumeEnabled is false — even if loader is set, no checkpoint should load.
+			WithCheckpointDir("/tmp/test-cp"),
+			WithCheckpointLoader(func(dir, phaseID string) (any, error) {
+				return "should-not-be-used", nil
+			}),
+		)
+		wg.ensureGater()
+		wg.tracker = NewPhaseTracker(n.Phases, state)
+		wg.progress = NewProgressReporter(n, state, nil, nil, io.Discard)
+
+		wg.executePhase(context.Background(), "phase-1", 0)
+
+		resumeCalls := runner.getResumeCalls()
+		existingCalls := runner.getExistingCalls()
+		if len(existingCalls) != 1 {
+			t.Fatalf("expected RunExistingPhase called, got existing=%v resume=%v", existingCalls, resumeCalls)
+		}
+		if len(resumeCalls) != 0 {
+			t.Fatalf("expected no RunFromCheckpoint calls when resume disabled, got %v", resumeCalls)
+		}
+	})
+
+	t.Run("ResumeEnabled_ValidationFails_FallsBackToFresh", func(t *testing.T) {
+		t.Parallel()
+		n := makeNebula()
+		var removedPhase string
+		state := &State{
+			Version: 1,
+			Phases: map[string]*PhaseState{
+				"phase-1": {BeadID: "bead-1", Status: PhaseStatusInProgress},
+			},
+		}
+		runner := &resumeMockRunner{
+			result: &PhaseRunnerResult{TotalCostUSD: 0.01},
+		}
+		wg := NewWorkerGroup(n, state,
+			WithRunner(runner),
+			WithMaxWorkers(1),
+			WithLogger(io.Discard),
+			WithResumeEnabled(true),
+			WithCheckpointDir("/tmp/test-cp"),
+			WithCheckpointLoader(func(dir, phaseID string) (any, error) {
+				return "stale-checkpoint", nil
+			}),
+			WithCheckpointValidator(func(cp any, gitSHA string) error {
+				return fmt.Errorf("SHA mismatch")
+			}),
+			WithCheckpointRemover(func(dir, phaseID string) error {
+				removedPhase = phaseID
+				return nil
+			}),
+			WithGitSHAFunc(func(ctx context.Context) (string, error) {
+				return "abc123", nil
+			}),
+		)
+		wg.ensureGater()
+		wg.tracker = NewPhaseTracker(n.Phases, state)
+		wg.progress = NewProgressReporter(n, state, nil, nil, io.Discard)
+
+		wg.executePhase(context.Background(), "phase-1", 0)
+
+		resumeCalls := runner.getResumeCalls()
+		existingCalls := runner.getExistingCalls()
+		if len(existingCalls) != 1 {
+			t.Fatalf("expected RunExistingPhase called after validation failure, got existing=%v resume=%v", existingCalls, resumeCalls)
+		}
+		if len(resumeCalls) != 0 {
+			t.Fatalf("expected no RunFromCheckpoint calls after validation failure, got %v", resumeCalls)
+		}
+		if removedPhase != "phase-1" {
+			t.Fatalf("expected stale checkpoint to be removed, got %q", removedPhase)
 		}
 	})
 }
