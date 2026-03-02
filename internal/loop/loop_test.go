@@ -3912,7 +3912,7 @@ func TestRunFromCheckpoint(t *testing.T) {
 		inv := &fakeInvoker{
 			responses: []agent.InvocationResult{
 				{ResultText: "coding", CostUSD: 0.10},
-				{ResultText: "APPROVED", CostUSD: 0.05},
+				{ResultText: "APPROVED: OK.", CostUSD: 0.05},
 			},
 		}
 		l := &Loop{
