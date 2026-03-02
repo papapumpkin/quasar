@@ -203,25 +203,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		nebula.WithCommitter(phaseCommitter),
 		nebula.WithCheckpointDir(dir),
 	}
-	if resume {
-		wgOpts = append(wgOpts,
-			nebula.WithResumeEnabled(true),
-			nebula.WithCheckpointLoader(func(cpDir, phaseID string) (any, error) {
-				return checkpoint.Load(cpDir, phaseID)
-			}),
-			nebula.WithCheckpointValidator(func(cp any, gitSHA string) error {
-				typed, ok := cp.(*checkpoint.Checkpoint)
-				if !ok {
-					return fmt.Errorf("invalid checkpoint type: expected *checkpoint.Checkpoint")
-				}
-				return checkpoint.Validate(typed, gitSHA)
-			}),
-			nebula.WithCheckpointRemover(checkpoint.Remove),
-			nebula.WithGitSHAFunc(func(ctx context.Context) (string, error) {
-				return checkpoint.CurrentGitSHA(ctx, workDir)
-			}),
-		)
-	}
+	wgOpts = append(wgOpts, resumeOptions(resume, workDir)...)
 	wgOpts = append(wgOpts, fc.WorkerGroupOptions()...)
 	wg := nebula.NewWorkerGroup(n, state, wgOpts...)
 
@@ -582,6 +564,33 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// resumeOptions returns nebula.Option values that enable checkpoint-based
+// resume for a WorkerGroup. When resume is false it returns nil.
+// workDir is used in the GitSHA closure so each nebula gets the correct
+// working directory for HEAD resolution.
+func resumeOptions(resume bool, workDir string) []nebula.Option {
+	if !resume {
+		return nil
+	}
+	return []nebula.Option{
+		nebula.WithResumeEnabled(true),
+		nebula.WithCheckpointLoader(func(cpDir, phaseID string) (any, error) {
+			return checkpoint.Load(cpDir, phaseID)
+		}),
+		nebula.WithCheckpointValidator(func(cp any, gitSHA string) error {
+			typed, ok := cp.(*checkpoint.Checkpoint)
+			if !ok {
+				return fmt.Errorf("invalid checkpoint type: expected *checkpoint.Checkpoint")
+			}
+			return checkpoint.Validate(typed, gitSHA)
+		}),
+		nebula.WithCheckpointRemover(checkpoint.Remove),
+		nebula.WithGitSHAFunc(func(ctx context.Context) (string, error) {
+			return checkpoint.CurrentGitSHA(ctx, workDir)
+		}),
+	}
 }
 
 // cleanupCheckpoints removes all checkpoint files in the given directory.
