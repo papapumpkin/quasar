@@ -58,7 +58,9 @@ type WorkerGroup struct {
 	OnScanning   func(phaseID string)                     // optional callback for fabric scanning notifications
 	Invoker      agent.Invoker                            // optional; required for auto-decomposition
 	Metrics      *Metrics                                 // optional; nil = no collection
-	Logger       io.Writer                                // optional; nil = os.Stderr
+	Logger        io.Writer // optional; nil = os.Stderr
+	ResumeEnabled bool     // When true, load existing checkpoints to skip completed phases.
+	CheckpointDir string   // Directory for checkpoint files. Empty disables checkpoint load/cleanup.
 
 	mu          sync.Mutex
 	outputMu    sync.Mutex // serializes checkpoint + dashboard output in watch mode

@@ -12,6 +12,11 @@ import (
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
+// CheckpointCleanupFunc is called after a successful task completion when
+// resuming from a checkpoint. Callers supply a function that removes the
+// checkpoint file, avoiding a circular dependency on the checkpoint package.
+type CheckpointCleanupFunc func() error
+
 // Loop orchestrates the coder-reviewer cycle for a single task.
 type Loop struct {
 	Invoker           agent.Invoker
