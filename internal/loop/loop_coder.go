@@ -389,3 +389,27 @@ func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkNam
 	})
 	return false, nil
 }
+
+// drainRefactor checks the RefactorCh for a pending phase edit and applies it
+// to the cycle state. The current cycle always completes before the new
+// description takes effect. Only the most recent value on the channel wins.
+func (l *Loop) drainRefactor(state *CycleState) {
+	if l.RefactorCh == nil {
+		return
+	}
+	var latest string
+	for {
+		select {
+		case body := <-l.RefactorCh:
+			latest = body
+		default:
+			if latest != "" {
+				state.OriginalDescription = state.TaskTitle
+				state.RefactorDescription = latest
+				state.TaskTitle = latest
+				state.Refactored = true
+			}
+			return
+		}
+	}
+}

@@ -30,7 +30,8 @@ var lineCountExceptions = map[string]int{
 	"internal/dag/dag.go":            462,  // TODO: split DAG operations
 	"internal/fabric/sqlite.go":      565,  // TODO: split query methods into separate files
 	"internal/fabric/static.go":      486,  // TODO: decompose static fabric impl
-	"internal/loop/loop.go":          745,  // core orchestration after split into loop_coder.go / loop_reviewer.go
+	"internal/loop/loop.go":          673,  // core orchestration after split into loop_coder.go / loop_reviewer.go / loop_cache.go
+	"internal/loop/loop_coder.go":    415,  // coder phase + lint/filter fix loops + drainRefactor
 	"internal/nebula/plan_engine.go": 408,  // TODO: extract plan engine steps
 	"internal/nebula/worker.go":      471,  // TODO: extract worker lifecycle methods
 	"internal/tui/diffview.go":       495,  // TODO: extract diff rendering
