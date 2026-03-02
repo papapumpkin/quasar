@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'code-reorg'
-total_cost_usd = 6.390480749999999
+total_cost_usd = 14.063313
 
 [phases]
 [phases.consolidate-loop]
@@ -53,9 +53,15 @@ updated_at = 2026-03-02T14:32:43.186449-05:00
 
 [phases.split-loop]
 bead_id = 'quasar-gnah'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-02T14:32:41.008505-05:00
-updated_at = 2026-03-02T14:42:12.029415-05:00
+updated_at = 2026-03-02T15:09:09.158372-05:00
+
+[phases.split-loop.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean structural split of loop.go into 4 focused files with all prior findings addressed; loop.go remains above the 500-line target due to pre-existing duplicated resumeLoop body, but all planned extractions were completed correctly.'
 
 [phases.split-nebula-healing]
 bead_id = 'quasar-e3gx'
