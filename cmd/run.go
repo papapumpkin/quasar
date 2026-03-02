@@ -43,10 +43,10 @@ func init() {
 	runCmd.Flags().Int("max-context-tokens", 0, "token budget for context injection (0 = use default 10000)")
 
 	// Bind cache-related flags to viper for config precedence: flags > env > file > defaults.
-	viper.BindPFlag("cache_optimization", runCmd.Flags().Lookup("cache-optimization"))
-	viper.BindPFlag("cache_verbose", runCmd.Flags().Lookup("cache-verbose"))
-	viper.BindPFlag("project_context_path", runCmd.Flags().Lookup("project-context-path"))
-	viper.BindPFlag("max_context_tokens", runCmd.Flags().Lookup("max-context-tokens"))
+	_ = viper.BindPFlag("cache_optimization", runCmd.Flags().Lookup("cache-optimization"))
+	_ = viper.BindPFlag("cache_verbose", runCmd.Flags().Lookup("cache-verbose"))
+	_ = viper.BindPFlag("project_context_path", runCmd.Flags().Lookup("project-context-path"))
+	_ = viper.BindPFlag("max_context_tokens", runCmd.Flags().Lookup("max-context-tokens"))
 
 	rootCmd.AddCommand(runCmd)
 }
