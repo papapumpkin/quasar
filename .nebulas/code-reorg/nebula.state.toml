@@ -53,9 +53,9 @@ summary = 'Correct deletion of 15 dead/empty stub files with no live references;
 
 [phases.extract-worker-subpackage]
 bead_id = 'quasar-z17b'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-03-02T14:32:42.459017-05:00
-updated_at = 2026-03-02T15:42:40.128763-05:00
+updated_at = 2026-03-02T16:04:09.562627-05:00
 
 [phases.final-verification]
 bead_id = 'quasar-8ibx'
@@ -77,6 +77,6 @@ summary = 'Clean structural split of loop.go into 4 focused files with all prior
 
 [phases.split-nebula-healing]
 bead_id = 'quasar-e3gx'
-status = 'created'
+status = 'failed'
 created_at = 2026-03-02T14:32:41.715964-05:00
-updated_at = 2026-03-02T14:32:41.715964-05:00
+updated_at = 2026-03-02T16:04:13.412689-05:00
