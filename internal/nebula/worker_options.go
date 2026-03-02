@@ -201,3 +201,10 @@ func WithCheckpointValidator(fn func(cp any, gitSHA string) error) Option {
 func WithCheckpointRemover(fn func(dir, phaseID string) error) Option {
 	return func(wg *WorkerGroup) { wg.CheckpointRemover = fn }
 }
+
+// WithGitSHAFunc sets the function used to retrieve the current git SHA for
+// checkpoint validation. When set alongside CheckpointValidator, loaded
+// checkpoints are checked against HEAD before resume.
+func WithGitSHAFunc(fn func(ctx context.Context) (string, error)) Option {
+	return func(wg *WorkerGroup) { wg.GitSHAFunc = fn }
+}

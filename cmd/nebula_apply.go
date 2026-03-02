@@ -204,7 +204,23 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		nebula.WithCheckpointDir(dir),
 	}
 	if resume {
-		wgOpts = append(wgOpts, nebula.WithResumeEnabled(true))
+		wgOpts = append(wgOpts,
+			nebula.WithResumeEnabled(true),
+			nebula.WithCheckpointLoader(func(cpDir, phaseID string) (any, error) {
+				return checkpoint.Load(cpDir, phaseID)
+			}),
+			nebula.WithCheckpointValidator(func(cp any, gitSHA string) error {
+				typed, ok := cp.(*checkpoint.Checkpoint)
+				if !ok {
+					return fmt.Errorf("invalid checkpoint type: expected *checkpoint.Checkpoint")
+				}
+				return checkpoint.Validate(typed, gitSHA)
+			}),
+			nebula.WithCheckpointRemover(checkpoint.Remove),
+			nebula.WithGitSHAFunc(func(ctx context.Context) (string, error) {
+				return checkpoint.CurrentGitSHA(ctx, workDir)
+			}),
+		)
 	}
 	wgOpts = append(wgOpts, fc.WorkerGroupOptions()...)
 	wg := nebula.NewWorkerGroup(n, state, wgOpts...)
