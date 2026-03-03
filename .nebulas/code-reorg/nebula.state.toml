@@ -53,21 +53,21 @@ summary = 'Correct deletion of 15 dead/empty stub files with no live references;
 
 [phases.extract-worker-subpackage]
 bead_id = 'quasar-vwuj'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-02T14:32:42.459017-05:00
 updated_at = 2026-03-02T21:19:54.021862-05:00
 
-[phases.final-verification]
-bead_id = 'quasar-t7vi'
-status = 'done'
-created_at = 2026-03-02T14:32:43.186449-05:00
-updated_at = 2026-03-02T19:02:54.476691-05:00
-
-[phases.final-verification.report]
+[phases.extract-worker-subpackage.report]
 satisfaction = 'high'
 risk = 'low'
 needs_human_review = false
-summary = 'Comprehensive final verification confirms the codebase compiles, passes all tests and static analysis cleanly after the code-reorg nebula phases; no code changes were needed; two minor housekeeping items noted (orphaned shell script, state file status).'
+summary = 'Manual extraction: moved 10 source files and 19 test files to internal/nebula/worker/, updated all package declarations, removed leftover shell scripts.'
+
+[phases.final-verification]
+bead_id = 'quasar-t7vi'
+status = 'created'
+created_at = 2026-03-02T14:32:43.186449-05:00
+updated_at = 2026-03-02T19:02:54.476691-05:00
 
 [phases.fix-external-imports]
 bead_id = 'quasar-qag5'
@@ -83,9 +83,15 @@ summary = 'Coder correctly identified and reported that the prerequisite worker 
 
 [phases.fix-worker-compilation]
 bead_id = 'quasar-ehve'
-status = 'created'
+status = 'done'
 created_at = 2026-03-02T18:52:08.812961-05:00
 updated_at = 2026-03-02T21:19:53.867602-05:00
+
+[phases.fix-worker-compilation.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Skipped — compilation fixes handled as part of manual worker extraction.'
 
 [phases.split-loop]
 bead_id = 'quasar-gnah'
