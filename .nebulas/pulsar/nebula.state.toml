@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'pulsar'
-total_cost_usd = 40.438938449999995
+total_cost_usd = 44.92427944999999
 
 [phases]
 [phases.bus-impl]
@@ -29,9 +29,15 @@ summary = 'Clean typed event bus interface with comprehensive Kind vocabulary co
 
 [phases.cli-adapter]
 bead_id = 'quasar-f6e2'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-02T23:31:04.294997-05:00
-updated_at = 2026-03-03T09:09:32.103368-05:00
+updated_at = 2026-03-03T09:23:50.670415-05:00
+
+[phases.cli-adapter.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean extraction of shared helpers (`resolvePrompts`, `engineConfigFromSettings`, `executeTUIRun`) eliminates CLI/cockpit duplication and meets all acceptance criteria with passing builds and tests.'
 
 [phases.engine-extract]
 bead_id = 'quasar-qc6o'
