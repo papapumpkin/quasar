@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'code-reorg'
-total_cost_usd = 39.6113739
+total_cost_usd = 46.1712074
 
 [phases]
 [phases.consolidate-loop]
@@ -53,9 +53,9 @@ summary = 'Correct deletion of 15 dead/empty stub files with no live references;
 
 [phases.extract-worker-subpackage]
 bead_id = 'quasar-q3n8'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-03-02T14:32:42.459017-05:00
-updated_at = 2026-03-02T20:58:51.381295-05:00
+updated_at = 2026-03-02T21:16:02.636264-05:00
 
 [phases.final-verification]
 bead_id = 'quasar-t7vi'
