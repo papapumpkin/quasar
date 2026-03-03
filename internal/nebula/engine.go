@@ -292,6 +292,86 @@ func (e *Engine) BranchName() string { return e.branchName }
 // includes any manifest-derived overrides applied during loading.
 func (e *Engine) Config() EngineConfig { return e.cfg }
 
+// Load loads, validates, and resolves the nebula: reads the manifest, checks
+// phases, resolves workDir from the manifest, creates or checks out the git
+// branch, and loads persisted state. After Load returns successfully, GetPlan,
+// GetNebula, GetState, WorkDir, and BranchName are available.
+func (e *Engine) Load(ctx context.Context) error {
+	e.transition(EngineLoading)
+	e.publishLifecycle(ctx, bus.KindEngineLoading)
+	n, err := e.load(ctx)
+	if err != nil {
+		e.transition(EngineDone)
+		e.publishLifecycle(ctx, bus.KindEngineDone)
+		return err
+	}
+	e.nebula = n
+	if err := e.createBranch(ctx); err != nil {
+		e.transition(EngineDone)
+		e.publishLifecycle(ctx, bus.KindEngineDone)
+		return err
+	}
+	return nil
+}
+
+// Plan builds the execution plan by comparing nebula phases against current
+// bead state. Does NOT apply bead changes — call ApplyPlan separately so the
+// caller can display the plan in between. The result is available via GetPlan.
+func (e *Engine) Plan(ctx context.Context) error {
+	e.transition(EnginePlanning)
+	e.publishLifecycle(ctx, bus.KindEnginePlanning)
+	plan, err := e.buildPlan(ctx)
+	if err != nil {
+		e.transition(EngineDone)
+		e.publishLifecycle(ctx, bus.KindEngineDone)
+		return err
+	}
+	e.plan = plan
+	return nil
+}
+
+// ApplyPlan applies the execution plan to beads (create/update/close).
+// No-op if the plan has no changes. Must be called after Plan.
+func (e *Engine) ApplyPlan(ctx context.Context) error {
+	if e.plan == nil {
+		return fmt.Errorf("no plan built; call Plan first")
+	}
+	return e.applyPlan(ctx, e.plan)
+}
+
+// Execute creates the WorkerGroup with the given options and runs all ready
+// phases. The caller provides display-path-specific options (runner, bus,
+// dashboard, etc.) via extraOpts. Call SetFabric before Execute if fabric
+// coordination is needed. Must be called after ApplyPlan.
+func (e *Engine) Execute(ctx context.Context, extraOpts ...Option) ([]WorkerResult, error) {
+	if err := e.initFabric(ctx); err != nil {
+		return nil, fmt.Errorf("fabric initialization: %w", err)
+	}
+	if e.fabric != nil {
+		defer e.fabric.Close()
+	}
+	e.transition(EngineExecuting)
+	e.publishLifecycle(ctx, bus.KindEngineExecuting)
+	return e.execute(ctx, extraOpts...)
+}
+
+// PostComplete runs the post-execution git workflow: commit remaining changes,
+// push the branch, and check out the default branch. Returns nil if branch
+// management is not active.
+func (e *Engine) PostComplete(ctx context.Context, allSucceeded bool) *PostCompletionResult {
+	e.transition(EngineCompleting)
+	e.publishLifecycle(ctx, bus.KindEngineCompleting)
+	if e.branchName == "" {
+		e.transition(EngineDone)
+		e.publishLifecycle(ctx, bus.KindEngineDone)
+		return nil
+	}
+	result := PostCompletion(ctx, e.cfg.WorkDir, e.branchName, allSucceeded)
+	e.transition(EngineDone)
+	e.publishLifecycle(ctx, bus.KindEngineDone)
+	return result
+}
+
 // toErrors converts a slice of ValidationError to a slice of error.
 func toErrors(valErrs []ValidationError) []error {
 	errs := make([]error, len(valErrs))

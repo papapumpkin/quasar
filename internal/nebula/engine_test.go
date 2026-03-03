@@ -2,6 +2,7 @@ package nebula
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -108,8 +109,13 @@ func TestEngine_Run_ValidationError_ShortCircuits(t *testing.T) {
 	if result.Err == nil {
 		t.Fatal("expected validation error, got nil")
 	}
-	if !strings.Contains(result.Err.Error(), "validate nebula") {
-		t.Errorf("error should mention 'validate nebula', got: %v", result.Err)
+	if !strings.Contains(result.Err.Error(), "validation failed") {
+		t.Errorf("error should mention 'validation failed', got: %v", result.Err)
+	}
+	// Verify the error is a ValidationFailedError with structured fields.
+	var valErr *ValidationFailedError
+	if !errors.As(result.Err, &valErr) {
+		t.Errorf("expected *ValidationFailedError, got %T", result.Err)
 	}
 	if got := e.Phase(); got != EngineDone {
 		t.Errorf("phase = %v, want %v", got, EngineDone)
@@ -242,11 +248,11 @@ func TestEngine_BuildWorkerOptions(t *testing.T) {
 	opts := e.buildWorkerOptions()
 
 	// We should have the base options plus resume options.
-	// Base: MaxWorkers, BeadsClient, GlobalCycles, GlobalBudget, GlobalModel, Bus, Invoker = 7
-	// Resume: ResumeEnabled, CheckpointDir = 2
-	// Total = 9
-	if len(opts) != 9 {
-		t.Errorf("got %d options, want 9", len(opts))
+	// Base: MaxWorkers, BeadsClient, GlobalCycles, GlobalBudget, GlobalModel, Bus, Invoker, Committer, CheckpointDir = 9
+	// Resume: ResumeEnabled = 1
+	// Total = 10
+	if len(opts) != 10 {
+		t.Errorf("got %d options, want 10", len(opts))
 	}
 }
 
@@ -261,9 +267,9 @@ func TestEngine_BuildWorkerOptions_NoResume(t *testing.T) {
 
 	opts := e.buildWorkerOptions()
 
-	// Base options only: MaxWorkers, BeadsClient, GlobalCycles, GlobalBudget, GlobalModel, Bus, Invoker = 7
-	if len(opts) != 7 {
-		t.Errorf("got %d options, want 7", len(opts))
+	// Base options only: MaxWorkers, BeadsClient, GlobalCycles, GlobalBudget, GlobalModel, Bus, Invoker, Committer, CheckpointDir = 9
+	if len(opts) != 9 {
+		t.Errorf("got %d options, want 9", len(opts))
 	}
 }
 
@@ -284,9 +290,9 @@ func TestEngine_BuildWorkerOptions_WithFabric(t *testing.T) {
 
 	opts := e.buildWorkerOptions()
 
-	// 7 base + 1 from fabric
-	if len(opts) != 8 {
-		t.Errorf("got %d options, want 8", len(opts))
+	// 9 base + 1 from fabric
+	if len(opts) != 10 {
+		t.Errorf("got %d options, want 10", len(opts))
 	}
 }
 

@@ -18,7 +18,6 @@ import (
 	"github.com/papapumpkin/quasar/internal/checkpoint"
 	"github.com/papapumpkin/quasar/internal/claude"
 	"github.com/papapumpkin/quasar/internal/config"
-	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/loop"
 	"github.com/papapumpkin/quasar/internal/nebula"
 	"github.com/papapumpkin/quasar/internal/snapshot"
@@ -195,6 +194,8 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 
 	// Build the runner and WorkerGroup, branching on TUI vs stderr.
 	var tuiProgram *tui.Program
+	var eventBus *bus.MemoryBus
+	var busSub *tui.BusSubscriber
 	wgOpts := []nebula.Option{
 		nebula.WithMaxWorkers(maxWorkers),
 		nebula.WithBeadsClient(client),
@@ -228,9 +229,9 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 		// Create the event bus and wire a BusSubscriber to convert bus
 		// events into TUI messages. This replaces direct tea.Program.Send
 		// callbacks with bus-mediated delivery.
-		eventBus := bus.NewMemoryBus()
+		eventBus = bus.NewMemoryBus()
 		defer eventBus.Close()
-		busSub := tui.NewBusSubscriber(tuiProgram, eventBus, 128)
+		busSub = tui.NewBusSubscriber(tuiProgram, eventBus, 128)
 		busSub.Start()
 		defer busSub.Stop()
 
@@ -455,6 +456,15 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 				nextWgOpts = append(nextWgOpts, fc.WorkerGroupOptions()...)
 				wg = nebula.NewWorkerGroup(nextN, nextState, nextWgOpts...)
 				tuiProgram = tui.NewNebulaProgram(nextN.Manifest.Nebula.Name, phases, nextDir, noSplash)
+				// Tear down the previous bus infrastructure and create a new
+				// event bus + subscriber for the next nebula's TUI program.
+				busSub.Stop()
+				eventBus.Close()
+				eventBus = bus.NewMemoryBus()
+				busSub = tui.NewBusSubscriber(tuiProgram, eventBus, 128)
+				busSub.Start()
+				wg.Bus = eventBus
+
 				wg.Runner = &tuiLoopAdapter{
 					program:          tuiProgram,
 					invoker:          claudeInv,
@@ -468,27 +478,16 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 					reviewPrompt:     reviewerPrompt,
 					workDir:          nextWorkDir,
 					fabric:           wg.Fabric, // nil-safe
+					bus:              eventBus,
 					projectContext:   projectCtx,
 					maxContextTokens: maxContextTokens,
 					checkpointDir:    nextDir,
 				}
 				wg.Prompter = tui.NewGater(tuiProgram)
-				// Re-wire OnHail for the next nebula's TUI program.
-				wg.OnHail = func(phaseID string, d fabric.Discovery) {
-					tuiProgram.Send(tui.MsgHail{PhaseID: phaseID, Discovery: d})
-				}
-				wg.OnScanning = func(phaseID string) {
-					tuiProgram.Send(tui.MsgPhaseScanning{PhaseID: phaseID})
-				}
-				wg.OnProgress = func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
-					tuiProgram.Send(tui.MsgNebulaProgress{
-						Completed:    completed,
-						Total:        total,
-						OpenBeads:    openBeads,
-						ClosedBeads:  closedBeads,
-						TotalCostUSD: totalCostUSD,
-					})
-				}
+				// Note: OnProgress, OnRefactor, OnHotAdd, OnHail, OnScanning
+				// callbacks are NOT set here. When wg.Bus is non-nil,
+				// WorkerGroup.Run wraps nil callbacks to publish to the bus,
+				// and BusSubscriber converts bus events into TUI messages.
 
 				// Create a new watcher for the next nebula.
 				if w != nil {

@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'pulsar'
-total_cost_usd = 22.875683699999996
+total_cost_usd = 27.449240549999995
 
 [phases]
 [phases.bus-impl]
@@ -35,9 +35,15 @@ updated_at = 2026-03-03T00:27:21.616188-05:00
 
 [phases.engine-extract]
 bead_id = 'quasar-qc6o'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-02T23:31:04.190752-05:00
-updated_at = 2026-03-03T00:27:21.616563-05:00
+updated_at = 2026-03-03T00:40:34.908398-05:00
+
+[phases.engine-extract.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = "Engine lifecycle extraction is clean and correct with proper error handling, nil-safe bus publishing, and thread-safe phase transitions; two tests have misleading names (plan-only and context-cancelled) that don't exercise their claimed code paths, but production code is solid."
 
 [phases.engine-types]
 bead_id = 'quasar-kbcs'
