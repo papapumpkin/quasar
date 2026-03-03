@@ -30,12 +30,14 @@ func newTestHarness(t *testing.T) (bus.Bus, func() []Event) {
 	sub.Start()
 
 	return b, func() []Event {
+		// Close the bus first: this closes subscriber channels, allowing
+		// the run goroutine to drain remaining events and exit.
+		if err := b.Close(); err != nil {
+			t.Fatalf("Bus.Close: %v", err)
+		}
 		sub.Stop()
 		if err := em.Close(); err != nil {
 			t.Fatalf("Emitter.Close: %v", err)
-		}
-		if err := b.Close(); err != nil {
-			t.Fatalf("Bus.Close: %v", err)
 		}
 
 		f, err := os.Open(path)
@@ -208,31 +210,24 @@ func TestBusSubscriberStop(t *testing.T) {
 		}
 	}
 
-	// Stop should drain remaining events and return.
-	sub.Stop()
-
-	// Close the bus after the subscriber is stopped.
+	// Close the bus first: this closes the subscriber channel, allowing
+	// run() to drain buffered events and exit.
 	if err := b.Close(); err != nil {
 		t.Fatalf("Bus.Close: %v", err)
 	}
 
+	// Stop waits for the run goroutine to finish draining.
+	sub.Stop()
+
 	// Read back the file — all 5 events should have been written.
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
+		t.Fatalf("open: %v", err)
 	}
+	defer f.Close()
+
 	var count int
-	scanner := bufio.NewScanner(
-		// Re-wrap as a reader from the bytes.
-		func() *os.File {
-			f, err := os.Open(path)
-			if err != nil {
-				t.Fatalf("open: %v", err)
-			}
-			return f
-		}(),
-	)
-	_ = data // We already checked the file is readable.
+	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		if scanner.Text() != "" {
 			count++
