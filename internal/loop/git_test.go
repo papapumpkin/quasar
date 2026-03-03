@@ -64,7 +64,7 @@ func TestCommitCycle(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		sha, err := c.CommitCycle(ctx, "task-1", 3, "Fix status bar wrapping")
+		sha, err := c.CommitCycle(ctx, "task-1", 3, "Fix status bar wrapping", "bug")
 		if err != nil {
 			t.Fatalf("CommitCycle: %v", err)
 		}
@@ -79,7 +79,7 @@ func TestCommitCycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		msg := strings.TrimSpace(string(out))
-		want := "task-1/cycle-3: Fix status bar wrapping"
+		want := "fix(task-1/cycle-3): Fix status bar wrapping"
 		if msg != want {
 			t.Errorf("commit message = %q, want %q", msg, want)
 		}
@@ -91,7 +91,7 @@ func TestCommitCycle(t *testing.T) {
 		c := NewCycleCommitter(context.Background(), dir)
 
 		ctx := context.Background()
-		sha, err := c.CommitCycle(ctx, "task-1", 1, "No changes")
+		sha, err := c.CommitCycle(ctx, "task-1", 1, "No changes", "task")
 		if err != nil {
 			t.Fatalf("CommitCycle on clean tree: %v", err)
 		}
@@ -140,7 +140,7 @@ func TestDiffRange(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "diff.txt"), []byte("content\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		sha, err := c.CommitCycle(ctx, "test", 1, "add diff.txt")
+		sha, err := c.CommitCycle(ctx, "test", 1, "add diff.txt", "task")
 		if err != nil {
 			t.Fatalf("CommitCycle: %v", err)
 		}
@@ -208,7 +208,7 @@ func TestResetTo(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "reset.txt"), []byte("content\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		_, err = c.CommitCycle(ctx, "test", 1, "add reset.txt")
+		_, err = c.CommitCycle(ctx, "test", 1, "add reset.txt", "task")
 		if err != nil {
 			t.Fatalf("CommitCycle: %v", err)
 		}
@@ -330,7 +330,7 @@ func TestNilCycleCommitter(t *testing.T) {
 
 	t.Run("CommitCycle is no-op", func(t *testing.T) {
 		t.Parallel()
-		sha, err := c.CommitCycle(ctx, "x", 1, "test")
+		sha, err := c.CommitCycle(ctx, "x", 1, "test", "task")
 		if err != nil {
 			t.Fatalf("nil CommitCycle: %v", err)
 		}

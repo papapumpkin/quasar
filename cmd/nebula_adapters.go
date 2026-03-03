@@ -40,6 +40,7 @@ func (a *loopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, pha
 		a.loop.Model = exec.Model
 	}
 	a.loop.CommitSummary = phaseTitle
+	a.loop.PhaseType = exec.PhaseType
 
 	// Enable struggle detection when auto-decomposition is active.
 	if exec.AutoDecompose {
@@ -81,6 +82,7 @@ func (a *loopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData any,
 		a.loop.Model = exec.Model
 	}
 	a.loop.CommitSummary = phaseTitle
+	a.loop.PhaseType = exec.PhaseType
 
 	if exec.AutoDecompose {
 		cfg := loop.DefaultStruggleConfig()
@@ -157,6 +159,7 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 		ReviewPrompt:      a.reviewPrompt,
 		WorkDir:           a.workDir,
 		CommitSummary:     phaseTitle,
+		PhaseType:         exec.PhaseType,
 		Fabric:            a.fabric,
 		FabricEnabled:     a.fabric != nil,
 		ProjectContext:    a.projectContext,
@@ -251,6 +254,7 @@ func (a *tuiLoopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData a
 		ReviewPrompt:      a.reviewPrompt,
 		WorkDir:           a.workDir,
 		CommitSummary:     phaseTitle,
+		PhaseType:         exec.PhaseType,
 		Fabric:            a.fabric,
 		FabricEnabled:     a.fabric != nil,
 		ProjectContext:    a.projectContext,

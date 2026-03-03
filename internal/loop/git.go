@@ -12,9 +12,10 @@ import (
 type CycleCommitter interface {
 	// CommitCycle stages all changes and creates a commit for the given cycle.
 	// The summary is a short human-readable description included in the commit message.
+	// phaseType controls the conventional commit prefix (bug→fix, feature→feat, default→ref).
 	// Returns the HEAD SHA after the commit. If the working tree is clean,
 	// no commit is created and the current HEAD SHA is returned.
-	CommitCycle(ctx context.Context, label string, cycle int, summary string) (sha string, err error)
+	CommitCycle(ctx context.Context, label string, cycle int, summary, phaseType string) (sha string, err error)
 	// HeadSHA returns the current HEAD commit SHA.
 	HeadSHA(ctx context.Context) (string, error)
 	// DiffRange returns the full diff between two commits (base..head).
@@ -62,7 +63,7 @@ func NewCycleCommitterWithBranch(ctx context.Context, dir, branch string) CycleC
 // CommitCycle stages all changes and creates a commit for the given cycle.
 // If the working tree is clean, no commit is created and the current HEAD SHA
 // is returned.
-func (g *gitCycleCommitter) CommitCycle(ctx context.Context, label string, cycle int, summary string) (string, error) {
+func (g *gitCycleCommitter) CommitCycle(ctx context.Context, label string, cycle int, summary, phaseType string) (string, error) {
 	if g == nil {
 		return "", nil
 	}
@@ -84,9 +85,10 @@ func (g *gitCycleCommitter) CommitCycle(ctx context.Context, label string, cycle
 		return g.HeadSHA(ctx)
 	}
 
-	// Create commit with descriptive message.
-	msg := fmt.Sprintf("%s/cycle-%d: %s", label, cycle, summary)
-	commitCmd := exec.CommandContext(ctx, "git", "-C", g.dir, "commit", "-m", msg)
+	// Create commit with conventional commit prefix.
+	cp := commitPrefix(phaseType)
+	msg := fmt.Sprintf("%s(%s/cycle-%d): %s", cp, label, cycle, summary)
+	commitCmd := exec.CommandContext(ctx, "git", "-C", g.dir, "commit", "--no-verify", "-m", msg)
 	if err := commitCmd.Run(); err != nil {
 		return "", fmt.Errorf("git commit: %w", err)
 	}
@@ -156,6 +158,18 @@ func (g *gitCycleCommitter) ResetTo(ctx context.Context, sha string) error {
 		return fmt.Errorf("git reset --hard %s: %w: %s", sha, err, strings.TrimSpace(resetStderr.String()))
 	}
 	return nil
+}
+
+// commitPrefix maps a phase type to a conventional commit prefix.
+func commitPrefix(phaseType string) string {
+	switch phaseType {
+	case "bug":
+		return "fix"
+	case "feature":
+		return "feat"
+	default:
+		return "ref"
+	}
 }
 
 // ensureBranch verifies the working directory is on the expected branch.

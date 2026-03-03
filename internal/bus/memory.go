@@ -46,7 +46,7 @@ func NewMemoryBus() *MemoryBus {
 }
 
 // Publish sends ev to every active subscriber. If any subscriber's buffer
-// is full, Publish blocks until space is available or ctx is cancelled.
+// is full, Publish blocks until space is available or ctx is canceled.
 // Returns ErrBusClosed if the bus has been closed.
 func (b *MemoryBus) Publish(ctx context.Context, ev Event) error {
 	b.mu.RLock()
@@ -69,7 +69,7 @@ func (b *MemoryBus) Publish(ctx context.Context, ev Event) error {
 
 	// Deliver to each subscriber. If a subscriber's buffer is full,
 	// block until space is available, the subscriber unsubscribes,
-	// the context is cancelled, or the bus is closed.
+	// the context is canceled, or the bus is closed.
 	for _, s := range targets {
 		select {
 		case s.ch <- ev:

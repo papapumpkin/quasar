@@ -279,7 +279,7 @@ func TestContextCancellation(t *testing.T) {
 
 	err := b.Publish(ctx, New(KindInfo))
 	if err == nil {
-		t.Fatal("expected error from cancelled context, got nil")
+		t.Fatal("expected error from canceled context, got nil")
 	}
 	if err != context.Canceled {
 		t.Fatalf("Publish error = %v, want %v", err, context.Canceled)

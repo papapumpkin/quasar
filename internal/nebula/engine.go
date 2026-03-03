@@ -13,7 +13,7 @@ import (
 // bus and returns an EngineResult. Additional options are forwarded to the
 // WorkerGroup for display-path-specific configuration (runner, bus, etc.).
 //
-// The context controls cancellation — cancelling ctx will stop workers
+// The context controls cancellation — canceling ctx will stop workers
 // gracefully after their current cycle.
 func (e *Engine) Run(ctx context.Context, opts ...Option) *EngineResult {
 	result := &EngineResult{}
@@ -187,16 +187,9 @@ func (e *Engine) execute(ctx context.Context, extraOpts ...Option) ([]WorkerResu
 }
 
 // postComplete handles the post-execution git workflow: commit remaining
-// changes, push the branch, and optionally check out the default branch.
-func (e *Engine) postComplete(ctx context.Context, results []WorkerResult) *PostCompletionResult {
-	allSucceeded := true
-	for _, r := range results {
-		if r.Err != nil {
-			allSucceeded = false
-			break
-		}
-	}
-	return PostCompletion(ctx, e.cfg.WorkDir, e.branchName, allSucceeded)
+// changes and push the branch.
+func (e *Engine) postComplete(ctx context.Context, _ []WorkerResult) *PostCompletionResult {
+	return PostCompletion(ctx, e.cfg.WorkDir, e.branchName)
 }
 
 // buildWorkerOptions constructs the []Option list for WorkerGroup creation.
@@ -352,9 +345,8 @@ func (e *Engine) Execute(ctx context.Context, extraOpts ...Option) ([]WorkerResu
 }
 
 // PostComplete runs the post-execution git workflow: commit remaining changes,
-// push the branch, and check out the default branch. Returns nil if branch
-// management is not active.
-func (e *Engine) PostComplete(ctx context.Context, allSucceeded bool) *PostCompletionResult {
+// push the branch. Returns nil if branch management is not active.
+func (e *Engine) PostComplete(ctx context.Context) *PostCompletionResult {
 	e.transition(EngineCompleting)
 	e.publishLifecycle(ctx, bus.KindEngineCompleting)
 	if e.branchName == "" {
@@ -362,7 +354,7 @@ func (e *Engine) PostComplete(ctx context.Context, allSucceeded bool) *PostCompl
 		e.publishLifecycle(ctx, bus.KindEngineDone)
 		return nil
 	}
-	result := PostCompletion(ctx, e.cfg.WorkDir, e.branchName, allSucceeded)
+	result := PostCompletion(ctx, e.cfg.WorkDir, e.branchName)
 	e.transition(EngineDone)
 	e.publishLifecycle(ctx, bus.KindEngineDone)
 	return result

@@ -943,14 +943,13 @@ func TestBuildNebulaResultCounts(t *testing.T) {
 func TestCompletionOverlayGitStatus(t *testing.T) {
 	t.Parallel()
 
-	t.Run("shows push success and checkout success", func(t *testing.T) {
+	t.Run("shows push success and staying on branch", func(t *testing.T) {
 		t.Parallel()
 		o := &CompletionOverlay{
 			Kind:      CompletionSuccess,
 			DoneCount: 2,
 			GitResult: &nebula.PostCompletionResult{
-				PushBranch:     "nebula/my-feature",
-				CheckoutBranch: "main",
+				PushBranch: "nebula/my-feature",
 			},
 		}
 
@@ -959,8 +958,8 @@ func TestCompletionOverlayGitStatus(t *testing.T) {
 		if !strings.Contains(view, "Pushed to origin/nebula/my-feature") {
 			t.Error("expected push success message in overlay")
 		}
-		if !strings.Contains(view, "Checked out main") {
-			t.Error("expected checkout success message in overlay")
+		if !strings.Contains(view, "Staying on nebula/my-feature") {
+			t.Error("expected staying on branch message in overlay")
 		}
 	})
 
@@ -985,25 +984,24 @@ func TestCompletionOverlayGitStatus(t *testing.T) {
 		}
 	})
 
-	t.Run("shows checkout error", func(t *testing.T) {
+	t.Run("shows staying on branch after push error", func(t *testing.T) {
 		t.Parallel()
 		o := &CompletionOverlay{
 			Kind:      CompletionSuccess,
 			DoneCount: 1,
 			GitResult: &nebula.PostCompletionResult{
-				PushBranch:     "nebula/ok",
-				CheckoutBranch: "main",
-				CheckoutErr:    fmt.Errorf("dirty working tree"),
+				PushBranch: "nebula/ok",
+				PushErr:    fmt.Errorf("network error"),
 			},
 		}
 
 		view := o.View(80, 30)
 
-		if !strings.Contains(view, "Checkout main failed") {
-			t.Error("expected checkout failure message in overlay")
+		if !strings.Contains(view, "Push failed") {
+			t.Error("expected push failure message in overlay")
 		}
-		if !strings.Contains(view, "dirty working tree") {
-			t.Error("expected checkout error detail in overlay")
+		if !strings.Contains(view, "Staying on nebula/ok") {
+			t.Error("expected staying on branch message in overlay")
 		}
 	})
 

@@ -10,7 +10,7 @@ import (
 )
 
 // collectBusEvents subscribes to the bus and collects all events until the
-// bus is closed or the context is cancelled.
+// bus is closed or the context is canceled.
 func collectBusEvents(b bus.Bus) <-chan []bus.Event {
 	ch := make(chan []bus.Event, 1)
 	sub := b.Subscribe("test", 64)

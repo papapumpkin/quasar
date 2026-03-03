@@ -55,7 +55,7 @@ func (s *BusSubscriber) run() {
 }
 
 // mapEvent translates a bus.Event into the corresponding tea.Msg that the
-// AppModel.Update() method expects. Returns nil for unrecognised event kinds
+// AppModel.Update() method expects. Returns nil for unrecognized event kinds
 // or events with missing payloads.
 func (s *BusSubscriber) mapEvent(ev bus.Event) tea.Msg {
 	switch ev.Kind {

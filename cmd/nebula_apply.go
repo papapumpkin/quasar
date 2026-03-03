@@ -305,7 +305,7 @@ func executeTUIRun(
 			cleanupCheckpoints(cpDir)
 		}
 		prog.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
-		if gitResult := engine.PostComplete(context.Background(), runErr == nil); gitResult != nil {
+		if gitResult := engine.PostComplete(context.Background()); gitResult != nil {
 			prog.Send(tui.MsgGitPostCompletion{Result: gitResult})
 		}
 	}()
@@ -401,7 +401,7 @@ func runApplyWithStderr(
 	cleanupCheckpoints(ecfg.NebulaDir)
 
 	// Post-completion git workflow.
-	if gitResult := engine.PostComplete(context.Background(), true); gitResult != nil {
+	if gitResult := engine.PostComplete(context.Background()); gitResult != nil {
 		printGitResult(printer, gitResult)
 	}
 
@@ -544,11 +544,6 @@ func printGitResult(printer *ui.Printer, result *nebula.PostCompletionResult) {
 		printer.Error(fmt.Sprintf("git push failed: %v", result.PushErr))
 	} else {
 		printer.Info(fmt.Sprintf("pushed to origin/%s", result.PushBranch))
-	}
-	if result.CheckoutErr != nil {
-		printer.Error(fmt.Sprintf("git checkout %s failed: %v", result.CheckoutBranch, result.CheckoutErr))
-	} else if result.CheckoutBranch != "" {
-		printer.Info(fmt.Sprintf("checked out %s", result.CheckoutBranch))
 	}
 }
 
