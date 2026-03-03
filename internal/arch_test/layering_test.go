@@ -12,6 +12,7 @@ var layers = map[string]int{
 	"agent":     0,
 	"ansi":      0,
 	"beads":     0,
+	"bus":       0,
 	"config":    0,
 	"dag":       0,
 	"filter":    0,

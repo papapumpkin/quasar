@@ -88,6 +88,8 @@ const (
 	KindError            Kind = "error"
 	KindInfo             Kind = "info"
 	KindBeadUpdate       Kind = "bead.update"
+	KindHailReceived     Kind = "hail.received"
+	KindHailResolved     Kind = "hail.resolved"
 )
 
 // Nebula control event kinds — correspond to nebula lifecycle TUI messages.
@@ -101,6 +103,21 @@ const (
 	KindDiscoveryPosted    Kind = "discovery.posted"
 	KindScratchpadEntry    Kind = "scratchpad.entry"
 )
+
+// Plan lifecycle event kinds — correspond to MsgPlan* TUI messages.
+const (
+	KindPlanReady  Kind = "plan.ready"
+	KindPlanAction Kind = "plan.action"
+	KindPlanError  Kind = "plan.error"
+)
+
+// KindHail represents a full request-response hail interrupt requiring human
+// attention. Corresponds to MsgHail in the TUI.
+const KindHail Kind = "hail"
+
+// KindStaleWarning represents a stale-state alert from the Tycho scheduler.
+// Corresponds to MsgStaleWarning in the TUI.
+const KindStaleWarning Kind = "stale.warning"
 
 // Event is the canonical bus event. The Kind field determines which
 // payload fields are populated.
@@ -147,6 +164,10 @@ type Event struct {
 	Finding      *FindingPayload
 	Hail         *HailPayload
 	HailResolved *HailResolvedPayload
+	PlanReady    *PlanReadyPayload
+	PlanAction   *PlanActionPayload
+	PlanError    *PlanErrorPayload
+	StaleWarning *StaleWarningPayload
 }
 
 // CycleSummaryPayload carries structured data for a completed coder-reviewer
@@ -238,6 +259,30 @@ type HailPayload struct {
 type HailResolvedPayload struct {
 	ID         string
 	Resolution string
+}
+
+// PlanReadyPayload carries a computed execution plan for preview.
+type PlanReadyPayload struct {
+	Plan      any    // *nebula.ExecutionPlan — kept as any to avoid import cycle
+	Changes   any    // []nebula.PlanChange — kept as any to avoid import cycle
+	NebulaDir string
+}
+
+// PlanActionPayload carries the user's decision from the plan preview.
+type PlanActionPayload struct {
+	Action    int    // PlanAction enum value from tui package
+	Plan      any    // *nebula.ExecutionPlan — kept as any to avoid import cycle
+	NebulaDir string
+}
+
+// PlanErrorPayload carries an error from plan computation.
+type PlanErrorPayload struct {
+	Err error
+}
+
+// StaleWarningPayload carries stale-state items detected by the Tycho scheduler.
+type StaleWarningPayload struct {
+	Items any // []tycho.StaleItem — kept as any to avoid import cycle
 }
 
 // New returns a timestamp-populated Event with the given kind.
