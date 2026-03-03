@@ -54,6 +54,7 @@ brews:
     repository:
       owner: papapumpkin
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: "https://github.com/papapumpkin/quasar"
     description: "Astral themed agent orchestration system inspired by Gas Town"
     license: "MIT"
