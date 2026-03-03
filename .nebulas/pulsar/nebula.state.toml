@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'pulsar'
-total_cost_usd = 6.4578926999999995
+total_cost_usd = 9.20867895
 
 [phases]
 [phases.bus-impl]
@@ -29,15 +29,15 @@ summary = 'Clean typed event bus interface with comprehensive Kind vocabulary co
 
 [phases.cli-adapter]
 bead_id = 'quasar-dmlg'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-02T23:31:04.294997-05:00
-updated_at = 2026-03-02T23:31:04.294997-05:00
+updated_at = 2026-03-03T00:27:21.616188-05:00
 
 [phases.engine-extract]
 bead_id = 'quasar-qc6o'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-02T23:31:04.190752-05:00
-updated_at = 2026-03-02T23:31:04.190752-05:00
+updated_at = 2026-03-03T00:27:21.616563-05:00
 
 [phases.engine-types]
 bead_id = 'quasar-kbcs'
@@ -53,9 +53,15 @@ updated_at = 2026-03-03T00:04:47.337329-05:00
 
 [phases.telemetry-subscriber]
 bead_id = 'quasar-naae'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-02T23:31:03.869683-05:00
-updated_at = 2026-03-03T00:04:47.335867-05:00
+updated_at = 2026-03-03T00:27:21.602567-05:00
+
+[phases.telemetry-subscriber.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Telemetry bus subscriber cleanly bridges bus events to JSONL telemetry output with comprehensive tests and correct lifecycle management; both prior minor findings are fixed.'
 
 [phases.tui-subscriber]
 bead_id = 'quasar-54nh'
