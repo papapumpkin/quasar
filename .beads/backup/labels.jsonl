@@ -718,6 +718,8 @@
 {"issue_id":"quasar-ee7.2","label":"review-finding"}
 {"issue_id":"quasar-ee7.3","label":"quasar"}
 {"issue_id":"quasar-ee7.3","label":"review-finding"}
+{"issue_id":"quasar-ehve","label":"organization"}
+{"issue_id":"quasar-ehve","label":"refactor"}
 {"issue_id":"quasar-ei79","label":"docs"}
 {"issue_id":"quasar-ei79","label":"quasar"}
 {"issue_id":"quasar-eirj","label":"adaptive-routing"}
@@ -1025,6 +1027,10 @@
 {"issue_id":"quasar-q3n8.1","label":"quasar"}
 {"issue_id":"quasar-q3n8.1","label":"refactor"}
 {"issue_id":"quasar-q3n8.1","label":"review-finding"}
+{"issue_id":"quasar-q3n8.10","label":"organization"}
+{"issue_id":"quasar-q3n8.10","label":"quasar"}
+{"issue_id":"quasar-q3n8.10","label":"refactor"}
+{"issue_id":"quasar-q3n8.10","label":"review-finding"}
 {"issue_id":"quasar-q3n8.2","label":"organization"}
 {"issue_id":"quasar-q3n8.2","label":"quasar"}
 {"issue_id":"quasar-q3n8.2","label":"refactor"}
@@ -1053,6 +1059,10 @@
 {"issue_id":"quasar-q3n8.8","label":"quasar"}
 {"issue_id":"quasar-q3n8.8","label":"refactor"}
 {"issue_id":"quasar-q3n8.8","label":"review-finding"}
+{"issue_id":"quasar-q3n8.9","label":"organization"}
+{"issue_id":"quasar-q3n8.9","label":"quasar"}
+{"issue_id":"quasar-q3n8.9","label":"refactor"}
+{"issue_id":"quasar-q3n8.9","label":"review-finding"}
 {"issue_id":"quasar-q41","label":"cosmetic"}
 {"issue_id":"quasar-q41","label":"refactor"}
 {"issue_id":"quasar-q7m","label":"cosmetic"}
@@ -1252,6 +1262,8 @@
 {"issue_id":"quasar-vwe","label":"onboarding"}
 {"issue_id":"quasar-vwe","label":"quasar"}
 {"issue_id":"quasar-vwe","label":"relativity"}
+{"issue_id":"quasar-vwuj","label":"organization"}
+{"issue_id":"quasar-vwuj","label":"refactor"}
 {"issue_id":"quasar-wbas","label":"cost-optimization"}
 {"issue_id":"quasar-wbas","label":"performance"}
 {"issue_id":"quasar-wbas","label":"quasar"}
@@ -1342,6 +1354,8 @@
 {"issue_id":"quasar-zaq","label":"contracts"}
 {"issue_id":"quasar-zaq","label":"nebula"}
 {"issue_id":"quasar-zaq","label":"quasar"}
+{"issue_id":"quasar-zgym","label":"organization"}
+{"issue_id":"quasar-zgym","label":"refactor"}
 {"issue_id":"quasar-ziw","label":"cockpit"}
 {"issue_id":"quasar-ziw","label":"quasar"}
 {"issue_id":"quasar-ziw","label":"tui"}
