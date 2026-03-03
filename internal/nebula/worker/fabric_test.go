@@ -1,4 +1,4 @@
-package nebula
+package worker
 
 import (
 	"bytes"
