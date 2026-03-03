@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'code-reorg'
-total_cost_usd = 36.9124554
+total_cost_usd = 38.122757899999996
 
 [phases]
 [phases.consolidate-loop]
@@ -59,9 +59,9 @@ updated_at = 2026-03-02T18:53:59.269221-05:00
 
 [phases.final-verification]
 bead_id = 'quasar-t7vi'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-02T14:32:43.186449-05:00
-updated_at = 2026-03-02T18:52:08.688479-05:00
+updated_at = 2026-03-02T18:58:08.254282-05:00
 
 [phases.fix-external-imports]
 bead_id = 'quasar-qag5'
@@ -95,6 +95,12 @@ summary = 'Clean structural split of loop.go into 4 focused files with all prior
 
 [phases.split-nebula-healing]
 bead_id = 'quasar-m01i'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-02T14:32:41.715964-05:00
-updated_at = 2026-03-02T18:53:59.270377-05:00
+updated_at = 2026-03-02T18:58:08.244473-05:00
+
+[phases.split-nebula-healing.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean file split of healing.go into diagnosis and remediation concerns with zero behavioral changes, correct imports, and passing tests.'
