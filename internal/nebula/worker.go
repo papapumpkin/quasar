@@ -11,6 +11,7 @@ import (
 
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/bus"
 	"github.com/papapumpkin/quasar/internal/dag"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/tycho"
@@ -56,6 +57,7 @@ type WorkerGroup struct {
 	OnHotAdd            HotAddFunc                                // optional callback for hot-added phases
 	OnHail              func(phaseID string, d fabric.Discovery)  // optional callback for hail surfacing
 	OnScanning          func(phaseID string)                      // optional callback for fabric scanning notifications
+	Bus                 bus.Bus                                   // optional event bus; when non-nil, callbacks also publish to the bus
 	Invoker             agent.Invoker                             // optional; required for auto-decomposition
 	Metrics             *Metrics                                  // optional; nil = no collection
 	Logger              io.Writer                                 // optional; nil = os.Stderr
@@ -233,6 +235,16 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	}
 
 	wg.ensureGater()
+
+	// When the bus is available, wrap each callback to also publish the
+	// corresponding bus event. This is additive — the original callback
+	// still fires for the stderr path. We mutate the struct fields so
+	// that all downstream consumers (ProgressReporter, HotReloader,
+	// tycho.Scheduler, worker_exec, worker_healing) automatically get
+	// bus-publishing behavior without individual modifications.
+	if wg.Bus != nil {
+		wg.wrapCallbacksForBus()
+	}
 
 	// Initialize healing state.
 	wg.healingPolicy = wg.Nebula.Manifest.Execution.HealingPolicy()

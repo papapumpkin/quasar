@@ -27,8 +27,8 @@ func newMockBus() *mockBus {
 }
 
 func (b *mockBus) Publish(_ context.Context, ev bus.Event) error { b.ch <- ev; return nil }
-func (b *mockBus) Subscribe(_ string, _ int) bus.Subscription  { return &mockSub{ch: b.ch} }
-func (b *mockBus) Close() error                                { close(b.ch); b.closed = true; return nil }
+func (b *mockBus) Subscribe(_ string, _ int) bus.Subscription    { return &mockSub{ch: b.ch} }
+func (b *mockBus) Close() error                                  { close(b.ch); b.closed = true; return nil }
 
 // mockSub implements bus.Subscription for testing.
 type mockSub struct {
@@ -36,7 +36,7 @@ type mockSub struct {
 }
 
 func (s *mockSub) Events() <-chan bus.Event { return s.ch }
-func (s *mockSub) Unsubscribe()            {}
+func (s *mockSub) Unsubscribe()             {}
 
 // ── mapEvent tests ───────────────────────────────────────────────────────────
 
@@ -45,12 +45,12 @@ func TestMapEvent_PhaseLifecycle(t *testing.T) {
 	sub := &BusSubscriber{done: make(chan struct{})}
 
 	tests := []struct {
-		name   string
-		event  bus.Event
-		check  func(t *testing.T, msg tea.Msg)
+		name  string
+		event bus.Event
+		check func(t *testing.T, msg tea.Msg)
 	}{
 		{
-			name: "PhaseTaskStarted",
+			name:  "PhaseTaskStarted",
 			event: bus.Event{Kind: bus.KindPhaseTaskStarted, PhaseID: "p1", BeadID: "b1", Title: "task"},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgPhaseTaskStarted)
@@ -63,7 +63,7 @@ func TestMapEvent_PhaseLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "PhaseTaskComplete",
+			name:  "PhaseTaskComplete",
 			event: bus.Event{Kind: bus.KindPhaseTaskComplete, PhaseID: "p1", BeadID: "b1", CostUSD: 1.5},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgPhaseTaskComplete)
@@ -76,7 +76,7 @@ func TestMapEvent_PhaseLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "PhaseCycleStart",
+			name:  "PhaseCycleStart",
 			event: bus.Event{Kind: bus.KindPhaseCycleStart, PhaseID: "p1", Cycle: 2, MaxCycles: 5},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgPhaseCycleStart)
@@ -89,7 +89,7 @@ func TestMapEvent_PhaseLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "PhaseAgentStart",
+			name:  "PhaseAgentStart",
 			event: bus.Event{Kind: bus.KindPhaseAgentStart, PhaseID: "p1", Role: "coder"},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgPhaseAgentStart)
@@ -102,7 +102,7 @@ func TestMapEvent_PhaseLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "PhaseAgentDone",
+			name:  "PhaseAgentDone",
 			event: bus.Event{Kind: bus.KindPhaseAgentDone, PhaseID: "p1", Role: "coder", CostUSD: 0.5, DurationMs: 1000, Tokens: 500},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgPhaseAgentDone)
@@ -115,7 +115,7 @@ func TestMapEvent_PhaseLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "PhaseAgentOutput",
+			name:  "PhaseAgentOutput",
 			event: bus.Event{Kind: bus.KindPhaseAgentOutput, PhaseID: "p1", Role: "coder", Cycle: 1, Message: "output"},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgPhaseAgentOutput)
@@ -128,7 +128,7 @@ func TestMapEvent_PhaseLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "PhaseIssuesFound",
+			name:  "PhaseIssuesFound",
 			event: bus.Event{Kind: bus.KindPhaseIssuesFound, PhaseID: "p1", Count: 3},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgPhaseIssuesFound)
@@ -141,7 +141,7 @@ func TestMapEvent_PhaseLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "PhaseApproved",
+			name:  "PhaseApproved",
 			event: bus.Event{Kind: bus.KindPhaseApproved, PhaseID: "p1"},
 			check: func(t *testing.T, msg tea.Msg) {
 				if _, ok := msg.(MsgPhaseApproved); !ok {
@@ -150,7 +150,7 @@ func TestMapEvent_PhaseLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "PhaseError",
+			name:  "PhaseError",
 			event: bus.Event{Kind: bus.KindPhaseError, PhaseID: "p1", Message: "boom"},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgPhaseError)
@@ -163,7 +163,7 @@ func TestMapEvent_PhaseLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "PhaseRefactorPending",
+			name:  "PhaseRefactorPending",
 			event: bus.Event{Kind: bus.KindPhaseRefactorPending, PhaseID: "p1"},
 			check: func(t *testing.T, msg tea.Msg) {
 				if _, ok := msg.(MsgPhaseRefactorPending); !ok {
@@ -172,7 +172,7 @@ func TestMapEvent_PhaseLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "PhaseRefactorApplied",
+			name:  "PhaseRefactorApplied",
 			event: bus.Event{Kind: bus.KindPhaseRefactorApplied, PhaseID: "p1"},
 			check: func(t *testing.T, msg tea.Msg) {
 				if _, ok := msg.(MsgPhaseRefactorApplied); !ok {
@@ -181,7 +181,7 @@ func TestMapEvent_PhaseLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "PhaseScanning",
+			name:  "PhaseScanning",
 			event: bus.Event{Kind: bus.KindPhaseScanning, PhaseID: "p1"},
 			check: func(t *testing.T, msg tea.Msg) {
 				if _, ok := msg.(MsgPhaseScanning); !ok {
@@ -190,7 +190,7 @@ func TestMapEvent_PhaseLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "PhaseFindingLifecycle_nil",
+			name:  "PhaseFindingLifecycle_nil",
 			event: bus.Event{Kind: bus.KindPhaseFindingLifecycle, PhaseID: "p1"},
 			check: func(t *testing.T, msg tea.Msg) {
 				if msg != nil {
@@ -219,7 +219,7 @@ func TestMapEvent_SingleTaskLifecycle(t *testing.T) {
 		check func(t *testing.T, msg tea.Msg)
 	}{
 		{
-			name: "TaskStarted",
+			name:  "TaskStarted",
 			event: bus.Event{Kind: bus.KindTaskStarted, BeadID: "b1", Title: "task"},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgTaskStarted)
@@ -232,7 +232,7 @@ func TestMapEvent_SingleTaskLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "TaskComplete",
+			name:  "TaskComplete",
 			event: bus.Event{Kind: bus.KindTaskComplete, BeadID: "b1", CostUSD: 2.0},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgTaskComplete)
@@ -245,7 +245,7 @@ func TestMapEvent_SingleTaskLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "CycleStart",
+			name:  "CycleStart",
 			event: bus.Event{Kind: bus.KindCycleStart, Cycle: 1, MaxCycles: 3},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgCycleStart)
@@ -258,7 +258,7 @@ func TestMapEvent_SingleTaskLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "AgentStart",
+			name:  "AgentStart",
 			event: bus.Event{Kind: bus.KindAgentStart, Role: "reviewer"},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgAgentStart)
@@ -271,7 +271,7 @@ func TestMapEvent_SingleTaskLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "AgentDone",
+			name:  "AgentDone",
 			event: bus.Event{Kind: bus.KindAgentDone, Role: "coder", CostUSD: 0.3, DurationMs: 500, Tokens: 100},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgAgentDone)
@@ -284,7 +284,7 @@ func TestMapEvent_SingleTaskLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "AgentOutput",
+			name:  "AgentOutput",
 			event: bus.Event{Kind: bus.KindAgentOutput, Role: "coder", Cycle: 1, Message: "output text"},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgAgentOutput)
@@ -297,7 +297,7 @@ func TestMapEvent_SingleTaskLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "IssuesFound",
+			name:  "IssuesFound",
 			event: bus.Event{Kind: bus.KindIssuesFound, Count: 2},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgIssuesFound)
@@ -319,7 +319,7 @@ func TestMapEvent_SingleTaskLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "MaxCyclesReached",
+			name:  "MaxCyclesReached",
 			event: bus.Event{Kind: bus.KindMaxCyclesReached, MaxCycles: 5},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgMaxCyclesReached)
@@ -332,7 +332,7 @@ func TestMapEvent_SingleTaskLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "BudgetExceeded",
+			name:  "BudgetExceeded",
 			event: bus.Event{Kind: bus.KindBudgetExceeded, Spent: 10.0, Limit: 8.0},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgBudgetExceeded)
@@ -345,7 +345,7 @@ func TestMapEvent_SingleTaskLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "Error",
+			name:  "Error",
 			event: bus.Event{Kind: bus.KindError, Message: "fail"},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgError)
@@ -358,7 +358,7 @@ func TestMapEvent_SingleTaskLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name: "Info",
+			name:  "Info",
 			event: bus.Event{Kind: bus.KindInfo, Message: "info"},
 			check: func(t *testing.T, msg tea.Msg) {
 				m, ok := msg.(MsgInfo)

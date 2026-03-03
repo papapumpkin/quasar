@@ -152,7 +152,7 @@ type Engine struct {
 
 	// Dependencies injected at construction time.
 	invoker     agent.Invoker
-	beadsClient *beads.CLI
+	beadsClient beads.Client
 
 	// Internal state populated during Run.
 	nebula     *Nebula
@@ -168,7 +168,7 @@ type Engine struct {
 
 // NewEngine creates an Engine with the given configuration and bus.
 // The bus may be nil for plan-only (non-auto) mode.
-func NewEngine(cfg EngineConfig, b bus.Bus, invoker agent.Invoker, beadsClient *beads.CLI) *Engine {
+func NewEngine(cfg EngineConfig, b bus.Bus, invoker agent.Invoker, beadsClient beads.Client) *Engine {
 	return &Engine{
 		cfg:         cfg,
 		bus:         b,
