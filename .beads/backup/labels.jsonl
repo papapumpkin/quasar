@@ -890,6 +890,8 @@
 {"issue_id":"quasar-kae","label":"tui"}
 {"issue_id":"quasar-kae","label":"visual"}
 {"issue_id":"quasar-kbcs","label":"quasar"}
+{"issue_id":"quasar-kbcs.1","label":"quasar"}
+{"issue_id":"quasar-kbcs.1","label":"review-finding"}
 {"issue_id":"quasar-keb2","label":"quasar"}
 {"issue_id":"quasar-kf8","label":"beads"}
 {"issue_id":"quasar-kf8","label":"quasar"}
@@ -983,6 +985,10 @@
 {"issue_id":"quasar-n9sj.4","label":"quasar"}
 {"issue_id":"quasar-n9sj.4","label":"review-finding"}
 {"issue_id":"quasar-naae","label":"quasar"}
+{"issue_id":"quasar-naae.1","label":"quasar"}
+{"issue_id":"quasar-naae.1","label":"review-finding"}
+{"issue_id":"quasar-naae.2","label":"quasar"}
+{"issue_id":"quasar-naae.2","label":"review-finding"}
 {"issue_id":"quasar-neth","label":"organization"}
 {"issue_id":"quasar-neth","label":"refactor"}
 {"issue_id":"quasar-nr6k","label":"cache"}
