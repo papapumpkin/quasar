@@ -186,12 +186,17 @@ func (s *BusSubscriber) mapEvent(ev bus.Event) tea.Msg {
 			RemediationTitle: ev.Healing.RemediationTitle,
 		}
 	case bus.KindEntanglementUpdate:
-		// Entanglements are carried as the Message field JSON or via a
-		// separate mechanism. For now, we forward via a direct event-level
-		// field that the producer populates with the concrete type.
-		return nil
+		ents, ok := ev.Entanglements.([]fabric.Entanglement)
+		if !ok || len(ents) == 0 {
+			return nil
+		}
+		return MsgEntanglementUpdate{Entanglements: ents}
 	case bus.KindDiscoveryPosted:
-		return nil
+		disc, ok := ev.FabricDiscovery.(fabric.Discovery)
+		if !ok {
+			return nil
+		}
+		return MsgDiscoveryPosted{Discovery: disc}
 	case bus.KindScratchpadEntry:
 		return MsgScratchpadEntry{
 			Timestamp: ev.Timestamp,

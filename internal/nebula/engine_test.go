@@ -401,4 +401,3 @@ func (m *mockFabricCloser) Close() error {
 func (m *mockFabricCloser) WorkerGroupOptions() []Option {
 	return m.options
 }
-

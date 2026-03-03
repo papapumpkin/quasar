@@ -177,6 +177,10 @@ type Event struct {
 	PlanAction   *PlanActionPayload
 	PlanError    *PlanErrorPayload
 	StaleWarning *StaleWarningPayload
+
+	// Fabric payloads — kept as any to avoid import cycles with the fabric package.
+	Entanglements any // []fabric.Entanglement for KindEntanglementUpdate
+	FabricDiscovery any // fabric.Discovery for KindDiscoveryPosted
 }
 
 // CycleSummaryPayload carries structured data for a completed coder-reviewer

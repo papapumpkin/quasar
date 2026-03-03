@@ -209,8 +209,7 @@ func (a *tuiLoopAdapter) emitFabricEvents(ctx context.Context, phaseID string) {
 	if ents, err := a.fabric.AllEntanglements(ctx); err == nil && len(ents) > 0 {
 		if a.bus != nil {
 			ev := bus.New(bus.KindEntanglementUpdate)
-			// Entanglements are currently forwarded as nil in the bus subscriber;
-			// the event kind alone is sufficient for the TUI to refresh.
+			ev.Entanglements = ents
 			_ = a.bus.Publish(ctx, ev)
 		} else {
 			a.program.Send(tui.MsgEntanglementUpdate{Entanglements: ents})
@@ -222,6 +221,7 @@ func (a *tuiLoopAdapter) emitFabricEvents(ctx context.Context, phaseID string) {
 			if a.bus != nil {
 				ev := bus.NewPhase(bus.KindDiscoveryPosted, phaseID)
 				ev.Message = d.Detail
+				ev.FabricDiscovery = d
 				_ = a.bus.Publish(ctx, ev)
 			} else {
 				a.program.Send(tui.MsgDiscoveryPosted{Discovery: d})

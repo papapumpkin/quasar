@@ -2,19 +2,20 @@ package nebula
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"os"
 
 	"github.com/papapumpkin/quasar/internal/bus"
 )
 
 // Run executes the full nebula lifecycle: load, validate, branch, plan, apply,
 // and (if Auto is set) execute workers. It publishes lifecycle events to the
-// bus and returns an EngineResult.
+// bus and returns an EngineResult. Additional options are forwarded to the
+// WorkerGroup for display-path-specific configuration (runner, bus, etc.).
 //
 // The context controls cancellation — cancelling ctx will stop workers
 // gracefully after their current cycle.
-func (e *Engine) Run(ctx context.Context) *EngineResult {
+func (e *Engine) Run(ctx context.Context, opts ...Option) *EngineResult {
 	result := &EngineResult{}
 
 	// Phase 1: Load & validate.
@@ -78,7 +79,7 @@ func (e *Engine) Run(ctx context.Context) *EngineResult {
 
 	e.transition(EngineExecuting)
 	e.publishLifecycle(ctx, bus.KindEngineExecuting)
-	results, err := e.execute(ctx)
+	results, err := e.execute(ctx, opts...)
 	result.WorkerResults = results
 	if err != nil {
 		result.Err = err
@@ -95,15 +96,41 @@ func (e *Engine) Run(ctx context.Context) *EngineResult {
 	return result
 }
 
-// load reads and validates the nebula from disk, and loads its state file.
+// load reads and validates the nebula from disk, resolves manifest-dependent
+// defaults (workDir, maxWorkers, maxContextTokens), and loads state.
 func (e *Engine) load(_ context.Context) (*Nebula, error) {
 	n, err := Load(e.cfg.NebulaDir)
 	if err != nil {
 		return nil, fmt.Errorf("load nebula: %w", err)
 	}
 	if valErrs := Validate(n); len(valErrs) > 0 {
-		return nil, fmt.Errorf("validate nebula: %w", errors.Join(toErrors(valErrs)...))
+		return nil, &ValidationFailedError{
+			Name:       n.Manifest.Nebula.Name,
+			PhaseCount: len(n.Phases),
+			Errors:     valErrs,
+		}
 	}
+
+	// Resolve workDir: manifest overrides config; cwd is the fallback.
+	if n.Manifest.Context.WorkingDir != "" {
+		e.cfg.WorkDir = n.Manifest.Context.WorkingDir
+	}
+	if e.cfg.WorkDir == "" || e.cfg.WorkDir == "." {
+		wd, wdErr := os.Getwd()
+		if wdErr != nil {
+			return nil, fmt.Errorf("get working directory: %w", wdErr)
+		}
+		e.cfg.WorkDir = wd
+	}
+
+	// Resolve manifest-dependent defaults when the CLI didn't set them.
+	if !e.cfg.MaxWorkersExplicit && n.Manifest.Execution.MaxWorkers > 0 {
+		e.cfg.MaxWorkers = n.Manifest.Execution.MaxWorkers
+	}
+	if !e.cfg.MaxContextTokensExplicit && n.Manifest.Execution.MaxContextTokens > 0 {
+		e.cfg.MaxContextTokens = n.Manifest.Execution.MaxContextTokens
+	}
+
 	e.state, err = LoadState(e.cfg.NebulaDir)
 	if err != nil {
 		return nil, fmt.Errorf("load state: %w", err)
@@ -149,9 +176,12 @@ func (e *Engine) applyPlan(ctx context.Context, plan *Plan) error {
 	return nil
 }
 
-// execute creates and runs the WorkerGroup.
-func (e *Engine) execute(ctx context.Context) ([]WorkerResult, error) {
+// execute creates and runs the WorkerGroup. Additional options are appended
+// after the base options, allowing the CLI to inject runner, bus subscribers,
+// dashboard, and other display-path-specific configuration.
+func (e *Engine) execute(ctx context.Context, extraOpts ...Option) ([]WorkerResult, error) {
 	opts := e.buildWorkerOptions()
+	opts = append(opts, extraOpts...)
 	e.wg = NewWorkerGroup(e.nebula, e.state, opts...)
 	return e.wg.Run(ctx)
 }
@@ -170,7 +200,10 @@ func (e *Engine) postComplete(ctx context.Context, results []WorkerResult) *Post
 }
 
 // buildWorkerOptions constructs the []Option list for WorkerGroup creation.
+// These are the base options shared by all display paths (TUI and stderr).
+// The caller appends display-path-specific options via execute's extraOpts.
 func (e *Engine) buildWorkerOptions() []Option {
+	committer := NewGitCommitterWithBranch(context.Background(), e.cfg.WorkDir, e.branchName)
 	opts := []Option{
 		WithMaxWorkers(e.cfg.MaxWorkers),
 		WithBeadsClient(e.beadsClient),
@@ -179,9 +212,11 @@ func (e *Engine) buildWorkerOptions() []Option {
 		WithGlobalModel(e.cfg.Model),
 		WithBus(e.bus),
 		WithInvoker(e.invoker),
+		WithCommitter(committer),
+		WithCheckpointDir(e.cfg.NebulaDir),
 	}
 	if e.cfg.Resume {
-		opts = append(opts, WithResumeEnabled(true), WithCheckpointDir(e.cfg.NebulaDir))
+		opts = append(opts, WithResumeEnabled(true))
 	}
 	if e.fabric != nil {
 		opts = append(opts, e.fabric.WorkerGroupOptions()...)
@@ -235,6 +270,27 @@ func (e *Engine) publishEvent(ctx context.Context, ev bus.Event) {
 func (e *Engine) SetFabric(fc fabricCloser) {
 	e.fabric = fc
 }
+
+// GetPlan returns the current plan, or nil if buildPlan has not been called.
+func (e *Engine) GetPlan() *Plan { return e.plan }
+
+// GetNebula returns the loaded nebula, or nil if load has not been called.
+func (e *Engine) GetNebula() *Nebula { return e.nebula }
+
+// GetState returns the loaded state, or nil if load has not been called.
+func (e *Engine) GetState() *State { return e.state }
+
+// WorkDir returns the resolved working directory. Only valid after Run
+// has progressed past the loading phase.
+func (e *Engine) WorkDir() string { return e.cfg.WorkDir }
+
+// BranchName returns the nebula branch name. Empty if branch management
+// is not active. Only valid after Run has progressed past branch creation.
+func (e *Engine) BranchName() string { return e.branchName }
+
+// Config returns the engine configuration (by value). The returned config
+// includes any manifest-derived overrides applied during loading.
+func (e *Engine) Config() EngineConfig { return e.cfg }
 
 // toErrors converts a slice of ValidationError to a slice of error.
 func toErrors(valErrs []ValidationError) []error {
