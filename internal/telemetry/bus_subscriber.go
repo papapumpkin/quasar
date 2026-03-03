@@ -1,4 +1,4 @@
-// Package telemetry provides a JSONL event stream for recording state transitions.
+// bus_subscriber.go implements a bus.Subscription-based telemetry writer.
 
 package telemetry
 

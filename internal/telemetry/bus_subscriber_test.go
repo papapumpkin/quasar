@@ -201,10 +201,9 @@ func TestBusSubscriberStop(t *testing.T) {
 	sub.Start()
 
 	// Publish several events before stopping.
-	for i := range 5 {
+	for range 5 {
 		ev := bus.NewPhase(bus.KindPhaseAgentStart, "drain-phase")
 		ev.Role = "coder"
-		_ = i
 		if err := b.Publish(context.Background(), ev); err != nil {
 			t.Fatalf("Publish: %v", err)
 		}
