@@ -29,9 +29,9 @@ summary = 'Clean typed event bus interface with comprehensive Kind vocabulary co
 
 [phases.cli-adapter]
 bead_id = 'quasar-dmlg'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-03-02T23:31:04.294997-05:00
-updated_at = 2026-03-03T00:27:21.616188-05:00
+updated_at = 2026-03-03T00:58:23.851653-05:00
 
 [phases.engine-extract]
 bead_id = 'quasar-qc6o'
