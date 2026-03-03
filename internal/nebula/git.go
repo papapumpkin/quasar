@@ -226,15 +226,17 @@ func (g *gitCommitter) ensureBranch(ctx context.Context) error {
 	return nil
 }
 
+// interventionFileNames lists the filenames used for human intervention
+// control of nebula execution (PAUSE, STOP, RETRY).
+var interventionFileNames = []string{"PAUSE", "STOP", "RETRY"}
+
 // InterventionFileNames returns the filenames that should be excluded from
-// git commits in a nebula directory. These are the PAUSE and STOP intervention
-// files used for human control of nebula execution.
+// git commits in a nebula directory. These are the PAUSE, STOP, and RETRY
+// intervention files used for human control of nebula execution.
 func InterventionFileNames() []string {
-	names := make([]string, 0, len(interventionFiles))
-	for name := range interventionFiles {
-		names = append(names, name)
-	}
-	return names
+	out := make([]string, len(interventionFileNames))
+	copy(out, interventionFileNames)
+	return out
 }
 
 // GitExcludePatterns returns gitignore-style patterns for intervention files.
