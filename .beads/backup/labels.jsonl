@@ -816,6 +816,12 @@
 {"issue_id":"quasar-ijp","label":"quasar"}
 {"issue_id":"quasar-ijp","label":"tui"}
 {"issue_id":"quasar-ip76","label":"quasar"}
+{"issue_id":"quasar-ip76.1","label":"quasar"}
+{"issue_id":"quasar-ip76.1","label":"review-finding"}
+{"issue_id":"quasar-ip76.2","label":"quasar"}
+{"issue_id":"quasar-ip76.2","label":"review-finding"}
+{"issue_id":"quasar-ip76.3","label":"quasar"}
+{"issue_id":"quasar-ip76.3","label":"review-finding"}
 {"issue_id":"quasar-ivtq","label":"architecture"}
 {"issue_id":"quasar-ivtq","label":"cleanup"}
 {"issue_id":"quasar-ivtq","label":"quasar"}
