@@ -4,7 +4,7 @@ title = "Define bus interface and canonical event types"
 type = "task"
 priority = 1
 depends_on = []
-scope = ["internal/bus/**"]
+scope = ["internal/bus/bus.go"]
 +++
 
 ## Problem

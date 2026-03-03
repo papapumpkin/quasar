@@ -9,11 +9,11 @@ labels = ["quasar", "web"]
 assignee = ""
 
 [execution]
-max_workers = 2
+max_workers = 8
 max_review_cycles = 5
 max_budget_usd = 80.0
 model = ""
-gate = "review"
+gate = "trust"
 
 [context]
 repo = "github.com/papapumpkin/quasar"

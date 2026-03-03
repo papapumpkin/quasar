@@ -4,7 +4,7 @@ title = "Reduce cmd/nebula_apply.go to a thin CLI adapter around Engine"
 type = "task"
 priority = 2
 depends_on = ["engine-extract"]
-scope = ["cmd/nebula_apply.go", "cmd/nebula_adapters.go", "cmd/tui.go"]
+scope = ["cmd/nebula_apply.go", "cmd/tui.go", "cmd/nebula_apply_test.go"]
 allow_scope_overlap = true
 +++
 
@@ -19,7 +19,7 @@ With the `Engine` fully implemented (phase 7), `runNebulaApply` still contains t
 
 Until this is done, there are two code paths — the old monolithic one and the new Engine. Both produce correct behavior, but the old one must be removed to complete the extraction and avoid maintenance burden.
 
-Similarly, `cmd/tui.go` (`quasar cockpit`) should use the Engine for its `runSelectedNebula` function, and `cmd/nebula_adapters.go` should be simplified since the Engine now owns worker group construction.
+Similarly, `cmd/tui.go` (`quasar cockpit`) should use the Engine for its `runSelectedNebula` function.
 
 ## Solution
 
@@ -147,13 +147,6 @@ func runWithTUI(ctx context.Context, engine *nebula.Engine, b bus.Bus, cfg nebul
 }
 ```
 
-### Simplify nebula_adapters.go
-
-The `tuiLoopAdapter` and `loopAdapter` remain but are simplified:
-- `tuiLoopAdapter` no longer needs to set up `OnProgress`/`OnRefactor` callbacks — the bus handles delivery.
-- The `bus` field on `tuiLoopAdapter` provides `BusUIBridge` per phase (from phase 5).
-- `loopAdapter` for the stderr path remains unchanged.
-
 ### Update cmd/tui.go
 
 `runSelectedNebula` in `cmd/tui.go` currently duplicates much of `runNebulaApply`. Replace it with:
@@ -189,7 +182,6 @@ After this phase, `runNebulaApply` should be ~60-80 lines (down from ~567). The 
 ## Files
 
 - `cmd/nebula_apply.go` — rewrite `runNebulaApply` as thin adapter: `resolveEngineConfig` + `Engine.Run` + consumer subscriptions
-- `cmd/nebula_adapters.go` — simplify `tuiLoopAdapter` to remove direct callback wiring (bus handles it)
 - `cmd/tui.go` — update `runSelectedNebula` to use `Engine`
 - `cmd/nebula_apply_test.go` — add test for `resolveEngineConfig` producing correct `EngineConfig` from flags
 

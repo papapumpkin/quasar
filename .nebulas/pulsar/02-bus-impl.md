@@ -4,7 +4,7 @@ title = "Channel-based bus implementation with fan-out and backpressure"
 type = "task"
 priority = 2
 depends_on = ["bus-interface"]
-scope = ["internal/bus/**"]
+scope = ["internal/bus/memory.go", "internal/bus/memory_test.go"]
 +++
 
 ## Problem

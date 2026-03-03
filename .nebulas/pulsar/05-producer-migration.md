@@ -4,7 +4,7 @@ title = "Migrate event producers to publish to the bus"
 type = "task"
 priority = 2
 depends_on = ["tui-subscriber", "telemetry-subscriber"]
-scope = ["internal/tui/bridge.go", "internal/nebula/worker*.go", "cmd/nebula_adapters.go", "cmd/nebula_apply.go"]
+scope = ["internal/tui/bridge.go", "internal/tui/bus_bridge.go", "internal/nebula/worker*.go", "cmd/nebula_adapters.go"]
 allow_scope_overlap = true
 +++
 
