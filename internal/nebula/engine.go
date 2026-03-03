@@ -132,12 +132,12 @@ func (e *Engine) buildPlan(ctx context.Context) (*Plan, error) {
 		return nil, fmt.Errorf("build plan: %w", err)
 	}
 	// Publish plan for consumers (TUI plan view, web dashboard).
-	e.publishEvent(ctx, bus.Event{
-		Kind: bus.KindPlanReady,
-		PlanReady: &bus.PlanReadyPayload{
-			Plan: plan,
-		},
-	})
+	ev := bus.New(bus.KindPlanReady)
+	ev.PlanReady = &bus.PlanReadyPayload{
+		Plan:      plan,
+		NebulaDir: e.cfg.NebulaDir,
+	}
+	e.publishEvent(ctx, ev)
 	return plan, nil
 }
 

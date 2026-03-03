@@ -2366,3 +2366,21 @@ time="2026-03-03T00:31:19-05:00" level=info msg=NewConnection DisableClientMulti
 time="2026-03-03T00:31:19-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=571
 time="2026-03-03T00:31:19-05:00" level=info msg=ConnectionClosed connectionID=570
 time="2026-03-03T00:31:19-05:00" level=info msg=ConnectionClosed connectionID=571
+time="2026-03-03T00:32:38-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=572
+time="2026-03-03T00:32:38-05:00" level=info msg=ConnectionClosed connectionID=572
+time="2026-03-03T00:32:38-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=573
+time="2026-03-03T00:32:38-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=574
+time="2026-03-03T00:32:38-05:00" level=info msg=ConnectionClosed connectionID=573
+time="2026-03-03T00:32:38-05:00" level=info msg=ConnectionClosed connectionID=574
+time="2026-03-03T00:32:38-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=575
+time="2026-03-03T00:32:38-05:00" level=info msg=ConnectionClosed connectionID=575
+time="2026-03-03T00:32:38-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=576
+time="2026-03-03T00:32:38-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=577
+time="2026-03-03T00:32:38-05:00" level=info msg=ConnectionClosed connectionID=576
+time="2026-03-03T00:32:38-05:00" level=info msg=ConnectionClosed connectionID=577
+time="2026-03-03T00:32:38-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=578
+time="2026-03-03T00:32:38-05:00" level=info msg=ConnectionClosed connectionID=578
+time="2026-03-03T00:32:38-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=579
+time="2026-03-03T00:32:38-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=580
+time="2026-03-03T00:32:38-05:00" level=info msg=ConnectionClosed connectionID=579
+time="2026-03-03T00:32:38-05:00" level=info msg=ConnectionClosed connectionID=580
