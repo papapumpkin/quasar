@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'pulsar'
-total_cost_usd = 9.20867895
+total_cost_usd = 17.456782949999997
 
 [phases]
 [phases.bus-impl]
@@ -65,6 +65,12 @@ summary = 'Telemetry bus subscriber cleanly bridges bus events to JSONL telemetr
 
 [phases.tui-subscriber]
 bead_id = 'quasar-54nh'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-02T23:31:03.758544-05:00
-updated_at = 2026-03-02T23:44:58.507589-05:00
+updated_at = 2026-03-03T00:31:19.842627-05:00
+
+[phases.tui-subscriber.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'TUI bus subscriber correctly maps all bus events to tea.Msg types with proper lifecycle management, goroutine safety, and comprehensive tests — all four prior findings are fixed.'

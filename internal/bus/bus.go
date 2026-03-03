@@ -119,6 +119,15 @@ const KindHail Kind = "hail"
 // Corresponds to MsgStaleWarning in the TUI.
 const KindStaleWarning Kind = "stale.warning"
 
+// Engine lifecycle event kinds — correspond to Engine phase transitions.
+const (
+	KindEngineLoading    Kind = "engine.loading"
+	KindEnginePlanning   Kind = "engine.planning"
+	KindEngineExecuting  Kind = "engine.executing"
+	KindEngineCompleting Kind = "engine.completing"
+	KindEngineDone       Kind = "engine.done"
+)
+
 // Event is the canonical bus event. The Kind field determines which
 // payload fields are populated.
 type Event struct {

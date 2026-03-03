@@ -137,8 +137,9 @@ type EngineResult struct {
 }
 
 // fabricCloser is a minimal interface for the fabric lifecycle.
+// It is satisfied by the cmd package's fabricComponents type.
 type fabricCloser interface {
-	Close()
+	Close() error
 	WorkerGroupOptions() []Option
 }
 
