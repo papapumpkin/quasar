@@ -1,0 +1,49 @@
+[nebula]
+name = "vox"
+description = "Add a pluggable speech-to-text (STT) subsystem and a conversational feedback loop that lets users steer nebula execution mid-run — via voice in the TUI (push-to-talk) or browser (MediaRecorder), with an advisor agent that translates natural language into concrete FeedbackActions applied between coder-reviewer cycles."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "voice"]
+assignee = ""
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 70.0
+model = ""
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Define a Transcriber interface with Start/Stop/Transcriptions/Available methods and a noop fallback",
+    "Implement a macOS dictation backend using NSSpeechRecognizer via Cgo (darwin build tag)",
+    "Build an audio pipeline with voice activity detection, silence chunking, and buffer management",
+    "Define typed feedback primitives: FeedbackItem (source, content, target), FeedbackAction (refactor, reprioritize, pause, skip, add-phase), FeedbackQueue",
+    "Create an advisor agent that uses agent.Invoker to interpret natural language into FeedbackActions",
+    "Integrate the feedback queue into WorkerGroup so workers apply actions between coder-reviewer cycles via HotReloader",
+    "Add a TUI feedback panel with push-to-talk STT input and scrollable feedback history",
+    "Add a web feedback panel with text input, microphone button (MediaRecorder), and HTMX-powered feedback history",
+]
+constraints = [
+    "Transcriber interface defined in internal/stt/ — platform backends behind build tags",
+    "Noop backend must compile on all platforms; macOS backend only under //go:build darwin",
+    "No external audio libraries — use system APIs (macOS dictation) or browser MediaRecorder",
+    "FeedbackQueue must be goroutine-safe with blocking receive (sync.Cond or channel-based)",
+    "Advisor agent reuses existing agent.Invoker interface — no new subprocess abstractions",
+    "Worker integration must not break existing WorkerGroup.Run semantics — feedback is additive",
+    "TUI changes must follow the BubbleTea message-driven pattern: new Msg types, Update routing, View rendering",
+    "Web changes must use HTMX + SSE (no WebSocket) following meridian patterns",
+    "All new files must have corresponding _test.go files using stdlib testing only",
+    "Follow existing patterns: interfaces defined at consumer, constructor injection, context propagation",
+    "Use canonical vocabulary: Fabric, Entanglement, Discovery, Hail, Quasar (worker), Epoch, Pulse",
+    "All existing tests must pass after every phase",
+    "go build and go vet ./... must pass after every phase",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = ["pulsar", "meridian", "canvas"]

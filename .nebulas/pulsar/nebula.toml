@@ -1,0 +1,41 @@
+[nebula]
+name = "pulsar"
+description = "Event bus + engine extraction: decouple TUI/telemetry from workers via a typed pub-sub bus and extract the nebula lifecycle from runNebulaApply into a standalone Engine"
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["quasar"]
+assignee = ""
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 80.0
+model = ""
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Introduce a shared typed event bus (internal/bus/) with pub-sub, fan-out, backpressure, and per-subscriber buffering",
+    "Make TUI a passive bus subscriber instead of a direct bridge target — zero behavior change",
+    "Make telemetry a bus subscriber instead of scattered direct Emit calls",
+    "Extract the nebula lifecycle (load, validate, plan, apply, execute) from runNebulaApply into an Engine struct",
+    "Reduce cmd/nebula_apply.go to a thin CLI adapter that creates an Engine and subscribes consumers to the bus",
+]
+constraints = [
+    "Zero behavior change in TUI rendering, gate prompts, splash animation, and nebula chaining",
+    "Zero behavior change in stderr printer path",
+    "All existing tests must pass after every phase",
+    "go build, go vet ./... must pass after every phase",
+    "No external dependencies — stdlib channels and sync primitives only",
+    "Maintain context propagation and cancellation semantics",
+    "Bus must be safe for concurrent publishers (multiple workers)",
+    "Interfaces defined where consumed, not where implemented",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []
