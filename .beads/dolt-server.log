@@ -2732,3 +2732,15 @@ time="2026-03-03T09:23:50-05:00" level=info msg=NewConnection DisableClientMulti
 time="2026-03-03T09:23:50-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=754
 time="2026-03-03T09:23:50-05:00" level=info msg=ConnectionClosed connectionID=753
 time="2026-03-03T09:23:50-05:00" level=info msg=ConnectionClosed connectionID=754
+time="2026-03-03T09:23:50-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=755
+time="2026-03-03T09:23:50-05:00" level=info msg=ConnectionClosed connectionID=755
+time="2026-03-03T09:23:50-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=756
+time="2026-03-03T09:23:50-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=757
+time="2026-03-03T09:23:50-05:00" level=info msg=ConnectionClosed connectionID=756
+time="2026-03-03T09:23:50-05:00" level=info msg=ConnectionClosed connectionID=757
+time="2026-03-03T09:23:50-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=758
+time="2026-03-03T09:23:50-05:00" level=info msg=ConnectionClosed connectionID=758
+time="2026-03-03T09:23:50-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=759
+time="2026-03-03T09:23:50-05:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=760
+time="2026-03-03T09:23:50-05:00" level=info msg=ConnectionClosed connectionID=759
+time="2026-03-03T09:23:50-05:00" level=info msg=ConnectionClosed connectionID=760
