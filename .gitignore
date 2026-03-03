@@ -34,3 +34,4 @@ Thumbs.db
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+dolt-server.log
