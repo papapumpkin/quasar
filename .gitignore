@@ -35,3 +35,7 @@ Thumbs.db
 .dolt/
 *.db
 .beads/dolt-server.log
+.beads/dolt-server.pid
+.beads/dolt-server.port
+.beads/dolt-server.activity
+.beads/dolt-monitor.pid
