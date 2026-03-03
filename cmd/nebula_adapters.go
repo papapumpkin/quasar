@@ -20,6 +20,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/loop"
 	"github.com/papapumpkin/quasar/internal/nebula"
 	"github.com/papapumpkin/quasar/internal/tui"
+	"github.com/papapumpkin/quasar/internal/ui"
 )
 
 // loopAdapter wraps *loop.Loop to satisfy nebula.PhaseRunner.
@@ -127,6 +128,16 @@ type tuiLoopAdapter struct {
 	checkpointDir    string        // Directory for checkpoint files. Empty disables checkpointing.
 }
 
+// newPhaseUI returns a ui.UI implementation for the given phase. When the bus
+// is available, it returns a BusUIBridge that publishes to the bus. Otherwise,
+// it returns a PhaseUIBridge that sends directly to the TUI program.
+func (a *tuiLoopAdapter) newPhaseUI(phaseID string) ui.UI {
+	if a.bus != nil {
+		return tui.NewBusUIBridge(a.bus, phaseID, a.workDir)
+	}
+	return tui.NewPhaseUIBridge(a.program, phaseID, a.workDir)
+}
+
 func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, phaseTitle, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
 	// Create a per-phase UI bridge. When the bus is available, use
 	// BusUIBridge so events flow through the bus to BusSubscriber.
@@ -188,18 +199,33 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 
 // emitFabricEvents queries the fabric for entanglements and discoveries
 // produced by this phase and emits the corresponding TUI messages.
-func (a *tuiLoopAdapter) emitFabricEvents(ctx context.Context, phaseID string, phaseUI *tui.PhaseUIBridge) {
+// When the bus is available, events are published to the bus; otherwise,
+// they are sent directly to the TUI program.
+func (a *tuiLoopAdapter) emitFabricEvents(ctx context.Context, phaseID string) {
 	if a.fabric == nil {
 		return
 	}
 	// Emit entanglement update with the full list.
 	if ents, err := a.fabric.AllEntanglements(ctx); err == nil && len(ents) > 0 {
-		phaseUI.EntanglementPublished(ents)
+		if a.bus != nil {
+			ev := bus.New(bus.KindEntanglementUpdate)
+			// Entanglements are currently forwarded as nil in the bus subscriber;
+			// the event kind alone is sufficient for the TUI to refresh.
+			_ = a.bus.Publish(ctx, ev)
+		} else {
+			a.program.Send(tui.MsgEntanglementUpdate{Entanglements: ents})
+		}
 	}
 	// Emit discoveries posted by this phase.
 	if discs, err := a.fabric.Discoveries(ctx, phaseID); err == nil {
 		for _, d := range discs {
-			phaseUI.DiscoveryPosted(d)
+			if a.bus != nil {
+				ev := bus.NewPhase(bus.KindDiscoveryPosted, phaseID)
+				ev.Message = d.Detail
+				_ = a.bus.Publish(ctx, ev)
+			} else {
+				a.program.Send(tui.MsgDiscoveryPosted{Discovery: d})
+			}
 		}
 	}
 }
@@ -210,7 +236,7 @@ func (a *tuiLoopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData a
 		return nil, fmt.Errorf("invalid checkpoint data type for phase %s: expected *checkpoint.Checkpoint", phaseID)
 	}
 
-	phaseUI := tui.NewPhaseUIBridge(a.program, phaseID, a.workDir)
+	phaseUI := a.newPhaseUI(phaseID)
 
 	l := &loop.Loop{
 		Invoker:           a.invoker,
@@ -258,7 +284,7 @@ func (a *tuiLoopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData a
 	result, err := l.RunFromCheckpoint(ctx, cycleState, checkpointPhase, cleanup)
 
 	// After the loop completes, emit fabric events if fabric is available.
-	a.emitFabricEvents(ctx, phaseID, phaseUI)
+	a.emitFabricEvents(ctx, phaseID)
 
 	if err != nil {
 		if result != nil {
@@ -270,7 +296,7 @@ func (a *tuiLoopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData a
 }
 
 func (a *tuiLoopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error) {
-	phaseUI := tui.NewPhaseUIBridge(a.program, "checkpoint", a.workDir)
+	phaseUI := a.newPhaseUI("checkpoint")
 	l := &loop.Loop{
 		Invoker:          a.invoker,
 		UI:               phaseUI,

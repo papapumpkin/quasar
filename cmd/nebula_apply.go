@@ -14,6 +14,7 @@ import (
 
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/bus"
 	"github.com/papapumpkin/quasar/internal/checkpoint"
 	"github.com/papapumpkin/quasar/internal/claude"
 	"github.com/papapumpkin/quasar/internal/config"
@@ -223,7 +224,20 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			phases = append(phases, pi)
 		}
 		tuiProgram = tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir, noSplash)
-		// Per-phase loops with PhaseUIBridge for hierarchical TUI tracking.
+
+		// Create the event bus and wire a BusSubscriber to convert bus
+		// events into TUI messages. This replaces direct tea.Program.Send
+		// callbacks with bus-mediated delivery.
+		eventBus := bus.NewMemoryBus()
+		defer eventBus.Close()
+		busSub := tui.NewBusSubscriber(tuiProgram, eventBus, 128)
+		busSub.Start()
+		defer busSub.Stop()
+
+		// Pass the bus to the WorkerGroup so callbacks publish to it.
+		wg.Bus = eventBus
+
+		// Per-phase loops with BusUIBridge for hierarchical TUI tracking.
 		wg.Runner = &tuiLoopAdapter{
 			program:          tuiProgram,
 			invoker:          claudeInv,
@@ -237,35 +251,18 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 			reviewPrompt:     reviewerPrompt,
 			workDir:          workDir,
 			fabric:           wg.Fabric, // nil-safe — emitFabricEvents checks for nil
+			bus:              eventBus,
 			projectContext:   projectCtx,
 			maxContextTokens: maxContextTokens,
 			checkpointDir:    dir,
 		}
 		wg.Logger = io.Discard
 		wg.Prompter = tui.NewGater(tuiProgram)
-		wg.OnProgress = func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
-			tuiProgram.Send(tui.MsgNebulaProgress{
-				Completed:    completed,
-				Total:        total,
-				OpenBeads:    openBeads,
-				ClosedBeads:  closedBeads,
-				TotalCostUSD: totalCostUSD,
-			})
-		}
-		wg.OnRefactor = func(phaseID string, pending bool) {
-			if pending {
-				tuiProgram.Send(tui.MsgPhaseRefactorPending{PhaseID: phaseID})
-			}
-		}
-		// Wire Tycho OnHail callback to emit MsgHail via the TUI program.
-		wg.OnHail = func(phaseID string, d fabric.Discovery) {
-			tuiProgram.Send(tui.MsgHail{PhaseID: phaseID, Discovery: d})
-		}
-		// Wire fabric scanning notification to surface a toast when phases
-		// enter the scanning gate (blocked → scanning → running).
-		wg.OnScanning = func(phaseID string) {
-			tuiProgram.Send(tui.MsgPhaseScanning{PhaseID: phaseID})
-		}
+		// Note: OnProgress, OnRefactor, OnHotAdd, OnHail, OnScanning
+		// callbacks are NOT set here. When wg.Bus is non-nil,
+		// WorkerGroup.Run wraps nil callbacks to publish to the bus,
+		// and BusSubscriber converts bus events into TUI messages.
+
 		// Start telemetry bridge if a telemetry file exists.
 		telemetryPath := filepath.Join(".quasar", "telemetry", "current.jsonl")
 		if _, statErr := os.Stat(telemetryPath); statErr == nil {
