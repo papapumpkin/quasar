@@ -290,6 +290,14 @@
 {"issue_id":"quasar-53j","label":"tui"}
 {"issue_id":"quasar-53j","label":"visual"}
 {"issue_id":"quasar-54nh","label":"quasar"}
+{"issue_id":"quasar-54nh.1","label":"quasar"}
+{"issue_id":"quasar-54nh.1","label":"review-finding"}
+{"issue_id":"quasar-54nh.2","label":"quasar"}
+{"issue_id":"quasar-54nh.2","label":"review-finding"}
+{"issue_id":"quasar-54nh.3","label":"quasar"}
+{"issue_id":"quasar-54nh.3","label":"review-finding"}
+{"issue_id":"quasar-54nh.4","label":"quasar"}
+{"issue_id":"quasar-54nh.4","label":"review-finding"}
 {"issue_id":"quasar-5az","label":"quasar"}
 {"issue_id":"quasar-5az","label":"tui"}
 {"issue_id":"quasar-5c4","label":"cosmetic"}
@@ -1134,6 +1142,10 @@
 {"issue_id":"quasar-qonf","label":"plan"}
 {"issue_id":"quasar-qonf","label":"quasar"}
 {"issue_id":"quasar-qunm","label":"quasar"}
+{"issue_id":"quasar-qunm.1","label":"quasar"}
+{"issue_id":"quasar-qunm.1","label":"review-finding"}
+{"issue_id":"quasar-qunm.2","label":"quasar"}
+{"issue_id":"quasar-qunm.2","label":"review-finding"}
 {"issue_id":"quasar-qvnx","label":"nebula-generate"}
 {"issue_id":"quasar-qvnx","label":"quasar"}
 {"issue_id":"quasar-r2za","label":"docs"}
