@@ -3,49 +3,49 @@ nebula_name = 'pulsar'
 
 [phases]
 [phases.bus-impl]
-bead_id = 'quasar-nwzp'
+bead_id = 'quasar-4w64'
 status = 'failed'
 created_at = 2026-03-02T23:19:17.652204-05:00
-updated_at = 2026-03-02T23:19:18.412473-05:00
+updated_at = 2026-03-02T23:19:52.280606-05:00
 
 [phases.bus-interface]
-bead_id = 'quasar-minn'
+bead_id = 'quasar-h45s'
 status = 'skipped'
 created_at = 2026-03-02T23:19:17.541641-05:00
-updated_at = 2026-03-02T23:19:18.412473-05:00
+updated_at = 2026-03-02T23:19:52.280607-05:00
 
 [phases.cli-adapter]
-bead_id = 'quasar-5ke5'
+bead_id = 'quasar-luwn'
 status = 'skipped'
 created_at = 2026-03-02T23:19:18.342332-05:00
-updated_at = 2026-03-02T23:19:18.412474-05:00
+updated_at = 2026-03-02T23:19:52.280608-05:00
 
 [phases.engine-extract]
-bead_id = 'quasar-jumg'
+bead_id = 'quasar-jg9o'
 status = 'skipped'
 created_at = 2026-03-02T23:19:18.212225-05:00
-updated_at = 2026-03-02T23:19:18.412474-05:00
+updated_at = 2026-03-02T23:19:52.280608-05:00
 
 [phases.engine-types]
-bead_id = 'quasar-wkpw'
+bead_id = 'quasar-a466'
 status = 'skipped'
 created_at = 2026-03-02T23:19:18.07698-05:00
-updated_at = 2026-03-02T23:19:18.412474-05:00
+updated_at = 2026-03-02T23:19:52.280608-05:00
 
 [phases.producer-migration]
-bead_id = 'quasar-13xf'
+bead_id = 'quasar-4jlo'
 status = 'skipped'
 created_at = 2026-03-02T23:19:17.971305-05:00
-updated_at = 2026-03-02T23:19:18.412474-05:00
+updated_at = 2026-03-02T23:19:52.280608-05:00
 
 [phases.telemetry-subscriber]
-bead_id = 'quasar-xh5d'
+bead_id = 'quasar-0wrj'
 status = 'skipped'
 created_at = 2026-03-02T23:19:17.86701-05:00
-updated_at = 2026-03-02T23:19:18.412474-05:00
+updated_at = 2026-03-02T23:19:52.280608-05:00
 
 [phases.tui-subscriber]
-bead_id = 'quasar-j5aw'
+bead_id = 'quasar-6vsk'
 status = 'skipped'
 created_at = 2026-03-02T23:19:17.762042-05:00
-updated_at = 2026-03-02T23:19:18.412473-05:00
+updated_at = 2026-03-02T23:19:52.280608-05:00
