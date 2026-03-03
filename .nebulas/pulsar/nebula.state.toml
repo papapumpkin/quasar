@@ -1,13 +1,19 @@
 version = 1
 nebula_name = 'pulsar'
-total_cost_usd = 3.16833245
+total_cost_usd = 6.4578926999999995
 
 [phases]
 [phases.bus-impl]
 bead_id = 'quasar-qunm'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-02T23:31:03.650775-05:00
-updated_at = 2026-03-02T23:44:58.5079-05:00
+updated_at = 2026-03-03T00:04:47.324529-05:00
+
+[phases.bus-impl.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Solid channel-based event bus implementation with correct concurrency semantics; both prior race/leak findings are fixed, tests pass with race detector, only a minor interface doc mismatch remains.'
 
 [phases.bus-interface]
 bead_id = 'quasar-8wn4'
@@ -35,21 +41,21 @@ updated_at = 2026-03-02T23:31:04.190752-05:00
 
 [phases.engine-types]
 bead_id = 'quasar-kbcs'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-02T23:31:04.085631-05:00
-updated_at = 2026-03-02T23:31:04.085631-05:00
+updated_at = 2026-03-03T00:04:47.335561-05:00
 
 [phases.producer-migration]
 bead_id = 'quasar-ip76'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-02T23:31:03.980051-05:00
-updated_at = 2026-03-02T23:31:03.980051-05:00
+updated_at = 2026-03-03T00:04:47.337329-05:00
 
 [phases.telemetry-subscriber]
 bead_id = 'quasar-naae'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-02T23:31:03.869683-05:00
-updated_at = 2026-03-02T23:31:03.869683-05:00
+updated_at = 2026-03-03T00:04:47.335867-05:00
 
 [phases.tui-subscriber]
 bead_id = 'quasar-54nh'
