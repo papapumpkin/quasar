@@ -52,10 +52,10 @@ needs_human_review = false
 summary = 'Correct deletion of 15 dead/empty stub files with no live references; purely structural cleanup with zero behavioral impact.'
 
 [phases.extract-worker-subpackage]
-bead_id = 'quasar-q3n8'
-status = 'failed'
+bead_id = 'quasar-vwuj'
+status = 'in_progress'
 created_at = 2026-03-02T14:32:42.459017-05:00
-updated_at = 2026-03-02T21:16:02.636264-05:00
+updated_at = 2026-03-02T21:19:54.021862-05:00
 
 [phases.final-verification]
 bead_id = 'quasar-t7vi'
@@ -82,10 +82,10 @@ needs_human_review = false
 summary = 'Coder correctly identified and reported that the prerequisite worker extraction was never completed (only a shell script was committed, never run), making this import-update phase impossible to execute; no incorrect changes were made.'
 
 [phases.fix-worker-compilation]
-bead_id = 'quasar-neth'
+bead_id = 'quasar-ehve'
 status = 'created'
 created_at = 2026-03-02T18:52:08.812961-05:00
-updated_at = 2026-03-02T20:58:51.225348-05:00
+updated_at = 2026-03-02T21:19:53.867602-05:00
 
 [phases.split-loop]
 bead_id = 'quasar-gnah'
