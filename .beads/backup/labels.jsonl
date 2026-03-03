@@ -459,6 +459,10 @@
 {"issue_id":"quasar-8st","label":"performance"}
 {"issue_id":"quasar-8st","label":"quasar"}
 {"issue_id":"quasar-8wn4","label":"quasar"}
+{"issue_id":"quasar-8wn4.1","label":"quasar"}
+{"issue_id":"quasar-8wn4.1","label":"review-finding"}
+{"issue_id":"quasar-8wn4.2","label":"quasar"}
+{"issue_id":"quasar-8wn4.2","label":"review-finding"}
 {"issue_id":"quasar-96l2","label":"checkpoint"}
 {"issue_id":"quasar-96l2","label":"quasar"}
 {"issue_id":"quasar-96l2","label":"reliability"}
