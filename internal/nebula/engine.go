@@ -343,13 +343,9 @@ func (e *Engine) ApplyPlan(ctx context.Context) error {
 // phases. The caller provides display-path-specific options (runner, bus,
 // dashboard, etc.) via extraOpts. Call SetFabric before Execute if fabric
 // coordination is needed. Must be called after ApplyPlan.
+//
+// The caller owns the fabric lifecycle — Execute does not close it.
 func (e *Engine) Execute(ctx context.Context, extraOpts ...Option) ([]WorkerResult, error) {
-	if err := e.initFabric(ctx); err != nil {
-		return nil, fmt.Errorf("fabric initialization: %w", err)
-	}
-	if e.fabric != nil {
-		defer e.fabric.Close()
-	}
 	e.transition(EngineExecuting)
 	e.publishLifecycle(ctx, bus.KindEngineExecuting)
 	return e.execute(ctx, extraOpts...)

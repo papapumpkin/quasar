@@ -409,8 +409,8 @@ func TestBusUIBridgeHailReceived(t *testing.T) {
 
 	bridge := NewBusUIBridge(b, "phase-17", "/tmp/work")
 	hail := ui.HailInfo{
-		ID:   "hail-1",
-		Kind: "decision_needed",
+		ID:      "hail-1",
+		Kind:    "decision_needed",
 		Summary: "Need input on approach",
 	}
 	bridge.HailReceived(hail)

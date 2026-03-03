@@ -179,7 +179,7 @@ type Event struct {
 	StaleWarning *StaleWarningPayload
 
 	// Fabric payloads — kept as any to avoid import cycles with the fabric package.
-	Entanglements any // []fabric.Entanglement for KindEntanglementUpdate
+	Entanglements   any // []fabric.Entanglement for KindEntanglementUpdate
 	FabricDiscovery any // fabric.Discovery for KindDiscoveryPosted
 }
 
