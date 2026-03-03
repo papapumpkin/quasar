@@ -108,7 +108,7 @@ func (s *BusSubscriber) mapEvent(ev bus.Event) tea.Msg {
 		// Finding lifecycle is currently a no-op in the bridge; drop silently.
 		return nil
 	case bus.KindPhaseHailReceived:
-		return mapHail(ev)
+		return mapHailReceived(ev)
 	case bus.KindPhaseHailResolved:
 		if ev.HailResolved == nil {
 			return nil
@@ -150,7 +150,7 @@ func (s *BusSubscriber) mapEvent(ev bus.Event) tea.Msg {
 	case bus.KindBeadUpdate:
 		return mapBeadUpdate(ev)
 	case bus.KindHailReceived:
-		return mapHail(ev)
+		return mapHailReceived(ev)
 	case bus.KindHailResolved:
 		if ev.HailResolved == nil {
 			return nil
@@ -172,7 +172,7 @@ func (s *BusSubscriber) mapEvent(ev bus.Event) tea.Msg {
 	case bus.KindNebulaDone:
 		return mapNebulaDone(ev)
 	case bus.KindGatePrompt:
-		return mapGatePrompt(ev)
+		return s.mapGatePrompt(ev)
 	case bus.KindGateResolved:
 		return mapGateResolved(ev)
 	case bus.KindHealingAttempt:
@@ -201,7 +201,7 @@ func (s *BusSubscriber) mapEvent(ev bus.Event) tea.Msg {
 
 	// ── Hail (request-response) ───────────────────────────────────────
 	case bus.KindHail:
-		return mapHail(ev)
+		return s.mapHail(ev)
 
 	// ── Stale warning ─────────────────────────────────────────────────
 	case bus.KindStaleWarning:
@@ -344,19 +344,19 @@ func mapNebulaDone(ev bus.Event) tea.Msg {
 // The bus stores Checkpoint and ResponseCh as any to avoid import cycles.
 // For the response channel, we create a typed adapter that forwards the
 // nebula.GateAction to the underlying chan<- any.
-func mapGatePrompt(ev bus.Event) tea.Msg {
+func (s *BusSubscriber) mapGatePrompt(ev bus.Event) tea.Msg {
 	if ev.GatePrompt == nil {
 		return nil
 	}
-	checkpoint, _ := ev.GatePrompt.Checkpoint.(*nebula.Checkpoint)
-	if checkpoint == nil {
+	checkpoint, ok := ev.GatePrompt.Checkpoint.(*nebula.Checkpoint)
+	if !ok || checkpoint == nil {
 		return nil
 	}
 
 	// Create a typed channel adapter: the TUI sends nebula.GateAction,
 	// and we forward it to the bus's chan<- any channel.
 	typedCh := make(chan nebula.GateAction, 1)
-	go forwardGateAction(typedCh, ev.GatePrompt.ResponseCh)
+	go forwardGateAction(typedCh, ev.GatePrompt.ResponseCh, s.done)
 
 	return MsgGatePrompt{
 		Checkpoint: checkpoint,
@@ -367,10 +367,15 @@ func mapGatePrompt(ev bus.Event) tea.Msg {
 // forwardGateAction reads a single nebula.GateAction from the typed channel
 // and forwards it to the bus's untyped response channel. This bridges the
 // type gap between the bus (any) and the TUI (nebula.GateAction).
-func forwardGateAction(from <-chan nebula.GateAction, to chan<- any) {
-	action, ok := <-from
-	if ok && to != nil {
-		to <- action
+// The done channel allows the goroutine to exit if the subscriber stops
+// before a response is received, preventing goroutine leaks.
+func forwardGateAction(from <-chan nebula.GateAction, to chan<- any, done <-chan struct{}) {
+	select {
+	case action, ok := <-from:
+		if ok && to != nil {
+			to <- action
+		}
+	case <-done:
 	}
 }
 
@@ -385,20 +390,22 @@ func mapGateResolved(ev bus.Event) tea.Msg {
 	}
 }
 
-// mapHail converts a hail bus event (KindHail, KindPhaseHailReceived,
-// KindHailReceived) to MsgHail. The bus stores Discovery and ResponseCh
-// as any to avoid import cycles. For the response channel, we create a
-// typed adapter when present.
-func mapHail(ev bus.Event) tea.Msg {
+// mapHail converts a KindHail bus event to MsgHail (the interactive hail
+// overlay). The bus stores Discovery and ResponseCh as any to avoid import
+// cycles. For the response channel, we create a typed adapter when present.
+func (s *BusSubscriber) mapHail(ev bus.Event) tea.Msg {
 	if ev.Hail == nil {
 		return nil
 	}
-	discovery, _ := ev.Hail.Discovery.(fabric.Discovery)
+	discovery, ok := ev.Hail.Discovery.(fabric.Discovery)
+	if !ok {
+		return nil
+	}
 
 	var responseCh chan<- string
 	if ev.Hail.ResponseCh != nil {
 		typedCh := make(chan string, 1)
-		go forwardHailResponse(typedCh, ev.Hail.ResponseCh)
+		go forwardHailResponse(typedCh, ev.Hail.ResponseCh, s.done)
 		responseCh = typedCh
 	}
 
@@ -409,12 +416,34 @@ func mapHail(ev bus.Event) tea.Msg {
 	}
 }
 
+// mapHailReceived converts a KindHailReceived or KindPhaseHailReceived bus
+// event to MsgHailReceived (notification for the pending hails badge/list).
+// The bus stores the HailInfo as any in HailPayload.Discovery.
+func mapHailReceived(ev bus.Event) tea.Msg {
+	if ev.Hail == nil {
+		return nil
+	}
+	hailInfo, ok := ev.Hail.Discovery.(ui.HailInfo)
+	if !ok {
+		return nil
+	}
+	return MsgHailReceived{
+		PhaseID: ev.PhaseID,
+		Hail:    hailInfo,
+	}
+}
+
 // forwardHailResponse reads a single string response from the typed channel
-// and forwards it to the bus's untyped response channel.
-func forwardHailResponse(from <-chan string, to chan<- any) {
-	resp, ok := <-from
-	if ok && to != nil {
-		to <- resp
+// and forwards it to the bus's untyped response channel. The done channel
+// allows the goroutine to exit if the subscriber stops before a response
+// is received, preventing goroutine leaks.
+func forwardHailResponse(from <-chan string, to chan<- any, done <-chan struct{}) {
+	select {
+	case resp, ok := <-from:
+		if ok && to != nil {
+			to <- resp
+		}
+	case <-done:
 	}
 }
 

@@ -23,8 +23,8 @@ type MemoryBus struct {
 	detached []*memorySub // unsubscribed subs awaiting channel close
 	nextID   uint64
 	closed   bool
-	done     chan struct{}    // closed on Close to unblock in-flight publishes
-	inflight sync.WaitGroup  // tracks in-flight Publish calls
+	done     chan struct{}  // closed on Close to unblock in-flight publishes
+	inflight sync.WaitGroup // tracks in-flight Publish calls
 }
 
 // memorySub is a single subscriber attached to a MemoryBus.
