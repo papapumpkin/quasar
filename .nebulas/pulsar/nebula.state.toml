@@ -1,0 +1,100 @@
+version = 1
+nebula_name = 'pulsar'
+total_cost_usd = 44.92427944999999
+
+[phases]
+[phases.bus-impl]
+bead_id = 'quasar-qunm'
+status = 'done'
+created_at = 2026-03-02T23:31:03.650775-05:00
+updated_at = 2026-03-03T00:04:47.324529-05:00
+
+[phases.bus-impl.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Solid channel-based event bus implementation with correct concurrency semantics; both prior race/leak findings are fixed, tests pass with race detector, only a minor interface doc mismatch remains.'
+
+[phases.bus-interface]
+bead_id = 'quasar-8wn4'
+status = 'done'
+created_at = 2026-03-02T23:31:03.5493-05:00
+updated_at = 2026-03-02T23:44:58.494844-05:00
+
+[phases.bus-interface.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean typed event bus interface with comprehensive Kind vocabulary covering all domain events; prior findings (Plan*, Hail, StaleWarning, single-task hail variants) fully resolved; minor coverage gaps for TUI-internal messages are acceptable.'
+
+[phases.cli-adapter]
+bead_id = 'quasar-f6e2'
+status = 'done'
+created_at = 2026-03-02T23:31:04.294997-05:00
+updated_at = 2026-03-03T09:23:50.670415-05:00
+
+[phases.cli-adapter.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean extraction of shared helpers (`resolvePrompts`, `engineConfigFromSettings`, `executeTUIRun`) eliminates CLI/cockpit duplication and meets all acceptance criteria with passing builds and tests.'
+
+[phases.engine-extract]
+bead_id = 'quasar-qc6o'
+status = 'done'
+created_at = 2026-03-02T23:31:04.190752-05:00
+updated_at = 2026-03-03T00:40:34.908398-05:00
+
+[phases.engine-extract.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = "Engine lifecycle extraction is clean and correct with proper error handling, nil-safe bus publishing, and thread-safe phase transitions; two tests have misleading names (plan-only and context-cancelled) that don't exercise their claimed code paths, but production code is solid."
+
+[phases.engine-types]
+bead_id = 'quasar-kbcs'
+status = 'done'
+created_at = 2026-03-02T23:31:04.085631-05:00
+updated_at = 2026-03-03T00:34:48.310031-05:00
+
+[phases.engine-types.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean type definitions for the nebula Engine lifecycle — well-documented, interface-oriented, matches all entanglements, prior finding fixed.'
+
+[phases.producer-migration]
+bead_id = 'quasar-ip76'
+status = 'done'
+created_at = 2026-03-02T23:31:03.980051-05:00
+updated_at = 2026-03-03T00:49:26.20773-05:00
+
+[phases.producer-migration.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Producer migration correctly bridges all ui.UI methods and WorkerGroup callbacks to the bus with comprehensive tests and proper chaining support; only a minor defer-capture resource leak in the nebula chaining path.'
+
+[phases.telemetry-subscriber]
+bead_id = 'quasar-naae'
+status = 'done'
+created_at = 2026-03-02T23:31:03.869683-05:00
+updated_at = 2026-03-03T00:27:21.602567-05:00
+
+[phases.telemetry-subscriber.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Telemetry bus subscriber cleanly bridges bus events to JSONL telemetry output with comprehensive tests and correct lifecycle management; both prior minor findings are fixed.'
+
+[phases.tui-subscriber]
+bead_id = 'quasar-54nh'
+status = 'done'
+created_at = 2026-03-02T23:31:03.758544-05:00
+updated_at = 2026-03-03T00:31:19.842627-05:00
+
+[phases.tui-subscriber.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'TUI bus subscriber correctly maps all bus events to tea.Msg types with proper lifecycle management, goroutine safety, and comprehensive tests — all four prior findings are fixed.'

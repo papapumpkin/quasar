@@ -11,6 +11,7 @@ import (
 
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/bus"
 	"github.com/papapumpkin/quasar/internal/dag"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/tycho"
@@ -56,6 +57,7 @@ type WorkerGroup struct {
 	OnHotAdd            HotAddFunc                                // optional callback for hot-added phases
 	OnHail              func(phaseID string, d fabric.Discovery)  // optional callback for hail surfacing
 	OnScanning          func(phaseID string)                      // optional callback for fabric scanning notifications
+	Bus                 bus.Bus                                   // optional event bus; when non-nil, callbacks also publish to the bus
 	Invoker             agent.Invoker                             // optional; required for auto-decomposition
 	Metrics             *Metrics                                  // optional; nil = no collection
 	Logger              io.Writer                                 // optional; nil = os.Stderr
@@ -91,6 +93,81 @@ func (wg *WorkerGroup) logger() io.Writer {
 		return wg.Logger
 	}
 	return os.Stderr
+}
+
+// wrapCallbacksForBus augments the existing OnProgress, OnRefactor, OnHotAdd,
+// OnHail, and OnScanning callbacks to also publish the corresponding bus event.
+// The original callback (if non-nil) is called first, then the bus event is
+// published. This preserves stderr-path behavior while adding bus-mediated
+// delivery for the TUI path.
+func (wg *WorkerGroup) wrapCallbacksForBus() {
+	b := wg.Bus
+
+	// Wrap OnProgress to also publish KindNebulaProgress.
+	origProgress := wg.OnProgress
+	wg.OnProgress = func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
+		if origProgress != nil {
+			origProgress(completed, total, openBeads, closedBeads, totalCostUSD)
+		}
+		ev := bus.New(bus.KindNebulaProgress)
+		ev.Progress = &bus.ProgressPayload{
+			Completed:    completed,
+			Total:        total,
+			OpenBeads:    openBeads,
+			ClosedBeads:  closedBeads,
+			TotalCostUSD: totalCostUSD,
+		}
+		_ = b.Publish(context.Background(), ev)
+	}
+
+	// Wrap OnRefactor to also publish KindPhaseRefactorPending.
+	origRefactor := wg.OnRefactor
+	wg.OnRefactor = func(phaseID string, pending bool) {
+		if origRefactor != nil {
+			origRefactor(phaseID, pending)
+		}
+		if pending {
+			ev := bus.NewPhase(bus.KindPhaseRefactorPending, phaseID)
+			_ = b.Publish(context.Background(), ev)
+		}
+	}
+
+	// Wrap OnHotAdd to also publish KindPhaseHotAdded.
+	origHotAdd := wg.OnHotAdd
+	wg.OnHotAdd = func(phaseID, title string, dependsOn []string) {
+		if origHotAdd != nil {
+			origHotAdd(phaseID, title, dependsOn)
+		}
+		ev := bus.NewPhase(bus.KindPhaseHotAdded, phaseID)
+		ev.HotAdd = &bus.HotAddPayload{
+			Title:     title,
+			DependsOn: dependsOn,
+		}
+		_ = b.Publish(context.Background(), ev)
+	}
+
+	// Wrap OnHail to also publish KindHail.
+	origHail := wg.OnHail
+	wg.OnHail = func(phaseID string, d fabric.Discovery) {
+		if origHail != nil {
+			origHail(phaseID, d)
+		}
+		ev := bus.NewPhase(bus.KindHail, phaseID)
+		ev.Hail = &bus.HailPayload{
+			Discovery: d,
+		}
+		_ = b.Publish(context.Background(), ev)
+	}
+
+	// Wrap OnScanning to also publish KindPhaseScanning.
+	origScanning := wg.OnScanning
+	wg.OnScanning = func(phaseID string) {
+		if origScanning != nil {
+			origScanning(phaseID)
+		}
+		ev := bus.NewPhase(bus.KindPhaseScanning, phaseID)
+		_ = b.Publish(context.Background(), ev)
+	}
 }
 
 // SnapshotNebula returns a deep copy of the Nebula under the WorkerGroup's
@@ -233,6 +310,16 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	}
 
 	wg.ensureGater()
+
+	// When the bus is available, wrap each callback to also publish the
+	// corresponding bus event. This is additive — the original callback
+	// still fires for the stderr path. We mutate the struct fields so
+	// that all downstream consumers (ProgressReporter, HotReloader,
+	// tycho.Scheduler, worker_exec, worker_healing) automatically get
+	// bus-publishing behavior without individual modifications.
+	if wg.Bus != nil {
+		wg.wrapCallbacksForBus()
+	}
 
 	// Initialize healing state.
 	wg.healingPolicy = wg.Nebula.Manifest.Execution.HealingPolicy()

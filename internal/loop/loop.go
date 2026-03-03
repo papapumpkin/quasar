@@ -36,6 +36,7 @@ type Loop struct {
 	MCP               *agent.MCPConfig // Optional MCP server config passed to agents.
 	RefactorCh        <-chan string    // Optional channel carrying updated task descriptions from phase edits.
 	CommitSummary     string           // Short label for cycle commit messages. If empty, derived from task title.
+	PhaseType         string           // Phase type for conventional commit prefixes (bug→fix, feature→feat, default→ref).
 	Fabric            fabric.Fabric    // Optional; when set and FabricEnabled, auto-inject fabric state into prompts.
 	FabricEnabled     bool             // When true, inject fabric protocol into agent system prompts.
 	TaskID            string           // Task ID for fabric context (QUASAR_TASK_ID).
@@ -634,7 +635,7 @@ func (l *Loop) runLintFixLoop(ctx context.Context, state *CycleState, perAgentBu
 			if summary == "" {
 				summary = firstLine(state.TaskTitle, 72)
 			}
-			sha, commitErr := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle, summary+" (lint fix)")
+			sha, commitErr := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle, summary+" (lint fix)", l.PhaseType)
 			if commitErr != nil {
 				l.UI.Error(fmt.Sprintf("failed to commit lint fix: %v", commitErr))
 			} else {
@@ -780,7 +781,7 @@ func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkNam
 			if summary == "" {
 				summary = firstLine(state.TaskTitle, 72)
 			}
-			sha, commitErr := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle, summary+" (filter fix)")
+			sha, commitErr := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle, summary+" (filter fix)", l.PhaseType)
 			if commitErr != nil {
 				l.UI.Error(fmt.Sprintf("failed to commit filter fix: %v", commitErr))
 			} else {
@@ -1022,7 +1023,7 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 		if summary == "" {
 			summary = firstLine(state.TaskTitle, 72)
 		}
-		sha, err := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle, summary)
+		sha, err := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle, summary, l.PhaseType)
 		if err != nil {
 			l.UI.Error(fmt.Sprintf("failed to commit cycle %d: %v", state.Cycle, err))
 		} else {

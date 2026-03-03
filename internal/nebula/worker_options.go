@@ -6,6 +6,7 @@ import (
 
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/bus"
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
@@ -207,4 +208,12 @@ func WithCheckpointRemover(fn func(dir, phaseID string) error) Option {
 // checkpoints are checked against HEAD before resume.
 func WithGitSHAFunc(fn func(ctx context.Context) (string, error)) Option {
 	return func(wg *WorkerGroup) { wg.GitSHAFunc = fn }
+}
+
+// WithBus sets the event bus for publishing lifecycle events. When non-nil,
+// the WorkerGroup publishes progress, refactor, hot-add, hail, and scanning
+// events to the bus alongside existing callback invocations. This enables
+// bus-mediated delivery to the TUI via BusSubscriber.
+func WithBus(b bus.Bus) Option {
+	return func(wg *WorkerGroup) { wg.Bus = b }
 }

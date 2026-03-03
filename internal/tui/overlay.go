@@ -169,17 +169,8 @@ func (o *CompletionOverlay) renderGitStatus() string {
 			Render(fmt.Sprintf("✓ Pushed to origin/%s", r.PushBranch)))
 	}
 
-	branch := r.CheckoutBranch
-	if branch == "" {
-		branch = "default branch"
-	}
-	if r.CheckoutErr != nil {
-		parts = append(parts, lipgloss.NewStyle().Foreground(colorDanger).
-			Render(fmt.Sprintf("⚠ Checkout %s failed: %v", branch, r.CheckoutErr)))
-	} else {
-		parts = append(parts, lipgloss.NewStyle().Foreground(colorSuccess).
-			Render(fmt.Sprintf("✓ Checked out %s", branch)))
-	}
+	parts = append(parts, lipgloss.NewStyle().Foreground(colorMuted).
+		Render(fmt.Sprintf("Staying on %s", r.PushBranch)))
 
 	return strings.Join(parts, "\n")
 }

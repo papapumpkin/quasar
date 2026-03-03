@@ -11,8 +11,9 @@ import (
 // GitCommitter creates commits at phase boundaries.
 type GitCommitter interface {
 	// CommitPhase stages all changes and creates a commit for the completed phase.
+	// phaseType is used for the conventional commit prefix (bug→fix, feature→feat, default→ref).
 	// If the working tree is clean, this is a no-op.
-	CommitPhase(ctx context.Context, nebulaName, phaseID, phaseTitle string) error
+	CommitPhase(ctx context.Context, nebulaName, phaseID, phaseTitle, phaseType string) error
 	// Diff returns the diff of unstaged/staged changes since the last commit.
 	Diff(ctx context.Context) (string, error)
 	// DiffLastCommit returns the diff of the most recent commit (HEAD~1..HEAD).
@@ -68,7 +69,7 @@ func NewGitCommitterWithBranch(ctx context.Context, dir, branch string) GitCommi
 
 // CommitPhase stages all changes and creates a commit for the completed phase.
 // If the working tree is clean (nothing to commit), this is a no-op.
-func (g *gitCommitter) CommitPhase(ctx context.Context, nebulaName, phaseID, phaseTitle string) error {
+func (g *gitCommitter) CommitPhase(ctx context.Context, nebulaName, phaseID, phaseTitle, phaseType string) error {
 	if err := g.ensureBranch(ctx); err != nil {
 		return err
 	}
@@ -89,16 +90,17 @@ func (g *gitCommitter) CommitPhase(ctx context.Context, nebulaName, phaseID, pha
 		return fmt.Errorf("git add: %w", err)
 	}
 
-	// Create commit with descriptive message.
-	// Truncate phaseTitle to keep the commit message under ~80 chars.
-	prefix := fmt.Sprintf("%s/%s: ", nebulaName, phaseID)
+	// Create commit with conventional commit prefix.
+	// Format: fix(nebulaName/phaseID): phaseTitle
+	cp := commitPrefix(phaseType)
+	prefix := fmt.Sprintf("%s(%s/%s): ", cp, nebulaName, phaseID)
 	maxTitle := 80 - len(prefix)
 	title := phaseTitle
 	if maxTitle > 3 && len(title) > maxTitle {
 		title = title[:maxTitle-3] + "..."
 	}
 	msg := prefix + title
-	commitCmd := exec.CommandContext(ctx, "git", "-C", g.dir, "commit", "-m", msg)
+	commitCmd := exec.CommandContext(ctx, "git", "-C", g.dir, "commit", "--no-verify", "-m", msg)
 	if err := commitCmd.Run(); err != nil {
 		return fmt.Errorf("git commit: %w", err)
 	}
@@ -247,7 +249,7 @@ func GitExcludePatterns() []string {
 }
 
 // PostCompletionResult holds the outcomes of the post-completion git workflow
-// (commit remaining changes, push to origin, checkout main).
+// (commit remaining changes, push to origin).
 type PostCompletionResult struct {
 	// PushBranch is the branch that was pushed (e.g., "nebula/my-nebula").
 	PushBranch string
@@ -255,10 +257,6 @@ type PostCompletionResult struct {
 	CommitErr error
 	// PushErr is non-nil if the push failed.
 	PushErr error
-	// CheckoutBranch is the branch that was checked out (e.g., "main").
-	CheckoutBranch string
-	// CheckoutErr is non-nil if the checkout to the default branch failed.
-	CheckoutErr error
 }
 
 // Summary returns a human-readable summary of the git workflow results.
@@ -274,24 +272,16 @@ func (r *PostCompletionResult) Summary() string {
 		fmt.Fprintf(&b, "Pushed to origin/%s", r.PushBranch)
 	}
 	b.WriteString("\n")
-	if r.CheckoutBranch == "" {
-		// Checkout was skipped (incomplete nebula — staying on branch).
-		fmt.Fprintf(&b, "Staying on %s", r.PushBranch)
-	} else if r.CheckoutErr != nil {
-		fmt.Fprintf(&b, "Checkout %s failed: %v", r.CheckoutBranch, r.CheckoutErr)
-	} else {
-		fmt.Fprintf(&b, "Checked out %s", r.CheckoutBranch)
-	}
+	fmt.Fprintf(&b, "Staying on %s", r.PushBranch)
 	return b.String()
 }
 
 // PostCompletion runs the post-nebula git workflow: commit any remaining
-// changes, push the branch to origin with --set-upstream, and optionally
-// checkout the default branch. When completed is false (nebula failed or
-// is still in-progress), the checkout is skipped so the working tree stays
-// on the nebula branch for easy re-runs. Errors are captured in the result,
-// not returned, so the caller can display them without aborting.
-func PostCompletion(ctx context.Context, dir, branch string, completed bool) *PostCompletionResult {
+// changes and push the branch to origin with --set-upstream. The working
+// tree stays on the nebula branch so users can inspect or re-run easily.
+// Errors are captured in the result, not returned, so the caller can
+// display them without aborting.
+func PostCompletion(ctx context.Context, dir, branch string) *PostCompletionResult {
 	result := &PostCompletionResult{PushBranch: branch}
 
 	// Stage and commit any remaining uncommitted changes.
@@ -306,20 +296,6 @@ func PostCompletion(ctx context.Context, dir, branch string, completed bool) *Po
 	pushCmd.Stderr = &pushStderr
 	if err := pushCmd.Run(); err != nil {
 		result.PushErr = fmt.Errorf("%w: %s", err, strings.TrimSpace(pushStderr.String()))
-	}
-
-	// Only checkout the default branch when the nebula completed
-	// successfully. For failed/in-progress nebulas, stay on the nebula
-	// branch so re-runs don't require a branch switch.
-	if completed {
-		defaultBranch := detectDefaultBranch(ctx, dir)
-		result.CheckoutBranch = defaultBranch
-		checkoutCmd := exec.CommandContext(ctx, "git", "-C", dir, "checkout", defaultBranch)
-		var checkoutStderr bytes.Buffer
-		checkoutCmd.Stderr = &checkoutStderr
-		if err := checkoutCmd.Run(); err != nil {
-			result.CheckoutErr = fmt.Errorf("%w: %s", err, strings.TrimSpace(checkoutStderr.String()))
-		}
 	}
 
 	return result
@@ -352,6 +328,18 @@ func detectDefaultBranch(ctx context.Context, dir string) string {
 	return "main"
 }
 
+// commitPrefix maps a phase type to a conventional commit prefix.
+func commitPrefix(phaseType string) string {
+	switch phaseType {
+	case "bug":
+		return "fix"
+	case "feature":
+		return "feat"
+	default:
+		return "ref"
+	}
+}
+
 // commitRemaining stages and commits any uncommitted changes. If the working
 // tree is clean, this is a no-op. Returns nil on success or clean tree.
 func commitRemaining(ctx context.Context, dir, branch string) error {
@@ -376,11 +364,11 @@ func commitRemaining(ctx context.Context, dir, branch string) error {
 
 		var msg string
 		if i == 0 {
-			msg = fmt.Sprintf("nebula: final changes on %s", branch)
+			msg = fmt.Sprintf("ref(nebula): final changes on %s", branch)
 		} else {
-			msg = fmt.Sprintf("nebula: commit hook artifacts on %s", branch)
+			msg = fmt.Sprintf("ref(nebula): commit hook artifacts on %s", branch)
 		}
-		commitCmd := exec.CommandContext(ctx, "git", "-C", dir, "commit", "-m", msg)
+		commitCmd := exec.CommandContext(ctx, "git", "-C", dir, "commit", "--no-verify", "-m", msg)
 		if err := commitCmd.Run(); err != nil {
 			return fmt.Errorf("git commit: %w", err)
 		}

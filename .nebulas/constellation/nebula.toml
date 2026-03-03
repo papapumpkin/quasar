@@ -1,0 +1,45 @@
+[nebula]
+name = "constellation"
+description = "Multi-nebula coordination: DAG-based scheduling across multiple nebulas with shared context, cross-nebula fabric propagation, AI-driven replanning via an oracle agent, and a web dashboard for constellation-level visibility."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "constellation"]
+assignee = ""
+
+[execution]
+max_workers = 8
+max_review_cycles = 5
+max_budget_usd = 80.0
+model = ""
+gate = "trust"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Define a constellation manifest format (constellation.toml) that specifies a DAG of nebulas with shared context and coordination rules",
+    "Build a DAG scheduler that dispatches nebulas in dependency order, reusing internal/dag/ for the nebula-level graph",
+    "Enable cross-nebula fabric coordination with namespace-isolated entanglements, discoveries, and claims that can propagate across boundaries",
+    "Implement an oracle agent that monitors constellation outcomes and dynamically replans — inserting, retrying, or skipping nebulas at runtime",
+    "Persist constellation state for partial completion and resume from any point after interruption",
+    "Add CLI commands for constellation validate, plan, apply, and status",
+    "Provide a constellation view in the meridian web dashboard with nebula DAG visualization and drill-down",
+]
+constraints = [
+    "Reuse internal/dag/ for nebula-level DAG — do not duplicate DAG logic",
+    "Reuse internal/fabric/ for cross-nebula coordination — extend with namespace isolation, do not replace",
+    "Follow existing patterns: interfaces defined where consumed, constructor injection, context propagation",
+    "All new files must have corresponding _test.go files using stdlib testing only",
+    "Use canonical vocabulary: Fabric, Entanglement, Discovery, Constellation, Oracle, Nebula",
+    "go build, go vet ./... must pass after every phase",
+    "All existing tests must pass after every phase",
+    "No external dependencies beyond what the project already uses",
+    "Maintain graceful shutdown and context cancellation throughout",
+    "Constellation state must be JSON-serializable and human-readable",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = ["pulsar"]

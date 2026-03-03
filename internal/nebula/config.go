@@ -10,6 +10,7 @@ type ResolvedExecution struct {
 	RoutedTier      string  // Non-empty when auto-routing selected the model.
 	ComplexityScore float64 // Zero when auto-routing was not applied.
 	AutoDecompose   bool    // true if struggle detection + auto-decomposition is enabled for this phase.
+	PhaseType       string  // Phase type for conventional commit prefix (bug→fix, feature→feat, default→ref).
 }
 
 // RoutingContext carries the optional data needed for adaptive model routing.
@@ -76,6 +77,7 @@ func ResolveExecution(globalCycles int, globalBudget float64, globalModel string
 		if phase.Model != "" {
 			r.Model = phase.Model
 		}
+		r.PhaseType = phase.Type
 	}
 
 	// Auto-routing: if enabled, no explicit model was set at any level, and we

@@ -1,0 +1,44 @@
+[nebula]
+name = "canvas"
+description = "Conversational nebula authoring: an interactive session where developers describe their goals in natural language and an AI architect agent organizes their thoughts into well-structured nebula manifests and phase files, available via CLI REPL and web chat UI."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "canvas"]
+assignee = ""
+
+[execution]
+max_workers = 7
+max_review_cycles = 5
+max_budget_usd = 60.0
+model = ""
+gate = "trust"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Enable developers to start from a blank canvas and conversationally describe what they want to build",
+    "Have an AI architect agent ask clarifying questions, propose phase breakdowns, and suggest dependency graphs",
+    "Accumulate draft phases throughout the conversation and generate valid nebula files on demand",
+    "Support session persistence so interrupted conversations can be resumed",
+    "Provide both a CLI REPL and a web chat UI for the conversational experience",
+    "Reuse the existing agent.Invoker interface and architect agent patterns from internal/nebula/architect.go",
+]
+constraints = [
+    "Use the existing agent.Invoker interface — no new invocation mechanisms",
+    "Follow existing patterns: interfaces defined at consumer, constructor injection, context propagation",
+    "Generated nebulas must pass nebula.Validate() before being written to disk",
+    "All new files must have corresponding _test.go files using stdlib testing only",
+    "CLI conversation uses stdin/stderr for interactive I/O (stdout reserved for structured data)",
+    "Web UI reuses HTTP server infrastructure from the meridian nebula (internal/web/)",
+    "Use canonical vocabulary: Fabric, Pulse, Nebula, Phase, Quasar",
+    "No external dependencies beyond what the project already uses (Cobra, Viper, BubbleTea, HTMX)",
+    "Session persistence uses JSON serialization in .quasar/canvas/",
+    "All methods doing I/O must accept context.Context as first parameter",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = ["meridian"]

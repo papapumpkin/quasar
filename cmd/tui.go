@@ -4,17 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 
-	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/claude"
 	"github.com/papapumpkin/quasar/internal/config"
-	"github.com/papapumpkin/quasar/internal/loop"
 	"github.com/papapumpkin/quasar/internal/nebula"
 	"github.com/papapumpkin/quasar/internal/tui"
 	"github.com/papapumpkin/quasar/internal/ui"
@@ -140,211 +137,68 @@ type nebulaResult struct {
 	NextNebula   string // user selected a nebula from the picker
 }
 
-// runSelectedNebula loads, validates, and executes a single nebula in TUI mode.
-// It reuses the same setup logic as runNebulaApply's TUI path.
-// maxWorkersExplicit indicates whether the user explicitly set --max-workers;
-// when false, the nebula manifest's MaxWorkers value takes precedence.
+// runSelectedNebula loads, validates, and executes a single nebula in TUI
+// mode. It delegates to the shared executeTUIRun helper for the TUI
+// lifecycle, eliminating duplication with runApplyWithTUI.
 func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSplash bool, maxWorkers int, maxWorkersExplicit bool) nebulaResult {
-	n, err := nebula.Load(dir)
-	if err != nil {
-		return nebulaResult{Err: fmt.Errorf("failed to load nebula: %w", err)}
-	}
+	ecfg := engineConfigFromSettings(cfg, dir, noSplash, maxWorkers, maxWorkersExplicit)
 
-	if errs := nebula.Validate(n); len(errs) > 0 {
-		printer.NebulaValidateResult(n.Manifest.Nebula.Name, len(n.Phases), errs)
-		return nebulaResult{Err: fmt.Errorf("validation failed")}
-	}
+	invoker := claude.NewInvoker(cfg.ClaudePath, cfg.Verbose)
+	client := &beads.CLI{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
+	engine := nebula.NewEngine(ecfg, nil, invoker, client)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Resolve workDir and checkout nebula branch BEFORE loading state or
-	// applying bead changes. The state file lives on the feature branch;
-	// writing it before checkout creates an untracked file that blocks
-	// the subsequent git checkout.
-	workDir := cfg.WorkDir
-	if n.Manifest.Context.WorkingDir != "" {
-		workDir = n.Manifest.Context.WorkingDir
-	}
-	if workDir == "." || workDir == "" {
-		wd, wdErr := os.Getwd()
-		if wdErr != nil {
-			return nebulaResult{Err: fmt.Errorf("failed to get working directory: %w", wdErr)}
-		}
-		workDir = wd
+	// Load, validate, resolve workDir, create branch, load state.
+	if err := engine.Load(ctx); err != nil {
+		return nebulaResult{Err: handleLoadError(printer, err)}
 	}
 
-	// Create nebula branch if in a git repo.
-	branchMgr, branchErr := nebula.NewBranchManager(ctx, workDir, n.Manifest.Nebula.Name)
-	if branchErr != nil {
-		fmt.Fprintf(os.Stderr, "warning: branch management unavailable: %v\n", branchErr)
-	}
-	if branchMgr != nil {
-		if err := branchMgr.CreateOrCheckout(ctx); err != nil {
-			return nebulaResult{Err: fmt.Errorf("failed to create nebula branch: %w", err)}
-		}
-	}
-	branchName := branchMgr.Branch()
-
-	state, err := nebula.LoadState(dir)
-	if err != nil {
-		return nebulaResult{Err: fmt.Errorf("failed to load state: %w", err)}
+	// Build plan.
+	if err := engine.Plan(ctx); err != nil {
+		printer.Error(err.Error())
+		return nebulaResult{Err: err}
 	}
 
-	client := &beads.CLI{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
-
-	plan, err := nebula.BuildPlan(ctx, n, state, client)
-	if err != nil {
-		return nebulaResult{Err: fmt.Errorf("failed to build plan: %w", err)}
-	}
-
-	if !plan.HasChanges() {
+	if !engine.GetPlan().HasChanges() {
 		printer.Info("nothing to do — all phases already applied")
 		return nebulaResult{}
 	}
 
-	if err := nebula.Apply(ctx, plan, n, state, client); err != nil {
-		return nebulaResult{Err: fmt.Errorf("failed to apply plan: %w", err)}
+	if err := engine.ApplyPlan(ctx); err != nil {
+		printer.Error(err.Error())
+		return nebulaResult{Err: err}
 	}
 
-	// If --max-workers was not explicitly set, use nebula execution config.
-	if maxWorkers <= 0 {
-		maxWorkers = 1
-	}
-	if !maxWorkersExplicit && n.Manifest.Execution.MaxWorkers > 0 {
-		maxWorkers = n.Manifest.Execution.MaxWorkers
-	}
-
-	// Load custom prompts.
-	coderPrompt := agent.DefaultCoderSystemPrompt
-	if cfg.CoderSystemPrompt != "" {
-		coderPrompt = cfg.CoderSystemPrompt
-	}
-	reviewerPrompt := agent.DefaultReviewerSystemPrompt
-	if cfg.ReviewerSystemPrompt != "" {
-		reviewerPrompt = cfg.ReviewerSystemPrompt
-	}
-
-	claudeInv := claude.NewInvoker(cfg.ClaudePath, cfg.Verbose)
-	if err := claudeInv.Validate(); err != nil {
+	// Validate invoker before starting workers.
+	if err := invoker.Validate(); err != nil {
 		return nebulaResult{Err: fmt.Errorf("claude not available: %w", err)}
 	}
 
-	// Initialize fabric infrastructure when the DAG has inter-phase dependencies.
-	fc, fcErr := initFabric(ctx, n, dir, workDir, claudeInv)
+	// Initialize fabric infrastructure.
+	fc, fcErr := initFabric(ctx, engine.GetNebula(), dir, engine.WorkDir(), invoker)
 	if fcErr != nil {
 		return nebulaResult{Err: fmt.Errorf("fabric initialization failed: %w", fcErr)}
 	}
 	defer fc.Close()
+	engine.SetFabric(fc)
 
-	git := loop.NewCycleCommitterWithBranch(ctx, workDir, branchName)
-	phaseCommitter := nebula.NewGitCommitterWithBranch(ctx, workDir, branchName)
+	// Scan project context.
+	projectCtx := scanProjectContext(ctx, engine.WorkDir())
 
-	// Build TUI phase info, seeding status from saved state.
-	phases := make([]tui.PhaseInfo, 0, len(n.Phases))
-	for _, p := range n.Phases {
-		pi := tui.PhaseInfo{
-			ID:        p.ID,
-			Title:     p.Title,
-			DependsOn: p.DependsOn,
-			PlanBody:  p.Body,
-		}
-		if ps := state.Phases[p.ID]; ps != nil {
-			pi.Status = tui.PhaseStatusFromString(string(ps.Status))
-		}
-		phases = append(phases, pi)
-	}
-
-	tuiProgram := tui.NewNebulaProgram(n.Manifest.Nebula.Name, phases, dir, noSplash)
-
-	wgOpts := []nebula.Option{
-		nebula.WithMaxWorkers(maxWorkers),
-		nebula.WithBeadsClient(client),
-		nebula.WithGlobalCycles(cfg.MaxReviewCycles),
-		nebula.WithGlobalBudget(cfg.MaxBudgetUSD),
-		nebula.WithGlobalModel(cfg.Model),
-		nebula.WithCommitter(phaseCommitter),
-	}
-	wgOpts = append(wgOpts, fc.WorkerGroupOptions()...)
-	wg := nebula.NewWorkerGroup(n, state, wgOpts...)
-
-	wg.Runner = &tuiLoopAdapter{
-		program:      tuiProgram,
-		invoker:      claudeInv,
-		beads:        client,
-		git:          git,
-		linter:       loop.NewLinter(cfg.LintCommands, workDir),
-		maxCycles:    cfg.MaxReviewCycles,
-		maxBudget:    cfg.MaxBudgetUSD,
-		model:        cfg.Model,
-		coderPrompt:  coderPrompt,
-		reviewPrompt: reviewerPrompt,
-		workDir:      workDir,
-		fabric:       wg.Fabric, // nil-safe — emitFabricEvents checks for nil
-	}
-	wg.Logger = io.Discard
-	wg.Prompter = tui.NewGater(tuiProgram)
-	wg.OnProgress = func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
-		tuiProgram.Send(tui.MsgNebulaProgress{
-			Completed:    completed,
-			Total:        total,
-			OpenBeads:    openBeads,
-			ClosedBeads:  closedBeads,
-			TotalCostUSD: totalCostUSD,
-		})
-	}
-	wg.OnRefactor = func(phaseID string, pending bool) {
-		if pending {
-			tuiProgram.Send(tui.MsgPhaseRefactorPending{PhaseID: phaseID})
-		}
-	}
-
-	// Create watcher for intervention file detection.
-	w, watcherErr := nebula.NewWatcher(dir)
-	if watcherErr != nil {
-		fmt.Fprintf(os.Stderr, "warning: watcher unavailable: %v\n", watcherErr)
-	} else {
-		if startErr := w.Start(); startErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: watcher start failed: %v\n", startErr)
-		} else {
-			wg.Watcher = w
-			defer w.Stop()
-		}
-	}
-
-	// Run workers in goroutine; block on TUI.
-	prog := tuiProgram
-	br := branchName
-	wd := workDir
-	go func() {
-		results, runErr := wg.Run(ctx)
-		prog.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
-		if br != "" {
-			allSucceeded := runErr == nil
-			gitResult := nebula.PostCompletion(context.Background(), wd, br, allSucceeded)
-			prog.Send(tui.MsgGitPostCompletion{Result: gitResult})
-		}
-	}()
-
-	finalModel, tuiErr := tuiProgram.Run()
-	cancel()
-	if tuiErr != nil {
-		return nebulaResult{Err: fmt.Errorf("TUI error: %w", tuiErr)}
-	}
-
-	appModel, ok := finalModel.(tui.AppModel)
-	if !ok {
-		return nebulaResult{}
+	// Execute via shared TUI path.
+	appModel, err := executeTUIRun(ctx, cancel, engine, invoker, client, ecfg, projectCtx)
+	if err != nil {
+		return nebulaResult{Err: err}
 	}
 
 	res := nebulaResult{
 		ReturnToHome: appModel.ReturnToHome,
 		NextNebula:   appModel.NextNebula,
 	}
-
 	if appModel.DoneErr != nil && !errors.Is(appModel.DoneErr, nebula.ErrManualStop) {
 		res.Err = appModel.DoneErr
 	}
-
 	return res
 }

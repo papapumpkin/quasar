@@ -1,0 +1,47 @@
+[nebula]
+name = "meridian"
+description = "Add a web dashboard (HTMX + Go net/http + SSE) alongside the BubbleTea TUI, providing a browser-based interface for monitoring nebula execution, reviewing phase details and diffs, visualizing the DAG, and handling gate prompts — all powered by server-sent events from the Pulsar event bus."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "web"]
+assignee = ""
+
+[execution]
+max_workers = 8
+max_review_cycles = 5
+max_budget_usd = 80.0
+model = ""
+gate = "trust"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Create internal/web/ package with an HTTP server that serves a live dashboard for nebula execution",
+    "Bridge Pulsar event bus events to the browser via SSE at /events",
+    "Render a dashboard page mirroring the TUI NebulaView: phase table with ID, title, status, cost, cycles",
+    "Wire HTMX hx-swap-oob to update individual phase rows and progress bars in real time",
+    "Build a per-phase detail page showing cycle timeline, agent output, reviewer assessment, and cost",
+    "Add a syntax-highlighted diff viewer using Go-based rendering (chroma or CSS-only)",
+    "Generate a server-side SVG DAG visualization of the phase dependency graph with status coloring",
+    "Implement gate prompt forms in the web UI with approve/reject/skip actions via HTMX POST",
+    "Integrate via --web flag on nebula apply and cockpit commands with auto-open and graceful shutdown",
+]
+constraints = [
+    "Use only Go stdlib net/http and html/template — no external web frameworks",
+    "HTMX is the only client-side JS dependency; inline it or serve from static/",
+    "SSE is the sole push mechanism — no WebSockets",
+    "The web server must not interfere with the TUI — they can coexist (TUI on stderr, web on a port)",
+    "All templates live in internal/web/templates/ as embedded Go files (embed.FS)",
+    "Follow existing patterns: interfaces defined at consumer, constructor injection, context propagation",
+    "All new files must have corresponding _test.go files using stdlib testing only",
+    "Use canonical vocabulary: Fabric, Entanglement, Discovery, Hail, Quasar (worker), Epoch, Pulse",
+    "Graceful shutdown: web server must respect context cancellation and drain SSE connections",
+    "No global mutable state — Server struct holds all dependencies",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = ["pulsar"]

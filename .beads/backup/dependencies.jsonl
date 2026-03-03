@@ -53,6 +53,10 @@
 {"created_at":"2026-02-17T19:47:24Z","created_by":"Aaron","depends_on_id":"quasar-4er","issue_id":"quasar-4er.1","type":"parent-child"}
 {"created_at":"2026-02-17T19:47:24Z","created_by":"Aaron","depends_on_id":"quasar-4er","issue_id":"quasar-4er.2","type":"parent-child"}
 {"created_at":"2026-02-17T19:58:42Z","created_by":"Aaron","depends_on_id":"quasar-4er","issue_id":"quasar-4er.3","type":"parent-child"}
+{"created_at":"2026-03-02T23:58:53Z","created_by":"Aaron","depends_on_id":"quasar-54nh","issue_id":"quasar-54nh.1","type":"parent-child"}
+{"created_at":"2026-03-02T23:58:53Z","created_by":"Aaron","depends_on_id":"quasar-54nh","issue_id":"quasar-54nh.2","type":"parent-child"}
+{"created_at":"2026-03-02T23:58:54Z","created_by":"Aaron","depends_on_id":"quasar-54nh","issue_id":"quasar-54nh.3","type":"parent-child"}
+{"created_at":"2026-03-02T23:58:54Z","created_by":"Aaron","depends_on_id":"quasar-54nh","issue_id":"quasar-54nh.4","type":"parent-child"}
 {"created_at":"2026-02-18T23:31:13Z","created_by":"Aaron","depends_on_id":"quasar-5f7","issue_id":"quasar-5f7.1","type":"parent-child"}
 {"created_at":"2026-02-18T23:31:13Z","created_by":"Aaron","depends_on_id":"quasar-5f7","issue_id":"quasar-5f7.2","type":"parent-child"}
 {"created_at":"2026-02-18T23:31:13Z","created_by":"Aaron","depends_on_id":"quasar-5f7","issue_id":"quasar-5f7.3","type":"parent-child"}
@@ -93,6 +97,8 @@
 {"created_at":"2026-02-23T19:26:31Z","created_by":"Aaron","depends_on_id":"quasar-892z","issue_id":"quasar-892z.3","type":"parent-child"}
 {"created_at":"2026-02-23T14:52:25Z","created_by":"Aaron","depends_on_id":"quasar-8i2","issue_id":"quasar-8i2.1","type":"parent-child"}
 {"created_at":"2026-02-23T14:52:25Z","created_by":"Aaron","depends_on_id":"quasar-8i2","issue_id":"quasar-8i2.2","type":"parent-child"}
+{"created_at":"2026-03-02T23:39:15Z","created_by":"Aaron","depends_on_id":"quasar-8wn4","issue_id":"quasar-8wn4.1","type":"parent-child"}
+{"created_at":"2026-03-02T23:39:15Z","created_by":"Aaron","depends_on_id":"quasar-8wn4","issue_id":"quasar-8wn4.2","type":"parent-child"}
 {"created_at":"2026-03-02T15:14:22Z","created_by":"Aaron","depends_on_id":"quasar-9fmj","issue_id":"quasar-9fmj.1","type":"parent-child"}
 {"created_at":"2026-03-02T15:14:23Z","created_by":"Aaron","depends_on_id":"quasar-9fmj","issue_id":"quasar-9fmj.2","type":"parent-child"}
 {"created_at":"2026-03-02T15:28:23Z","created_by":"Aaron","depends_on_id":"quasar-9fmj","issue_id":"quasar-9fmj.3","type":"parent-child"}
@@ -150,6 +156,9 @@
 {"created_at":"2026-03-02T15:02:53Z","created_by":"Aaron","depends_on_id":"quasar-gnah","issue_id":"quasar-gnah.4","type":"parent-child"}
 {"created_at":"2026-02-23T12:25:07Z","created_by":"Aaron","depends_on_id":"quasar-ibk","issue_id":"quasar-ibk.1","type":"parent-child"}
 {"created_at":"2026-02-23T12:25:07Z","created_by":"Aaron","depends_on_id":"quasar-ibk","issue_id":"quasar-ibk.2","type":"parent-child"}
+{"created_at":"2026-03-03T00:36:00Z","created_by":"Aaron","depends_on_id":"quasar-ip76","issue_id":"quasar-ip76.1","type":"parent-child"}
+{"created_at":"2026-03-03T00:36:00Z","created_by":"Aaron","depends_on_id":"quasar-ip76","issue_id":"quasar-ip76.2","type":"parent-child"}
+{"created_at":"2026-03-03T00:36:00Z","created_by":"Aaron","depends_on_id":"quasar-ip76","issue_id":"quasar-ip76.3","type":"parent-child"}
 {"created_at":"2026-02-28T23:56:32Z","created_by":"Aaron","depends_on_id":"quasar-iyyo","issue_id":"quasar-iyyo.1","type":"parent-child"}
 {"created_at":"2026-02-28T23:56:33Z","created_by":"Aaron","depends_on_id":"quasar-iyyo","issue_id":"quasar-iyyo.2","type":"parent-child"}
 {"created_at":"2026-02-28T23:56:33Z","created_by":"Aaron","depends_on_id":"quasar-iyyo","issue_id":"quasar-iyyo.3","type":"parent-child"}
@@ -163,6 +172,7 @@
 {"created_at":"2026-03-01T00:55:49Z","created_by":"Aaron","depends_on_id":"quasar-k1xh","issue_id":"quasar-k1xh.3","type":"parent-child"}
 {"created_at":"2026-03-01T00:55:50Z","created_by":"Aaron","depends_on_id":"quasar-k1xh","issue_id":"quasar-k1xh.4","type":"parent-child"}
 {"created_at":"2026-02-24T11:02:26Z","created_by":"Aaron","depends_on_id":"quasar-k6g8","issue_id":"quasar-k6g8.1","type":"parent-child"}
+{"created_at":"2026-03-03T00:10:15Z","created_by":"Aaron","depends_on_id":"quasar-kbcs","issue_id":"quasar-kbcs.1","type":"parent-child"}
 {"created_at":"2026-02-18T10:09:34Z","created_by":"Aaron","depends_on_id":"quasar-kf8","issue_id":"quasar-kf8.1","type":"parent-child"}
 {"created_at":"2026-02-18T10:09:35Z","created_by":"Aaron","depends_on_id":"quasar-kf8","issue_id":"quasar-kf8.2","type":"parent-child"}
 {"created_at":"2026-02-18T10:11:54Z","created_by":"Aaron","depends_on_id":"quasar-kf8","issue_id":"quasar-kf8.3","type":"parent-child"}
@@ -176,6 +186,8 @@
 {"created_at":"2026-03-01T10:03:09Z","created_by":"Aaron","depends_on_id":"quasar-n9sj","issue_id":"quasar-n9sj.2","type":"parent-child"}
 {"created_at":"2026-03-01T10:03:10Z","created_by":"Aaron","depends_on_id":"quasar-n9sj","issue_id":"quasar-n9sj.3","type":"parent-child"}
 {"created_at":"2026-03-01T10:03:11Z","created_by":"Aaron","depends_on_id":"quasar-n9sj","issue_id":"quasar-n9sj.4","type":"parent-child"}
+{"created_at":"2026-03-03T00:24:20Z","created_by":"Aaron","depends_on_id":"quasar-naae","issue_id":"quasar-naae.1","type":"parent-child"}
+{"created_at":"2026-03-03T00:24:21Z","created_by":"Aaron","depends_on_id":"quasar-naae","issue_id":"quasar-naae.2","type":"parent-child"}
 {"created_at":"2026-03-01T13:33:50Z","created_by":"Aaron","depends_on_id":"quasar-nr6k","issue_id":"quasar-nr6k.1","type":"parent-child"}
 {"created_at":"2026-03-01T13:33:51Z","created_by":"Aaron","depends_on_id":"quasar-nr6k","issue_id":"quasar-nr6k.2","type":"parent-child"}
 {"created_at":"2026-02-28T19:22:33Z","created_by":"Aaron","depends_on_id":"quasar-nsk6","issue_id":"quasar-nsk6.1","type":"parent-child"}
@@ -209,6 +221,8 @@
 {"created_at":"2026-02-17T11:12:07Z","created_by":"Aaron","depends_on_id":"quasar-qas","issue_id":"quasar-qas.4","type":"parent-child"}
 {"created_at":"2026-02-23T15:14:29Z","created_by":"Aaron","depends_on_id":"quasar-qla","issue_id":"quasar-qla.1","type":"parent-child"}
 {"created_at":"2026-02-23T15:14:29Z","created_by":"Aaron","depends_on_id":"quasar-qla","issue_id":"quasar-qla.2","type":"parent-child"}
+{"created_at":"2026-03-02T23:53:47Z","created_by":"Aaron","depends_on_id":"quasar-qunm","issue_id":"quasar-qunm.1","type":"parent-child"}
+{"created_at":"2026-03-02T23:53:47Z","created_by":"Aaron","depends_on_id":"quasar-qunm","issue_id":"quasar-qunm.2","type":"parent-child"}
 {"created_at":"2026-03-02T13:26:23Z","created_by":"Aaron","depends_on_id":"quasar-r5ee","issue_id":"quasar-r5ee.1","type":"parent-child"}
 {"created_at":"2026-02-24T10:05:28Z","created_by":"Aaron","depends_on_id":"quasar-r9d1","issue_id":"quasar-r9d1.1","type":"parent-child"}
 {"created_at":"2026-02-17T16:51:11Z","created_by":"Aaron","depends_on_id":"quasar-s0d","issue_id":"quasar-s0d.1","type":"parent-child"}

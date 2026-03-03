@@ -103,12 +103,12 @@ func TestGitCommitter_CommitPhase(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := gc.CommitPhase(ctx, "CI/CD Pipeline", "test-script-action", "Run CI test scripts"); err != nil {
+		if err := gc.CommitPhase(ctx, "CI/CD Pipeline", "test-script-action", "Run CI test scripts", "task"); err != nil {
 			t.Fatalf("CommitPhase: %v", err)
 		}
 
 		msg := lastCommitMessage(ctx, t, dir)
-		want := "CI/CD Pipeline/test-script-action: Run CI test scripts"
+		want := "ref(CI/CD Pipeline/test-script-action): Run CI test scripts"
 		if msg != want {
 			t.Errorf("commit message = %q, want %q", msg, want)
 		}
@@ -123,7 +123,7 @@ func TestGitCommitter_CommitPhase(t *testing.T) {
 		}
 
 		before := commitCount(ctx, t, dir)
-		if err := gc.CommitPhase(ctx, "test", "phase-1", "Test phase one"); err != nil {
+		if err := gc.CommitPhase(ctx, "test", "phase-1", "Test phase one", "task"); err != nil {
 			t.Fatalf("CommitPhase: %v", err)
 		}
 		after := commitCount(ctx, t, dir)
@@ -146,12 +146,12 @@ func TestGitCommitter_CommitPhase(t *testing.T) {
 		}
 
 		longTitle := strings.Repeat("a", 200)
-		if err := gc.CommitPhase(ctx, "neb", "ph", longTitle); err != nil {
+		if err := gc.CommitPhase(ctx, "neb", "ph", longTitle, "bug"); err != nil {
 			t.Fatalf("CommitPhase: %v", err)
 		}
 
 		msg := lastCommitMessage(ctx, t, dir)
-		// prefix = "neb/ph: " (8 chars), so title budget = 72, truncated = 69 + "..."
+		// prefix = "fix(neb/ph): " (13 chars), so title budget = 67, truncated = 64 + "..."
 		if len(msg) > 80 {
 			t.Errorf("commit message too long: %d chars: %q", len(msg), msg)
 		}
@@ -172,12 +172,12 @@ func TestGitCommitter_CommitPhase(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Use a very long nebulaName+phaseID so the prefix is ~78 chars.
-		// "aaaa...a/bbbb...b: " leaves maxTitle <= 3.
+		// Use a very long nebulaName+phaseID so the prefix is ~83 chars.
+		// "ref(aaaa...a/bbbb...b): " leaves maxTitle <= 3.
 		longNebula := strings.Repeat("a", 40)
 		longPhase := strings.Repeat("b", 36)
-		// prefix = 40 + "/" + 36 + ": " = 79 chars, maxTitle = 1
-		if err := gc.CommitPhase(ctx, longNebula, longPhase, "Some title"); err != nil {
+		// prefix = "ref(" + 40 + "/" + 36 + "): " = 84 chars, maxTitle = -4
+		if err := gc.CommitPhase(ctx, longNebula, longPhase, "Some title", "task"); err != nil {
 			t.Fatalf("CommitPhase: %v", err)
 		}
 
@@ -207,7 +207,7 @@ func TestGitCommitter_CommitPhase(t *testing.T) {
 			}
 		}
 
-		if err := gc.CommitPhase(ctx, "multi-file", "phase-2", "Stage and commit all changes"); err != nil {
+		if err := gc.CommitPhase(ctx, "multi-file", "phase-2", "Stage and commit all changes", "feature"); err != nil {
 			t.Fatalf("CommitPhase: %v", err)
 		}
 
@@ -270,13 +270,13 @@ func TestPostCompletionResult_Summary(t *testing.T) {
 
 	t.Run("success summary", func(t *testing.T) {
 		t.Parallel()
-		r := &PostCompletionResult{PushBranch: "nebula/my-test", CheckoutBranch: "main"}
+		r := &PostCompletionResult{PushBranch: "nebula/my-test"}
 		s := r.Summary()
 		if !strings.Contains(s, "Pushed to origin/nebula/my-test") {
 			t.Errorf("expected push success in summary, got %q", s)
 		}
-		if !strings.Contains(s, "Checked out main") {
-			t.Errorf("expected checkout success in summary, got %q", s)
+		if !strings.Contains(s, "Staying on nebula/my-test") {
+			t.Errorf("expected staying on branch in summary, got %q", s)
 		}
 	})
 
@@ -295,28 +295,22 @@ func TestPostCompletionResult_Summary(t *testing.T) {
 		}
 	})
 
-	t.Run("checkout error summary", func(t *testing.T) {
+	t.Run("staying on branch summary", func(t *testing.T) {
 		t.Parallel()
 		r := &PostCompletionResult{
-			PushBranch:     "nebula/fail",
-			CheckoutBranch: "main",
-			CheckoutErr:    fmt.Errorf("dirty worktree"),
+			PushBranch: "nebula/stay",
 		}
 		s := r.Summary()
-		if !strings.Contains(s, "Checkout main failed") {
-			t.Errorf("expected checkout failure in summary, got %q", s)
-		}
-		if !strings.Contains(s, "dirty worktree") {
-			t.Errorf("expected error detail in summary, got %q", s)
+		if !strings.Contains(s, "Staying on nebula/stay") {
+			t.Errorf("expected staying on branch in summary, got %q", s)
 		}
 	})
 
 	t.Run("commit error summary", func(t *testing.T) {
 		t.Parallel()
 		r := &PostCompletionResult{
-			PushBranch:     "nebula/fail",
-			CommitErr:      fmt.Errorf("git add: permission denied"),
-			CheckoutBranch: "main",
+			PushBranch: "nebula/fail",
+			CommitErr:  fmt.Errorf("git add: permission denied"),
 		}
 		s := r.Summary()
 		if !strings.Contains(s, "Commit failed") {
@@ -324,18 +318,6 @@ func TestPostCompletionResult_Summary(t *testing.T) {
 		}
 		if !strings.Contains(s, "permission denied") {
 			t.Errorf("expected error detail in summary, got %q", s)
-		}
-	})
-
-	t.Run("checkout with master branch", func(t *testing.T) {
-		t.Parallel()
-		r := &PostCompletionResult{
-			PushBranch:     "nebula/test",
-			CheckoutBranch: "master",
-		}
-		s := r.Summary()
-		if !strings.Contains(s, "Checked out master") {
-			t.Errorf("expected 'Checked out master' in summary, got %q", s)
 		}
 	})
 }
@@ -364,7 +346,7 @@ func TestCommitRemaining(t *testing.T) {
 		}
 
 		msg := lastCommitMessage(ctx, t, dir)
-		if !strings.Contains(msg, "nebula: final changes on nebula/test-commit") {
+		if !strings.Contains(msg, "ref(nebula): final changes on nebula/test-commit") {
 			t.Errorf("unexpected commit message: %q", msg)
 		}
 	})
@@ -393,7 +375,7 @@ func TestPostCompletion(t *testing.T) {
 		// Create a nebula branch.
 		run(ctx, t, dir, "git", "checkout", "-b", "nebula/no-remote")
 
-		result := PostCompletion(ctx, dir, "nebula/no-remote", true)
+		result := PostCompletion(ctx, dir, "nebula/no-remote")
 
 		// Push should fail because there's no remote.
 		if result.PushErr == nil {
@@ -404,97 +386,23 @@ func TestPostCompletion(t *testing.T) {
 		}
 	})
 
-	t.Run("checkout main fails when main does not exist", func(t *testing.T) {
-		dir := initTestRepo(t)
-		ctx := context.Background()
-
-		// The default branch in initTestRepo might be "master" depending on git config.
-		// Create a nebula branch from whatever default branch.
-		run(ctx, t, dir, "git", "checkout", "-b", "nebula/no-main")
-
-		result := PostCompletion(ctx, dir, "nebula/no-main", true)
-
-		// Checkout main may fail if the default branch is "master".
-		// We just verify the result is populated.
-		if result.PushBranch != "nebula/no-main" {
-			t.Errorf("expected PushBranch='nebula/no-main', got %q", result.PushBranch)
-		}
-	})
-
-	t.Run("checkout succeeds when main exists", func(t *testing.T) {
-		dir := initTestRepo(t)
-		ctx := context.Background()
-
-		// Ensure "main" branch exists. initTestRepo may create "master".
-		// Rename to main.
-		run(ctx, t, dir, "git", "branch", "-M", "main")
-
-		// Create nebula branch.
-		run(ctx, t, dir, "git", "checkout", "-b", "nebula/checkout-test")
-
-		result := PostCompletion(ctx, dir, "nebula/checkout-test", true)
-
-		if result.CheckoutErr != nil {
-			t.Errorf("expected checkout to succeed: %v", result.CheckoutErr)
-		}
-		if result.CheckoutBranch != "main" {
-			t.Errorf("expected CheckoutBranch='main', got %q", result.CheckoutBranch)
-		}
-
-		// Verify we're on main now.
-		current := currentBranchHelper(ctx, t, dir)
-		if current != "main" {
-			t.Errorf("expected to be on main after PostCompletion, got %q", current)
-		}
-	})
-
-	t.Run("checkout succeeds when master is default", func(t *testing.T) {
-		dir := initTestRepo(t)
-		ctx := context.Background()
-
-		// Ensure "master" branch exists.
-		run(ctx, t, dir, "git", "branch", "-M", "master")
-
-		// Create nebula branch.
-		run(ctx, t, dir, "git", "checkout", "-b", "nebula/master-test")
-
-		result := PostCompletion(ctx, dir, "nebula/master-test", true)
-
-		if result.CheckoutErr != nil {
-			t.Errorf("expected checkout to succeed: %v", result.CheckoutErr)
-		}
-		if result.CheckoutBranch != "master" {
-			t.Errorf("expected CheckoutBranch='master', got %q", result.CheckoutBranch)
-		}
-
-		// Verify we're on master now.
-		current := currentBranchHelper(ctx, t, dir)
-		if current != "master" {
-			t.Errorf("expected to be on master after PostCompletion, got %q", current)
-		}
-	})
-
-	t.Run("skips checkout when incomplete", func(t *testing.T) {
+	t.Run("stays on nebula branch", func(t *testing.T) {
 		dir := initTestRepo(t)
 		ctx := context.Background()
 
 		run(ctx, t, dir, "git", "branch", "-M", "main")
-		run(ctx, t, dir, "git", "checkout", "-b", "nebula/incomplete-test")
+		run(ctx, t, dir, "git", "checkout", "-b", "nebula/stay-test")
 
-		result := PostCompletion(ctx, dir, "nebula/incomplete-test", false)
+		result := PostCompletion(ctx, dir, "nebula/stay-test")
 
-		// Checkout should be skipped entirely.
-		if result.CheckoutBranch != "" {
-			t.Errorf("expected CheckoutBranch='', got %q", result.CheckoutBranch)
-		}
-		if result.CheckoutErr != nil {
-			t.Errorf("expected no CheckoutErr, got %v", result.CheckoutErr)
+		if result.PushBranch != "nebula/stay-test" {
+			t.Errorf("expected PushBranch='nebula/stay-test', got %q", result.PushBranch)
 		}
 
-		// Should still be on the nebula branch.
+		// Verify we're still on the nebula branch.
 		current := currentBranchHelper(ctx, t, dir)
-		if current != "nebula/incomplete-test" {
-			t.Errorf("expected to stay on nebula/incomplete-test, got %q", current)
+		if current != "nebula/stay-test" {
+			t.Errorf("expected to stay on nebula/stay-test, got %q", current)
 		}
 	})
 }

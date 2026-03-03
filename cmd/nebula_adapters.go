@@ -14,11 +14,13 @@ import (
 
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/bus"
 	"github.com/papapumpkin/quasar/internal/checkpoint"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/loop"
 	"github.com/papapumpkin/quasar/internal/nebula"
 	"github.com/papapumpkin/quasar/internal/tui"
+	"github.com/papapumpkin/quasar/internal/ui"
 )
 
 // loopAdapter wraps *loop.Loop to satisfy nebula.PhaseRunner.
@@ -38,6 +40,7 @@ func (a *loopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, pha
 		a.loop.Model = exec.Model
 	}
 	a.loop.CommitSummary = phaseTitle
+	a.loop.PhaseType = exec.PhaseType
 
 	// Enable struggle detection when auto-decomposition is active.
 	if exec.AutoDecompose {
@@ -79,6 +82,7 @@ func (a *loopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData any,
 		a.loop.Model = exec.Model
 	}
 	a.loop.CommitSummary = phaseTitle
+	a.loop.PhaseType = exec.PhaseType
 
 	if exec.AutoDecompose {
 		cfg := loop.DefaultStruggleConfig()
@@ -120,14 +124,27 @@ type tuiLoopAdapter struct {
 	reviewPrompt     string
 	workDir          string
 	fabric           fabric.Fabric // nil when fabric is not configured
+	bus              bus.Bus       // nil = use PhaseUIBridge; non-nil = use BusUIBridge
 	projectContext   string        // Deterministic project snapshot for prompt caching.
 	maxContextTokens int           // Token budget for context injection. 0 = use default.
 	checkpointDir    string        // Directory for checkpoint files. Empty disables checkpointing.
 }
 
+// newPhaseUI returns a ui.UI implementation for the given phase. When the bus
+// is available, it returns a BusUIBridge that publishes to the bus. Otherwise,
+// it returns a PhaseUIBridge that sends directly to the TUI program.
+func (a *tuiLoopAdapter) newPhaseUI(phaseID string) ui.UI {
+	if a.bus != nil {
+		return tui.NewBusUIBridge(a.bus, phaseID, a.workDir)
+	}
+	return tui.NewPhaseUIBridge(a.program, phaseID, a.workDir)
+}
+
 func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, phaseTitle, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
-	// Create a per-phase UI bridge so messages carry the phase ID.
-	phaseUI := tui.NewPhaseUIBridge(a.program, phaseID, a.workDir)
+	// Create a per-phase UI bridge. When the bus is available, use
+	// BusUIBridge so events flow through the bus to BusSubscriber.
+	// Otherwise, fall back to the direct PhaseUIBridge.
+	phaseUI := a.newPhaseUI(phaseID)
 
 	l := &loop.Loop{
 		Invoker:           a.invoker,
@@ -142,6 +159,7 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 		ReviewPrompt:      a.reviewPrompt,
 		WorkDir:           a.workDir,
 		CommitSummary:     phaseTitle,
+		PhaseType:         exec.PhaseType,
 		Fabric:            a.fabric,
 		FabricEnabled:     a.fabric != nil,
 		ProjectContext:    a.projectContext,
@@ -171,7 +189,7 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 	result, err := l.RunExistingTask(ctx, beadID, phaseDescription)
 
 	// After the loop completes, emit fabric events if fabric is available.
-	a.emitFabricEvents(ctx, phaseID, phaseUI)
+	a.emitFabricEvents(ctx, phaseID)
 
 	if err != nil {
 		if result != nil {
@@ -184,18 +202,33 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 
 // emitFabricEvents queries the fabric for entanglements and discoveries
 // produced by this phase and emits the corresponding TUI messages.
-func (a *tuiLoopAdapter) emitFabricEvents(ctx context.Context, phaseID string, phaseUI *tui.PhaseUIBridge) {
+// When the bus is available, events are published to the bus; otherwise,
+// they are sent directly to the TUI program.
+func (a *tuiLoopAdapter) emitFabricEvents(ctx context.Context, phaseID string) {
 	if a.fabric == nil {
 		return
 	}
 	// Emit entanglement update with the full list.
 	if ents, err := a.fabric.AllEntanglements(ctx); err == nil && len(ents) > 0 {
-		phaseUI.EntanglementPublished(ents)
+		if a.bus != nil {
+			ev := bus.New(bus.KindEntanglementUpdate)
+			ev.Entanglements = ents
+			_ = a.bus.Publish(ctx, ev)
+		} else {
+			a.program.Send(tui.MsgEntanglementUpdate{Entanglements: ents})
+		}
 	}
 	// Emit discoveries posted by this phase.
 	if discs, err := a.fabric.Discoveries(ctx, phaseID); err == nil {
 		for _, d := range discs {
-			phaseUI.DiscoveryPosted(d)
+			if a.bus != nil {
+				ev := bus.NewPhase(bus.KindDiscoveryPosted, phaseID)
+				ev.Message = d.Detail
+				ev.FabricDiscovery = d
+				_ = a.bus.Publish(ctx, ev)
+			} else {
+				a.program.Send(tui.MsgDiscoveryPosted{Discovery: d})
+			}
 		}
 	}
 }
@@ -206,7 +239,7 @@ func (a *tuiLoopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData a
 		return nil, fmt.Errorf("invalid checkpoint data type for phase %s: expected *checkpoint.Checkpoint", phaseID)
 	}
 
-	phaseUI := tui.NewPhaseUIBridge(a.program, phaseID, a.workDir)
+	phaseUI := a.newPhaseUI(phaseID)
 
 	l := &loop.Loop{
 		Invoker:           a.invoker,
@@ -221,6 +254,7 @@ func (a *tuiLoopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData a
 		ReviewPrompt:      a.reviewPrompt,
 		WorkDir:           a.workDir,
 		CommitSummary:     phaseTitle,
+		PhaseType:         exec.PhaseType,
 		Fabric:            a.fabric,
 		FabricEnabled:     a.fabric != nil,
 		ProjectContext:    a.projectContext,
@@ -254,7 +288,7 @@ func (a *tuiLoopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData a
 	result, err := l.RunFromCheckpoint(ctx, cycleState, checkpointPhase, cleanup)
 
 	// After the loop completes, emit fabric events if fabric is available.
-	a.emitFabricEvents(ctx, phaseID, phaseUI)
+	a.emitFabricEvents(ctx, phaseID)
 
 	if err != nil {
 		if result != nil {
@@ -266,7 +300,7 @@ func (a *tuiLoopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData a
 }
 
 func (a *tuiLoopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDescription string) (string, error) {
-	phaseUI := tui.NewPhaseUIBridge(a.program, "checkpoint", a.workDir)
+	phaseUI := a.newPhaseUI("checkpoint")
 	l := &loop.Loop{
 		Invoker:          a.invoker,
 		UI:               phaseUI,
