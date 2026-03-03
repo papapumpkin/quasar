@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'pulsar'
-total_cost_usd = 27.449240549999995
+total_cost_usd = 40.438938449999995
 
 [phases]
 [phases.bus-impl]
@@ -59,9 +59,15 @@ summary = 'Clean type definitions for the nebula Engine lifecycle — well-docum
 
 [phases.producer-migration]
 bead_id = 'quasar-ip76'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-02T23:31:03.980051-05:00
-updated_at = 2026-03-03T00:04:47.337329-05:00
+updated_at = 2026-03-03T00:49:26.20773-05:00
+
+[phases.producer-migration.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Producer migration correctly bridges all ui.UI methods and WorkerGroup callbacks to the bus with comprehensive tests and proper chaining support; only a minor defer-capture resource leak in the nebula chaining path.'
 
 [phases.telemetry-subscriber]
 bead_id = 'quasar-naae'
