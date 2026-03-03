@@ -161,6 +161,8 @@ func resolveEngineConfig(cmd *cobra.Command, args []string) (nebula.EngineConfig
 		BeadsPath:                cfg.BeadsPath,
 		CacheOptimization:        cfg.CacheOptimization,
 		CacheVerbose:             cfg.CacheVerbose,
+		FixEffort:                cfg.FixEffort,
+		FallbackModel:            cfg.FallbackModel,
 	}, nil
 }
 
@@ -203,6 +205,8 @@ func engineConfigFromSettings(cfg config.Config, dir string, noSplash bool, maxW
 		BeadsPath:          cfg.BeadsPath,
 		CacheOptimization:  cfg.CacheOptimization,
 		CacheVerbose:       cfg.CacheVerbose,
+		FixEffort:          cfg.FixEffort,
+		FallbackModel:      cfg.FallbackModel,
 	}
 }
 
@@ -360,6 +364,8 @@ func runApplyWithStderr(
 		CacheOptimization: ecfg.CacheOptimization,
 		CacheVerbose:      ecfg.CacheVerbose,
 		CheckpointDir:     ecfg.NebulaDir,
+		FixEffort:         ecfg.FixEffort,
+		FallbackModel:     ecfg.FallbackModel,
 	}
 
 	isTTY := isStderrTTY()
@@ -436,6 +442,8 @@ func buildTUIWorkerOpts(
 		projectContext:   projectCtx,
 		maxContextTokens: ecfg.MaxContextTokens,
 		checkpointDir:    ecfg.NebulaDir,
+		fixEffort:        ecfg.FixEffort,
+		fallbackModel:    ecfg.FallbackModel,
 	}
 
 	opts := []nebula.Option{

@@ -11,6 +11,7 @@ type ResolvedExecution struct {
 	ComplexityScore float64 // Zero when auto-routing was not applied.
 	AutoDecompose   bool    // true if struggle detection + auto-decomposition is enabled for this phase.
 	PhaseType       string  // Phase type for conventional commit prefix (bug→fix, feature→feat, default→ref).
+	FallbackModel   string  // Automatic fallback model when primary is overloaded.
 }
 
 // RoutingContext carries the optional data needed for adaptive model routing.
@@ -63,6 +64,9 @@ func ResolveExecution(globalCycles int, globalBudget float64, globalModel string
 		}
 		if neb.Model != "" {
 			r.Model = neb.Model
+		}
+		if neb.FallbackModel != "" {
+			r.FallbackModel = neb.FallbackModel
 		}
 	}
 

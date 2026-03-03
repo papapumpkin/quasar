@@ -38,6 +38,8 @@ func TestLoad_Defaults(t *testing.T) {
 		{"CacheVerbose", cfg.CacheVerbose, false},
 		{"ProjectContextPath", cfg.ProjectContextPath, ""},
 		{"MaxContextTokens", cfg.MaxContextTokens, 10000},
+		{"FixEffort", cfg.FixEffort, "low"},
+		{"FallbackModel", cfg.FallbackModel, ""},
 	}
 
 	for _, tt := range tests {

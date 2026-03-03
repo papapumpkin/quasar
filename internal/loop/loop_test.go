@@ -4018,3 +4018,62 @@ func TestWireCheckpointHook(t *testing.T) {
 		}
 	})
 }
+
+func TestSessionContinuity_CoderResumesOnCycle2(t *testing.T) {
+	t.Parallel()
+
+	inv := &fakeInvoker{
+		responses: []agent.InvocationResult{
+			// Cycle 1: coder — returns a session ID
+			{ResultText: "first attempt", CostUSD: 0.50, SessionID: "sess-abc"},
+			// Cycle 1: reviewer — rejected
+			{ResultText: "ISSUE:\nSEVERITY: major\nDESCRIPTION: Missing tests.", CostUSD: 0.30},
+			// Cycle 2: coder — should receive --resume with sess-abc
+			{ResultText: "added tests", CostUSD: 0.40, SessionID: "sess-def"},
+			// Cycle 2: reviewer — approved
+			{ResultText: "APPROVED: Tests look good.", CostUSD: 0.20},
+		},
+	}
+	l := &Loop{
+		Invoker:      inv,
+		UI:           &noopUI{},
+		MaxCycles:    3,
+		MaxBudgetUSD: 10.0,
+	}
+	result, err := l.runLoop(context.Background(), "bead-session", "add tests")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.CyclesUsed != 2 {
+		t.Fatalf("CyclesUsed = %d, want 2", result.CyclesUsed)
+	}
+
+	// Verify the agents captured by the invoker.
+	// Invocation order: coder(cycle1), reviewer(cycle1), coder(cycle2), reviewer(cycle2)
+	inv.mu.Lock()
+	defer inv.mu.Unlock()
+
+	if len(inv.agents) != 4 {
+		t.Fatalf("expected 4 invocations, got %d", len(inv.agents))
+	}
+
+	// Cycle 1 coder: no resume (first cycle).
+	if inv.agents[0].ResumeSessionID != "" {
+		t.Errorf("cycle 1 coder: ResumeSessionID = %q, want empty", inv.agents[0].ResumeSessionID)
+	}
+
+	// Cycle 1 reviewer: never resumed.
+	if inv.agents[1].ResumeSessionID != "" {
+		t.Errorf("cycle 1 reviewer: ResumeSessionID = %q, want empty", inv.agents[1].ResumeSessionID)
+	}
+
+	// Cycle 2 coder: should resume from cycle 1's session.
+	if inv.agents[2].ResumeSessionID != "sess-abc" {
+		t.Errorf("cycle 2 coder: ResumeSessionID = %q, want %q", inv.agents[2].ResumeSessionID, "sess-abc")
+	}
+
+	// Cycle 2 reviewer: never resumed.
+	if inv.agents[3].ResumeSessionID != "" {
+		t.Errorf("cycle 2 reviewer: ResumeSessionID = %q, want empty", inv.agents[3].ResumeSessionID)
+	}
+}

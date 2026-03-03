@@ -74,6 +74,18 @@ func buildArgs(a agent.Agent, prompt string) []string {
 		args = append(args, "--mcp-config", a.MCP.ConfigPath)
 	}
 
+	if a.ResumeSessionID != "" {
+		args = append(args, "--resume", a.ResumeSessionID)
+	}
+
+	if a.Effort != "" {
+		args = append(args, "--effort", a.Effort)
+	}
+
+	if a.FallbackModel != "" {
+		args = append(args, "--fallback-model", a.FallbackModel)
+	}
+
 	return args
 }
 

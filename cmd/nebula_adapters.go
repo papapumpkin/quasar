@@ -39,6 +39,9 @@ func (a *loopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, pha
 	if exec.Model != "" {
 		a.loop.Model = exec.Model
 	}
+	if exec.FallbackModel != "" {
+		a.loop.FallbackModel = exec.FallbackModel
+	}
 	a.loop.CommitSummary = phaseTitle
 	a.loop.PhaseType = exec.PhaseType
 
@@ -80,6 +83,9 @@ func (a *loopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData any,
 	}
 	if exec.Model != "" {
 		a.loop.Model = exec.Model
+	}
+	if exec.FallbackModel != "" {
+		a.loop.FallbackModel = exec.FallbackModel
 	}
 	a.loop.CommitSummary = phaseTitle
 	a.loop.PhaseType = exec.PhaseType
@@ -128,6 +134,8 @@ type tuiLoopAdapter struct {
 	projectContext   string        // Deterministic project snapshot for prompt caching.
 	maxContextTokens int           // Token budget for context injection. 0 = use default.
 	checkpointDir    string        // Directory for checkpoint files. Empty disables checkpointing.
+	fixEffort        string        // Effort level for lint/filter fix invocations.
+	fallbackModel    string        // Automatic fallback model when primary is overloaded.
 }
 
 // newPhaseUI returns a ui.UI implementation for the given phase. When the bus
@@ -166,6 +174,8 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 		MaxContextTokens:  a.maxContextTokens,
 		CacheOptimization: true,
 		CheckpointDir:     a.checkpointDir,
+		FixEffort:         a.fixEffort,
+		FallbackModel:     a.fallbackModel,
 	}
 
 	// Apply per-phase execution overrides.
@@ -177,6 +187,9 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 	}
 	if exec.Model != "" {
 		l.Model = exec.Model
+	}
+	if exec.FallbackModel != "" {
+		l.FallbackModel = exec.FallbackModel
 	}
 
 	// Enable struggle detection when auto-decomposition is active.
@@ -261,6 +274,8 @@ func (a *tuiLoopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData a
 		MaxContextTokens:  a.maxContextTokens,
 		CacheOptimization: true,
 		CheckpointDir:     a.checkpointDir,
+		FixEffort:         a.fixEffort,
+		FallbackModel:     a.fallbackModel,
 	}
 
 	// Apply per-phase execution overrides.
@@ -272,6 +287,9 @@ func (a *tuiLoopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData a
 	}
 	if exec.Model != "" {
 		l.Model = exec.Model
+	}
+	if exec.FallbackModel != "" {
+		l.FallbackModel = exec.FallbackModel
 	}
 
 	if exec.AutoDecompose {

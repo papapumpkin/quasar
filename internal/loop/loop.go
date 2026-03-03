@@ -48,6 +48,8 @@ type Loop struct {
 	HailTimeout       time.Duration    // Auto-resolve timeout for hails. 0 disables auto-resolution.
 	StruggleConfig    StruggleConfig   // Optional; zero value disables struggle detection.
 	CheckpointDir     string           // Directory for checkpoint files. Empty disables checkpointing.
+	FixEffort         string           // Effort level for lint/filter fix invocations (e.g. "low"). Empty = Claude's default.
+	FallbackModel     string           // Automatic fallback model passed to all agents.
 	// NewCheckpointHook, when non-nil, is called by RunTask and RunExistingTask
 	// to create a checkpoint hook that is prepended to Hooks. The function
 	// receives a state accessor (returning the current *CycleState) and must
@@ -615,7 +617,11 @@ func (l *Loop) runLintFixLoop(ctx context.Context, state *CycleState, perAgentBu
 		// Feed lint issues back to the coder.
 		l.UI.Info(fmt.Sprintf("lint issues found (attempt %d/%d), sending back to coder", attempt+1, maxRetries))
 		lintPrompt := l.buildLintFixPrompt(state)
-		result, err := l.Invoker.Invoke(ctx, l.coderAgent(perAgentBudget), lintPrompt, l.WorkDir)
+		lintCoder := l.coderAgent(perAgentBudget)
+		if l.FixEffort != "" {
+			lintCoder.Effort = l.FixEffort
+		}
+		result, err := l.Invoker.Invoke(ctx, lintCoder, lintPrompt, l.WorkDir)
 		if err != nil {
 			return fmt.Errorf("coder lint-fix invocation failed: %w", err)
 		}
@@ -751,12 +757,14 @@ func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkNam
 			})
 		}
 		a := agent.Agent{
-			Role:         agent.RoleCoder,
-			SystemPrompt: sysPrompt,
-			Model:        l.Model,
-			MaxBudgetUSD: fixBudget,
-			AllowedTools: []string{"Read", "Edit", "Write", "Glob"},
-			MCP:          l.MCP,
+			Role:          agent.RoleCoder,
+			SystemPrompt:  sysPrompt,
+			Model:         l.Model,
+			MaxBudgetUSD:  fixBudget,
+			AllowedTools:  []string{"Read", "Edit", "Write", "Glob"},
+			MCP:           l.MCP,
+			Effort:        l.FixEffort,
+			FallbackModel: l.FallbackModel,
 		}
 
 		result, err := l.Invoker.Invoke(ctx, a, prompt, l.WorkDir)
@@ -953,7 +961,8 @@ func (l *Loop) coderAgent(budget float64) agent.Agent {
 			"Read", "Edit", "Write", "Glob", "Grep",
 			"Bash(go *)", "Bash(git diff *)", "Bash(git status)", "Bash(git log *)",
 		},
-		MCP: l.MCP,
+		MCP:           l.MCP,
+		FallbackModel: l.FallbackModel,
 	}
 }
 
@@ -979,7 +988,8 @@ func (l *Loop) reviewerAgent(budget float64) agent.Agent {
 			"Read", "Glob", "Grep",
 			"Bash(go vet *)", "Bash(git diff *)", "Bash(git log *)",
 		},
-		MCP: l.MCP,
+		MCP:           l.MCP,
+		FallbackModel: l.FallbackModel,
 	}
 }
 
@@ -1002,10 +1012,22 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	}
 	prompt = l.composeVolatilePrefix(ctx, prompt)
 
-	result, err := l.Invoker.Invoke(ctx, l.coderAgent(perAgentBudget), prompt, l.WorkDir)
+	coder := l.coderAgent(perAgentBudget)
+	// Resume the coder's prior session on cycle 2+ to avoid re-reading
+	// the entire codebase each iteration.
+	if state.Cycle > 1 && state.coderSessionID != "" {
+		coder.ResumeSessionID = state.coderSessionID
+	}
+
+	result, err := l.Invoker.Invoke(ctx, coder, prompt, l.WorkDir)
 	if err != nil {
 		state.Phase = PhaseError
 		return fmt.Errorf("coder invocation failed: %w", err)
+	}
+
+	// Store the session ID for potential resume in the next cycle.
+	if result.SessionID != "" {
+		state.coderSessionID = result.SessionID
 	}
 
 	state.CoderOutput = result.ResultText

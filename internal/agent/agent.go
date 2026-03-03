@@ -21,12 +21,15 @@ type MCPConfig struct {
 
 // Agent describes the configuration for a single agent invocation.
 type Agent struct {
-	Role         Role
-	SystemPrompt string
-	Model        string
-	MaxBudgetUSD float64
-	AllowedTools []string   // Tool permissions for this agent (passed as --allowedTools flags)
-	MCP          *MCPConfig // Optional MCP server configuration
+	Role            Role
+	SystemPrompt    string
+	Model           string
+	MaxBudgetUSD    float64
+	AllowedTools    []string   // Tool permissions for this agent (passed as --allowedTools flags)
+	MCP             *MCPConfig // Optional MCP server configuration
+	ResumeSessionID string     // When set, passes --resume <id> to resume a prior session.
+	Effort          string     // "low", "medium", "high", or "" (Claude's default).
+	FallbackModel   string     // Automatic fallback model when primary is overloaded.
 }
 
 // InvocationResult holds the output and cost metrics from a single agent invocation.

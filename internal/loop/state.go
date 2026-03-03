@@ -112,4 +112,5 @@ type CycleState struct {
 	cacheHitCount          int                   // number of invocations where system prompt hash matched previous
 	cacheMissCount         int                   // number of invocations where system prompt hash changed (or first invocation)
 	totalCachedBytes       int64                 // sum of SystemPromptLen for cache-hit invocations
+	coderSessionID         string                // transient: session ID from last coder invocation for --resume
 }

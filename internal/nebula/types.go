@@ -29,6 +29,7 @@ type Execution struct {
 	Healing              bool       `toml:"healing"`                // Master switch for auto-healing on failure.
 	HealingMaxAttempts   int        `toml:"healing_max_attempts"`   // Per-phase healing attempts (default 1).
 	HealingBudgetReserve float64    `toml:"healing_budget_reserve"` // USD reserved from nebula budget for healing phases.
+	FallbackModel        string     `toml:"fallback_model"`         // Automatic fallback model when primary is overloaded.
 }
 
 // DefaultHailTimeout is the built-in fallback for hail auto-resolution timeout.

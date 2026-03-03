@@ -84,6 +84,12 @@ type EngineConfig struct {
 	// explicitly set by the user. When false, the manifest value is used
 	// if available.
 	MaxContextTokensExplicit bool
+
+	// FixEffort is the effort level for lint/filter fix invocations.
+	FixEffort string
+
+	// FallbackModel is the automatic fallback model when primary is overloaded.
+	FallbackModel string
 }
 
 // EnginePhase represents the current lifecycle phase of the engine.

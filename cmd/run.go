@@ -243,17 +243,19 @@ func buildLoop(cfg *config.Config, uiHandler ui.UI, coderPrompt, reviewerPrompt 
 	beadHook := &loop.BeadHook{Beads: beadsClient, UI: uiHandler}
 
 	return &loop.Loop{
-		Invoker:      claudeInv,
-		UI:           uiHandler,
-		Git:          git,
-		Hooks:        []loop.Hook{beadHook},
-		Linter:       loop.NewLinter(cfg.LintCommands, workDir),
-		MaxCycles:    cfg.MaxReviewCycles,
-		MaxBudgetUSD: cfg.MaxBudgetUSD,
-		Model:        cfg.Model,
-		CoderPrompt:  coderPrompt,
-		ReviewPrompt: reviewerPrompt,
-		WorkDir:      workDir,
+		Invoker:       claudeInv,
+		UI:            uiHandler,
+		Git:           git,
+		Hooks:         []loop.Hook{beadHook},
+		Linter:        loop.NewLinter(cfg.LintCommands, workDir),
+		MaxCycles:     cfg.MaxReviewCycles,
+		MaxBudgetUSD:  cfg.MaxBudgetUSD,
+		Model:         cfg.Model,
+		CoderPrompt:   coderPrompt,
+		ReviewPrompt:  reviewerPrompt,
+		WorkDir:       workDir,
+		FixEffort:     cfg.FixEffort,
+		FallbackModel: cfg.FallbackModel,
 	}, nil
 }
 

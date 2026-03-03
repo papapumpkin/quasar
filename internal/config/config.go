@@ -45,6 +45,16 @@ type Config struct {
 	// Controls how much project context and fabric state is included.
 	// Default: 10000.
 	MaxContextTokens int `mapstructure:"max_context_tokens"`
+
+	// FixEffort is the effort level for lint/filter fix invocations.
+	// Valid values: "low", "medium", "high", or "" (Claude's default).
+	// Default: "low".
+	FixEffort string `mapstructure:"fix_effort"`
+
+	// FallbackModel is the automatic fallback model when the primary
+	// model is overloaded. Empty means no fallback.
+	// Default: "".
+	FallbackModel string `mapstructure:"fallback_model"`
 }
 
 // Load reads configuration from viper, applying built-in defaults for any
@@ -64,6 +74,8 @@ func Load() (Config, error) {
 	viper.SetDefault("cache_verbose", false)
 	viper.SetDefault("project_context_path", "")
 	viper.SetDefault("max_context_tokens", 10000)
+	viper.SetDefault("fix_effort", "low")
+	viper.SetDefault("fallback_model", "")
 
 	var cfg Config
 	if err := viper.Unmarshal(&cfg); err != nil {

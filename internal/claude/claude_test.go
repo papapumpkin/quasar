@@ -329,6 +329,42 @@ func TestBuildArgs_OptionalFlags(t *testing.T) {
 			wantFlag: "--max-budget-usd",
 			present:  false,
 		},
+		{
+			name:     "resume session present",
+			agent:    agent.Agent{ResumeSessionID: "sess-abc123"},
+			wantFlag: "--resume",
+			present:  true,
+		},
+		{
+			name:     "resume session absent",
+			agent:    agent.Agent{},
+			wantFlag: "--resume",
+			present:  false,
+		},
+		{
+			name:     "effort present",
+			agent:    agent.Agent{Effort: "low"},
+			wantFlag: "--effort",
+			present:  true,
+		},
+		{
+			name:     "effort absent",
+			agent:    agent.Agent{},
+			wantFlag: "--effort",
+			present:  false,
+		},
+		{
+			name:     "fallback model present",
+			agent:    agent.Agent{FallbackModel: "sonnet"},
+			wantFlag: "--fallback-model",
+			present:  true,
+		},
+		{
+			name:     "fallback model absent",
+			agent:    agent.Agent{},
+			wantFlag: "--fallback-model",
+			present:  false,
+		},
 	}
 
 	for _, tt := range tests {
