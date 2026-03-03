@@ -263,15 +263,15 @@ type HailResolvedPayload struct {
 
 // PlanReadyPayload carries a computed execution plan for preview.
 type PlanReadyPayload struct {
-	Plan      any    // *nebula.ExecutionPlan — kept as any to avoid import cycle
-	Changes   any    // []nebula.PlanChange — kept as any to avoid import cycle
+	Plan      any // *nebula.ExecutionPlan — kept as any to avoid import cycle
+	Changes   any // []nebula.PlanChange — kept as any to avoid import cycle
 	NebulaDir string
 }
 
 // PlanActionPayload carries the user's decision from the plan preview.
 type PlanActionPayload struct {
-	Action    int    // PlanAction enum value from tui package
-	Plan      any    // *nebula.ExecutionPlan — kept as any to avoid import cycle
+	Action    int // PlanAction enum value from tui package
+	Plan      any // *nebula.ExecutionPlan — kept as any to avoid import cycle
 	NebulaDir string
 }
 
