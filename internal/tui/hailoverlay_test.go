@@ -509,6 +509,235 @@ func TestAppModelViewWithHail(t *testing.T) {
 	})
 }
 
+// --- Dialogue mode tests ---
+
+func TestHailOverlay_TextInputWidth(t *testing.T) {
+	t.Parallel()
+	msg := MsgHail{
+		PhaseID:   "p1",
+		Discovery: fabric.Discovery{Kind: "test", Detail: "detail"},
+	}
+	h := NewHailOverlay(msg, nil)
+	if h.Input.Width == 0 {
+		t.Error("expected non-zero textinput width after construction")
+	}
+}
+
+func TestHailOverlay_AddEntry(t *testing.T) {
+	t.Parallel()
+
+	t.Run("adds entry and clears input", func(t *testing.T) {
+		t.Parallel()
+		h := makeTestOverlay()
+		h.Input.SetValue("first message")
+		h.AddEntry(strings.TrimSpace(h.Input.Value()))
+
+		if len(h.Entries) != 1 {
+			t.Fatalf("expected 1 entry, got %d", len(h.Entries))
+		}
+		if h.Entries[0].Text != "first message" {
+			t.Errorf("expected entry text %q, got %q", "first message", h.Entries[0].Text)
+		}
+		if h.Input.Value() != "" {
+			t.Errorf("expected input to be cleared, got %q", h.Input.Value())
+		}
+	})
+
+	t.Run("multiple entries accumulate", func(t *testing.T) {
+		t.Parallel()
+		h := makeTestOverlay()
+		h.AddEntry("one")
+		h.AddEntry("two")
+		h.AddEntry("three")
+
+		if len(h.Entries) != 3 {
+			t.Fatalf("expected 3 entries, got %d", len(h.Entries))
+		}
+	})
+}
+
+func TestHailOverlay_ComposeResolution(t *testing.T) {
+	t.Parallel()
+
+	t.Run("joins entries with double newline", func(t *testing.T) {
+		t.Parallel()
+		h := makeTestOverlay()
+		h.AddEntry("first")
+		h.AddEntry("second")
+
+		got := h.ComposeResolution()
+		want := "first\n\nsecond"
+		if got != want {
+			t.Errorf("expected %q, got %q", want, got)
+		}
+	})
+
+	t.Run("includes remaining input", func(t *testing.T) {
+		t.Parallel()
+		h := makeTestOverlay()
+		h.AddEntry("first")
+		h.Input.SetValue("still typing")
+
+		got := h.ComposeResolution()
+		want := "first\n\nstill typing"
+		if got != want {
+			t.Errorf("expected %q, got %q", want, got)
+		}
+	})
+
+	t.Run("empty entries and input returns empty", func(t *testing.T) {
+		t.Parallel()
+		h := makeTestOverlay()
+		got := h.ComposeResolution()
+		if got != "" {
+			t.Errorf("expected empty string, got %q", got)
+		}
+	})
+
+	t.Run("only remaining input", func(t *testing.T) {
+		t.Parallel()
+		h := makeTestOverlay()
+		h.Input.SetValue("solo message")
+		got := h.ComposeResolution()
+		if got != "solo message" {
+			t.Errorf("expected %q, got %q", "solo message", got)
+		}
+	})
+}
+
+func TestHailOverlay_OptionShortcut(t *testing.T) {
+	t.Parallel()
+
+	t.Run("single letter resolves immediately with no prior entries", func(t *testing.T) {
+		t.Parallel()
+		ch := make(chan string, 1)
+		m := makeModelWithHailCh(ch)
+		m.Hail.Input.SetValue("a")
+
+		result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+		updated := result.(AppModel)
+
+		if updated.Hail != nil {
+			t.Error("expected hail to be resolved")
+		}
+		select {
+		case got := <-ch:
+			if got != "incremental" {
+				t.Errorf("expected %q, got %q", "incremental", got)
+			}
+		default:
+			t.Error("expected response on channel")
+		}
+	})
+
+	t.Run("single letter adds entry when prior entries exist", func(t *testing.T) {
+		t.Parallel()
+		m := makeModelWithHail()
+		m.Hail.AddEntry("previous message")
+		m.Hail.Input.SetValue("a")
+
+		result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+		updated := result.(AppModel)
+
+		if updated.Hail == nil {
+			t.Error("expected hail to still be active (entry added, not resolved)")
+		}
+		if len(updated.Hail.Entries) != 2 {
+			t.Errorf("expected 2 entries, got %d", len(updated.Hail.Entries))
+		}
+	})
+}
+
+func TestHailOverlay_ToggleMode(t *testing.T) {
+	t.Parallel()
+
+	t.Run("toggles compose to scroll", func(t *testing.T) {
+		t.Parallel()
+		h := makeTestOverlay()
+		if h.Mode != HailModeCompose {
+			t.Fatal("expected initial mode to be compose")
+		}
+		h.ToggleMode()
+		if h.Mode != HailModeScroll {
+			t.Error("expected mode to be scroll after toggle")
+		}
+	})
+
+	t.Run("toggles scroll back to compose", func(t *testing.T) {
+		t.Parallel()
+		h := makeTestOverlay()
+		h.ToggleMode() // compose -> scroll
+		h.ToggleMode() // scroll -> compose
+		if h.Mode != HailModeCompose {
+			t.Error("expected mode to be compose after double toggle")
+		}
+	})
+}
+
+func TestHailOverlay_CtrlDSubmit(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ctrl+d submits composed resolution", func(t *testing.T) {
+		t.Parallel()
+		ch := make(chan string, 1)
+		m := makeModelWithHailCh(ch)
+		m.Hail.AddEntry("first point")
+		m.Hail.AddEntry("second point")
+		m.Hail.Input.SetValue("third point")
+
+		result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlD})
+		updated := result.(AppModel)
+
+		if updated.Hail != nil {
+			t.Error("expected hail to be resolved after ctrl+d")
+		}
+		select {
+		case got := <-ch:
+			want := "first point\n\nsecond point\n\nthird point"
+			if got != want {
+				t.Errorf("expected %q, got %q", want, got)
+			}
+		default:
+			t.Error("expected response on channel")
+		}
+	})
+}
+
+func TestHailOverlay_ViewWithEntries(t *testing.T) {
+	t.Parallel()
+
+	t.Run("renders composed entries", func(t *testing.T) {
+		t.Parallel()
+		h := makeTestOverlay()
+		h.AddEntry("my first point")
+		h.AddEntry("my second point")
+
+		view := h.View(80, 24)
+		if !strings.Contains(view, "you: my first point") {
+			t.Error("expected view to contain first entry")
+		}
+		if !strings.Contains(view, "you: my second point") {
+			t.Error("expected view to contain second entry")
+		}
+	})
+
+	t.Run("footer hint changes with entries", func(t *testing.T) {
+		t.Parallel()
+		h := makeTestOverlay()
+
+		viewEmpty := h.View(80, 24)
+		if !strings.Contains(viewEmpty, "enter: add message") {
+			t.Error("expected empty-state hint")
+		}
+
+		h.AddEntry("something")
+		viewWithEntries := h.View(80, 24)
+		if !strings.Contains(viewWithEntries, "ctrl+d: submit") {
+			t.Error("expected entries-state hint with ctrl+d")
+		}
+	})
+}
+
 // --- helpers ---
 
 // newTestInput creates a textinput.Model pre-populated with the given value.

@@ -26,10 +26,26 @@ var (
 				Padding(0, 1)
 )
 
+// DialogueEntry represents a single composed message in the hail dialogue.
+type DialogueEntry struct {
+	Text string
+}
+
+// HailMode indicates whether the hail overlay is in compose or scroll mode.
+type HailMode int
+
+const (
+	// HailModeCompose is the default — textinput is focused for typing.
+	HailModeCompose HailMode = iota
+	// HailModeScroll allows arrow keys to scroll the context/entries area.
+	HailModeScroll
+)
+
 // HailOverlay renders a red-bordered floating overlay for human decision
 // requests. It displays phase context, discovery detail, selectable options,
-// and a free-text input line. The overlay is driven by MsgHail messages from
-// the fabric and floats centered over the board view with the background dimmed.
+// and a multi-message dialogue input. The overlay is driven by MsgHail messages
+// from the fabric and floats centered over the board view with the background
+// dimmed.
 type HailOverlay struct {
 	PhaseID    string
 	QuasarID   string
@@ -41,6 +57,10 @@ type HailOverlay struct {
 	ResponseCh chan<- string
 	Width      int
 	IsCritical bool // true for blocker-kind hails that need red highlighting
+
+	Entries      []DialogueEntry // composed messages
+	Mode         HailMode        // compose (textinput focused) vs scroll
+	ScrollOffset int             // manual scroll position for context/entries area
 }
 
 // NewHailOverlay creates a hail overlay from a MsgHail and optional context.
@@ -50,6 +70,7 @@ func NewHailOverlay(msg MsgHail, responseCh chan<- string) *HailOverlay {
 	ti.Prompt = "▸ "
 	ti.Placeholder = "type a letter or free-text response"
 	ti.CharLimit = 256
+	ti.Width = 50
 	ti.Focus()
 
 	// Extract options from the discovery detail by looking for lines
@@ -118,9 +139,42 @@ func (h *HailOverlay) HandleInput() string {
 	return val
 }
 
+// AddEntry appends the current input text as a new dialogue entry and clears
+// the input for the next message.
+func (h *HailOverlay) AddEntry(text string) {
+	h.Entries = append(h.Entries, DialogueEntry{Text: text})
+	h.Input.SetValue("")
+}
+
+// ComposeResolution joins all dialogue entries plus any remaining input text
+// into a single response string separated by double newlines.
+func (h *HailOverlay) ComposeResolution() string {
+	var parts []string
+	for _, e := range h.Entries {
+		parts = append(parts, e.Text)
+	}
+	remaining := strings.TrimSpace(h.Input.Value())
+	if remaining != "" {
+		parts = append(parts, remaining)
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+// ToggleMode switches between compose and scroll modes, focusing or blurring
+// the textinput accordingly.
+func (h *HailOverlay) ToggleMode() {
+	if h.Mode == HailModeCompose {
+		h.Mode = HailModeScroll
+		h.Input.Blur()
+	} else {
+		h.Mode = HailModeCompose
+		h.Input.Focus()
+	}
+}
+
 // View renders the hail overlay box content (without centering — the caller
 // handles centering and dimming).
-func (h HailOverlay) View(width, _ int) string {
+func (h *HailOverlay) View(width, _ int) string {
 	var b strings.Builder
 
 	// Constrain overlay width to terminal width with padding.
@@ -131,6 +185,10 @@ func (h HailOverlay) View(width, _ int) string {
 	if overlayWidth < 30 {
 		overlayWidth = 30
 	}
+
+	// Dynamically set textinput width based on overlay dimensions.
+	// Account for border (2) + padding (4) = 6 chars of chrome.
+	h.Input.Width = overlayWidth - 6
 
 	// Header — critical hails get a more urgent indicator.
 	var header string
@@ -175,8 +233,27 @@ func (h HailOverlay) View(width, _ int) string {
 		b.WriteString("\n")
 	}
 
+	// Composed dialogue entries.
+	for _, entry := range h.Entries {
+		b.WriteString(styleHailUserMsg.Render("  you: " + entry.Text))
+		b.WriteString("\n")
+	}
+	if len(h.Entries) > 0 {
+		b.WriteString("\n")
+	}
+
 	// Text input.
 	b.WriteString(h.Input.View())
+	b.WriteString("\n")
+
+	// Footer hints.
+	var hint string
+	if len(h.Entries) > 0 {
+		hint = "enter: add  ctrl+d: submit  tab: scroll  esc: dismiss"
+	} else {
+		hint = "enter: add message  ctrl+d: submit  esc: dismiss"
+	}
+	b.WriteString(styleHailFooterHint.Render(hint))
 
 	overlayStyle := styleHailOverlay
 	if h.IsCritical {

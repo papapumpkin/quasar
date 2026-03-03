@@ -383,6 +383,16 @@ var (
 	// styleHailOption styles option labels (a/b/c) in blueshift cyan.
 	styleHailOption = lipgloss.NewStyle().
 			Foreground(colorBlueshift)
+
+	// styleHailUserMsg styles composed dialogue entries in the hail overlay.
+	styleHailUserMsg = lipgloss.NewStyle().
+				Foreground(colorBlueshift).
+				Italic(true)
+
+	// styleHailFooterHint styles the keybinding hint line at the bottom of the overlay.
+	styleHailFooterHint = lipgloss.NewStyle().
+				Foreground(colorMuted).
+				Italic(true)
 )
 
 // Toast notification styles.

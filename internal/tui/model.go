@@ -634,6 +634,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	}
 
+	// Forward non-key messages (e.g. cursor.BlinkMsg) to the active hail
+	// overlay's textinput so the cursor blinks while the overlay is open.
+	if m.Hail != nil {
+		if _, isKey := msg.(tea.KeyMsg); !isKey {
+			var cmd tea.Cmd
+			m.Hail.Input, cmd = m.Hail.Input.Update(msg)
+			cmds = append(cmds, cmd)
+		}
+	}
+
 	return m, tea.Batch(cmds...)
 }
 
@@ -1597,16 +1607,56 @@ func (m *AppModel) resolveGate(action nebula.GateAction) {
 func (m AppModel) handleHailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.Keys.Back):
+		// Esc: dismiss with empty response.
 		m.resolveHail("")
 		return m, nil
-	case key.Matches(msg, m.Keys.Enter):
-		response := m.Hail.HandleInput()
+
+	case msg.String() == "ctrl+d":
+		// Ctrl+D: submit all composed entries + remaining input.
+		response := m.Hail.ComposeResolution()
 		if response != "" {
 			m.resolveHail(response)
 		}
 		return m, nil
+
+	case msg.String() == "tab":
+		// Tab: toggle between compose and scroll modes.
+		m.Hail.ToggleMode()
+		return m, nil
+
+	case key.Matches(msg, m.Keys.Enter):
+		val := strings.TrimSpace(m.Hail.Input.Value())
+		if val == "" {
+			return m, nil
+		}
+		// Single-letter option shortcut on first entry (no prior entries).
+		if len(val) == 1 && len(m.Hail.Options) > 0 && len(m.Hail.Entries) == 0 {
+			idx := int(val[0] - 'a')
+			if idx >= 0 && idx < len(m.Hail.Options) {
+				m.resolveHail(m.Hail.Options[idx])
+				return m, nil
+			}
+		}
+		// Add as dialogue entry.
+		m.Hail.AddEntry(val)
+		return m, nil
+
 	default:
-		// Forward the key to the textinput widget.
+		// In scroll mode, arrow keys scroll the context area.
+		if m.Hail.Mode == HailModeScroll {
+			switch {
+			case key.Matches(msg, m.Keys.Up):
+				if m.Hail.ScrollOffset > 0 {
+					m.Hail.ScrollOffset--
+				}
+				return m, nil
+			case key.Matches(msg, m.Keys.Down):
+				m.Hail.ScrollOffset++
+				return m, nil
+			}
+			return m, nil
+		}
+		// Compose mode: forward the key to the textinput widget.
 		var cmd tea.Cmd
 		m.Hail.Input, cmd = m.Hail.Input.Update(msg)
 		return m, cmd
@@ -2301,6 +2351,11 @@ func (m AppModel) buildFooter() Footer {
 	// When the diff file list is active, show dedicated diff-mode bindings.
 	if m.ShowDiff && m.DiffFileList != nil {
 		f.Bindings = DiffFileListFooterBindings(m.Keys)
+		return f
+	}
+
+	if m.Hail != nil {
+		f.Bindings = HailOverlayFooterBindings(m.Keys)
 		return f
 	}
 
