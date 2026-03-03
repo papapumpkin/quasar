@@ -1,18 +1,25 @@
 version = 1
 nebula_name = 'pulsar'
+total_cost_usd = 3.16833245
 
 [phases]
 [phases.bus-impl]
 bead_id = 'quasar-qunm'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-02T23:31:03.650775-05:00
-updated_at = 2026-03-02T23:31:03.650775-05:00
+updated_at = 2026-03-02T23:44:58.5079-05:00
 
 [phases.bus-interface]
 bead_id = 'quasar-8wn4'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-02T23:31:03.5493-05:00
-updated_at = 2026-03-02T23:31:04.362452-05:00
+updated_at = 2026-03-02T23:44:58.494844-05:00
+
+[phases.bus-interface.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean typed event bus interface with comprehensive Kind vocabulary covering all domain events; prior findings (Plan*, Hail, StaleWarning, single-task hail variants) fully resolved; minor coverage gaps for TUI-internal messages are acceptable.'
 
 [phases.cli-adapter]
 bead_id = 'quasar-dmlg'
@@ -46,6 +53,6 @@ updated_at = 2026-03-02T23:31:03.869683-05:00
 
 [phases.tui-subscriber]
 bead_id = 'quasar-54nh'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-02T23:31:03.758544-05:00
-updated_at = 2026-03-02T23:31:03.758544-05:00
+updated_at = 2026-03-02T23:44:58.507589-05:00

@@ -17,6 +17,13 @@ var allowedColocations = map[string]map[string]bool{
 	"beads": {
 		"Client": true,
 	},
+	// Bus defines the typed event bus interface alongside MemoryBus, the
+	// canonical in-process implementation. Consumers (tui, telemetry, nebula)
+	// import the Bus and Subscription interfaces.
+	"bus": {
+		"Bus":          true,
+		"Subscription": true,
+	},
 	// Strategy pattern: multiple strategy implementations live alongside the interface.
 	"dag": {
 		"ReportStrategy": true,
