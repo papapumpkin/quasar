@@ -256,6 +256,34 @@ type Plan struct {
 	Actions    []Action
 }
 
+// DecomposeFinding is a minimal finding representation used for decomposition context.
+// It avoids importing internal/loop to prevent circular dependencies.
+type DecomposeFinding struct {
+	Severity    string
+	Description string
+	Cycle       int
+}
+
+// HealingPolicy controls whether and how healing is attempted.
+type HealingPolicy struct {
+	Enabled       bool    // master switch; false = never heal
+	MaxAttempts   int     // per-phase healing attempts (default 1)
+	BudgetReserve float64 // USD reserved from nebula budget for healing phases
+}
+
+// PhaseRunnerResult holds the outcome of a single phase execution.
+type PhaseRunnerResult struct {
+	TotalCostUSD   float64
+	CyclesUsed     int
+	Report         *agent.ReviewReport
+	BaseCommitSHA  string             // HEAD at start of the phase
+	FinalCommitSHA string             // last cycle's sealed SHA (or current HEAD as fallback)
+	CycleCommits   []string           // per-cycle sealed commit SHAs (index = cycle-1)
+	Decompose      bool               // true if the loop exited due to a struggle signal
+	StruggleReason string             // human-readable reason from StruggleSignal.Reason
+	AllFindings    []DecomposeFinding // accumulated findings at time of decomposition
+}
+
 // WorkerResult records the outcome of a single worker execution.
 type WorkerResult struct {
 	PhaseID string

@@ -1,6 +1,6 @@
-// Package nebula provides decomposition graph surgery for replacing a struggling
+// Package worker provides decomposition graph surgery for replacing a struggling
 // phase with multiple sub-phases in the live DAG.
-package nebula
+package worker
 
 import (
 	"fmt"

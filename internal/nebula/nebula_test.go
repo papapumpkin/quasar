@@ -174,9 +174,9 @@ func TestGraph_Sort(t *testing.T) {
 		{ID: "c", DependsOn: []string{"a", "b"}},
 	}
 
-	g, err := phasesToDAG(phases)
+	g, err := PhasesToDAG(phases)
 	if err != nil {
-		t.Fatalf("phasesToDAG failed: %v", err)
+		t.Fatalf("PhasesToDAG failed: %v", err)
 	}
 	sorted, err := g.TopologicalSort()
 	if err != nil {
@@ -203,7 +203,7 @@ func TestGraph_SortCycleDetection(t *testing.T) {
 		{ID: "y", DependsOn: []string{"x"}},
 	}
 
-	_, err := phasesToDAG(phases)
+	_, err := PhasesToDAG(phases)
 	if err == nil {
 		t.Fatal("expected cycle detection error")
 	}
@@ -219,7 +219,7 @@ func TestGraph_Ready(t *testing.T) {
 		{ID: "c"},
 	}
 
-	g, _ := phasesToDAG(phases)
+	g, _ := PhasesToDAG(phases)
 
 	// Initially, a and c should be ready.
 	ready := g.Ready(map[string]bool{})
@@ -1176,7 +1176,7 @@ func TestGraph_ComputeWaves_Linear(t *testing.T) {
 		{ID: "b", DependsOn: []string{"a"}},
 		{ID: "c", DependsOn: []string{"b"}},
 	}
-	g, _ := phasesToDAG(phases)
+	g, _ := PhasesToDAG(phases)
 	waves, err := g.ComputeWaves()
 	if err != nil {
 		t.Fatalf("ComputeWaves failed: %v", err)
@@ -1203,7 +1203,7 @@ func TestGraph_ComputeWaves_Parallel(t *testing.T) {
 		{ID: "c"},
 		{ID: "d", DependsOn: []string{"a", "b", "c"}},
 	}
-	g, _ := phasesToDAG(phases)
+	g, _ := PhasesToDAG(phases)
 	waves, err := g.ComputeWaves()
 	if err != nil {
 		t.Fatalf("ComputeWaves failed: %v", err)
@@ -1229,8 +1229,8 @@ func TestGraph_ComputeWaves_Cycle(t *testing.T) {
 		{ID: "x", DependsOn: []string{"y"}},
 		{ID: "y", DependsOn: []string{"x"}},
 	}
-	// phasesToDAG detects cycles during edge addition.
-	_, err := phasesToDAG(phases)
+	// PhasesToDAG detects cycles during edge addition.
+	_, err := PhasesToDAG(phases)
 	if err == nil {
 		t.Fatal("expected cycle detection error")
 	}
@@ -1245,7 +1245,7 @@ func TestGraph_ComputeWaves_WaveNumbers(t *testing.T) {
 		{ID: "a"},
 		{ID: "b", DependsOn: []string{"a"}},
 	}
-	g, _ := phasesToDAG(phases)
+	g, _ := PhasesToDAG(phases)
 	waves, err := g.ComputeWaves()
 	if err != nil {
 		t.Fatalf("ComputeWaves failed: %v", err)

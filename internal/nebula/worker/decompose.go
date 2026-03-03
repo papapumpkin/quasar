@@ -1,4 +1,4 @@
-package nebula
+package worker
 
 import (
 	"context"
@@ -9,14 +9,6 @@ import (
 
 	"github.com/papapumpkin/quasar/internal/agent"
 )
-
-// DecomposeFinding is a minimal finding representation used for decomposition context.
-// It avoids importing internal/loop to prevent circular dependencies.
-type DecomposeFinding struct {
-	Severity    string
-	Description string
-	Cycle       int
-}
 
 // DecomposeResult holds the output of a decomposition architect invocation.
 type DecomposeResult struct {

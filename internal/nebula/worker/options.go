@@ -9,19 +9,6 @@ import (
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
-// PhaseRunnerResult holds the outcome of a single phase execution.
-type PhaseRunnerResult struct {
-	TotalCostUSD   float64
-	CyclesUsed     int
-	Report         *agent.ReviewReport
-	BaseCommitSHA  string             // HEAD at start of the phase
-	FinalCommitSHA string             // last cycle's sealed SHA (or current HEAD as fallback)
-	CycleCommits   []string           // per-cycle sealed commit SHAs (index = cycle-1)
-	Decompose      bool               // true if the loop exited due to a struggle signal
-	StruggleReason string             // human-readable reason from StruggleSignal.Reason
-	AllFindings    []DecomposeFinding // accumulated findings at time of decomposition
-}
-
 // PhaseRunner is the interface for executing a phase (satisfied by loop.Loop).
 type PhaseRunner interface {
 	RunExistingPhase(ctx context.Context, phaseID, beadID, phaseTitle, phaseDescription string, exec ResolvedExecution) (*PhaseRunnerResult, error)

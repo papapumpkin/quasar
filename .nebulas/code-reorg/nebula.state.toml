@@ -64,10 +64,10 @@ needs_human_review = false
 summary = 'Manual extraction: moved 10 source files and 19 test files to internal/nebula/worker/, updated all package declarations, removed leftover shell scripts.'
 
 [phases.final-verification]
-bead_id = 'quasar-t7vi'
-status = 'created'
+bead_id = 'quasar-zgym'
+status = 'in_progress'
 created_at = 2026-03-02T14:32:43.186449-05:00
-updated_at = 2026-03-02T19:02:54.476691-05:00
+updated_at = 2026-03-02T21:54:24.92027-05:00
 
 [phases.fix-external-imports]
 bead_id = 'quasar-qag5'

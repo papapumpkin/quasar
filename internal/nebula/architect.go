@@ -108,7 +108,7 @@ func RunArchitect(ctx context.Context, invoker agent.Invoker, req ArchitectReque
 	}
 
 	// Apply defaults from the manifest.
-	applyDefaults(&parsed.PhaseSpec, req.Nebula.Manifest.Defaults)
+	ApplyDefaults(&parsed.PhaseSpec, req.Nebula.Manifest.Defaults)
 
 	// Validate the generated phase against the existing DAG.
 	dagErrors := validateAgainstDAG(parsed, req)
@@ -258,7 +258,7 @@ func parseArchitectOutput(output string) (*ArchitectResult, error) {
 	filename := strings.TrimSpace(afterMarker[:newlineIdx])
 
 	// Sanitize the filename to prevent path traversal.
-	if err := validateFilename(filename); err != nil {
+	if err := ValidateFilename(filename); err != nil {
 		return nil, fmt.Errorf("invalid filename %q: %w", filename, err)
 	}
 
@@ -271,7 +271,7 @@ func parseArchitectOutput(output string) (*ArchitectResult, error) {
 	phaseContent := output[contentStart : contentStart+endIdx]
 
 	// Parse the phase content using the existing frontmatter parser.
-	frontmatter, body, err := splitFrontmatter(phaseContent)
+	frontmatter, body, err := SplitFrontmatter(phaseContent)
 	if err != nil {
 		return nil, fmt.Errorf("parsing architect output frontmatter: %w", err)
 	}
@@ -294,9 +294,9 @@ func parseArchitectOutput(output string) (*ArchitectResult, error) {
 	return result, nil
 }
 
-// validateFilename rejects filenames that contain path traversal components or
+// ValidateFilename rejects filenames that contain path traversal components or
 // directory separators, and ensures the filename ends with ".md".
-func validateFilename(name string) error {
+func ValidateFilename(name string) error {
 	if name == "" {
 		return fmt.Errorf("filename is empty")
 	}
@@ -312,8 +312,8 @@ func validateFilename(name string) error {
 	return nil
 }
 
-// applyDefaults fills in zero-valued fields from the manifest defaults.
-func applyDefaults(spec *PhaseSpec, defaults Defaults) {
+// ApplyDefaults fills in zero-valued fields from the manifest defaults.
+func ApplyDefaults(spec *PhaseSpec, defaults Defaults) {
 	if spec.Type == "" {
 		spec.Type = defaults.Type
 	}
@@ -353,7 +353,7 @@ func validateAgainstDAG(result *ArchitectResult, req ArchitectRequest) []string 
 	}
 
 	// Check for duplicates and cycles using the DAG.
-	d, _ := phasesToDAG(req.Nebula.Phases)
+	d, _ := PhasesToDAG(req.Nebula.Phases)
 	// For refactor mode, remove the old phase from the DAG so it can be re-added cleanly.
 	if req.Mode == ArchitectModeRefactor {
 		_ = d.Remove(req.PhaseID)

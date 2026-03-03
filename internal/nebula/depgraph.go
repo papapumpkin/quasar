@@ -55,7 +55,7 @@ func (d *DependencyInferrer) InferDependencies() (*InferenceResult, error) {
 	applyEdges(phases, byID, mentionEdges)
 
 	// Step 4: Verify the result is a DAG (no cycles).
-	d2, err := phasesToDAG(phases)
+	d2, err := PhasesToDAG(phases)
 	if err != nil {
 		return nil, fmt.Errorf("dependency inference produced a cycle: %w", err)
 	}
@@ -308,10 +308,10 @@ func NewDAGFromPhases(phases []PhaseSpec) (*dag.DAG, error) {
 	return d, nil
 }
 
-// phasesToDAG constructs a *dag.DAG from a slice of phase specs.
+// PhasesToDAG constructs a *dag.DAG from a slice of phase specs.
 // It returns an error wrapping ErrDependencyCycle if adding edges
 // reveals a cycle.
-func phasesToDAG(phases []PhaseSpec) (*dag.DAG, error) {
+func PhasesToDAG(phases []PhaseSpec) (*dag.DAG, error) {
 	d := dag.New()
 	for _, p := range phases {
 		d.AddNodeIdempotent(p.ID, p.Priority)

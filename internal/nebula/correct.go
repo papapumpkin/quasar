@@ -358,7 +358,7 @@ func retryWithFeedback(
 	phases := make([]PhaseSpec, 0, len(results))
 	var warnings []string
 	for _, r := range results {
-		applyDefaults(&r.PhaseSpec, manifest.Defaults)
+		ApplyDefaults(&r.PhaseSpec, manifest.Defaults)
 		if len(r.Errors) > 0 {
 			for _, e := range r.Errors {
 				warnings = append(warnings, fmt.Sprintf("phase %q: %s", r.PhaseSpec.ID, e))

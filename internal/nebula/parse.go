@@ -44,7 +44,7 @@ func Load(dir string) (*Nebula, error) {
 			continue
 		}
 
-		phase, err := parsePhaseFile(filepath.Join(dir, e.Name()), manifest.Defaults)
+		phase, err := ParsePhaseFile(filepath.Join(dir, e.Name()), manifest.Defaults)
 		if err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", e.Name(), err)
 		}
@@ -59,15 +59,15 @@ func Load(dir string) (*Nebula, error) {
 	}, nil
 }
 
-// parsePhaseFile reads a markdown file with +++ TOML frontmatter.
-func parsePhaseFile(path string, defaults Defaults) (PhaseSpec, error) {
+// ParsePhaseFile reads a markdown file with +++ TOML frontmatter.
+func ParsePhaseFile(path string, defaults Defaults) (PhaseSpec, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return PhaseSpec{}, err
 	}
 
 	content := string(data)
-	frontmatter, body, err := splitFrontmatter(content)
+	frontmatter, body, err := SplitFrontmatter(content)
 	if err != nil {
 		return PhaseSpec{}, err
 	}
@@ -97,14 +97,14 @@ func parsePhaseFile(path string, defaults Defaults) (PhaseSpec, error) {
 	return phase, nil
 }
 
-// splitFrontmatter splits content on +++ delimiters.
+// SplitFrontmatter splits content on +++ delimiters.
 // Expected format:
 //
 //	+++
 //	<TOML>
 //	+++
 //	<body>
-func splitFrontmatter(content string) (string, string, error) {
+func SplitFrontmatter(content string) (string, string, error) {
 	const delim = "+++"
 
 	// Trim leading whitespace/newlines.
@@ -148,7 +148,7 @@ type phaseSpecFrontmatter struct {
 }
 
 // MarshalPhaseFile serializes a PhaseSpec into the +++TOML+++ frontmatter
-// format expected by parsePhaseFile. The spec's Body field is appended after
+// format expected by ParsePhaseFile. The spec's Body field is appended after
 // the closing delimiter.
 func MarshalPhaseFile(spec PhaseSpec) ([]byte, error) {
 	fm := phaseSpecFrontmatter{

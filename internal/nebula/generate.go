@@ -80,7 +80,7 @@ func Generate(ctx context.Context, invoker agent.Invoker, req GenerateRequest) (
 	phases := make([]PhaseSpec, 0, len(results))
 	var warnings []string
 	for _, r := range results {
-		applyDefaults(&r.PhaseSpec, manifest.Defaults)
+		ApplyDefaults(&r.PhaseSpec, manifest.Defaults)
 		if len(r.Errors) > 0 {
 			for _, e := range r.Errors {
 				warnings = append(warnings, fmt.Sprintf("phase %q: %s", r.PhaseSpec.ID, e))
@@ -152,7 +152,7 @@ func parseMultiPhaseOutput(output string) ([]*ArchitectResult, error) {
 		}
 		filename := strings.TrimSpace(afterMarker[:newlineIdx])
 
-		if err := validateFilename(filename); err != nil {
+		if err := ValidateFilename(filename); err != nil {
 			return nil, fmt.Errorf("invalid filename %q in phase block %d: %w", filename, len(results)+1, err)
 		}
 
@@ -165,7 +165,7 @@ func parseMultiPhaseOutput(output string) ([]*ArchitectResult, error) {
 		phaseContent := remaining[contentStart : contentStart+endIdx]
 
 		// Parse the frontmatter and body.
-		frontmatter, body, err := splitFrontmatter(phaseContent)
+		frontmatter, body, err := SplitFrontmatter(phaseContent)
 		if err != nil {
 			return nil, fmt.Errorf("parsing frontmatter for phase %q: %w", filename, err)
 		}

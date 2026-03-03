@@ -164,7 +164,7 @@ func Validate(n *Nebula) []ValidationError {
 	var d *dag.DAG
 	if len(errs) == 0 {
 		var err error
-		d, err = phasesToDAG(n.Phases)
+		d, err = PhasesToDAG(n.Phases)
 		if err != nil {
 			errs = append(errs, ValidationError{
 				Category:   ValCatCycle,

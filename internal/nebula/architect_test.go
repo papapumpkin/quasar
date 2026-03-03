@@ -728,7 +728,7 @@ func TestApplyDefaults(t *testing.T) {
 		t.Parallel()
 
 		spec := PhaseSpec{ID: "test", Title: "Test"}
-		applyDefaults(&spec, defaults)
+		ApplyDefaults(&spec, defaults)
 
 		if spec.Type != "task" {
 			t.Errorf("type = %q, want %q", spec.Type, "task")
@@ -755,7 +755,7 @@ func TestApplyDefaults(t *testing.T) {
 			Labels:   []string{"custom"},
 			Assignee: "someone",
 		}
-		applyDefaults(&spec, defaults)
+		ApplyDefaults(&spec, defaults)
 
 		if spec.Type != "feature" {
 			t.Errorf("type = %q, want %q", spec.Type, "feature")

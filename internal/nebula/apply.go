@@ -53,7 +53,7 @@ func applyCreateBead(ctx context.Context, client beads.Client, phase *PhaseSpec,
 		Type:        phase.Type,
 		Labels:      phase.Labels,
 		Assignee:    phase.Assignee,
-		Priority:    priorityStr(phase.Priority),
+		Priority:    PriorityStr(phase.Priority),
 	})
 	if err != nil {
 		return fmt.Errorf("creating bead for phase %q: %w", phase.ID, err)
@@ -102,7 +102,7 @@ func applyCloseBead(ctx context.Context, client beads.Client, action Action, sta
 	return nil
 }
 
-func priorityStr(p int) string {
+func PriorityStr(p int) string {
 	if p == 0 {
 		return ""
 	}

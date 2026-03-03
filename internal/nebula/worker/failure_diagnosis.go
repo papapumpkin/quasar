@@ -1,4 +1,4 @@
-package nebula
+package worker
 
 import (
 	"context"
@@ -65,16 +65,8 @@ type FailureContext struct {
 	AllFindings     []DecomposeFinding // reuses the existing nebula type
 }
 
-// HealingPolicy controls whether and how healing is attempted.
-type HealingPolicy struct {
-	Enabled       bool    // master switch; false = never heal
-	MaxAttempts   int     // per-phase healing attempts (default 1)
-	BudgetReserve float64 // USD reserved from nebula budget for healing phases
-}
-
 // CanHeal returns true if the diagnosis is healable and policy permits an attempt.
-// attempts is the number of prior healing attempts for this phase.
-func (p HealingPolicy) CanHeal(diag *FailureDiagnosis, attempts int) bool {
+func CanHeal(p HealingPolicy, diag *FailureDiagnosis, attempts int) bool {
 	if !p.Enabled {
 		return false
 	}

@@ -87,7 +87,7 @@ func TestMarshalPhaseFile(t *testing.T) {
 		}
 	})
 
-	t.Run("round-trip with parsePhaseFile", func(t *testing.T) {
+	t.Run("round-trip with ParsePhaseFile", func(t *testing.T) {
 		t.Parallel()
 		original := PhaseSpec{
 			ID:              "roundtrip-test",
@@ -114,9 +114,9 @@ func TestMarshalPhaseFile(t *testing.T) {
 			t.Fatalf("WriteFile: %v", err)
 		}
 
-		parsed, err := parsePhaseFile(path, Defaults{})
+		parsed, err := ParsePhaseFile(path, Defaults{})
 		if err != nil {
-			t.Fatalf("parsePhaseFile: %v", err)
+			t.Fatalf("ParsePhaseFile: %v", err)
 		}
 
 		if parsed.ID != original.ID {
