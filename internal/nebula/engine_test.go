@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/papapumpkin/quasar/internal/bus"
 )
@@ -394,35 +393,12 @@ type mockFabricCloser struct {
 	options []Option
 }
 
-func (m *mockFabricCloser) Close() {
+func (m *mockFabricCloser) Close() error {
 	m.closed = true
+	return nil
 }
 
 func (m *mockFabricCloser) WorkerGroupOptions() []Option {
 	return m.options
 }
 
-// copyTestNebula copies a test nebula directory structure to a temp directory.
-func copyTestNebula(t *testing.T, src, dst string) {
-	t.Helper()
-
-	// Copy nebula.toml and phase files.
-	entries, err := Load(src)
-	if err != nil {
-		t.Fatalf("failed to load source nebula %s: %v", src, err)
-	}
-	_ = entries // Load validates the nebula; we use file-level copy below.
-
-	// Simple file copy using the OS.
-	copyFile := func(name string) {
-		data, err := readFile(src + "/" + name)
-		if err != nil {
-			t.Fatalf("read %s: %v", name, err)
-		}
-		if err := writeFile(dst+"/"+name, data); err != nil {
-			t.Fatalf("write %s: %v", name, err)
-		}
-	}
-	_ = copyFile
-	_ = time.Now // reference time to avoid import issues
-}

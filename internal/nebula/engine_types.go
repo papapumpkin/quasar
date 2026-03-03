@@ -1,6 +1,7 @@
 package nebula
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/papapumpkin/quasar/internal/agent"
@@ -73,6 +74,16 @@ type EngineConfig struct {
 
 	// CacheVerbose enables cache debug logging.
 	CacheVerbose bool
+
+	// MaxWorkersExplicit indicates whether MaxWorkers was explicitly set
+	// by the user (e.g. via --max-workers flag). When false, the manifest
+	// value is used if available.
+	MaxWorkersExplicit bool
+
+	// MaxContextTokensExplicit indicates whether MaxContextTokens was
+	// explicitly set by the user. When false, the manifest value is used
+	// if available.
+	MaxContextTokensExplicit bool
 }
 
 // EnginePhase represents the current lifecycle phase of the engine.
@@ -134,6 +145,20 @@ type EngineResult struct {
 
 	// Err is the first fatal error encountered, if any.
 	Err error
+}
+
+// ValidationFailedError is returned by Engine.Load when the nebula fails
+// validation. It carries the validation context so the caller can display
+// a structured error message.
+type ValidationFailedError struct {
+	Name       string
+	PhaseCount int
+	Errors     []ValidationError
+}
+
+// Error implements the error interface.
+func (e *ValidationFailedError) Error() string {
+	return fmt.Sprintf("nebula %q validation failed with %d error(s)", e.Name, len(e.Errors))
 }
 
 // fabricCloser is a minimal interface for the fabric lifecycle.

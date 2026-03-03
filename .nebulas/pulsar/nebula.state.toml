@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'pulsar'
-total_cost_usd = 17.456782949999997
+total_cost_usd = 22.875683699999996
 
 [phases]
 [phases.bus-impl]
@@ -41,9 +41,15 @@ updated_at = 2026-03-03T00:27:21.616563-05:00
 
 [phases.engine-types]
 bead_id = 'quasar-kbcs'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-02T23:31:04.085631-05:00
-updated_at = 2026-03-03T00:04:47.335561-05:00
+updated_at = 2026-03-03T00:34:48.310031-05:00
+
+[phases.engine-types.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean type definitions for the nebula Engine lifecycle — well-documented, interface-oriented, matches all entanglements, prior finding fixed.'
 
 [phases.producer-migration]
 bead_id = 'quasar-ip76'
