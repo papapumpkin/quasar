@@ -28,10 +28,10 @@ needs_human_review = false
 summary = 'Clean typed event bus interface with comprehensive Kind vocabulary covering all domain events; prior findings (Plan*, Hail, StaleWarning, single-task hail variants) fully resolved; minor coverage gaps for TUI-internal messages are acceptable.'
 
 [phases.cli-adapter]
-bead_id = 'quasar-dmlg'
-status = 'failed'
+bead_id = 'quasar-f6e2'
+status = 'in_progress'
 created_at = 2026-03-02T23:31:04.294997-05:00
-updated_at = 2026-03-03T00:58:23.851653-05:00
+updated_at = 2026-03-03T09:09:32.103368-05:00
 
 [phases.engine-extract]
 bead_id = 'quasar-qc6o'

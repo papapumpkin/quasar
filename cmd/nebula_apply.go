@@ -136,14 +136,7 @@ func resolveEngineConfig(cmd *cobra.Command, args []string) (nebula.EngineConfig
 	maxWorkers, _ := cmd.Flags().GetInt("max-workers")
 	maxContextTokens, _ := cmd.Flags().GetInt("max-context-tokens")
 
-	coderPrompt := agent.DefaultCoderSystemPrompt
-	if cfg.CoderSystemPrompt != "" {
-		coderPrompt = cfg.CoderSystemPrompt
-	}
-	reviewerPrompt := agent.DefaultReviewerSystemPrompt
-	if cfg.ReviewerSystemPrompt != "" {
-		reviewerPrompt = cfg.ReviewerSystemPrompt
-	}
+	coderPrompt, reviewerPrompt := resolvePrompts(cfg)
 
 	return nebula.EngineConfig{
 		NebulaDir:                args[0],
@@ -171,6 +164,48 @@ func resolveEngineConfig(cmd *cobra.Command, args []string) (nebula.EngineConfig
 	}, nil
 }
 
+// resolvePrompts returns the coder and reviewer system prompts,
+// preferring custom prompts from config when set.
+func resolvePrompts(cfg config.Config) (coderPrompt, reviewerPrompt string) {
+	coderPrompt = agent.DefaultCoderSystemPrompt
+	if cfg.CoderSystemPrompt != "" {
+		coderPrompt = cfg.CoderSystemPrompt
+	}
+	reviewerPrompt = agent.DefaultReviewerSystemPrompt
+	if cfg.ReviewerSystemPrompt != "" {
+		reviewerPrompt = cfg.ReviewerSystemPrompt
+	}
+	return coderPrompt, reviewerPrompt
+}
+
+// engineConfigFromSettings builds an EngineConfig from a config.Config
+// and cockpit-specific parameters. This is the counterpart of
+// resolveEngineConfig for the cockpit path, which doesn't have a
+// cobra.Command.
+func engineConfigFromSettings(cfg config.Config, dir string, noSplash bool, maxWorkers int, maxWorkersExplicit bool) nebula.EngineConfig {
+	coderPrompt, reviewerPrompt := resolvePrompts(cfg)
+	return nebula.EngineConfig{
+		NebulaDir:          dir,
+		WorkDir:            cfg.WorkDir,
+		MaxWorkers:         maxWorkers,
+		MaxWorkersExplicit: maxWorkersExplicit,
+		MaxReviewCycles:    cfg.MaxReviewCycles,
+		MaxBudgetUSD:       cfg.MaxBudgetUSD,
+		Model:              cfg.Model,
+		CoderPrompt:        coderPrompt,
+		ReviewerPrompt:     reviewerPrompt,
+		Verbose:            cfg.Verbose,
+		Auto:               true,
+		UseTUI:             true,
+		NoSplash:           noSplash,
+		LintCommands:       cfg.LintCommands,
+		ClaudePath:         cfg.ClaudePath,
+		BeadsPath:          cfg.BeadsPath,
+		CacheOptimization:  cfg.CacheOptimization,
+		CacheVerbose:       cfg.CacheVerbose,
+	}
+}
+
 // runApplyWithTUI runs the nebula execution with the TUI display path.
 // It supports the "next nebula" loop: when the user picks a different
 // nebula from the completion overlay, a new Engine is created and re-run.
@@ -186,69 +221,13 @@ func runApplyWithTUI(
 	fc *fabricComponents,
 ) error {
 	for {
-		phases := buildTUIPhaseInfos(engine.GetNebula(), engine.GetState())
-		tuiProgram := tui.NewNebulaProgram(
-			engine.GetNebula().Manifest.Nebula.Name, phases, ecfg.NebulaDir, ecfg.NoSplash,
-		)
-
-		// Wire bus infrastructure.
-		eventBus := bus.NewMemoryBus()
-		busSub := tui.NewBusSubscriber(tuiProgram, eventBus, 128)
-		busSub.Start()
-
-		// Telemetry bridge (non-fatal).
-		telemetryPath := filepath.Join(".quasar", "telemetry", "current.jsonl")
-		if _, statErr := os.Stat(telemetryPath); statErr == nil {
-			tb := tui.NewTelemetryBridge(tuiProgram, telemetryPath)
-			if startErr := tb.Start(); startErr == nil {
-				defer tb.Stop()
-			}
-		}
-
-		// Build worker options for the TUI path.
-		wgOpts := buildTUIWorkerOpts(engine, invoker, client, ecfg, tuiProgram, eventBus, projectCtx)
-
-		// Run engine in background, block on TUI.
-		prog := tuiProgram
-		cpDir := ecfg.NebulaDir
-		isResume := ecfg.Resume
-		var cpCount int
-		if isResume {
-			if cps, loadErr := checkpoint.LoadAll(cpDir); loadErr == nil {
-				cpCount = len(cps)
-			}
-		}
-		go func() {
-			if isResume {
-				prog.Send(tui.MsgInfo{Msg: fmt.Sprintf("resume mode: found %d checkpoint(s)", cpCount)})
-			}
-			results, runErr := engine.Execute(ctx, wgOpts...)
-			if runErr == nil {
-				cleanupCheckpoints(cpDir)
-			}
-			prog.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
-			if gitResult := engine.PostComplete(context.Background(), runErr == nil); gitResult != nil {
-				prog.Send(tui.MsgGitPostCompletion{Result: gitResult})
-			}
-		}()
-
-		finalModel, tuiErr := tuiProgram.Run()
-		cancel()
-		busSub.Stop()
-		eventBus.Close()
-
-		if tuiErr != nil {
-			return fmt.Errorf("TUI error: %w", tuiErr)
-		}
-
-		appModel, ok := finalModel.(tui.AppModel)
-		if !ok {
-			return nil
+		appModel, err := executeTUIRun(ctx, cancel, engine, invoker, client, ecfg, projectCtx)
+		if err != nil {
+			return err
 		}
 
 		// Handle next-nebula selection.
 		if appModel.NextNebula != "" {
-			var err error
 			engine, ecfg, fc, ctx, cancel, err = prepareNextNebula(
 				appModel.NextNebula, ecfg, invoker, client, fc,
 			)
@@ -267,6 +246,84 @@ func runApplyWithTUI(
 		}
 		return nil
 	}
+}
+
+// executeTUIRun performs a single TUI execution cycle. It creates the TUI
+// program, wires bus/telemetry infrastructure, runs the engine in a
+// background goroutine, and blocks on the TUI. Returns the final AppModel
+// for the caller to interpret.
+func executeTUIRun(
+	ctx context.Context,
+	cancel context.CancelFunc,
+	engine *nebula.Engine,
+	invoker *claude.Invoker,
+	client beads.Client,
+	ecfg nebula.EngineConfig,
+	projectCtx string,
+) (tui.AppModel, error) {
+	ecfg = engine.Config() // pick up manifest-resolved values
+
+	phases := buildTUIPhaseInfos(engine.GetNebula(), engine.GetState())
+	tuiProgram := tui.NewNebulaProgram(
+		engine.GetNebula().Manifest.Nebula.Name, phases, ecfg.NebulaDir, ecfg.NoSplash,
+	)
+
+	// Wire bus infrastructure.
+	eventBus := bus.NewMemoryBus()
+	busSub := tui.NewBusSubscriber(tuiProgram, eventBus, 128)
+	busSub.Start()
+
+	// Telemetry bridge (non-fatal).
+	telemetryPath := filepath.Join(".quasar", "telemetry", "current.jsonl")
+	if _, statErr := os.Stat(telemetryPath); statErr == nil {
+		tb := tui.NewTelemetryBridge(tuiProgram, telemetryPath)
+		if startErr := tb.Start(); startErr == nil {
+			defer tb.Stop()
+		}
+	}
+
+	// Build worker options for the TUI path.
+	wgOpts := buildTUIWorkerOpts(engine, invoker, client, ecfg, tuiProgram, eventBus, projectCtx)
+
+	// Resume checkpoint handling.
+	cpDir := ecfg.NebulaDir
+	isResume := ecfg.Resume
+	var cpCount int
+	if isResume {
+		if cps, loadErr := checkpoint.LoadAll(cpDir); loadErr == nil {
+			cpCount = len(cps)
+		}
+	}
+
+	prog := tuiProgram
+	go func() {
+		if isResume {
+			prog.Send(tui.MsgInfo{Msg: fmt.Sprintf("resume mode: found %d checkpoint(s)", cpCount)})
+		}
+		results, runErr := engine.Execute(ctx, wgOpts...)
+		if runErr == nil {
+			cleanupCheckpoints(cpDir)
+		}
+		prog.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
+		if gitResult := engine.PostComplete(context.Background(), runErr == nil); gitResult != nil {
+			prog.Send(tui.MsgGitPostCompletion{Result: gitResult})
+		}
+	}()
+
+	finalModel, tuiErr := tuiProgram.Run()
+	cancel()
+	busSub.Stop()
+	eventBus.Close()
+
+	if tuiErr != nil {
+		return tui.AppModel{}, fmt.Errorf("TUI error: %w", tuiErr)
+	}
+
+	appModel, ok := finalModel.(tui.AppModel)
+	if !ok {
+		return tui.AppModel{}, nil
+	}
+	return appModel, nil
 }
 
 // runApplyWithStderr runs the nebula execution with the stderr display path.

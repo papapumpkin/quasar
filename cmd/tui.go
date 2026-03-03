@@ -9,9 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
-	"github.com/papapumpkin/quasar/internal/bus"
 	"github.com/papapumpkin/quasar/internal/claude"
 	"github.com/papapumpkin/quasar/internal/config"
 	"github.com/papapumpkin/quasar/internal/nebula"
@@ -139,41 +137,11 @@ type nebulaResult struct {
 	NextNebula   string // user selected a nebula from the picker
 }
 
-// runSelectedNebula loads, validates, and executes a single nebula in TUI mode.
-// It reuses the same setup logic as runNebulaApply's TUI path.
-// maxWorkersExplicit indicates whether the user explicitly set --max-workers;
-// when false, the nebula manifest's MaxWorkers value takes precedence.
+// runSelectedNebula loads, validates, and executes a single nebula in TUI
+// mode. It delegates to the shared executeTUIRun helper for the TUI
+// lifecycle, eliminating duplication with runApplyWithTUI.
 func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSplash bool, maxWorkers int, maxWorkersExplicit bool) nebulaResult {
-	// Load custom prompts.
-	coderPrompt := agent.DefaultCoderSystemPrompt
-	if cfg.CoderSystemPrompt != "" {
-		coderPrompt = cfg.CoderSystemPrompt
-	}
-	reviewerPrompt := agent.DefaultReviewerSystemPrompt
-	if cfg.ReviewerSystemPrompt != "" {
-		reviewerPrompt = cfg.ReviewerSystemPrompt
-	}
-
-	ecfg := nebula.EngineConfig{
-		NebulaDir:          dir,
-		WorkDir:            cfg.WorkDir,
-		MaxWorkers:         maxWorkers,
-		MaxWorkersExplicit: maxWorkersExplicit,
-		MaxReviewCycles:    cfg.MaxReviewCycles,
-		MaxBudgetUSD:       cfg.MaxBudgetUSD,
-		Model:              cfg.Model,
-		CoderPrompt:        coderPrompt,
-		ReviewerPrompt:     reviewerPrompt,
-		Verbose:            cfg.Verbose,
-		Auto:               true,
-		UseTUI:             true,
-		NoSplash:           noSplash,
-		LintCommands:       cfg.LintCommands,
-		ClaudePath:         cfg.ClaudePath,
-		BeadsPath:          cfg.BeadsPath,
-		CacheOptimization:  cfg.CacheOptimization,
-		CacheVerbose:       cfg.CacheVerbose,
-	}
+	ecfg := engineConfigFromSettings(cfg, dir, noSplash, maxWorkers, maxWorkersExplicit)
 
 	invoker := claude.NewInvoker(cfg.ClaudePath, cfg.Verbose)
 	client := &beads.CLI{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
@@ -219,51 +187,18 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 	// Scan project context.
 	projectCtx := scanProjectContext(ctx, engine.WorkDir())
 
-	// Build TUI phases and worker options using shared helpers.
-	ecfg = engine.Config() // pick up manifest-resolved values
-	phases := buildTUIPhaseInfos(engine.GetNebula(), engine.GetState())
-	tuiProgram := tui.NewNebulaProgram(
-		engine.GetNebula().Manifest.Nebula.Name, phases, dir, noSplash,
-	)
-
-	eventBus := bus.NewMemoryBus()
-	busSub := tui.NewBusSubscriber(tuiProgram, eventBus, 128)
-	busSub.Start()
-
-	wgOpts := buildTUIWorkerOpts(engine, invoker, client, ecfg, tuiProgram, eventBus, projectCtx)
-
-	// Run engine in goroutine; block on TUI.
-	prog := tuiProgram
-	go func() {
-		results, runErr := engine.Execute(ctx, wgOpts...)
-		prog.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
-		if gitResult := engine.PostComplete(context.Background(), runErr == nil); gitResult != nil {
-			prog.Send(tui.MsgGitPostCompletion{Result: gitResult})
-		}
-	}()
-
-	finalModel, tuiErr := tuiProgram.Run()
-	cancel()
-	busSub.Stop()
-	eventBus.Close()
-
-	if tuiErr != nil {
-		return nebulaResult{Err: fmt.Errorf("TUI error: %w", tuiErr)}
-	}
-
-	appModel, ok := finalModel.(tui.AppModel)
-	if !ok {
-		return nebulaResult{}
+	// Execute via shared TUI path.
+	appModel, err := executeTUIRun(ctx, cancel, engine, invoker, client, ecfg, projectCtx)
+	if err != nil {
+		return nebulaResult{Err: err}
 	}
 
 	res := nebulaResult{
 		ReturnToHome: appModel.ReturnToHome,
 		NextNebula:   appModel.NextNebula,
 	}
-
 	if appModel.DoneErr != nil && !errors.Is(appModel.DoneErr, nebula.ErrManualStop) {
 		res.Err = appModel.DoneErr
 	}
-
 	return res
 }
