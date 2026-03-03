@@ -95,6 +95,81 @@ func (wg *WorkerGroup) logger() io.Writer {
 	return os.Stderr
 }
 
+// wrapCallbacksForBus augments the existing OnProgress, OnRefactor, OnHotAdd,
+// OnHail, and OnScanning callbacks to also publish the corresponding bus event.
+// The original callback (if non-nil) is called first, then the bus event is
+// published. This preserves stderr-path behavior while adding bus-mediated
+// delivery for the TUI path.
+func (wg *WorkerGroup) wrapCallbacksForBus() {
+	b := wg.Bus
+
+	// Wrap OnProgress to also publish KindNebulaProgress.
+	origProgress := wg.OnProgress
+	wg.OnProgress = func(completed, total, openBeads, closedBeads int, totalCostUSD float64) {
+		if origProgress != nil {
+			origProgress(completed, total, openBeads, closedBeads, totalCostUSD)
+		}
+		ev := bus.New(bus.KindNebulaProgress)
+		ev.Progress = &bus.ProgressPayload{
+			Completed:    completed,
+			Total:        total,
+			OpenBeads:    openBeads,
+			ClosedBeads:  closedBeads,
+			TotalCostUSD: totalCostUSD,
+		}
+		_ = b.Publish(context.Background(), ev)
+	}
+
+	// Wrap OnRefactor to also publish KindPhaseRefactorPending.
+	origRefactor := wg.OnRefactor
+	wg.OnRefactor = func(phaseID string, pending bool) {
+		if origRefactor != nil {
+			origRefactor(phaseID, pending)
+		}
+		if pending {
+			ev := bus.NewPhase(bus.KindPhaseRefactorPending, phaseID)
+			_ = b.Publish(context.Background(), ev)
+		}
+	}
+
+	// Wrap OnHotAdd to also publish KindPhaseHotAdded.
+	origHotAdd := wg.OnHotAdd
+	wg.OnHotAdd = func(phaseID, title string, dependsOn []string) {
+		if origHotAdd != nil {
+			origHotAdd(phaseID, title, dependsOn)
+		}
+		ev := bus.NewPhase(bus.KindPhaseHotAdded, phaseID)
+		ev.HotAdd = &bus.HotAddPayload{
+			Title:     title,
+			DependsOn: dependsOn,
+		}
+		_ = b.Publish(context.Background(), ev)
+	}
+
+	// Wrap OnHail to also publish KindHail.
+	origHail := wg.OnHail
+	wg.OnHail = func(phaseID string, d fabric.Discovery) {
+		if origHail != nil {
+			origHail(phaseID, d)
+		}
+		ev := bus.NewPhase(bus.KindHail, phaseID)
+		ev.Hail = &bus.HailPayload{
+			Discovery: d,
+		}
+		_ = b.Publish(context.Background(), ev)
+	}
+
+	// Wrap OnScanning to also publish KindPhaseScanning.
+	origScanning := wg.OnScanning
+	wg.OnScanning = func(phaseID string) {
+		if origScanning != nil {
+			origScanning(phaseID)
+		}
+		ev := bus.NewPhase(bus.KindPhaseScanning, phaseID)
+		_ = b.Publish(context.Background(), ev)
+	}
+}
+
 // SnapshotNebula returns a deep copy of the Nebula under the WorkerGroup's
 // mutex, making it safe to call from any goroutine.
 func (wg *WorkerGroup) SnapshotNebula() *Nebula {

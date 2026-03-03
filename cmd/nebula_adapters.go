@@ -14,6 +14,7 @@ import (
 
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
+	"github.com/papapumpkin/quasar/internal/bus"
 	"github.com/papapumpkin/quasar/internal/checkpoint"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/loop"
@@ -120,14 +121,17 @@ type tuiLoopAdapter struct {
 	reviewPrompt     string
 	workDir          string
 	fabric           fabric.Fabric // nil when fabric is not configured
+	bus              bus.Bus       // nil = use PhaseUIBridge; non-nil = use BusUIBridge
 	projectContext   string        // Deterministic project snapshot for prompt caching.
 	maxContextTokens int           // Token budget for context injection. 0 = use default.
 	checkpointDir    string        // Directory for checkpoint files. Empty disables checkpointing.
 }
 
 func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, phaseTitle, phaseDescription string, exec nebula.ResolvedExecution) (*nebula.PhaseRunnerResult, error) {
-	// Create a per-phase UI bridge so messages carry the phase ID.
-	phaseUI := tui.NewPhaseUIBridge(a.program, phaseID, a.workDir)
+	// Create a per-phase UI bridge. When the bus is available, use
+	// BusUIBridge so events flow through the bus to BusSubscriber.
+	// Otherwise, fall back to the direct PhaseUIBridge.
+	phaseUI := a.newPhaseUI(phaseID)
 
 	l := &loop.Loop{
 		Invoker:           a.invoker,
@@ -171,7 +175,7 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 	result, err := l.RunExistingTask(ctx, beadID, phaseDescription)
 
 	// After the loop completes, emit fabric events if fabric is available.
-	a.emitFabricEvents(ctx, phaseID, phaseUI)
+	a.emitFabricEvents(ctx, phaseID)
 
 	if err != nil {
 		if result != nil {
