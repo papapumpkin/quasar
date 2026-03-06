@@ -846,24 +846,26 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Gate mode overrides normal keys.
-	if m.Gate != nil {
-		return m.handleGateKey(msg)
-	}
-
-	// Dialogue overlay takes priority over all other overlays.
+	// Dialogue overlay takes highest priority — it renders on top of
+	// everything (dimmed overlay) and must receive keys before the gate
+	// or any other inline overlay.
 	if m.Dialogue != nil {
 		return m.handleDialogueKey(msg)
 	}
 
-	// Hail overlay overrides normal keys when active.
+	// Hail overlay — also a dimmed overlay, takes priority over the gate.
 	if m.Hail != nil {
 		return m.handleHailKey(msg)
 	}
 
-	// Hail list overlay overrides normal keys when active.
+	// Hail list overlay.
 	if m.HailList != nil {
 		return m.handleHailListKey(msg)
+	}
+
+	// Gate mode overrides normal keys.
+	if m.Gate != nil {
+		return m.handleGateKey(msg)
 	}
 
 	// When viewing a single file's diff, route scroll keys to the detail panel.
