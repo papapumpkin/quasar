@@ -13,7 +13,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/bus"
 	"github.com/papapumpkin/quasar/internal/dag"
-	"github.com/papapumpkin/quasar/internal/dialogue"
+	"github.com/papapumpkin/quasar/internal/dialog"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/tycho"
 )
@@ -57,7 +57,7 @@ type WorkerGroup struct {
 	OnRefactor          func(phaseID string, pending bool)        // optional callback for refactor notifications
 	OnHotAdd            HotAddFunc                                // optional callback for hot-added phases
 	OnHail              func(phaseID string, d fabric.Discovery)  // optional callback for hail surfacing
-	Dialogue            dialogue.Opener                           // optional interactive dialogue; when set, escalations use back-and-forth
+	Dialog              dialog.Opener                             // optional interactive dialog; when set, escalations use back-and-forth
 	OnScanning          func(phaseID string)                      // optional callback for fabric scanning notifications
 	Bus                 bus.Bus                                   // optional event bus; when non-nil, callbacks also publish to the bus
 	Invoker             agent.Invoker                             // optional; required for auto-decomposition
@@ -394,10 +394,10 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 			wg:        wg,
 			scheduler: scheduler,
 		},
-		OnHail:   wg.OnHail,   // may be nil — surfaced via cockpit TUI when set
-		Dialogue: wg.Dialogue, // may be nil — interactive escalation when set
-		Waves:    waves,       // may be nil if ComputeWaves failed
-		DAG:      dagGraph,
+		OnHail: wg.OnHail, // may be nil — surfaced via cockpit TUI when set
+		Dialog: wg.Dialog, // may be nil — interactive escalation when set
+		Waves:  waves,     // may be nil if ComputeWaves failed
+		DAG:    dagGraph,
 	}
 
 	// Wire wave-aware scanner when fabric components are available and

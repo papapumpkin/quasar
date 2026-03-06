@@ -69,7 +69,7 @@ type ChatModel struct {
 	// spinner drives the loading animation.
 	spinner spinner.Model
 
-	// ctx is the context for cancelling in-flight AI calls.
+	// ctx is the context for canceling in-flight AI calls.
 	ctx    context.Context
 	cancel context.CancelFunc
 

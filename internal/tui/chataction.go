@@ -28,7 +28,7 @@ func (m *ChatModel) resetStreamingState() {
 }
 
 // startNewConversation creates a new empty conversation and focuses the chat input.
-// Any in-flight inference is cancelled so stale chunks don't leak into the new conversation.
+// Any in-flight inference is canceled so stale chunks don't leak into the new conversation.
 func (m ChatModel) startNewConversation() (tea.Model, tea.Cmd) {
 	// Cancel any in-flight inference from the previous conversation.
 	if m.streaming || m.ChatView.Loading {
@@ -254,7 +254,7 @@ func (m ChatModel) handleChatResponse(msg MsgChatResponse) (tea.Model, tea.Cmd) 
 
 // handleChatError processes an inference error. Context cancellation
 // errors are treated specially: the partial response is preserved with
-// a "[cancelled]" suffix. Other errors are displayed inline as system
+// a "[canceled]" suffix. Other errors are displayed inline as system
 // messages.
 func (m ChatModel) handleChatError(msg MsgChatError) (tea.Model, tea.Cmd) {
 	// Discard errors from a previous conversation.
@@ -265,11 +265,11 @@ func (m ChatModel) handleChatError(msg MsgChatError) (tea.Model, tea.Cmd) {
 	m.resetStreamingState()
 
 	if errors.Is(msg.Err, context.Canceled) {
-		// Preserve partial response with cancelled suffix.
+		// Preserve partial response with canceled suffix.
 		if m.ActiveConv != nil {
 			msgs := m.ActiveConv.Messages
 			if len(msgs) > 0 && msgs[len(msgs)-1].Role == chat.RoleAssistant {
-				m.ActiveConv.Messages[len(msgs)-1].Content += " [cancelled]"
+				m.ActiveConv.Messages[len(msgs)-1].Content += " [canceled]"
 				// Sync ChatView — replace last message content.
 				cvMsgs := m.ChatView.Messages
 				if len(cvMsgs) > 0 {

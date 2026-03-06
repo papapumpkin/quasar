@@ -13,7 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/papapumpkin/quasar/internal/dialogue"
+	"github.com/papapumpkin/quasar/internal/dialog"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/nebula"
 	"github.com/papapumpkin/quasar/internal/tycho"
@@ -108,8 +108,8 @@ type AppModel struct {
 	PendingHails []ui.HailInfo    // unresolved hails tracked via MsgHailReceived/MsgHailResolved
 	HailList     *HailListOverlay // non-nil when the hail list overlay is active
 
-	// Interactive dialogue — back-and-forth session with an agent/scheduler.
-	Dialogue *DialogueOverlay // non-nil when a dialogue overlay is active
+	// Interactive dialog — back-and-forth session with an agent/scheduler.
+	Dialog *DialogOverlay // non-nil when a dialog overlay is active
 
 	// Home mode state (landing page).
 	HomeCursor      int            // cursor position in the home nebula list
@@ -200,19 +200,19 @@ func resourceTickCmd() tea.Cmd {
 	})
 }
 
-// waitForDialogueMsg returns a Cmd that blocks on the session's ToHuman
-// channel and delivers the next agent message as MsgDialogueAgentMsg.
-// When the session is closed, it delivers MsgDialogueClosed instead.
-func waitForDialogueMsg(sess *dialogue.MemSession) tea.Cmd {
+// waitForDialogMsg returns a Cmd that blocks on the session's ToHuman
+// channel and delivers the next agent message as MsgDialogAgentMsg.
+// When the session is closed, it delivers MsgDialogClosed instead.
+func waitForDialogMsg(sess *dialog.MemSession) tea.Cmd {
 	return func() tea.Msg {
 		select {
 		case msg, ok := <-sess.ToHuman():
 			if !ok {
-				return MsgDialogueClosed{SessionID: sess.ID()}
+				return MsgDialogClosed{SessionID: sess.ID()}
 			}
-			return MsgDialogueAgentMsg{SessionID: sess.ID(), Message: msg}
+			return MsgDialogAgentMsg{SessionID: sess.ID(), Message: msg}
 		case <-sess.Closed():
-			return MsgDialogueClosed{SessionID: sess.ID()}
+			return MsgDialogClosed{SessionID: sess.ID()}
 		}
 	}
 }
@@ -615,23 +615,23 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.removePendingHail(msg.ID)
 		m.syncHailBadge()
 
-	// --- Interactive dialogue ---
-	case MsgDialogueOpen:
-		m.Dialogue = NewDialogueOverlay(msg.Session)
-		cmds = append(cmds, m.Dialogue.Input.Focus(), waitForDialogueMsg(msg.Session))
-		toast, cmd := NewToast("interactive dialogue opened", true)
+	// --- Interactive dialog ---
+	case MsgDialogOpen:
+		m.Dialog = NewDialogOverlay(msg.Session)
+		cmds = append(cmds, m.Dialog.Input.Focus(), waitForDialogMsg(msg.Session))
+		toast, cmd := NewToast("interactive dialog opened", true)
 		m.Toasts = append(m.Toasts, toast)
 		cmds = append(cmds, cmd)
 
-	case MsgDialogueAgentMsg:
-		if m.Dialogue != nil && m.Dialogue.Session.ID() == msg.SessionID {
-			m.Dialogue.AddAgentMessage(msg.Message)
-			cmds = append(cmds, waitForDialogueMsg(m.Dialogue.Session))
+	case MsgDialogAgentMsg:
+		if m.Dialog != nil && m.Dialog.Session.ID() == msg.SessionID {
+			m.Dialog.AddAgentMessage(msg.Message)
+			cmds = append(cmds, waitForDialogMsg(m.Dialog.Session))
 		}
 
-	case MsgDialogueClosed:
-		if m.Dialogue != nil && m.Dialogue.Session.ID() == msg.SessionID {
-			m.Dialogue = nil
+	case MsgDialogClosed:
+		if m.Dialog != nil && m.Dialog.Session.ID() == msg.SessionID {
+			m.Dialog = nil
 		}
 
 	case MsgScratchpadEntry:
@@ -691,9 +691,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Forward non-key messages (e.g. cursor.BlinkMsg) to active overlays'
 	// textinput so the cursor blinks while the overlay is open.
 	if _, isKey := msg.(tea.KeyMsg); !isKey {
-		if m.Dialogue != nil {
+		if m.Dialog != nil {
 			var cmd tea.Cmd
-			m.Dialogue.Input, cmd = m.Dialogue.Input.Update(msg)
+			m.Dialog.Input, cmd = m.Dialog.Input.Update(msg)
 			cmds = append(cmds, cmd)
 		}
 		if m.Hail != nil {
@@ -846,11 +846,11 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Dialogue overlay takes highest priority — it renders on top of
+	// Dialog overlay takes highest priority — it renders on top of
 	// everything (dimmed overlay) and must receive keys before the gate
 	// or any other inline overlay.
-	if m.Dialogue != nil {
-		return m.handleDialogueKey(msg)
+	if m.Dialog != nil {
+		return m.handleDialogKey(msg)
 	}
 
 	// Hail overlay — also a dimmed overlay, takes priority over the gate.
@@ -1668,13 +1668,13 @@ func (m *AppModel) resolveGate(action nebula.GateAction) {
 	}
 }
 
-// handleDialogueKey delegates key events to the dialogue overlay and
+// handleDialogKey delegates key events to the dialog overlay and
 // interprets the resulting action.
-func (m AppModel) handleDialogueKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	action, cmd := m.Dialogue.HandleKey(msg, m.Keys)
-	if action == DialogueClosed {
-		m.Dialogue = nil
-		toast, toastCmd := NewToast("dialogue closed", false)
+func (m AppModel) handleDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	action, cmd := m.Dialog.HandleKey(msg, m.Keys)
+	if action == DialogClosed {
+		m.Dialog = nil
+		toast, toastCmd := NewToast("dialog closed", false)
 		m.Toasts = append(m.Toasts, toast)
 		return m, toastCmd
 	}
@@ -1736,7 +1736,7 @@ func (m AppModel) handleHailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		}
-		// Add as dialogue entry.
+		// Add as dialog entry.
 		m.Hail.AddEntry(val)
 		return m, nil
 
@@ -2288,10 +2288,10 @@ func (m AppModel) View() string {
 
 	base := lipgloss.JoinVertical(lipgloss.Left, sections...)
 
-	// Dialogue overlay — rendered over a dimmed background for interactive sessions.
-	if m.Dialogue != nil {
+	// Dialog overlay — rendered over a dimmed background for interactive sessions.
+	if m.Dialog != nil {
 		dimmed := styleOverlayDimmed.Width(m.Width).Height(m.Height).Render(base)
-		overlayContent := m.Dialogue.View(m.Width, m.Height)
+		overlayContent := m.Dialog.View(m.Width, m.Height)
 		overlayBox := centerOverlay(overlayContent, m.Width, m.Height)
 		return compositeOverlay(dimmed, overlayBox, m.Width, m.Height)
 	}
@@ -2461,8 +2461,8 @@ func (m AppModel) buildFooter() Footer {
 		return f
 	}
 
-	if m.Dialogue != nil {
-		f.Bindings = DialogueFooterBindings()
+	if m.Dialog != nil {
+		f.Bindings = DialogFooterBindings()
 		return f
 	}
 

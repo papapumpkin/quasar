@@ -162,7 +162,7 @@ func TestEngine_Run_NilBus_NoPanic(t *testing.T) {
 	}
 }
 
-func TestEngine_Run_ContextCancelled(t *testing.T) {
+func TestEngine_Run_ContextCanceled(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())

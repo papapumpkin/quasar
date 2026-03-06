@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/papapumpkin/quasar/internal/dag"
-	"github.com/papapumpkin/quasar/internal/dialogue"
+	"github.com/papapumpkin/quasar/internal/dialog"
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
@@ -74,10 +74,10 @@ type Scheduler struct {
 	// If nil, escalations are logged but not surfaced.
 	OnHail func(phaseID string, discovery fabric.Discovery)
 
-	// Dialogue opens an interactive session with the human when set.
+	// Dialog opens an interactive session with the human when set.
 	// Used for escalations that benefit from back-and-forth resolution.
 	// When nil, escalations fall back to the fire-and-forget OnHail path.
-	Dialogue dialogue.Opener
+	Dialog dialog.Opener
 }
 
 // Eligible returns task IDs that have all DAG dependencies satisfied and
@@ -361,7 +361,7 @@ func (s *Scheduler) HandleEscalation(ctx context.Context, phaseID string, bp *fa
 // It unblocks the phase, updates the fabric state, logs the escalation
 // message, and resolves the phase based on the human's decision.
 //
-// When Dialogue is set, an interactive session runs in a goroutine so the
+// When Dialog is set, an interactive session runs in a goroutine so the
 // human can provide guidance before the phase is marked failed. Otherwise,
 // the fire-and-forget OnHail path posts a discovery and marks failed immediately.
 func (s *Scheduler) escalatePhase(ctx context.Context, phaseID string, bp *fabric.BlockedPhase, markFailed func(phaseID string)) {
@@ -375,8 +375,8 @@ func (s *Scheduler) escalatePhase(ctx context.Context, phaseID string, bp *fabri
 	msg := fabric.EscalationMessage(bp, maxRetries)
 	fmt.Fprintf(s.logger(), "\n── Fabric Escalation ──────────────────────────────\n%s───────────────────────────────────────────────────\n\n", msg)
 
-	if s.Dialogue != nil {
-		go s.resolveEscalationViaDialogue(ctx, phaseID, bp, maxRetries, markFailed)
+	if s.Dialog != nil {
+		go s.resolveEscalationViaDialog(ctx, phaseID, bp, maxRetries, markFailed)
 		return
 	}
 
@@ -386,13 +386,13 @@ func (s *Scheduler) escalatePhase(ctx context.Context, phaseID string, bp *fabri
 	}
 }
 
-// resolveEscalationViaDialogue runs an interactive dialogue in a goroutine
+// resolveEscalationViaDialog runs an interactive dialog in a goroutine
 // and applies the human's decision to the phase.
-func (s *Scheduler) resolveEscalationViaDialogue(ctx context.Context, phaseID string, bp *fabric.BlockedPhase, maxRetries int, markFailed func(phaseID string)) {
+func (s *Scheduler) resolveEscalationViaDialog(ctx context.Context, phaseID string, bp *fabric.BlockedPhase, maxRetries int, markFailed func(phaseID string)) {
 	handler := &EscalationHandler{
-		Dialogue: s.Dialogue,
-		Fabric:   s.Fabric,
-		Logger:   s.Logger,
+		Dialog: s.Dialog,
+		Fabric: s.Fabric,
+		Logger: s.Logger,
 	}
 
 	result := handler.Run(ctx, phaseID, bp, maxRetries)

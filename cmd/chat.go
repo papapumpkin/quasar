@@ -35,7 +35,7 @@ func init() {
 	rootCmd.AddCommand(chatCmd)
 }
 
-// runChat initialises the chat store, provider, and TUI model, then
+// runChat initializes the chat store, provider, and TUI model, then
 // launches the BubbleTea program in alternate screen mode.
 func runChat(cmd *cobra.Command, _ []string) error {
 	if !isStderrTTY() {
@@ -64,7 +64,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 	}
 	store, err := chat.NewFileStore(chatDir)
 	if err != nil {
-		return fmt.Errorf("failed to initialise chat store: %w", err)
+		return fmt.Errorf("failed to initialize chat store: %w", err)
 	}
 
 	// Set up AI provider backed by the Claude CLI invoker.

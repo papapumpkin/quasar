@@ -7,7 +7,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/bus"
-	"github.com/papapumpkin/quasar/internal/dialogue"
+	"github.com/papapumpkin/quasar/internal/dialog"
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
@@ -219,7 +219,7 @@ func WithBus(b bus.Bus) Option {
 	return func(wg *WorkerGroup) { wg.Bus = b }
 }
 
-// WithDialogue sets the interactive dialogue opener for escalation sessions.
-func WithDialogue(d dialogue.Opener) Option {
-	return func(wg *WorkerGroup) { wg.Dialogue = d }
+// WithDialog sets the interactive dialog opener for escalation sessions.
+func WithDialog(d dialog.Opener) Option {
+	return func(wg *WorkerGroup) { wg.Dialog = d }
 }

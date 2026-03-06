@@ -1,4 +1,4 @@
-package dialogue
+package dialog
 
 import (
 	"context"
@@ -163,24 +163,24 @@ func TestReceiveOnClosedSession(t *testing.T) {
 	}
 }
 
-func TestSendCancelledContext(t *testing.T) {
+func TestSendCanceledContext(t *testing.T) {
 	t.Parallel()
 	s := NewSession(Request{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	// Fill the buffered channel so Send must select and notice the cancelled ctx.
+	// Fill the buffered channel so Send must select and notice the canceled ctx.
 	for range cap(s.toHuman) {
 		s.toHuman <- Message{}
 	}
 
-	err := s.Send(ctx, "cancelled")
+	err := s.Send(ctx, "canceled")
 	if err != context.Canceled {
 		t.Fatalf("expected context.Canceled, got %v", err)
 	}
 }
 
-func TestReceiveCancelledContext(t *testing.T) {
+func TestReceiveCanceledContext(t *testing.T) {
 	t.Parallel()
 	s := NewSession(Request{})
 	ctx, cancel := context.WithCancel(context.Background())

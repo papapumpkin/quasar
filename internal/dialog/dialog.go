@@ -1,8 +1,8 @@
-// Package dialogue provides a generic interactive dialogue abstraction for
+// Package dialog provides a generic interactive dialog abstraction for
 // back-and-forth communication between automated processes (agents, schedulers)
 // and humans. It is display-agnostic — the TUI, stderr, or any other frontend
 // implements the Opener interface to bridge sessions to the user.
-package dialogue
+package dialog
 
 import (
 	"context"
@@ -14,25 +14,29 @@ import (
 )
 
 // ErrClosed is returned when Send or Receive is called on a closed session.
-var ErrClosed = errors.New("dialogue session closed")
+var ErrClosed = errors.New("dialog session closed")
 
 // Role identifies the sender of a message.
 type Role string
 
+// Role constants for dialog message senders.
 const (
-	RoleAgent  Role = "agent"
-	RoleHuman  Role = "human"
+	// RoleAgent identifies a message sent by the automated process.
+	RoleAgent Role = "agent"
+	// RoleHuman identifies a message sent by the human operator.
+	RoleHuman Role = "human"
+	// RoleSystem identifies a system-generated message.
 	RoleSystem Role = "system"
 )
 
-// Message is a single entry in a dialogue thread.
+// Message is a single entry in a dialog thread.
 type Message struct {
 	Role    Role
 	Content string
 	Time    time.Time
 }
 
-// Request describes the context for opening a new dialogue session.
+// Request describes the context for opening a new dialog session.
 type Request struct {
 	PhaseID string   // optional: related phase
 	Title   string   // short summary shown in overlay header
@@ -41,14 +45,14 @@ type Request struct {
 	Options []string // optional quick-select options
 }
 
-// Opener creates interactive dialogue sessions. Implementations bridge
+// Opener creates interactive dialog sessions. Implementations bridge
 // to the display layer (TUI, stderr, etc.). Consumed wherever interactive
 // human input is needed.
 type Opener interface {
 	Open(ctx context.Context, req Request) (Session, error)
 }
 
-// Session is the agent-facing handle for an active dialogue. The automated
+// Session is the agent-facing handle for an active dialog. The automated
 // process calls Send to post messages and Receive to wait for human input.
 type Session interface {
 	// ID returns the unique session identifier.
@@ -60,7 +64,7 @@ type Session interface {
 	// Receive blocks until the human sends a message.
 	Receive(ctx context.Context) (string, error)
 
-	// Close ends the dialogue. After Close, Send and Receive return errors.
+	// Close ends the dialog. After Close, Send and Receive return errors.
 	Close()
 
 	// Transcript returns all messages exchanged so far.
@@ -79,7 +83,7 @@ type DisplayHandle interface {
 	Closed() <-chan struct{}
 }
 
-// NewSession creates a new in-process dialogue session. The returned value
+// NewSession creates a new in-process dialog session. The returned value
 // satisfies both Session (for the agent) and DisplayHandle (for the TUI).
 func NewSession(req Request) *MemSession {
 	return &MemSession{
@@ -104,7 +108,10 @@ type MemSession struct {
 	closeOnce sync.Once
 }
 
-func (s *MemSession) ID() string       { return s.id }
+// ID returns the unique session identifier.
+func (s *MemSession) ID() string { return s.id }
+
+// Request returns the original request that opened this session.
 func (s *MemSession) Request() Request { return s.request }
 
 // ToHuman returns the channel the display layer reads from.
@@ -151,7 +158,7 @@ func (s *MemSession) Receive(ctx context.Context) (string, error) {
 	}
 }
 
-// Close ends the dialogue session.
+// Close ends the dialog session.
 func (s *MemSession) Close() {
 	s.closeOnce.Do(func() { close(s.closed) })
 }

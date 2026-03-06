@@ -26,8 +26,8 @@ var (
 				Padding(0, 1)
 )
 
-// DialogueEntry represents a single composed message in the hail dialogue.
-type DialogueEntry struct {
+// DialogEntry represents a single composed message in the hail dialog.
+type DialogEntry struct {
 	Text string
 }
 
@@ -43,7 +43,7 @@ const (
 
 // HailOverlay renders a red-bordered floating overlay for human decision
 // requests. It displays phase context, discovery detail, selectable options,
-// and a multi-message dialogue input. The overlay is driven by MsgHail messages
+// and a multi-message dialog input. The overlay is driven by MsgHail messages
 // from the fabric and floats centered over the board view with the background
 // dimmed.
 type HailOverlay struct {
@@ -58,9 +58,9 @@ type HailOverlay struct {
 	Width      int
 	IsCritical bool // true for blocker-kind hails that need red highlighting
 
-	Entries      []DialogueEntry // composed messages
-	Mode         HailMode        // compose (textinput focused) vs scroll
-	ScrollOffset int             // manual scroll position for context/entries area
+	Entries      []DialogEntry // composed messages
+	Mode         HailMode      // compose (textinput focused) vs scroll
+	ScrollOffset int           // manual scroll position for context/entries area
 }
 
 // NewHailOverlay creates a hail overlay from a MsgHail and optional context.
@@ -139,14 +139,14 @@ func (h *HailOverlay) HandleInput() string {
 	return val
 }
 
-// AddEntry appends the current input text as a new dialogue entry and clears
+// AddEntry appends the current input text as a new dialog entry and clears
 // the input for the next message.
 func (h *HailOverlay) AddEntry(text string) {
-	h.Entries = append(h.Entries, DialogueEntry{Text: text})
+	h.Entries = append(h.Entries, DialogEntry{Text: text})
 	h.Input.SetValue("")
 }
 
-// ComposeResolution joins all dialogue entries plus any remaining input text
+// ComposeResolution joins all dialog entries plus any remaining input text
 // into a single response string separated by double newlines.
 func (h *HailOverlay) ComposeResolution() string {
 	var parts []string
@@ -242,7 +242,7 @@ func (h *HailOverlay) View(width, _ int) string {
 		b.WriteString("\n")
 	}
 
-	// Composed dialogue entries.
+	// Composed dialog entries.
 	for _, entry := range h.Entries {
 		b.WriteString(styleHailUserMsg.Render("  you: " + entry.Text))
 		b.WriteString("\n")

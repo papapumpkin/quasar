@@ -211,7 +211,7 @@ func (cv *ChatView) ScrollUp() {
 	if !cv.ready {
 		return
 	}
-	cv.viewport.LineUp(1)
+	cv.viewport.ScrollUp(1)
 	cv.autoScroll = false
 }
 
@@ -221,7 +221,7 @@ func (cv *ChatView) ScrollDown() {
 	if !cv.ready {
 		return
 	}
-	cv.viewport.LineDown(1)
+	cv.viewport.ScrollDown(1)
 	cv.updateAutoScroll()
 }
 
@@ -230,7 +230,7 @@ func (cv *ChatView) ScrollPageUp() {
 	if !cv.ready {
 		return
 	}
-	cv.viewport.HalfViewUp()
+	cv.viewport.HalfPageUp()
 	cv.autoScroll = false
 }
 
@@ -240,7 +240,7 @@ func (cv *ChatView) ScrollPageDown() {
 	if !cv.ready {
 		return
 	}
-	cv.viewport.HalfViewDown()
+	cv.viewport.HalfPageDown()
 	cv.updateAutoScroll()
 }
 
@@ -424,7 +424,7 @@ func (cv ChatView) renderMessage(msg chat.Message, width int) string {
 	}
 
 	// Header line: [timestamp] role>
-	b.WriteString(fmt.Sprintf("%s %s", ts, label))
+	fmt.Fprintf(&b, "%s %s", ts, label)
 	b.WriteString("\n")
 
 	// Render message body with basic markdown.

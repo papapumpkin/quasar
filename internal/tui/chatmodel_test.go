@@ -1324,13 +1324,13 @@ func TestChatModelErrorCancellationPreservesPartial(t *testing.T) {
 		t.Error("ChatView.Streaming should be false after cancellation")
 	}
 
-	// Partial response should have "[cancelled]" suffix.
+	// Partial response should have "[canceled]" suffix.
 	lastMsg := m.ActiveConv.Messages[len(m.ActiveConv.Messages)-1]
-	if !strings.Contains(lastMsg.Content, "[cancelled]") {
-		t.Errorf("content = %q, want to contain '[cancelled]'", lastMsg.Content)
+	if !strings.Contains(lastMsg.Content, "[canceled]") {
+		t.Errorf("content = %q, want to contain '[canceled]'", lastMsg.Content)
 	}
-	if lastMsg.Content != "Partial response [cancelled]" {
-		t.Errorf("content = %q, want %q", lastMsg.Content, "Partial response [cancelled]")
+	if lastMsg.Content != "Partial response [canceled]" {
+		t.Errorf("content = %q, want %q", lastMsg.Content, "Partial response [canceled]")
 	}
 
 	// Should issue a save command.
