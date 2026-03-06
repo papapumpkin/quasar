@@ -184,8 +184,8 @@ func TestChatModelVimFocusKeys(t *testing.T) {
 		t.Errorf("focus after 'l' = %d, want FocusChatArea", updated.Focus)
 	}
 
-	// 'h' should move back to sidebar (only when input not focused for text).
-	// We need to blur the input first to use 'h' as navigation.
+	// 'h' should move back to sidebar when in normal mode.
+	updated.InputMode = ChatModeNormal
 	updated.ChatView.Input.Blur()
 	result, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
 	updated = result.(ChatModel)
