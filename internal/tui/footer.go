@@ -117,6 +117,16 @@ func HailOverlayFooterBindings(km KeyMap) []key.Binding {
 	return []key.Binding{enter, submit, tab, esc}
 }
 
+// DialogueFooterBindings returns footer bindings for the interactive dialogue overlay.
+func DialogueFooterBindings() []key.Binding {
+	return []key.Binding{
+		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "send")),
+		key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "close")),
+		key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "scroll")),
+		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close")),
+	}
+}
+
 // HailListFooterBindings returns footer bindings when the hail list overlay is active.
 func HailListFooterBindings(km KeyMap) []key.Binding {
 	return []key.Binding{km.Up, km.Down, km.Enter, km.Back}

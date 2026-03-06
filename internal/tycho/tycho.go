@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/papapumpkin/quasar/internal/dag"
+	"github.com/papapumpkin/quasar/internal/dialogue"
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
@@ -72,6 +73,11 @@ type Scheduler struct {
 	// OnHail is called when a blocked task requires human intervention.
 	// If nil, escalations are logged but not surfaced.
 	OnHail func(phaseID string, discovery fabric.Discovery)
+
+	// Dialogue opens an interactive session with the human when set.
+	// Used for escalations that benefit from back-and-forth resolution.
+	// When nil, escalations fall back to the fire-and-forget OnHail path.
+	Dialogue dialogue.Opener
 }
 
 // Eligible returns task IDs that have all DAG dependencies satisfied and
@@ -353,8 +359,11 @@ func (s *Scheduler) HandleEscalation(ctx context.Context, phaseID string, bp *fa
 
 // escalatePhase transitions a blocked phase to HUMAN_DECISION_REQUIRED.
 // It unblocks the phase, updates the fabric state, logs the escalation
-// message, and optionally calls markFailed to update the phase tracker.
-// When OnHail is set, a discovery is posted and surfaced.
+// message, and resolves the phase based on the human's decision.
+//
+// When Dialogue is set, an interactive session runs in a goroutine so the
+// human can provide guidance before the phase is marked failed. Otherwise,
+// the fire-and-forget OnHail path posts a discovery and marks failed immediately.
 func (s *Scheduler) escalatePhase(ctx context.Context, phaseID string, bp *fabric.BlockedPhase, markFailed func(phaseID string)) {
 	s.Blocked.Unblock(phaseID)
 
@@ -362,30 +371,71 @@ func (s *Scheduler) escalatePhase(ctx context.Context, phaseID string, bp *fabri
 		fmt.Fprintf(s.logger(), "warning: failed to set fabric state for %q: %v\n", phaseID, setErr)
 	}
 
-	maxRetries := fabric.DefaultMaxRetries
-	if s.Pushback.MaxRetries > 0 {
-		maxRetries = s.Pushback.MaxRetries
-	}
+	maxRetries := s.effectiveMaxRetries()
 	msg := fabric.EscalationMessage(bp, maxRetries)
-
 	fmt.Fprintf(s.logger(), "\n── Fabric Escalation ──────────────────────────────\n%s───────────────────────────────────────────────────\n\n", msg)
 
-	// Surface via OnHail callback if configured.
-	if s.OnHail != nil {
-		disc := fabric.Discovery{
-			SourceTask: phaseID,
-			Kind:       fabric.DiscoveryRequirementsAmbiguity,
-			Detail:     fmt.Sprintf("Phase %q escalated: %s", phaseID, bp.LastResult.Reason),
-		}
-		if _, postErr := s.Fabric.PostDiscovery(ctx, disc); postErr != nil {
-			fmt.Fprintf(s.logger(), "warning: failed to post escalation discovery for %q: %v\n", phaseID, postErr)
-		}
-		s.OnHail(phaseID, disc)
+	if s.Dialogue != nil {
+		go s.resolveEscalationViaDialogue(ctx, phaseID, bp, maxRetries, markFailed)
+		return
 	}
 
+	s.postEscalationDiscovery(ctx, phaseID, bp)
 	if markFailed != nil {
 		markFailed(phaseID)
 	}
+}
+
+// resolveEscalationViaDialogue runs an interactive dialogue in a goroutine
+// and applies the human's decision to the phase.
+func (s *Scheduler) resolveEscalationViaDialogue(ctx context.Context, phaseID string, bp *fabric.BlockedPhase, maxRetries int, markFailed func(phaseID string)) {
+	handler := &EscalationHandler{
+		Dialogue: s.Dialogue,
+		Fabric:   s.Fabric,
+		Logger:   s.Logger,
+	}
+
+	result := handler.Run(ctx, phaseID, bp, maxRetries)
+	s.applyEscalationResult(ctx, phaseID, result, markFailed)
+}
+
+// applyEscalationResult translates a human decision into scheduler state changes.
+func (s *Scheduler) applyEscalationResult(ctx context.Context, phaseID string, result EscalationResult, markFailed func(phaseID string)) {
+	switch result {
+	case EscalationRetry:
+		if stateErr := s.Fabric.SetPhaseState(ctx, phaseID, fabric.StateQueued); stateErr != nil {
+			fmt.Fprintf(s.logger(), "warning: failed to reset fabric state for %q: %v\n", phaseID, stateErr)
+		}
+		fmt.Fprintf(s.logger(), "phase %q: human chose retry, resetting to queued\n", phaseID)
+	case EscalationSkip, EscalationFail:
+		if markFailed != nil {
+			markFailed(phaseID)
+		}
+	}
+}
+
+// postEscalationDiscovery posts a fire-and-forget discovery via OnHail.
+func (s *Scheduler) postEscalationDiscovery(ctx context.Context, phaseID string, bp *fabric.BlockedPhase) {
+	if s.OnHail == nil {
+		return
+	}
+	disc := fabric.Discovery{
+		SourceTask: phaseID,
+		Kind:       fabric.DiscoveryRequirementsAmbiguity,
+		Detail:     fmt.Sprintf("Phase %q escalated: %s", phaseID, bp.LastResult.Reason),
+	}
+	if _, postErr := s.Fabric.PostDiscovery(ctx, disc); postErr != nil {
+		fmt.Fprintf(s.logger(), "warning: failed to post escalation discovery for %q: %v\n", phaseID, postErr)
+	}
+	s.OnHail(phaseID, disc)
+}
+
+// effectiveMaxRetries returns the configured max retries, falling back to the default.
+func (s *Scheduler) effectiveMaxRetries() int {
+	if s.Pushback.MaxRetries > 0 {
+		return s.Pushback.MaxRetries
+	}
+	return fabric.DefaultMaxRetries
 }
 
 // logger returns the effective log writer (io.Discard if Logger is nil).

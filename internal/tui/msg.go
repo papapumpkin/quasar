@@ -3,6 +3,7 @@ package tui
 import (
 	"time"
 
+	"github.com/papapumpkin/quasar/internal/dialogue"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/nebula"
 	"github.com/papapumpkin/quasar/internal/tycho"
@@ -409,4 +410,25 @@ type MsgPlanAction struct {
 // MsgPlanError is sent when plan computation fails.
 type MsgPlanError struct {
 	Err error
+}
+
+// --- Interactive dialogue messages ---
+
+// MsgDialogueOpen is sent when a dialogue session is opened. The TUI
+// creates a DialogueOverlay and starts listening for agent messages.
+type MsgDialogueOpen struct {
+	Session *dialogue.MemSession
+}
+
+// MsgDialogueAgentMsg is sent when the agent posts a new message to the
+// dialogue thread. The TUI appends it to the overlay.
+type MsgDialogueAgentMsg struct {
+	SessionID string
+	Message   dialogue.Message
+}
+
+// MsgDialogueClosed is sent when the dialogue session is closed by the
+// agent or by context cancellation.
+type MsgDialogueClosed struct {
+	SessionID string
 }

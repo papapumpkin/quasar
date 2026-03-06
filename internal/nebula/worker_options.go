@@ -7,6 +7,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/bus"
+	"github.com/papapumpkin/quasar/internal/dialogue"
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
@@ -216,4 +217,9 @@ func WithGitSHAFunc(fn func(ctx context.Context) (string, error)) Option {
 // bus-mediated delivery to the TUI via BusSubscriber.
 func WithBus(b bus.Bus) Option {
 	return func(wg *WorkerGroup) { wg.Bus = b }
+}
+
+// WithDialogue sets the interactive dialogue opener for escalation sessions.
+func WithDialogue(d dialogue.Opener) Option {
+	return func(wg *WorkerGroup) { wg.Dialogue = d }
 }
