@@ -66,11 +66,6 @@ type ChatModel struct {
 	Width  int
 	Height int
 
-	// titleEdit holds the in-progress title string during inline editing.
-	titleEdit string
-	// titleEditing is true when the user is editing a sidebar title.
-	titleEditing bool
-
 	// spinner drives the loading animation.
 	spinner spinner.Model
 
@@ -112,9 +107,14 @@ func NewChatModel(store chat.Store, provider chat.Provider, model string) ChatMo
 		idx = 0
 	}
 
+	cv := NewChatView()
+	cv.ModelTag = model
+	cv.ModelIndex = idx
+	cv.ModelCount = len(models)
+
 	return ChatModel{
 		Sidebar:    NewChatSidebar(),
-		ChatView:   NewChatView(),
+		ChatView:   cv,
 		Store:      store,
 		Provider:   provider,
 		Model:      model,
@@ -129,7 +129,7 @@ func NewChatModel(store chat.Store, provider chat.Provider, model string) ChatMo
 }
 
 // cycleModel moves through the model list by dir (+1 forward, -1 backward)
-// and updates the display tag.
+// and updates the display tag and position indicator.
 func (m *ChatModel) cycleModel(dir int) {
 	if len(m.Models) == 0 {
 		return
@@ -137,6 +137,8 @@ func (m *ChatModel) cycleModel(dir int) {
 	m.modelIndex = (m.modelIndex + dir + len(m.Models)) % len(m.Models)
 	m.Model = m.Models[m.modelIndex]
 	m.ChatView.ModelTag = m.Model
+	m.ChatView.ModelIndex = m.modelIndex
+	m.ChatView.ModelCount = len(m.Models)
 	if m.ActiveConv != nil {
 		m.ActiveConv.Model = m.Model
 	}

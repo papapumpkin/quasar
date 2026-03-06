@@ -12,12 +12,19 @@ func (m ChatModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Global keys that work regardless of state.
 	switch msg.String() {
 	case "ctrl+c":
+		if m.streaming || m.ChatView.Loading {
+			// Cancel in-flight inference without quitting. The
+			// readNextChunk cmd will surface a MsgChatError with
+			// context.Canceled, which preserves the partial response.
+			m.cancel()
+			return m, nil
+		}
 		m.cancel()
 		return m, tea.Quit
 	}
 
 	// Title editing intercepts all keys.
-	if m.titleEditing {
+	if m.Sidebar.TitleEditing {
 		return m.handleTitleEditKey(msg)
 	}
 
@@ -106,6 +113,7 @@ func (m ChatModel) handleSidebarKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if count > 0 {
 			m.Sidebar.Cursor = count - 1
 		}
+		m.Sidebar.ensureCursorVisible()
 		return m, nil
 
 	case msg.String() == "g":
@@ -138,7 +146,7 @@ func (m ChatModel) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ChatView.Input.Blur()
 		return m, nil
 
-	case msg.String() == "enter" && !m.ChatView.Loading:
+	case msg.String() == "enter" && !m.ChatView.Loading && !m.ChatView.Streaming:
 		return m.sendMessage()
 
 	case key.Matches(msg, key.NewBinding(key.WithKeys("ctrl+k"))):
@@ -221,6 +229,14 @@ func (m ChatModel) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.Sidebar.SearchBackspace()
 		return m, nil
 
+	case "down":
+		m.Sidebar.MoveDown()
+		return m, nil
+
+	case "up":
+		m.Sidebar.MoveUp()
+		return m, nil
+
 	default:
 		// Append printable characters to search query.
 		if len(msg.String()) == 1 && msg.String()[0] >= ' ' {
@@ -251,29 +267,29 @@ func (m ChatModel) handleDeleteConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m ChatModel) handleTitleEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.titleEditing = false
-		m.titleEdit = ""
+		m.Sidebar.TitleEditing = false
+		m.Sidebar.TitleEdit = ""
 		return m, nil
 
 	case tea.KeyEnter:
-		m.titleEditing = false
-		title := strings.TrimSpace(m.titleEdit)
-		m.titleEdit = ""
+		m.Sidebar.TitleEditing = false
+		title := strings.TrimSpace(m.Sidebar.TitleEdit)
+		m.Sidebar.TitleEdit = ""
 		if title == "" {
 			return m, nil
 		}
 		return m, m.renameConversation(title)
 
 	case tea.KeyBackspace:
-		if len(m.titleEdit) > 0 {
-			runes := []rune(m.titleEdit)
-			m.titleEdit = string(runes[:len(runes)-1])
+		if len(m.Sidebar.TitleEdit) > 0 {
+			runes := []rune(m.Sidebar.TitleEdit)
+			m.Sidebar.TitleEdit = string(runes[:len(runes)-1])
 		}
 		return m, nil
 
 	default:
 		if msg.Type == tea.KeyRunes && len(msg.Runes) > 0 {
-			m.titleEdit += string(msg.Runes)
+			m.Sidebar.TitleEdit += string(msg.Runes)
 		}
 		return m, nil
 	}
@@ -285,8 +301,8 @@ func (m *ChatModel) startTitleEdit() {
 	if sel == nil {
 		return
 	}
-	m.titleEditing = true
-	m.titleEdit = sel.AutoTitle()
+	m.Sidebar.TitleEditing = true
+	m.Sidebar.TitleEdit = sel.AutoTitle()
 }
 
 // toggleFocus switches between sidebar and chat area.

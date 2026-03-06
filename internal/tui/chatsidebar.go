@@ -61,7 +61,7 @@ var (
 
 // ChatSidebar holds the state for the conversation list panel. It supports
 // vim-style j/k navigation, real-time search filtering via /, delete
-// confirmation via d, and collapsible visibility.
+// confirmation via d, inline title editing via t, and collapsible visibility.
 type ChatSidebar struct {
 	Conversations []chat.Conversation
 	Cursor        int
@@ -71,6 +71,11 @@ type ChatSidebar struct {
 	Width     int
 	Height    int
 	Collapsed bool
+
+	// TitleEditing is true when the selected item's title is being edited inline.
+	TitleEditing bool
+	// TitleEdit is the current text during inline title editing.
+	TitleEdit string
 
 	mode     ChatSidebarMode
 	filtered []int // indices into Conversations matching the search
@@ -448,13 +453,19 @@ func (s ChatSidebar) renderConvItem(conv *chat.Conversation, selected bool) []st
 	if titleWidth < 4 {
 		titleWidth = 4
 	}
-	title := TruncateWithEllipsis(conv.AutoTitle(), titleWidth)
 
 	var styledTitle string
-	if selected {
-		styledTitle = styleRowSelected.Render(title)
+	if selected && s.TitleEditing {
+		// Show inline edit input with cursor indicator.
+		editText := TruncateWithEllipsis(s.TitleEdit+"_", titleWidth)
+		styledTitle = styleSidebarSearchPrompt.Render(editText)
 	} else {
-		styledTitle = styleSidebarItemNormal.Render(title)
+		title := TruncateWithEllipsis(conv.AutoTitle(), titleWidth)
+		if selected {
+			styledTitle = styleRowSelected.Render(title)
+		} else {
+			styledTitle = styleSidebarItemNormal.Render(title)
+		}
 	}
 
 	line1 := indicator + styledTitle

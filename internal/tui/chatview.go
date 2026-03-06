@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -85,10 +86,16 @@ type ChatView struct {
 	Title    string // conversation title
 	ModelTag string // active model name shown in title bar
 
-	Messages []chat.Message
-	Input    textinput.Model
-	Spinner  spinner.Model
-	Loading  bool // true while waiting for AI response
+	// ModelIndex is the 0-based index of the current model in the carousel.
+	ModelIndex int
+	// ModelCount is the total number of available models for {/} cycling.
+	ModelCount int
+
+	Messages  []chat.Message
+	Input     textinput.Model
+	Spinner   spinner.Model
+	Loading   bool // true while waiting for first AI response chunk
+	Streaming bool // true while streaming chunks are being received
 
 	viewport   viewport.Model
 	width      int
@@ -154,6 +161,35 @@ func (cv *ChatView) viewportHeight() int {
 // is active (the user has not scrolled up), the viewport scrolls to bottom.
 func (cv *ChatView) AddMessage(msg chat.Message) {
 	cv.Messages = append(cv.Messages, msg)
+	cv.refreshContent()
+	if cv.autoScroll {
+		cv.viewport.GotoBottom()
+	}
+}
+
+// AppendStreamChunk appends a streaming token to the in-progress assistant
+// message. If no assistant message exists yet, a new one is created. The
+// viewport is refreshed and auto-scrolled if enabled.
+func (cv *ChatView) AppendStreamChunk(chunk string) {
+	n := len(cv.Messages)
+	if n > 0 && cv.Messages[n-1].Role == chat.RoleAssistant {
+		cv.Messages[n-1].Content += chunk
+	} else {
+		cv.Messages = append(cv.Messages, chat.Message{
+			Role:      chat.RoleAssistant,
+			Content:   chunk,
+			Timestamp: time.Now(),
+		})
+	}
+	cv.refreshContent()
+	if cv.autoScroll {
+		cv.viewport.GotoBottom()
+	}
+}
+
+// RefreshContent re-renders the viewport content. Exported so that
+// callers (e.g. ChatModel) can force a refresh after modifying Messages.
+func (cv *ChatView) RefreshContent() {
 	cv.refreshContent()
 	if cv.autoScroll {
 		cv.viewport.GotoBottom()
@@ -269,7 +305,7 @@ func (cv ChatView) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
-// renderTitleBar renders the conversation title and model name.
+// renderTitleBar renders the conversation title and model name with position.
 func (cv ChatView) renderTitleBar() string {
 	title := cv.Title
 	if title == "" {
@@ -280,7 +316,11 @@ func (cv ChatView) renderTitleBar() string {
 	parts = append(parts, styleChatTitle.Render(title))
 
 	if cv.ModelTag != "" {
-		parts = append(parts, styleChatModel.Render(fmt.Sprintf(" [%s]", cv.ModelTag)))
+		modelText := fmt.Sprintf(" [%s]", cv.ModelTag)
+		if cv.ModelCount > 1 {
+			modelText = fmt.Sprintf(" [%s %d/%d]", cv.ModelTag, cv.ModelIndex+1, cv.ModelCount)
+		}
+		parts = append(parts, styleChatModel.Render(modelText))
 	}
 
 	content := strings.Join(parts, "")
@@ -302,7 +342,9 @@ func (cv ChatView) renderInputArea() string {
 
 	// Hint line.
 	hint := "enter: send"
-	if cv.Loading {
+	if cv.Streaming {
+		hint += "  " + cv.Spinner.View() + " streaming…"
+	} else if cv.Loading {
 		hint += "  " + cv.Spinner.View() + " thinking…"
 	}
 	b.WriteString(styleChatTimestamp.Render(hint))
@@ -323,7 +365,7 @@ func (cv *ChatView) refreshContent() {
 // renderMessages formats all messages into a single string for the viewport.
 func (cv ChatView) renderMessages() string {
 	if len(cv.Messages) == 0 && !cv.Loading {
-		return styleChatEmpty.Render("  Start a conversation by typing a message below.")
+		return cv.renderEmptyState()
 	}
 
 	contentWidth := cv.width - 2 // small margin
@@ -339,12 +381,15 @@ func (cv ChatView) renderMessages() string {
 		sb.WriteString(cv.renderMessage(msg, contentWidth))
 	}
 
-	// Loading indicator at the bottom.
-	if cv.Loading {
+	// Loading indicator (pre-first-chunk) or streaming indicator.
+	if cv.Loading && !cv.Streaming {
 		if len(cv.Messages) > 0 {
 			sb.WriteString("\n")
 		}
 		sb.WriteString(cv.renderLoadingIndicator())
+	} else if cv.Streaming {
+		sb.WriteString("\n")
+		sb.WriteString(cv.renderStreamingIndicator())
 	}
 
 	return sb.String()
@@ -387,6 +432,37 @@ func (cv ChatView) renderMessage(msg chat.Message, width int) string {
 	return b.String()
 }
 
+// renderEmptyState renders a helpful onboarding message when no messages exist.
+func (cv ChatView) renderEmptyState() string {
+	var sb strings.Builder
+
+	sb.WriteString(styleChatEmpty.Render("  Start a conversation by typing a message below."))
+	sb.WriteString("\n\n")
+	sb.WriteString(styleChatTimestamp.Render("  Quick reference:"))
+	sb.WriteString("\n")
+
+	hints := []struct{ key, desc string }{
+		{"i", "compose message"},
+		{"{/}", "switch model"},
+		{"h/l", "sidebar ↔ chat"},
+		{"j/k", "scroll / navigate"},
+		{"/", "search conversations"},
+		{"t", "rename conversation"},
+		{"n", "new conversation"},
+		{"q", "quit"},
+	}
+	for _, h := range hints {
+		line := fmt.Sprintf("    %s  %s",
+			styleFooterKey.Render(fmt.Sprintf("%-5s", h.key)),
+			styleChatTimestamp.Render(h.desc),
+		)
+		sb.WriteString(line)
+		sb.WriteString("\n")
+	}
+
+	return sb.String()
+}
+
 // renderLoadingIndicator renders a spinner line while waiting for AI response.
 func (cv ChatView) renderLoadingIndicator() string {
 	label := styleChatRoleLabel.Foreground(colorAccent).Render("assistant>")
@@ -395,6 +471,13 @@ func (cv ChatView) renderLoadingIndicator() string {
 		label,
 		cv.Spinner.View()+" "+styleChatAssistant.Render("thinking…"),
 	)
+}
+
+// renderStreamingIndicator renders a compact spinner while streaming tokens.
+func (cv ChatView) renderStreamingIndicator() string {
+	return styleChatTimestamp.Render("  ") +
+		cv.Spinner.View() + " " +
+		styleChatAssistant.Render("streaming…")
 }
 
 // renderMarkdown applies basic markdown formatting to message content.
