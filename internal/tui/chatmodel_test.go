@@ -828,34 +828,45 @@ func TestChatModelFooter(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		focus    ChatFocus
-		setup    func(m *ChatModel)
-		contains []string
+		name      string
+		focus     ChatFocus
+		inputMode ChatInputMode
+		setup     func(m *ChatModel)
+		contains  []string
 	}{
 		{
-			name:     "sidebar normal",
-			focus:    FocusSidebar,
-			contains: []string{"tab", "j/k", "navigate", "enter", "open", "n", "new chat", "q", "quit"},
+			name:      "sidebar normal",
+			focus:     FocusSidebar,
+			inputMode: ChatModeNormal,
+			contains:  []string{"h/l", "j/k", "navigate", "enter", "open", "n", "new", "q", "quit", "{/}", "model"},
 		},
 		{
-			name:     "chat area normal",
-			focus:    FocusChatArea,
-			contains: []string{"tab", "enter", "send", "j/k", "scroll", "ctrl+c", "quit"},
+			name:      "chat area compose",
+			focus:     FocusChatArea,
+			inputMode: ChatModeCompose,
+			contains:  []string{"enter", "send", "esc", "normal", "{/}", "model"},
 		},
 		{
-			name:  "search mode",
-			focus: FocusSidebar,
+			name:      "chat area normal",
+			focus:     FocusChatArea,
+			inputMode: ChatModeNormal,
+			contains:  []string{"i", "compose", "j/k", "scroll", "g/G", "q", "quit", "{/}", "model"},
+		},
+		{
+			name:      "search mode",
+			focus:     FocusSidebar,
+			inputMode: ChatModeNormal,
+			setup:     func(m *ChatModel) { m.Sidebar.EnterSearch() },
+			contains:  []string{"esc", "cancel", "enter", "select"},
+		},
+		{
+			name:      "delete confirm",
+			focus:     FocusSidebar,
+			inputMode: ChatModeNormal,
 			setup: func(m *ChatModel) {
-				m.Sidebar.EnterSearch()
-			},
-			contains: []string{"esc", "cancel", "enter", "select"},
-		},
-		{
-			name:  "delete confirm",
-			focus: FocusSidebar,
-			setup: func(m *ChatModel) {
-				m.Sidebar.Conversations = []chat.Conversation{{ID: "c1", Title: "Test"}}
+				m.Sidebar.Conversations = []chat.Conversation{
+					{ID: "c1", Title: "Test"},
+				}
 				m.Sidebar.RequestDelete()
 			},
 			contains: []string{"y", "confirm", "n", "cancel"},
@@ -868,6 +879,7 @@ func TestChatModelFooter(t *testing.T) {
 
 			m, _, _ := newTestChatModel()
 			m.Focus = tt.focus
+			m.InputMode = tt.inputMode
 			if tt.setup != nil {
 				tt.setup(&m)
 			}
