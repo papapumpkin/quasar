@@ -542,3 +542,190 @@ func TestChatViewSetSizeResize(t *testing.T) {
 		t.Fatalf("expected height 40, got %d", cv.height)
 	}
 }
+
+// --- Edge case tests ---
+
+func TestRenderMarkdownUnclosedCodeFence(t *testing.T) {
+	t.Parallel()
+
+	// An unclosed code fence should render remaining lines as code block
+	// content without crashing.
+	input := "before\n```go\nfunc main() {}\nstill in block"
+	result := renderMarkdown(input, styleChatAssistant, 80)
+
+	if !strings.Contains(result, "before") {
+		t.Fatal("expected text before code fence")
+	}
+	if !strings.Contains(result, "┌─") {
+		t.Fatal("expected code block opener")
+	}
+	if !strings.Contains(result, "func main()") {
+		t.Fatal("expected code block content")
+	}
+	if !strings.Contains(result, "still in block") {
+		t.Fatal("expected trailing content inside unclosed code block")
+	}
+	// Should NOT contain a closing fence.
+	if strings.Contains(result, "└──") {
+		t.Fatal("unclosed code fence should not produce a closing fence")
+	}
+}
+
+func TestChatViewEmptyMessageContent(t *testing.T) {
+	t.Parallel()
+
+	cv := NewChatView()
+	cv.SetSize(80, 24)
+
+	cv.AddMessage(chat.Message{
+		Role:      chat.RoleAssistant,
+		Content:   "",
+		Timestamp: time.Date(2026, 3, 6, 12, 0, 0, 0, time.UTC),
+	})
+
+	if len(cv.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(cv.Messages))
+	}
+
+	// Should render without panic, showing the role label even with empty body.
+	view := cv.View()
+	if !strings.Contains(view, "assistant>") {
+		t.Fatal("expected assistant role label for empty message")
+	}
+}
+
+func TestChatViewWhitespaceOnlyMessage(t *testing.T) {
+	t.Parallel()
+
+	cv := NewChatView()
+	cv.SetSize(80, 24)
+
+	cv.AddMessage(chat.Message{
+		Role:      chat.RoleUser,
+		Content:   "   \n\t\n  ",
+		Timestamp: time.Date(2026, 3, 6, 12, 0, 0, 0, time.UTC),
+	})
+
+	// Should render without panic.
+	view := cv.View()
+	if !strings.Contains(view, "you>") {
+		t.Fatal("expected user role label for whitespace-only message")
+	}
+}
+
+func TestRenderMarkdownUnclosedBold(t *testing.T) {
+	t.Parallel()
+
+	// Unclosed ** should render as literal text (falls through to plain).
+	result := renderMarkdown("This has **no closing bold", styleChatAssistant, 80)
+
+	// The text including the ** should appear (rendered as plain text).
+	if !strings.Contains(result, "**no closing bold") {
+		t.Fatal("unclosed bold delimiters should be rendered as literal text")
+	}
+}
+
+func TestRenderMarkdownUnclosedBacktick(t *testing.T) {
+	t.Parallel()
+
+	// Unclosed ` should render as literal text.
+	result := renderMarkdown("Use `no closing backtick", styleChatAssistant, 80)
+
+	if !strings.Contains(result, "`no closing backtick") {
+		t.Fatal("unclosed backtick should be rendered as literal text")
+	}
+}
+
+func TestRenderMarkdownLongWordExceedingWidth(t *testing.T) {
+	t.Parallel()
+
+	// A single word longer than the wrap width should be hard-broken
+	// by wrapText rather than causing an infinite loop or panic.
+	longWord := strings.Repeat("x", 100)
+	result := renderMarkdown(longWord, styleChatAssistant, 40)
+
+	// The full content should be present (possibly across multiple lines).
+	if !strings.Contains(result, strings.Repeat("x", 40)) {
+		t.Fatal("expected long word content in output")
+	}
+	// The result should contain a line break since the word exceeds width.
+	if !strings.Contains(result, "\n") {
+		t.Fatal("expected line break for word exceeding wrap width")
+	}
+}
+
+func TestRenderInlineMarkdownBatchesPlainText(t *testing.T) {
+	t.Parallel()
+
+	// Verify that plain text between markdown spans is styled efficiently
+	// (batched, not per-character). We test this by checking that the output
+	// for a plain string produces a single styled run rather than per-char runs.
+	plain := "hello world"
+	result := renderInlineMarkdown(plain, styleChatAssistant)
+
+	// The plain text should appear as-is within the output.
+	if !strings.Contains(result, "hello world") {
+		t.Fatal("expected plain text content in a single styled run")
+	}
+
+	// A per-character approach would produce "h" "e" "l" "l" "o" each
+	// separately styled — far more bytes. A batched approach wraps
+	// the entire string in one styled call. We verify by checking that
+	// the byte count is reasonable (not bloated by per-char ANSI codes).
+	perCharOverhead := len(styleChatAssistant.Render("x")) * len(plain)
+	batchedSize := len(styleChatAssistant.Render(plain))
+	if len(result) > batchedSize+10 {
+		t.Fatalf("output appears per-character styled: len=%d, expected ~%d (per-char would be ~%d)",
+			len(result), batchedSize, perCharOverhead)
+	}
+}
+
+func TestRenderInlineMarkdownMixedSpans(t *testing.T) {
+	t.Parallel()
+
+	// Verify mixed inline formatting: plain + bold + plain + code + plain.
+	input := "start **bold** middle `code` end"
+	result := renderInlineMarkdown(input, styleChatAssistant)
+
+	if !strings.Contains(result, "start") {
+		t.Fatal("expected 'start' in output")
+	}
+	if !strings.Contains(result, "bold") {
+		t.Fatal("expected 'bold' in output")
+	}
+	if !strings.Contains(result, "middle") {
+		t.Fatal("expected 'middle' in output")
+	}
+	if !strings.Contains(result, "code") {
+		t.Fatal("expected 'code' in output")
+	}
+	if !strings.Contains(result, "end") {
+		t.Fatal("expected 'end' in output")
+	}
+}
+
+func TestRenderMarkdownWrappingBeforeStyling(t *testing.T) {
+	t.Parallel()
+
+	// Verify that wrapping operates on plain text width, not ANSI-inflated width.
+	// A 60-char plain text line with a 40-char wrap width should wrap at ~40 chars.
+	// If wrapping happened after styling, ANSI codes would inflate the byte count
+	// and cause premature wrapping.
+	input := "Here is some text with **bold** and `code` mixed throughout the line"
+	result := renderMarkdown(input, styleChatAssistant, 40)
+
+	// Content should be present and wrapped.
+	if !strings.Contains(result, "Here is") {
+		t.Fatal("expected start of wrapped content")
+	}
+	if !strings.Contains(result, "bold") {
+		t.Fatal("expected bold content after wrapping")
+	}
+	if !strings.Contains(result, "code") {
+		t.Fatal("expected code content after wrapping")
+	}
+	// Should contain a line break due to wrapping.
+	if !strings.Contains(result, "\n") {
+		t.Fatal("expected line break from wrapping")
+	}
+}

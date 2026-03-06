@@ -439,28 +439,47 @@ func renderMarkdown(content string, baseStyle lipgloss.Style, width int) string 
 			continue
 		}
 
-		// Apply inline formatting and word-wrap.
-		formatted := renderInlineMarkdown(line, baseStyle)
-		wrapped := wrapText(formatted, width)
-		sb.WriteString(wrapped)
+		// Wrap plain text first (correct width counting), then apply
+		// inline markdown formatting to each wrapped line. This avoids
+		// ANSI escape codes inflating the byte count used by wrapText.
+		wrapped := wrapText(line, width)
+		wrappedLines := strings.Split(wrapped, "\n")
+		for j, wl := range wrappedLines {
+			if j > 0 {
+				sb.WriteString("\n")
+			}
+			sb.WriteString(renderInlineMarkdown(wl, baseStyle))
+		}
 	}
 
 	return sb.String()
 }
 
 // renderInlineMarkdown processes inline markdown within a single line.
-// It handles **bold** and `inline code` spans.
+// It handles **bold** and `inline code` spans. Consecutive plain characters
+// are batched into a single baseStyle.Render call to avoid per-character
+// ANSI escape code overhead. Unclosed delimiters are rendered as literal text.
 func renderInlineMarkdown(line string, baseStyle lipgloss.Style) string {
 	var sb strings.Builder
+	var plain strings.Builder // accumulates consecutive plain characters
 	i := 0
 	runes := []rune(line)
 	n := len(runes)
+
+	// flushPlain renders accumulated plain text in the base style.
+	flushPlain := func() {
+		if plain.Len() > 0 {
+			sb.WriteString(baseStyle.Render(plain.String()))
+			plain.Reset()
+		}
+	}
 
 	for i < n {
 		// Bold: **text**
 		if i+1 < n && runes[i] == '*' && runes[i+1] == '*' {
 			end := findClosing(runes, i+2, "**")
 			if end >= 0 {
+				flushPlain()
 				inner := string(runes[i+2 : end])
 				sb.WriteString(styleChatBold.Render(inner))
 				i = end + 2
@@ -472,6 +491,7 @@ func renderInlineMarkdown(line string, baseStyle lipgloss.Style) string {
 		if runes[i] == '`' {
 			end := findClosingRune(runes, i+1, '`')
 			if end >= 0 {
+				flushPlain()
 				inner := string(runes[i+1 : end])
 				sb.WriteString(styleChatCode.Render(inner))
 				i = end + 1
@@ -479,11 +499,12 @@ func renderInlineMarkdown(line string, baseStyle lipgloss.Style) string {
 			}
 		}
 
-		// Regular character — apply base style.
-		sb.WriteString(baseStyle.Render(string(runes[i])))
+		// Regular character — accumulate for batch styling.
+		plain.WriteRune(runes[i])
 		i++
 	}
 
+	flushPlain()
 	return sb.String()
 }
 
