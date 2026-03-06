@@ -112,6 +112,14 @@ func (s *ChatSidebar) Mode() ChatSidebarMode {
 	return s.mode
 }
 
+// SetMode sets the sidebar input mode. This allows a parent component
+// (e.g., ChatModel) to synchronize its own state with the sidebar's
+// rendering mode, ensuring View() renders the correct UI for the
+// current interaction state.
+func (s *ChatSidebar) SetMode(m ChatSidebarMode) {
+	s.mode = m
+}
+
 // --- Selection ---
 
 // SelectedConversation returns the currently highlighted conversation, or nil
@@ -157,13 +165,16 @@ func (s *ChatSidebar) visibleCount() int {
 // --- Navigation ---
 
 // MoveUp moves the cursor up by one, clamping at the top.
+// Scroll offset is adjusted to keep the cursor visible.
 func (s *ChatSidebar) MoveUp() {
 	if s.Cursor > 0 {
 		s.Cursor--
 	}
+	s.ensureCursorVisible()
 }
 
 // MoveDown moves the cursor down by one, clamping at the bottom.
+// Scroll offset is adjusted to keep the cursor visible.
 func (s *ChatSidebar) MoveDown() {
 	maxIdx := s.visibleCount() - 1
 	if maxIdx < 0 {
@@ -172,6 +183,37 @@ func (s *ChatSidebar) MoveDown() {
 	if s.Cursor < maxIdx {
 		s.Cursor++
 	}
+	s.ensureCursorVisible()
+}
+
+// ensureCursorVisible adjusts the scroll offset so the cursor stays within
+// the visible list area. No-op when Height is zero (dimensions not yet set).
+func (s *ChatSidebar) ensureCursorVisible() {
+	if s.Height == 0 {
+		return
+	}
+	maxItems := s.maxVisibleItems()
+	if s.Cursor < s.Offset {
+		s.Offset = s.Cursor
+	}
+	if s.Cursor >= s.Offset+maxItems {
+		s.Offset = s.Cursor - maxItems + 1
+	}
+}
+
+// maxVisibleItems returns the number of conversation items that fit in the
+// list area. Each item occupies 2 lines (title + detail).
+func (s *ChatSidebar) maxVisibleItems() int {
+	// Reserve 4 lines: header(1) + sep(1) + footer-sep(1) + footer-hint(1).
+	listHeight := s.Height - 4
+	if listHeight < 2 {
+		listHeight = 2
+	}
+	n := listHeight / 2
+	if n < 1 {
+		n = 1
+	}
+	return n
 }
 
 // clampCursor ensures the cursor is within bounds.
@@ -220,6 +262,7 @@ func (s *ChatSidebar) EnterSearch() {
 	s.SearchQuery = ""
 	s.filtered = nil
 	s.Cursor = 0
+	s.Offset = 0
 }
 
 // ExitSearch exits search mode, restoring the full conversation list.
@@ -228,6 +271,7 @@ func (s *ChatSidebar) ExitSearch() {
 	s.SearchQuery = ""
 	s.filtered = nil
 	s.Cursor = 0
+	s.Offset = 0
 }
 
 // IsSearching returns whether the sidebar is in search mode.
@@ -293,9 +337,7 @@ func (s *ChatSidebar) IsConfirmingDelete() bool {
 // --- Rendering ---
 
 // View renders the sidebar panel. Returns an empty string when collapsed
-// or when dimensions have not been set. This is the self-contained
-// rendering method; ChatModel.renderSidebar provides an alternative
-// integrated rendering path.
+// or when dimensions have not been set.
 func (s ChatSidebar) View() string {
 	if s.Collapsed || s.Width == 0 || s.Height == 0 {
 		return ""
@@ -369,11 +411,15 @@ func (s ChatSidebar) renderList(height int) []string {
 		maxItems = 1
 	}
 
-	// Scroll offset to keep cursor in view.
-	offset := 0
-	if s.Cursor >= maxItems {
-		offset = s.Cursor - maxItems + 1
+	// Use the maintained scroll offset.
+	offset := s.Offset
+	if offset > len(visible)-maxItems {
+		offset = len(visible) - maxItems
 	}
+	if offset < 0 {
+		offset = 0
+	}
+
 	end := offset + maxItems
 	if end > len(visible) {
 		end = len(visible)
@@ -417,7 +463,7 @@ func (s ChatSidebar) renderConvItem(conv *chat.Conversation, selected bool) []st
 	}
 
 	// Line 2: timestamp + model badge.
-	ts := formatSidebarTimestamp(conv.UpdatedAt)
+	ts := formatSidebarTimestamp(conv.UpdatedAt, time.Now())
 	var detailParts []string
 	detailParts = append(detailParts, styleSidebarTimestamp.Render(ts))
 	if conv.Model != "" {
@@ -469,8 +515,8 @@ func (s ChatSidebar) renderFooter() []string {
 
 // formatSidebarTimestamp renders a compact timestamp for the sidebar.
 // Same-day times show "15:04"; older timestamps show "Jan 02".
-func formatSidebarTimestamp(t time.Time) string {
-	now := time.Now()
+// The now parameter enables deterministic testing.
+func formatSidebarTimestamp(t time.Time, now time.Time) string {
 	if t.Year() == now.Year() && t.YearDay() == now.YearDay() {
 		return t.Format("15:04")
 	}

@@ -524,11 +524,30 @@ func TestChatSidebarViewModelBadge(t *testing.T) {
 func TestFormatSidebarTimestamp(t *testing.T) {
 	t.Parallel()
 
+	now := time.Date(2026, 3, 6, 14, 0, 0, 0, time.UTC)
+
+	t.Run("today shows time only", func(t *testing.T) {
+		t.Parallel()
+		ts := time.Date(2026, 3, 6, 9, 45, 0, 0, time.UTC)
+		result := formatSidebarTimestamp(ts, now)
+		if result != "09:45" {
+			t.Fatalf("expected '09:45', got %q", result)
+		}
+	})
+
+	t.Run("yesterday shows month and day", func(t *testing.T) {
+		t.Parallel()
+		ts := time.Date(2026, 3, 5, 23, 59, 0, 0, time.UTC)
+		result := formatSidebarTimestamp(ts, now)
+		if result != "Mar 05" {
+			t.Fatalf("expected 'Mar 05', got %q", result)
+		}
+	})
+
 	t.Run("old date shows month and day", func(t *testing.T) {
 		t.Parallel()
-		// Use a date in a different year to guarantee it's not "today".
 		ts := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
-		result := formatSidebarTimestamp(ts)
+		result := formatSidebarTimestamp(ts, now)
 		if result != "Jan 15" {
 			t.Fatalf("expected 'Jan 15', got %q", result)
 		}
@@ -537,7 +556,7 @@ func TestFormatSidebarTimestamp(t *testing.T) {
 	t.Run("very old date shows month and day", func(t *testing.T) {
 		t.Parallel()
 		ts := time.Date(2020, 12, 25, 8, 0, 0, 0, time.UTC)
-		result := formatSidebarTimestamp(ts)
+		result := formatSidebarTimestamp(ts, now)
 		if result != "Dec 25" {
 			t.Fatalf("expected 'Dec 25', got %q", result)
 		}
@@ -575,7 +594,7 @@ func TestChatSidebarScrolling(t *testing.T) {
 			cs.MoveDown()
 		}
 
-		// View should still render without error and show the cursor item.
+		// View should show the cursor item.
 		view := cs.View()
 		if !strings.Contains(view, "Conv 4") {
 			t.Fatal("expected scrolled view to contain 'Conv 4'")
@@ -592,21 +611,104 @@ func TestChatSidebarScrolling(t *testing.T) {
 			t.Fatal("expected 'Conv 0' visible at cursor 0")
 		}
 	})
+
+	t.Run("offset resets on enter search", func(t *testing.T) {
+		t.Parallel()
+		cs := makeSidebarWithConvs(10)
+		cs.SetSize(30, 10)
+		cs.Offset = 5
+		cs.Cursor = 5
+		cs.EnterSearch()
+
+		if cs.Offset != 0 {
+			t.Fatalf("expected offset 0 after EnterSearch, got %d", cs.Offset)
+		}
+		if cs.Cursor != 0 {
+			t.Fatalf("expected cursor 0 after EnterSearch, got %d", cs.Cursor)
+		}
+	})
 }
 
-// --- Mode tests ---
+// --- SetMode tests ---
 
-func TestChatSidebarModeConstants(t *testing.T) {
+func TestChatSidebarSetMode(t *testing.T) {
 	t.Parallel()
 
-	modes := []ChatSidebarMode{SidebarNormal, SidebarSearch, SidebarConfirmDelete}
-	seen := make(map[ChatSidebarMode]bool)
-	for _, m := range modes {
-		if seen[m] {
-			t.Errorf("duplicate ChatSidebarMode value: %d", m)
-		}
-		seen[m] = true
+	cs := NewChatSidebar()
+	if cs.Mode() != SidebarNormal {
+		t.Fatalf("expected SidebarNormal, got %d", cs.Mode())
 	}
+
+	cs.SetMode(SidebarSearch)
+	if cs.Mode() != SidebarSearch {
+		t.Fatalf("expected SidebarSearch, got %d", cs.Mode())
+	}
+
+	cs.SetMode(SidebarConfirmDelete)
+	if cs.Mode() != SidebarConfirmDelete {
+		t.Fatalf("expected SidebarConfirmDelete, got %d", cs.Mode())
+	}
+
+	cs.SetMode(SidebarNormal)
+	if cs.Mode() != SidebarNormal {
+		t.Fatalf("expected SidebarNormal, got %d", cs.Mode())
+	}
+}
+
+// --- ensureCursorVisible tests ---
+
+func TestChatSidebarEnsureCursorVisible(t *testing.T) {
+	t.Parallel()
+
+	t.Run("scrolls down when cursor past visible area", func(t *testing.T) {
+		t.Parallel()
+		cs := makeSidebarWithConvs(10)
+		cs.SetSize(30, 10) // list area = 10-4 = 6 lines → 3 items visible
+
+		// Move cursor to item 4 (past visible area of 3 items).
+		for i := 0; i < 4; i++ {
+			cs.MoveDown()
+		}
+
+		// Offset should have adjusted so cursor is visible.
+		if cs.Offset == 0 {
+			t.Fatal("expected offset to increase when cursor past visible area")
+		}
+		if cs.Cursor != 4 {
+			t.Fatalf("expected cursor 4, got %d", cs.Cursor)
+		}
+	})
+
+	t.Run("scrolls up when cursor above offset", func(t *testing.T) {
+		t.Parallel()
+		cs := makeSidebarWithConvs(10)
+		cs.SetSize(30, 10)
+
+		// Manually set cursor and offset to simulate scrolled state.
+		cs.Cursor = 5
+		cs.Offset = 5
+		cs.MoveUp()
+
+		if cs.Offset > cs.Cursor {
+			t.Fatalf("offset %d should be <= cursor %d", cs.Offset, cs.Cursor)
+		}
+	})
+
+	t.Run("no-op when height is zero", func(t *testing.T) {
+		t.Parallel()
+		cs := makeSidebarWithConvs(5)
+		// Don't set size — Height stays 0.
+		cs.Cursor = 3
+		cs.Offset = 0
+		cs.MoveDown() // should not panic or change offset
+
+		if cs.Cursor != 4 {
+			t.Fatalf("expected cursor 4, got %d", cs.Cursor)
+		}
+		if cs.Offset != 0 {
+			t.Fatalf("expected offset 0 when height is zero, got %d", cs.Offset)
+		}
+	})
 }
 
 // --- helpers ---

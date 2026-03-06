@@ -106,8 +106,8 @@ func TestNewChatModel(t *testing.T) {
 	if m.Focus != FocusChatArea {
 		t.Errorf("initial focus = %d, want FocusChatArea(%d)", m.Focus, FocusChatArea)
 	}
-	if m.State != ChatStateNormal {
-		t.Errorf("initial state = %d, want ChatStateNormal(%d)", m.State, ChatStateNormal)
+	if m.Sidebar.Mode() != SidebarNormal {
+		t.Errorf("initial sidebar mode = %d, want SidebarNormal(%d)", m.Sidebar.Mode(), SidebarNormal)
 	}
 	if m.Model != "test-model" {
 		t.Errorf("model = %q, want %q", m.Model, "test-model")
@@ -344,22 +344,20 @@ func TestChatModelDeleteConfirmation(t *testing.T) {
 	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	m = result.(ChatModel)
 
-	if m.State != ChatStateDeleteConfirm {
-		t.Errorf("state = %d, want ChatStateDeleteConfirm(%d)", m.State, ChatStateDeleteConfirm)
+	if !m.Sidebar.IsConfirmingDelete() {
+		t.Error("sidebar should be in delete confirmation mode after 'd'")
 	}
-	if m.deleteTarget != "c1" {
-		t.Errorf("deleteTarget = %q, want %q", m.deleteTarget, "c1")
+	sel := m.Sidebar.SelectedConversation()
+	if sel == nil || sel.ID != "c1" {
+		t.Errorf("selected conversation should be c1, got %v", sel)
 	}
 
 	// Press 'n' to cancel.
 	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	m = result.(ChatModel)
 
-	if m.State != ChatStateNormal {
-		t.Errorf("state after cancel = %d, want ChatStateNormal", m.State)
-	}
-	if m.deleteTarget != "" {
-		t.Errorf("deleteTarget after cancel = %q, want empty", m.deleteTarget)
+	if m.Sidebar.IsConfirmingDelete() {
+		t.Error("sidebar should not be in delete confirmation mode after cancel")
 	}
 }
 
@@ -385,8 +383,8 @@ func TestChatModelDeleteConfirm(t *testing.T) {
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	m = result.(ChatModel)
 
-	if m.State != ChatStateNormal {
-		t.Errorf("state after confirm = %d, want ChatStateNormal", m.State)
+	if m.Sidebar.IsConfirmingDelete() {
+		t.Error("sidebar should not be in delete confirmation mode after confirm")
 	}
 	if cmd == nil {
 		t.Fatal("expected delete command after confirmation")
@@ -414,8 +412,8 @@ func TestChatModelSearchMode(t *testing.T) {
 	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	m = result.(ChatModel)
 
-	if m.State != ChatStateSearch {
-		t.Errorf("state = %d, want ChatStateSearch(%d)", m.State, ChatStateSearch)
+	if !m.Sidebar.IsSearching() {
+		t.Error("sidebar should be in search mode after '/'")
 	}
 
 	// Type "alpha".
@@ -437,8 +435,8 @@ func TestChatModelSearchMode(t *testing.T) {
 	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = result.(ChatModel)
 
-	if m.State != ChatStateNormal {
-		t.Errorf("state after esc = %d, want ChatStateNormal", m.State)
+	if m.Sidebar.IsSearching() {
+		t.Error("sidebar should not be in search mode after esc")
 	}
 	if m.Sidebar.SearchQuery != "" {
 		t.Errorf("SearchQuery after esc = %q, want empty", m.Sidebar.SearchQuery)
@@ -679,19 +677,19 @@ func TestChatModelViewNoSidebar(t *testing.T) {
 func TestChatModelDeleteConfirmView(t *testing.T) {
 	t.Parallel()
 
-	m, store, _ := newTestChatModel()
-	store.conversations = []chat.Conversation{
+	m, _, _ := newTestChatModel()
+	m.Sidebar.Conversations = []chat.Conversation{
 		{ID: "c1", Title: "Test", UpdatedAt: time.Now()},
 	}
-	result, _ := m.Update(MsgConvListUpdated{Conversations: store.conversations})
-	m = result.(ChatModel)
+	m.Sidebar.clampCursor()
+	m.recalcLayout()
 	m.Focus = FocusSidebar
-	m.State = ChatStateDeleteConfirm
+	m.Sidebar.RequestDelete()
 
 	view := m.View()
 
-	if !strings.Contains(view, "Delete conversation") {
-		t.Error("delete confirm view should show 'Delete conversation'")
+	if !strings.Contains(view, "Delete") {
+		t.Error("delete confirm view should show 'Delete'")
 	}
 }
 
@@ -832,31 +830,34 @@ func TestChatModelFooter(t *testing.T) {
 	tests := []struct {
 		name     string
 		focus    ChatFocus
-		state    ChatState
+		setup    func(m *ChatModel)
 		contains []string
 	}{
 		{
 			name:     "sidebar normal",
 			focus:    FocusSidebar,
-			state:    ChatStateNormal,
 			contains: []string{"tab", "j/k", "navigate", "enter", "open", "n", "new chat", "q", "quit"},
 		},
 		{
 			name:     "chat area normal",
 			focus:    FocusChatArea,
-			state:    ChatStateNormal,
 			contains: []string{"tab", "enter", "send", "j/k", "scroll", "ctrl+c", "quit"},
 		},
 		{
-			name:     "search mode",
-			focus:    FocusSidebar,
-			state:    ChatStateSearch,
+			name:  "search mode",
+			focus: FocusSidebar,
+			setup: func(m *ChatModel) {
+				m.Sidebar.EnterSearch()
+			},
 			contains: []string{"esc", "cancel", "enter", "select"},
 		},
 		{
-			name:     "delete confirm",
-			focus:    FocusSidebar,
-			state:    ChatStateDeleteConfirm,
+			name:  "delete confirm",
+			focus: FocusSidebar,
+			setup: func(m *ChatModel) {
+				m.Sidebar.Conversations = []chat.Conversation{{ID: "c1", Title: "Test"}}
+				m.Sidebar.RequestDelete()
+			},
 			contains: []string{"y", "confirm", "n", "cancel"},
 		},
 	}
@@ -867,7 +868,9 @@ func TestChatModelFooter(t *testing.T) {
 
 			m, _, _ := newTestChatModel()
 			m.Focus = tt.focus
-			m.State = tt.state
+			if tt.setup != nil {
+				tt.setup(&m)
+			}
 
 			footer := m.renderFooter()
 			for _, want := range tt.contains {
@@ -901,15 +904,15 @@ func TestChatFocusConstants(t *testing.T) {
 	}
 }
 
-func TestChatStateConstants(t *testing.T) {
+func TestChatModelSidebarModes(t *testing.T) {
 	t.Parallel()
 
-	states := []ChatState{ChatStateNormal, ChatStateSearch, ChatStateDeleteConfirm}
-	seen := make(map[ChatState]bool)
-	for _, s := range states {
-		if seen[s] {
-			t.Errorf("duplicate ChatState value: %d", s)
+	modes := []ChatSidebarMode{SidebarNormal, SidebarSearch, SidebarConfirmDelete}
+	seen := make(map[ChatSidebarMode]bool)
+	for _, m := range modes {
+		if seen[m] {
+			t.Errorf("duplicate ChatSidebarMode value: %d", m)
 		}
-		seen[s] = true
+		seen[m] = true
 	}
 }

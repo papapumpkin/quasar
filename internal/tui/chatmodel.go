@@ -25,20 +25,22 @@ const (
 	FocusChatArea
 )
 
-// ChatState represents the current interaction state of the chat model.
-type ChatState int
+// ChatInputMode controls how keyboard input is interpreted in the chat area.
+type ChatInputMode int
 
 const (
-	// ChatStateNormal is the default state with sidebar and chat side-by-side.
-	ChatStateNormal ChatState = iota
-	// ChatStateSearch activates search filtering in the sidebar.
-	ChatStateSearch
-	// ChatStateDeleteConfirm shows a confirmation overlay before deleting.
-	ChatStateDeleteConfirm
+	// ChatModeNormal interprets keys as vim-style navigation commands.
+	ChatModeNormal ChatInputMode = iota
+	// ChatModeCompose routes keys to the text input for message authoring.
+	ChatModeCompose
 )
 
-// sidebarWidth is the fixed width of the conversation sidebar.
-const sidebarWidth = 28
+// defaultModels is the built-in list of models available for {/} cycling.
+var defaultModels = []string{
+	"claude-sonnet-4-20250514",
+	"claude-haiku-4-20250414",
+	"claude-opus-4-20250514",
+}
 
 // sidebarMinTermWidth is the minimum terminal width to show the sidebar.
 // Below this width the sidebar is hidden to preserve chat area space.
@@ -54,17 +56,23 @@ type ChatModel struct {
 	Store    chat.Store
 	Provider chat.Provider
 
-	Focus ChatFocus
-	State ChatState
-	Model string // AI model name for display and provider calls
+	Focus     ChatFocus
+	InputMode ChatInputMode
+	Model     string // AI model name for display and provider calls
+
+	// Models is the list of available model names for {/} cycling.
+	Models     []string
+	modelIndex int // index into Models for the current selection
 
 	ActiveConv *chat.Conversation // currently loaded conversation
 
 	Width  int
 	Height int
 
-	// deleteTarget holds the conversation ID pending delete confirmation.
-	deleteTarget string
+	// titleEdit holds the in-progress title string during inline editing.
+	titleEdit string
+	// titleEditing is true when the user is editing a sidebar title.
+	titleEditing bool
 
 	// spinner drives the loading animation.
 	spinner spinner.Model
@@ -82,16 +90,51 @@ func NewChatModel(store chat.Store, provider chat.Provider, model string) ChatMo
 	s.Spinner = spinner.MiniDot
 	s.Style = lipgloss.NewStyle().Foreground(colorBlue)
 
+	models := make([]string, len(defaultModels))
+	copy(models, defaultModels)
+
+	// Find the initial model in the list, or prepend it.
+	idx := 0
+	found := false
+	for i, name := range models {
+		if name == model {
+			idx = i
+			found = true
+			break
+		}
+	}
+	if !found && model != "" {
+		models = append([]string{model}, models...)
+		idx = 0
+	}
+
 	return ChatModel{
-		ChatView: NewChatView(),
-		Store:    store,
-		Provider: provider,
-		Model:    model,
-		Focus:    FocusChatArea,
-		State:    ChatStateNormal,
-		spinner:  s,
-		ctx:      ctx,
-		cancel:   cancel,
+		Sidebar:    NewChatSidebar(),
+		ChatView:   NewChatView(),
+		Store:      store,
+		Provider:   provider,
+		Model:      model,
+		Models:     models,
+		modelIndex: idx,
+		InputMode:  ChatModeCompose,
+		Focus:      FocusChatArea,
+		spinner:    s,
+		ctx:        ctx,
+		cancel:     cancel,
+	}
+}
+
+// cycleModel moves through the model list by dir (+1 forward, -1 backward)
+// and updates the display tag.
+func (m *ChatModel) cycleModel(dir int) {
+	if len(m.Models) == 0 {
+		return
+	}
+	m.modelIndex = (m.modelIndex + dir + len(m.Models)) % len(m.Models)
+	m.Model = m.Models[m.modelIndex]
+	m.ChatView.ModelTag = m.Model
+	if m.ActiveConv != nil {
+		m.ActiveConv.Model = m.Model
 	}
 }
 
@@ -152,7 +195,7 @@ func (m ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View implements tea.Model. It renders the sidebar and chat view in a
-// horizontal split layout.
+// horizontal split layout. Delete confirmation is shown as a centered overlay.
 func (m ChatModel) View() string {
 	if m.Width < MinWidth || m.Height < MinHeight {
 		return centerOverlay(
@@ -161,28 +204,44 @@ func (m ChatModel) View() string {
 		)
 	}
 
-	base := m.renderLayout()
-
-	// Overlay: delete confirmation.
-	if m.State == ChatStateDeleteConfirm {
-		overlay := m.renderDeleteConfirm()
-		dimmed := styleOverlayDimmed.Render(base)
-		overlayBox := centerOverlay(overlay, m.Width, m.Height)
-		return compositeOverlay(dimmed, overlayBox, m.Width, m.Height)
+	if m.Sidebar.IsConfirmingDelete() {
+		return m.renderDeleteOverlay()
 	}
 
-	return base
+	return m.renderLayout()
+}
+
+// renderDeleteOverlay renders a centered delete confirmation dialog.
+func (m ChatModel) renderDeleteOverlay() string {
+	sel := m.Sidebar.SelectedConversation()
+	var text string
+	if sel != nil {
+		title := TruncateWithEllipsis(sel.AutoTitle(), 30)
+		text = fmt.Sprintf("Delete conversation %q?\n\n  y:yes  n:cancel", title)
+	} else {
+		text = "Delete conversation?\n\n  y:yes  n:cancel"
+	}
+	return centerOverlay(
+		styleOverlayWarning.Render(text),
+		m.Width, m.Height,
+	)
 }
 
 // renderLayout composes the sidebar and chat view into the horizontal split.
 func (m ChatModel) renderLayout() string {
-	showSidebar := m.Width >= sidebarMinTermWidth
+	showSidebar := m.Width >= sidebarMinTermWidth && !m.Sidebar.Collapsed
 
 	var sections []string
 
 	if showSidebar {
-		sidebar := m.renderSidebar()
-		sections = append(sections, sidebar)
+		sidebarView := m.Sidebar.View()
+		// Append a vertical separator to each line.
+		lines := strings.Split(sidebarView, "\n")
+		sep := lipgloss.NewStyle().Foreground(colorMuted).Render("│")
+		for i := range lines {
+			lines[i] = lines[i] + sep
+		}
+		sections = append(sections, strings.Join(lines, "\n"))
 	}
 
 	chatArea := m.ChatView.View()
@@ -199,109 +258,6 @@ func (m ChatModel) renderLayout() string {
 	)
 }
 
-// renderSidebar renders the conversation list panel.
-func (m ChatModel) renderSidebar() string {
-	w := sidebarWidth
-	// Available height for conversation entries: total minus header, search bar, footer.
-	h := m.Height - 3 // header (1) + separator (1) + footer hint (1)
-	if h < 1 {
-		h = 1
-	}
-
-	var b strings.Builder
-
-	// Header.
-	headerStyle := styleChatTitleBar.Width(w)
-	if m.Focus == FocusSidebar {
-		b.WriteString(headerStyle.Render(styleChatTitle.Render("Conversations")))
-	} else {
-		b.WriteString(headerStyle.Render(styleDetailDim.Render("Conversations")))
-	}
-	b.WriteString("\n")
-
-	// Search bar (when in search state).
-	if m.State == ChatStateSearch {
-		searchLine := fmt.Sprintf("🔍 %s", m.Sidebar.SearchQuery)
-		b.WriteString(styleChatInputBorder.Width(w).Render(searchLine))
-		b.WriteString("\n")
-		h-- // consume one line for search
-	}
-
-	// Conversation list.
-	list := m.Sidebar.visibleList()
-	if len(list) == 0 {
-		empty := styleChatEmpty.Render("  No conversations")
-		b.WriteString(empty)
-	} else {
-		// Clamp offset for scrolling.
-		offset := m.Sidebar.Offset
-		if offset > len(list)-h {
-			offset = len(list) - h
-		}
-		if offset < 0 {
-			offset = 0
-		}
-
-		end := offset + h
-		if end > len(list) {
-			end = len(list)
-		}
-
-		for i := offset; i < end; i++ {
-			conv := list[i]
-			title := conv.AutoTitle()
-			title = TruncateWithEllipsis(title, w-4)
-
-			var line string
-			if i == m.Sidebar.Cursor {
-				indicator := styleSelectionIndicator.Render(selectionIndicator)
-				line = indicator + " " + styleRowSelected.Render(title)
-				if m.Focus == FocusSidebar {
-					line = padToWidth(line, w, colorSelectionBg)
-				}
-			} else {
-				line = "  " + styleRowNormal.Render(title)
-			}
-			b.WriteString(line)
-			if i < end-1 {
-				b.WriteString("\n")
-			}
-		}
-	}
-
-	// Pad remaining lines to fill the sidebar height.
-	rendered := b.String()
-	lineCount := strings.Count(rendered, "\n") + 1
-	for lineCount < m.Height-1 {
-		rendered += "\n"
-		lineCount++
-	}
-
-	// Vertical separator on the right edge.
-	lines := strings.Split(rendered, "\n")
-	sep := styleChatInputBorder.Render("│")
-	for i, line := range lines {
-		lines[i] = line + sep
-	}
-
-	return strings.Join(lines, "\n")
-}
-
-// renderDeleteConfirm renders the delete confirmation overlay.
-func (m ChatModel) renderDeleteConfirm() string {
-	var b strings.Builder
-
-	title := styleOverlayTitle.Foreground(colorDanger).
-		Render("⚠  Delete conversation?")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-	b.WriteString("This action cannot be undone.")
-	b.WriteString("\n\n")
-	b.WriteString(styleOverlayHint.Render("[y] Yes, delete    [n] Cancel"))
-
-	return styleOverlayWarning.Render(b.String())
-}
-
 // renderFooter renders context-sensitive keybinding hints.
 func (m ChatModel) renderFooter() string {
 	var parts []string
@@ -312,26 +268,33 @@ func (m ChatModel) renderFooter() string {
 				styleFooterDesc.Render(desc))
 	}
 
-	switch m.State {
-	case ChatStateSearch:
+	switch {
+	case m.Sidebar.IsSearching():
 		add("esc", "cancel")
 		add("enter", "select")
-	case ChatStateDeleteConfirm:
+	case m.Sidebar.IsConfirmingDelete():
 		add("y", "confirm")
 		add("n", "cancel")
 	default:
-		add("tab", "switch focus")
+		add("{/}", "model")
 		if m.Focus == FocusSidebar {
+			add("h/l", "focus")
 			add("j/k", "navigate")
 			add("enter", "open")
 			add("n", "new chat")
 			add("d", "delete")
 			add("/", "search")
+			add("t", "rename")
 			add("q", "quit")
-		} else {
+		} else if m.InputMode == ChatModeCompose {
 			add("enter", "send")
+			add("esc", "normal")
+		} else {
+			add("i", "compose")
 			add("j/k", "scroll")
-			add("ctrl+c", "quit")
+			add("g/G", "top/bot")
+			add("h", "sidebar")
+			add("q", "quit")
 		}
 	}
 
@@ -339,26 +302,28 @@ func (m ChatModel) renderFooter() string {
 	return styleFooter.Width(m.Width).Render(line)
 }
 
-// recalcLayout resizes the chat view based on current terminal dimensions
-// and sidebar visibility.
+// recalcLayout resizes the sidebar and chat view based on current terminal
+// dimensions and sidebar visibility.
 func (m *ChatModel) recalcLayout() {
-	showSidebar := m.Width >= sidebarMinTermWidth
+	showSidebar := m.Width >= sidebarMinTermWidth && !m.Sidebar.Collapsed
+
+	// Reserve 1 line for footer.
+	contentHeight := m.Height - 1
+	if contentHeight < 1 {
+		contentHeight = 1
+	}
 
 	chatWidth := m.Width
 	if showSidebar {
-		chatWidth = m.Width - sidebarWidth - 1 // -1 for separator
+		sw := SidebarCalcWidth(m.Width)
+		m.Sidebar.SetSize(sw, contentHeight)
+		chatWidth = m.Width - sw - 1 // -1 for separator
 	}
 	if chatWidth < 20 {
 		chatWidth = 20
 	}
 
-	// Reserve 1 line for footer.
-	chatHeight := m.Height - 1
-	if chatHeight < 1 {
-		chatHeight = 1
-	}
-
-	m.ChatView.SetSize(chatWidth, chatHeight)
+	m.ChatView.SetSize(chatWidth, contentHeight)
 }
 
 // handleKey dispatches keyboard input based on current state and focus.
@@ -370,11 +335,16 @@ func (m ChatModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
-	// State-specific handlers.
-	switch m.State {
-	case ChatStateDeleteConfirm:
+	// Title editing intercepts all keys.
+	if m.titleEditing {
+		return m.handleTitleEditKey(msg)
+	}
+
+	// Mode-specific handlers.
+	switch {
+	case m.Sidebar.IsConfirmingDelete():
 		return m.handleDeleteConfirmKey(msg)
-	case ChatStateSearch:
+	case m.Sidebar.IsSearching():
 		return m.handleSearchKey(msg)
 	default:
 		return m.handleNormalKey(msg)
@@ -383,19 +353,33 @@ func (m ChatModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleNormalKey handles keys in the default state.
 func (m ChatModel) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Model cycling works regardless of focus.
+	switch msg.String() {
+	case "}":
+		m.cycleModel(1)
+		return m, nil
+	case "{":
+		m.cycleModel(-1)
+		return m, nil
+	}
+
 	switch {
 	case msg.String() == "q" && m.Focus == FocusSidebar:
+		m.cancel()
+		return m, tea.Quit
+	case msg.String() == "q" && m.Focus == FocusChatArea && m.InputMode == ChatModeNormal:
 		m.cancel()
 		return m, tea.Quit
 	case msg.String() == "tab":
 		m.toggleFocus()
 		return m, nil
-	case msg.String() == "h" && !m.ChatView.Input.Focused():
+	case msg.String() == "h" && m.InputMode == ChatModeNormal && m.Focus == FocusChatArea:
 		m.Focus = FocusSidebar
 		m.ChatView.Input.Blur()
 		return m, nil
 	case msg.String() == "l" && m.Focus == FocusSidebar:
 		m.Focus = FocusChatArea
+		m.InputMode = ChatModeCompose
 		m.ChatView.Input.Focus()
 		return m, nil
 	}
@@ -410,15 +394,11 @@ func (m ChatModel) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m ChatModel) handleSidebarKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, key.NewBinding(key.WithKeys("j", "down"))):
-		m.Sidebar.Cursor++
-		m.Sidebar.clampCursor()
-		m.ensureSidebarVisible()
+		m.Sidebar.MoveDown()
 		return m, nil
 
 	case key.Matches(msg, key.NewBinding(key.WithKeys("k", "up"))):
-		m.Sidebar.Cursor--
-		m.Sidebar.clampCursor()
-		m.ensureSidebarVisible()
+		m.Sidebar.MoveUp()
 		return m, nil
 
 	case msg.String() == "enter":
@@ -432,16 +412,11 @@ func (m ChatModel) handleSidebarKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.startNewConversation()
 
 	case msg.String() == "d":
-		conv := m.Sidebar.SelectedConversation()
-		if conv != nil {
-			m.State = ChatStateDeleteConfirm
-			m.deleteTarget = conv.ID
-		}
+		m.Sidebar.RequestDelete()
 		return m, nil
 
 	case msg.String() == "/":
-		m.State = ChatStateSearch
-		m.Sidebar.SearchQuery = ""
+		m.Sidebar.EnterSearch()
 		m.ChatView.Input.Blur()
 		return m, nil
 
@@ -449,7 +424,6 @@ func (m ChatModel) handleSidebarKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		count := m.Sidebar.visibleCount()
 		if count > 0 {
 			m.Sidebar.Cursor = count - 1
-			m.ensureSidebarVisible()
 		}
 		return m, nil
 
@@ -457,14 +431,32 @@ func (m ChatModel) handleSidebarKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.Sidebar.Cursor = 0
 		m.Sidebar.Offset = 0
 		return m, nil
+
+	case msg.String() == "t":
+		m.startTitleEdit()
+		return m, nil
 	}
 
 	return m, nil
 }
 
-// handleChatAreaKey handles keys when the chat area has focus.
+// handleChatAreaKey handles keys when the chat area has focus. It dispatches
+// to compose or normal mode handlers based on InputMode.
 func (m ChatModel) handleChatAreaKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.InputMode == ChatModeNormal {
+		return m.handleChatNormalKey(msg)
+	}
+	return m.handleComposeKey(msg)
+}
+
+// handleComposeKey handles keys in compose mode (text input focused).
+func (m ChatModel) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
+	case msg.Type == tea.KeyEsc:
+		m.InputMode = ChatModeNormal
+		m.ChatView.Input.Blur()
+		return m, nil
+
 	case msg.String() == "enter" && !m.ChatView.Loading:
 		return m.sendMessage()
 
@@ -492,81 +484,160 @@ func (m ChatModel) handleChatAreaKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-// handleSearchKey handles keys in the search state.
+// handleChatNormalKey handles keys in chat normal (vim navigation) mode.
+func (m ChatModel) handleChatNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "i":
+		m.InputMode = ChatModeCompose
+		m.ChatView.Input.Focus()
+		return m, nil
+
+	case "j":
+		m.ChatView.ScrollDown()
+		return m, nil
+
+	case "k":
+		m.ChatView.ScrollUp()
+		return m, nil
+
+	case "G":
+		m.ChatView.ScrollToBottom()
+		return m, nil
+
+	case "g":
+		m.ChatView.ScrollToTop()
+		return m, nil
+
+	case "ctrl+u":
+		m.ChatView.ScrollPageUp()
+		return m, nil
+
+	case "ctrl+d":
+		m.ChatView.ScrollPageDown()
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// handleSearchKey handles keys when the sidebar is in search mode.
 func (m ChatModel) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
-		m.State = ChatStateNormal
-		m.Sidebar.SearchQuery = ""
-		m.Sidebar.filtered = nil
-		m.Sidebar.clampCursor()
+		m.Sidebar.ExitSearch()
 		return m, nil
 
 	case "enter":
-		m.State = ChatStateNormal
-		// Keep the filter active but exit search mode.
+		// Capture selection before exiting search (which resets cursor).
 		conv := m.Sidebar.SelectedConversation()
+		m.Sidebar.ExitSearch()
 		if conv != nil {
 			return m, m.loadConversation(conv.ID)
 		}
 		return m, nil
 
 	case "backspace":
-		if len(m.Sidebar.SearchQuery) > 0 {
-			m.Sidebar.SearchQuery = m.Sidebar.SearchQuery[:len(m.Sidebar.SearchQuery)-1]
-			m.Sidebar.updateFilter()
-		}
+		m.Sidebar.SearchBackspace()
 		return m, nil
 
 	default:
 		// Append printable characters to search query.
 		if len(msg.String()) == 1 && msg.String()[0] >= ' ' {
-			m.Sidebar.SearchQuery += msg.String()
-			m.Sidebar.updateFilter()
+			m.Sidebar.SearchInput(rune(msg.String()[0]))
 		}
 		return m, nil
 	}
 }
 
-// handleDeleteConfirmKey handles keys in the delete confirmation state.
+// handleDeleteConfirmKey handles keys when the sidebar is confirming deletion.
 func (m ChatModel) handleDeleteConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y", "Y":
-		id := m.deleteTarget
-		m.State = ChatStateNormal
-		m.deleteTarget = ""
-		return m, m.deleteConversation(id)
+		id := m.Sidebar.ConfirmDelete()
+		if id != "" {
+			return m, m.deleteConversation(id)
+		}
+		return m, nil
 
 	case "n", "N", "esc":
-		m.State = ChatStateNormal
-		m.deleteTarget = ""
+		m.Sidebar.CancelDelete()
 		return m, nil
 	}
 	return m, nil
+}
+
+// handleTitleEditKey handles keys during inline title editing.
+func (m ChatModel) handleTitleEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.titleEditing = false
+		m.titleEdit = ""
+		return m, nil
+
+	case tea.KeyEnter:
+		m.titleEditing = false
+		title := strings.TrimSpace(m.titleEdit)
+		m.titleEdit = ""
+		if title == "" {
+			return m, nil
+		}
+		return m, m.renameConversation(title)
+
+	case tea.KeyBackspace:
+		if len(m.titleEdit) > 0 {
+			runes := []rune(m.titleEdit)
+			m.titleEdit = string(runes[:len(runes)-1])
+		}
+		return m, nil
+
+	default:
+		if msg.Type == tea.KeyRunes && len(msg.Runes) > 0 {
+			m.titleEdit += string(msg.Runes)
+		}
+		return m, nil
+	}
+}
+
+// startTitleEdit begins inline title editing for the selected sidebar item.
+func (m *ChatModel) startTitleEdit() {
+	sel := m.Sidebar.SelectedConversation()
+	if sel == nil {
+		return
+	}
+	m.titleEditing = true
+	m.titleEdit = sel.AutoTitle()
+}
+
+// renameConversation returns a tea.Cmd that updates the title of the selected
+// conversation and persists it.
+func (m ChatModel) renameConversation(title string) tea.Cmd {
+	sel := m.Sidebar.SelectedConversation()
+	if sel == nil || m.Store == nil {
+		return nil
+	}
+	store := m.Store
+	id := sel.ID
+	return func() tea.Msg {
+		conv, err := store.Load(id)
+		if err != nil {
+			return MsgConvSaved{ConversationID: id, Err: err}
+		}
+		conv.Title = title
+		err = store.Save(conv)
+		return MsgConvSaved{ConversationID: id, Err: err}
+	}
 }
 
 // toggleFocus switches between sidebar and chat area.
 func (m *ChatModel) toggleFocus() {
 	if m.Focus == FocusSidebar {
 		m.Focus = FocusChatArea
+		m.InputMode = ChatModeCompose
 		m.ChatView.Input.Focus()
 	} else {
 		m.Focus = FocusSidebar
+		m.InputMode = ChatModeNormal
 		m.ChatView.Input.Blur()
-	}
-}
-
-// ensureSidebarVisible adjusts the scroll offset so the cursor is visible.
-func (m *ChatModel) ensureSidebarVisible() {
-	visibleHeight := m.Height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-	if m.Sidebar.Cursor < m.Sidebar.Offset {
-		m.Sidebar.Offset = m.Sidebar.Cursor
-	}
-	if m.Sidebar.Cursor >= m.Sidebar.Offset+visibleHeight {
-		m.Sidebar.Offset = m.Sidebar.Cursor - visibleHeight + 1
 	}
 }
 
@@ -585,6 +656,7 @@ func (m ChatModel) startNewConversation() (tea.Model, tea.Cmd) {
 	m.ChatView.SetLoading(false)
 	m.ChatView.ClearInput()
 	m.Focus = FocusChatArea
+	m.InputMode = ChatModeCompose
 	m.ChatView.Input.Focus()
 	m.recalcLayout()
 
@@ -670,7 +742,7 @@ func (m ChatModel) handleConvListUpdated(msg MsgConvListUpdated) (tea.Model, tea
 	}
 	m.Sidebar.Conversations = msg.Conversations
 	m.Sidebar.clampCursor()
-	if m.State == ChatStateSearch {
+	if m.Sidebar.IsSearching() {
 		m.Sidebar.updateFilter()
 	}
 	return m, nil
@@ -689,6 +761,7 @@ func (m ChatModel) handleConvLoaded(msg MsgConvLoaded) (tea.Model, tea.Cmd) {
 	m.ChatView.ModelTag = msg.Conversation.Model
 	m.ChatView.SetLoading(false)
 	m.Focus = FocusChatArea
+	m.InputMode = ChatModeCompose
 	m.ChatView.Input.Focus()
 	m.recalcLayout()
 	m.ChatView.ScrollToBottom()
@@ -800,4 +873,3 @@ func (m ChatModel) deleteConversation(id string) tea.Cmd {
 		return MsgConvDeleted{ConversationID: id, Err: err}
 	}
 }
-
