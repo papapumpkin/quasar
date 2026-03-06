@@ -24,6 +24,8 @@ func (m ChatModel) startNewConversation() (tea.Model, tea.Cmd) {
 	m.ChatView.Messages = nil
 	m.ChatView.Title = "New conversation"
 	m.ChatView.ModelTag = m.Model
+	m.ChatView.ModelIndex = m.modelIndex
+	m.ChatView.ModelCount = len(m.Models)
 	m.ChatView.SetLoading(false)
 	m.ChatView.ClearInput()
 	m.Focus = FocusChatArea

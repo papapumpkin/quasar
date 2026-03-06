@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -926,5 +927,236 @@ func TestChatModelSidebarModes(t *testing.T) {
 			t.Errorf("duplicate ChatSidebarMode value: %d", m)
 		}
 		seen[m] = true
+	}
+}
+
+func TestChatModelTitleEdit(t *testing.T) {
+	t.Parallel()
+
+	m, store, _ := newTestChatModel()
+	now := time.Now()
+	store.conversations = []chat.Conversation{
+		{ID: "c1", Title: "Original Title", UpdatedAt: now},
+	}
+
+	// Load conversations.
+	result, _ := m.Update(MsgConvListUpdated{Conversations: store.conversations})
+	m = result.(ChatModel)
+	m.Focus = FocusSidebar
+	m.ChatView.Input.Blur()
+
+	// Press 't' to start title editing.
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	m = result.(ChatModel)
+
+	if !m.Sidebar.TitleEditing {
+		t.Fatal("expected TitleEditing to be true after 't'")
+	}
+	if m.Sidebar.TitleEdit != "Original Title" {
+		t.Errorf("TitleEdit = %q, want %q", m.Sidebar.TitleEdit, "Original Title")
+	}
+
+	// Type some characters.
+	for _, c := range "New" {
+		result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{c}})
+		m = result.(ChatModel)
+	}
+	if !strings.Contains(m.Sidebar.TitleEdit, "New") {
+		t.Errorf("TitleEdit = %q, want to contain 'New'", m.Sidebar.TitleEdit)
+	}
+
+	// Backspace removes a character.
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m = result.(ChatModel)
+
+	runes := []rune(m.Sidebar.TitleEdit)
+	if len(runes) > 0 && runes[len(runes)-1] == 'w' {
+		t.Errorf("backspace should have removed last character")
+	}
+
+	// Escape cancels.
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = result.(ChatModel)
+
+	if m.Sidebar.TitleEditing {
+		t.Fatal("expected TitleEditing to be false after Esc")
+	}
+	if m.Sidebar.TitleEdit != "" {
+		t.Errorf("TitleEdit = %q, want empty after cancel", m.Sidebar.TitleEdit)
+	}
+}
+
+func TestChatModelTitleEditConfirm(t *testing.T) {
+	t.Parallel()
+
+	m, store, _ := newTestChatModel()
+	now := time.Now()
+	store.conversations = []chat.Conversation{
+		{ID: "c1", Title: "Original Title", UpdatedAt: now},
+	}
+
+	result, _ := m.Update(MsgConvListUpdated{Conversations: store.conversations})
+	m = result.(ChatModel)
+	m.Focus = FocusSidebar
+	m.ChatView.Input.Blur()
+
+	// Start title edit.
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	m = result.(ChatModel)
+
+	// Clear and type new title.
+	m.Sidebar.TitleEdit = "Renamed"
+
+	// Press Enter to confirm.
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = result.(ChatModel)
+
+	if m.Sidebar.TitleEditing {
+		t.Fatal("expected TitleEditing to be false after Enter")
+	}
+	if cmd == nil {
+		t.Fatal("expected rename command after confirming title edit")
+	}
+}
+
+func TestChatModelTitleEditEmptyString(t *testing.T) {
+	t.Parallel()
+
+	m, store, _ := newTestChatModel()
+	now := time.Now()
+	store.conversations = []chat.Conversation{
+		{ID: "c1", Title: "Title", UpdatedAt: now},
+	}
+
+	result, _ := m.Update(MsgConvListUpdated{Conversations: store.conversations})
+	m = result.(ChatModel)
+	m.Focus = FocusSidebar
+	m.ChatView.Input.Blur()
+
+	// Start title edit then clear to empty.
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	m = result.(ChatModel)
+	m.Sidebar.TitleEdit = "   " // whitespace only
+
+	// Enter with empty title should not produce a rename command.
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = result.(ChatModel)
+
+	if cmd != nil {
+		t.Fatal("expected no command for empty title")
+	}
+}
+
+func TestChatModelSidebarGScrollOffset(t *testing.T) {
+	t.Parallel()
+
+	m, store, _ := newTestChatModel()
+	now := time.Now()
+	convs := make([]chat.Conversation, 15)
+	for i := range convs {
+		convs[i] = chat.Conversation{
+			ID:        fmt.Sprintf("c%d", i),
+			Title:     fmt.Sprintf("Conv %d", i),
+			UpdatedAt: now.Add(-time.Duration(i) * time.Hour),
+		}
+	}
+	store.conversations = convs
+
+	result, _ := m.Update(MsgConvListUpdated{Conversations: convs})
+	m = result.(ChatModel)
+	m.Focus = FocusSidebar
+	m.ChatView.Input.Blur()
+
+	// Press 'G' to jump to bottom.
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	m = result.(ChatModel)
+
+	if m.Sidebar.Cursor != 14 {
+		t.Errorf("cursor after G = %d, want 14", m.Sidebar.Cursor)
+	}
+
+	// The scroll offset should have adjusted so the cursor is visible.
+	maxItems := m.Sidebar.maxVisibleItems()
+	if m.Sidebar.Offset+maxItems <= m.Sidebar.Cursor {
+		t.Errorf("offset %d + maxItems %d should include cursor %d",
+			m.Sidebar.Offset, maxItems, m.Sidebar.Cursor)
+	}
+}
+
+func TestChatModelSearchNavigation(t *testing.T) {
+	t.Parallel()
+
+	m, store, _ := newTestChatModel()
+	now := time.Now()
+	store.conversations = []chat.Conversation{
+		{ID: "c1", Title: "Alpha chat", UpdatedAt: now},
+		{ID: "c2", Title: "Beta discussion", UpdatedAt: now.Add(-time.Hour)},
+		{ID: "c3", Title: "Alpha topic", UpdatedAt: now.Add(-2 * time.Hour)},
+	}
+
+	result, _ := m.Update(MsgConvListUpdated{Conversations: store.conversations})
+	m = result.(ChatModel)
+	m.Focus = FocusSidebar
+	m.ChatView.Input.Blur()
+
+	// Enter search and type "alpha".
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = result.(ChatModel)
+	for _, c := range "alpha" {
+		result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{c}})
+		m = result.(ChatModel)
+	}
+
+	if m.Sidebar.visibleCount() != 2 {
+		t.Fatalf("visible count = %d, want 2", m.Sidebar.visibleCount())
+	}
+
+	// Navigate down with arrow key in search mode.
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = result.(ChatModel)
+
+	if m.Sidebar.Cursor != 1 {
+		t.Errorf("cursor after down in search = %d, want 1", m.Sidebar.Cursor)
+	}
+
+	// Navigate back up.
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = result.(ChatModel)
+
+	if m.Sidebar.Cursor != 0 {
+		t.Errorf("cursor after up in search = %d, want 0", m.Sidebar.Cursor)
+	}
+}
+
+func TestChatModelCycleModelIndicator(t *testing.T) {
+	t.Parallel()
+
+	m, _, _ := newTestChatModel()
+
+	if m.ChatView.ModelCount < 2 {
+		t.Fatalf("expected at least 2 models, got %d", m.ChatView.ModelCount)
+	}
+
+	initialIndex := m.ChatView.ModelIndex
+
+	// Cycle forward with '}'.
+	m.Focus = FocusSidebar // ensure not in compose mode
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'}'}})
+	m = result.(ChatModel)
+
+	if m.ChatView.ModelIndex == initialIndex {
+		t.Error("expected ModelIndex to change after cycling")
+	}
+	if m.ChatView.ModelCount != len(m.Models) {
+		t.Errorf("ModelCount = %d, want %d", m.ChatView.ModelCount, len(m.Models))
+	}
+
+	// Cycle backward with '{'.
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'{'}})
+	m = result.(ChatModel)
+
+	if m.ChatView.ModelIndex != initialIndex {
+		t.Errorf("expected ModelIndex to return to %d after cycling back, got %d",
+			initialIndex, m.ChatView.ModelIndex)
 	}
 }

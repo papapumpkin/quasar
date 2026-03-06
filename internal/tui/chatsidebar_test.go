@@ -711,6 +711,55 @@ func TestChatSidebarEnsureCursorVisible(t *testing.T) {
 	})
 }
 
+// --- Title editing tests ---
+
+func TestChatSidebarTitleEditRendering(t *testing.T) {
+	t.Parallel()
+
+	t.Run("shows edit input for selected item", func(t *testing.T) {
+		t.Parallel()
+		cs := makeSidebarWithConvs(3)
+		cs.SetSize(30, 20)
+		cs.TitleEditing = true
+		cs.TitleEdit = "Edited Title"
+
+		view := cs.View()
+		if !strings.Contains(view, "Edited Title") {
+			t.Fatal("expected edit text 'Edited Title' in view")
+		}
+		if !strings.Contains(view, "_") {
+			t.Fatal("expected cursor indicator '_' in view")
+		}
+	})
+
+	t.Run("non-selected items render normally during edit", func(t *testing.T) {
+		t.Parallel()
+		cs := makeSidebarWithConvs(3)
+		cs.SetSize(30, 20)
+		cs.TitleEditing = true
+		cs.TitleEdit = "New Name"
+
+		view := cs.View()
+		// Other items should still show their original titles.
+		if !strings.Contains(view, "Conv 1") {
+			t.Fatal("expected 'Conv 1' to render normally during title edit")
+		}
+	})
+
+	t.Run("title edit not shown when not editing", func(t *testing.T) {
+		t.Parallel()
+		cs := makeSidebarWithConvs(3)
+		cs.SetSize(30, 20)
+		cs.TitleEditing = false
+		cs.TitleEdit = "Ghost Text"
+
+		view := cs.View()
+		if strings.Contains(view, "Ghost Text") {
+			t.Fatal("title edit text should not appear when not editing")
+		}
+	})
+}
+
 // --- helpers ---
 
 func makeTestConversations(n int) []chat.Conversation {

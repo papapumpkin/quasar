@@ -84,6 +84,57 @@ func TestChatViewRenderEmptyState(t *testing.T) {
 	}
 }
 
+func TestChatViewEmptyStateKeybindingHints(t *testing.T) {
+	t.Parallel()
+
+	cv := NewChatView()
+	cv.SetSize(80, 30)
+
+	view := cv.View()
+
+	hints := []string{"Quick reference", "compose", "switch model", "sidebar", "search", "rename", "quit"}
+	for _, hint := range hints {
+		if !strings.Contains(view, hint) {
+			t.Errorf("empty state should contain hint %q", hint)
+		}
+	}
+}
+
+func TestChatViewTitleBarModelPosition(t *testing.T) {
+	t.Parallel()
+
+	cv := NewChatView()
+	cv.Title = "Test Chat"
+	cv.ModelTag = "claude-sonnet-4"
+	cv.ModelIndex = 0
+	cv.ModelCount = 3
+	cv.SetSize(80, 24)
+
+	view := cv.View()
+	if !strings.Contains(view, "1/3") {
+		t.Fatal("expected model position indicator '1/3' in title bar")
+	}
+}
+
+func TestChatViewTitleBarSingleModel(t *testing.T) {
+	t.Parallel()
+
+	cv := NewChatView()
+	cv.Title = "Test Chat"
+	cv.ModelTag = "claude-sonnet-4"
+	cv.ModelIndex = 0
+	cv.ModelCount = 1
+	cv.SetSize(80, 24)
+
+	view := cv.View()
+	if strings.Contains(view, "1/1") {
+		t.Fatal("single model should not show position indicator")
+	}
+	if !strings.Contains(view, "claude-sonnet-4") {
+		t.Fatal("expected model name in title bar")
+	}
+}
+
 func TestChatViewRenderMessages(t *testing.T) {
 	t.Parallel()
 
