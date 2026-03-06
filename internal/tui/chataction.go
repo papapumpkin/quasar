@@ -12,8 +12,30 @@ import (
 	"github.com/papapumpkin/quasar/internal/chat"
 )
 
+// resetStreamingState clears all streaming-related fields and renews the
+// context for the next inference call. Called by handleChatDone,
+// handleChatError, and startNewConversation.
+func (m *ChatModel) resetStreamingState() {
+	m.ChatView.SetLoading(false)
+	m.ChatView.Streaming = false
+	m.streaming = false
+	m.streamChunks = nil
+	m.streamErrs = nil
+
+	ctx, cancel := context.WithCancel(context.Background())
+	m.ctx = ctx
+	m.cancel = cancel
+}
+
 // startNewConversation creates a new empty conversation and focuses the chat input.
+// Any in-flight inference is cancelled so stale chunks don't leak into the new conversation.
 func (m ChatModel) startNewConversation() (tea.Model, tea.Cmd) {
+	// Cancel any in-flight inference from the previous conversation.
+	if m.streaming || m.ChatView.Loading {
+		m.cancel()
+		m.resetStreamingState()
+	}
+
 	conv := &chat.Conversation{
 		Model:     m.Model,
 		CreatedAt: time.Now(),
@@ -179,6 +201,10 @@ func (m ChatModel) handleChatChunk(msg MsgChatChunk) (tea.Model, tea.Cmd) {
 	if m.ActiveConv == nil {
 		return m, nil
 	}
+	// Discard chunks from a previous conversation.
+	if msg.ConversationID != "" && msg.ConversationID != m.ActiveConv.ID {
+		return m, nil
+	}
 
 	// Transition from "thinking…" to streaming on first chunk.
 	if m.ChatView.Loading {
@@ -231,16 +257,12 @@ func (m ChatModel) handleChatResponse(msg MsgChatResponse) (tea.Model, tea.Cmd) 
 // a "[cancelled]" suffix. Other errors are displayed inline as system
 // messages.
 func (m ChatModel) handleChatError(msg MsgChatError) (tea.Model, tea.Cmd) {
-	m.ChatView.SetLoading(false)
-	m.ChatView.Streaming = false
-	m.streaming = false
-	m.streamChunks = nil
-	m.streamErrs = nil
+	// Discard errors from a previous conversation.
+	if msg.ConversationID != "" && m.ActiveConv != nil && msg.ConversationID != m.ActiveConv.ID {
+		return m, nil
+	}
 
-	// Renew context so the next request gets a fresh one.
-	ctx, cancel := context.WithCancel(context.Background())
-	m.ctx = ctx
-	m.cancel = cancel
+	m.resetStreamingState()
 
 	if errors.Is(msg.Err, context.Canceled) {
 		// Preserve partial response with cancelled suffix.
@@ -278,16 +300,12 @@ func (m ChatModel) handleChatError(msg MsgChatError) (tea.Model, tea.Cmd) {
 
 // handleChatDone processes the successful end of an AI inference stream.
 func (m ChatModel) handleChatDone(msg MsgChatDone) (tea.Model, tea.Cmd) {
-	m.ChatView.SetLoading(false)
-	m.ChatView.Streaming = false
-	m.streaming = false
-	m.streamChunks = nil
-	m.streamErrs = nil
+	// Discard completions from a previous conversation.
+	if msg.ConversationID != "" && m.ActiveConv != nil && msg.ConversationID != m.ActiveConv.ID {
+		return m, nil
+	}
 
-	// Renew context for next request.
-	ctx, cancel := context.WithCancel(context.Background())
-	m.ctx = ctx
-	m.cancel = cancel
+	m.resetStreamingState()
 
 	if msg.Err != nil {
 		// Legacy error path — show as system message.

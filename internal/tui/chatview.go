@@ -340,12 +340,14 @@ func (cv ChatView) renderInputArea() string {
 	b.WriteString(cv.Input.View())
 	b.WriteString("\n")
 
-	// Hint line.
-	hint := "enter: send"
+	// Hint line — show context-appropriate hints.
+	var hint string
 	if cv.Streaming {
-		hint += "  " + cv.Spinner.View() + " streaming…"
+		hint = cv.Spinner.View() + " streaming…  ctrl+c: cancel"
 	} else if cv.Loading {
-		hint += "  " + cv.Spinner.View() + " thinking…"
+		hint = cv.Spinner.View() + " thinking…  ctrl+c: cancel"
+	} else {
+		hint = "enter: send"
 	}
 	b.WriteString(styleChatTimestamp.Render(hint))
 

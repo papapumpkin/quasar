@@ -1160,3 +1160,520 @@ func TestChatModelCycleModelIndicator(t *testing.T) {
 			initialIndex, m.ChatView.ModelIndex)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Streaming tests
+// ---------------------------------------------------------------------------
+
+func TestChatModelChunkAppendsToAssistantMessage(t *testing.T) {
+	t.Parallel()
+
+	m, _, _ := newTestChatModel()
+	m.ActiveConv = &chat.Conversation{ID: "c1"}
+	m.streaming = true
+	m.ChatView.Loading = true
+
+	// First chunk — creates assistant message, transitions to streaming.
+	result, cmd := m.Update(MsgChatChunk{ConversationID: "c1", Content: "Hello"})
+	m = result.(ChatModel)
+
+	if m.ChatView.Loading {
+		t.Error("Loading should be false after first chunk")
+	}
+	if !m.ChatView.Streaming {
+		t.Error("Streaming should be true after first chunk")
+	}
+	if len(m.ActiveConv.Messages) != 1 {
+		t.Fatalf("messages = %d, want 1", len(m.ActiveConv.Messages))
+	}
+	if m.ActiveConv.Messages[0].Role != chat.RoleAssistant {
+		t.Errorf("role = %q, want assistant", m.ActiveConv.Messages[0].Role)
+	}
+	if m.ActiveConv.Messages[0].Content != "Hello" {
+		t.Errorf("content = %q, want %q", m.ActiveConv.Messages[0].Content, "Hello")
+	}
+	if cmd == nil {
+		t.Fatal("expected readNextChunk command")
+	}
+
+	// Second chunk — appends to existing assistant message.
+	result, cmd = m.Update(MsgChatChunk{ConversationID: "c1", Content: " World"})
+	m = result.(ChatModel)
+
+	if len(m.ActiveConv.Messages) != 1 {
+		t.Fatalf("messages = %d, want 1 (appended, not new)", len(m.ActiveConv.Messages))
+	}
+	if m.ActiveConv.Messages[0].Content != "Hello World" {
+		t.Errorf("content = %q, want %q", m.ActiveConv.Messages[0].Content, "Hello World")
+	}
+	if cmd == nil {
+		t.Fatal("expected readNextChunk command after second chunk")
+	}
+}
+
+func TestChatModelChunkIgnoresWrongConversation(t *testing.T) {
+	t.Parallel()
+
+	m, _, _ := newTestChatModel()
+	m.ActiveConv = &chat.Conversation{ID: "c2"}
+	m.streaming = true
+
+	// Chunk for c1 should be discarded when active is c2.
+	result, cmd := m.Update(MsgChatChunk{ConversationID: "c1", Content: "stale"})
+	m = result.(ChatModel)
+
+	if len(m.ActiveConv.Messages) != 0 {
+		t.Errorf("messages = %d, want 0 (chunk for wrong conv should be discarded)", len(m.ActiveConv.Messages))
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd for discarded chunk")
+	}
+}
+
+func TestChatModelDoneIgnoresWrongConversation(t *testing.T) {
+	t.Parallel()
+
+	m, store, _ := newTestChatModel()
+	m.ActiveConv = &chat.Conversation{ID: "c2"}
+	m.streaming = true
+
+	result, cmd := m.Update(MsgChatDone{ConversationID: "c1"})
+	m = result.(ChatModel)
+
+	// Streaming should NOT be reset since the message is for a different conv.
+	if !m.streaming {
+		t.Error("streaming should remain true for mismatched conv ID")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd for discarded done")
+	}
+	if len(store.saved) != 0 {
+		t.Error("should not save for discarded done")
+	}
+}
+
+func TestChatModelErrorIgnoresWrongConversation(t *testing.T) {
+	t.Parallel()
+
+	m, _, _ := newTestChatModel()
+	m.ActiveConv = &chat.Conversation{ID: "c2"}
+	m.streaming = true
+
+	result, _ := m.Update(MsgChatError{ConversationID: "c1", Err: fmt.Errorf("stale error")})
+	m = result.(ChatModel)
+
+	// Streaming should NOT be reset since the message is for a different conv.
+	if !m.streaming {
+		t.Error("streaming should remain true for mismatched conv ID")
+	}
+	// No system error message should be added.
+	if len(m.ActiveConv.Messages) != 0 {
+		t.Errorf("messages = %d, want 0 (error for wrong conv should be discarded)", len(m.ActiveConv.Messages))
+	}
+}
+
+func TestChatModelDoneSuccessSaves(t *testing.T) {
+	t.Parallel()
+
+	m, _, _ := newTestChatModel()
+	m.ActiveConv = &chat.Conversation{ID: "c1"}
+	m.streaming = true
+	m.ChatView.Streaming = true
+
+	result, cmd := m.Update(MsgChatDone{ConversationID: "c1"})
+	m = result.(ChatModel)
+
+	if m.streaming {
+		t.Error("streaming should be false after done")
+	}
+	if m.ChatView.Streaming {
+		t.Error("ChatView.Streaming should be false after done")
+	}
+	if m.ChatView.Loading {
+		t.Error("ChatView.Loading should be false after done")
+	}
+	if cmd == nil {
+		t.Fatal("expected save command on successful completion")
+	}
+}
+
+func TestChatModelErrorCancellationPreservesPartial(t *testing.T) {
+	t.Parallel()
+
+	m, store, _ := newTestChatModel()
+	m.ActiveConv = &chat.Conversation{
+		ID: "c1",
+		Messages: []chat.Message{
+			{Role: chat.RoleUser, Content: "Hello"},
+			{Role: chat.RoleAssistant, Content: "Partial response"},
+		},
+	}
+	m.ChatView.Messages = make([]chat.Message, len(m.ActiveConv.Messages))
+	copy(m.ChatView.Messages, m.ActiveConv.Messages)
+	m.streaming = true
+	m.ChatView.Streaming = true
+
+	result, cmd := m.Update(MsgChatError{ConversationID: "c1", Err: context.Canceled})
+	m = result.(ChatModel)
+
+	// Streaming state should be reset.
+	if m.streaming {
+		t.Error("streaming should be false after cancellation error")
+	}
+	if m.ChatView.Streaming {
+		t.Error("ChatView.Streaming should be false after cancellation")
+	}
+
+	// Partial response should have "[cancelled]" suffix.
+	lastMsg := m.ActiveConv.Messages[len(m.ActiveConv.Messages)-1]
+	if !strings.Contains(lastMsg.Content, "[cancelled]") {
+		t.Errorf("content = %q, want to contain '[cancelled]'", lastMsg.Content)
+	}
+	if lastMsg.Content != "Partial response [cancelled]" {
+		t.Errorf("content = %q, want %q", lastMsg.Content, "Partial response [cancelled]")
+	}
+
+	// Should issue a save command.
+	if cmd == nil {
+		t.Fatal("expected save command for partial conversation")
+	}
+	_ = store // store used to verify save
+}
+
+func TestChatModelErrorNonCancellationShowsSystemMessage(t *testing.T) {
+	t.Parallel()
+
+	m, _, _ := newTestChatModel()
+	m.ActiveConv = &chat.Conversation{ID: "c1"}
+	m.streaming = true
+
+	result, cmd := m.Update(MsgChatError{ConversationID: "c1", Err: fmt.Errorf("network timeout")})
+	m = result.(ChatModel)
+
+	if m.streaming {
+		t.Error("streaming should be false after error")
+	}
+
+	// Should have added a system error message.
+	if len(m.ActiveConv.Messages) != 1 {
+		t.Fatalf("messages = %d, want 1", len(m.ActiveConv.Messages))
+	}
+	errMsg := m.ActiveConv.Messages[0]
+	if errMsg.Role != chat.RoleSystem {
+		t.Errorf("role = %q, want system", errMsg.Role)
+	}
+	if !strings.Contains(errMsg.Content, "network timeout") {
+		t.Errorf("content = %q, want to contain 'network timeout'", errMsg.Content)
+	}
+
+	// No save command for errors.
+	if cmd != nil {
+		t.Error("expected nil cmd after non-cancellation error")
+	}
+}
+
+func TestChatModelSendMessageTriggersStreaming(t *testing.T) {
+	t.Parallel()
+
+	m, _, _ := newTestChatModel()
+	m.ChatView.Input.SetValue("Hello AI")
+
+	result, cmd := m.sendMessage()
+	m = result.(ChatModel)
+
+	if !m.streaming {
+		t.Error("streaming should be true after sendMessage")
+	}
+	if !m.ChatView.Loading {
+		t.Error("Loading should be true after sendMessage")
+	}
+	if cmd == nil {
+		t.Fatal("expected readNextChunk command from sendMessage")
+	}
+	// User message should be appended.
+	if len(m.ActiveConv.Messages) != 1 {
+		t.Fatalf("messages = %d, want 1", len(m.ActiveConv.Messages))
+	}
+	if m.ActiveConv.Messages[0].Content != "Hello AI" {
+		t.Errorf("content = %q, want %q", m.ActiveConv.Messages[0].Content, "Hello AI")
+	}
+}
+
+func TestChatModelSendMessageEmptyIgnored(t *testing.T) {
+	t.Parallel()
+
+	m, _, _ := newTestChatModel()
+	m.ChatView.Input.SetValue("   ") // whitespace only
+
+	result, cmd := m.sendMessage()
+	m = result.(ChatModel)
+
+	if m.streaming {
+		t.Error("streaming should be false for empty input")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd for empty input")
+	}
+}
+
+func TestChatModelEnterDisabledDuringStreaming(t *testing.T) {
+	t.Parallel()
+
+	m, _, _ := newTestChatModel()
+	m.Focus = FocusChatArea
+	m.InputMode = ChatModeCompose
+	m.ChatView.Streaming = true
+	m.ChatView.Input.SetValue("should not send")
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = result.(ChatModel)
+
+	// The input should NOT have been consumed.
+	if m.ChatView.InputValue() != "should not send" {
+		t.Errorf("input should remain unchanged during streaming, got %q", m.ChatView.InputValue())
+	}
+	// Should not start a new sendMessage (no streaming cmd).
+	if cmd != nil {
+		t.Error("expected nil cmd when enter is pressed during streaming")
+	}
+}
+
+func TestChatModelEnterDisabledDuringLoading(t *testing.T) {
+	t.Parallel()
+
+	m, _, _ := newTestChatModel()
+	m.Focus = FocusChatArea
+	m.InputMode = ChatModeCompose
+	m.ChatView.Loading = true
+	m.ChatView.Input.SetValue("should not send")
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = result.(ChatModel)
+
+	if m.ChatView.InputValue() != "should not send" {
+		t.Errorf("input should remain unchanged during loading, got %q", m.ChatView.InputValue())
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd when enter is pressed during loading")
+	}
+}
+
+func TestChatModelCtrlCDuringStreamingCancels(t *testing.T) {
+	t.Parallel()
+
+	m, _, _ := newTestChatModel()
+	m.streaming = true
+	m.ChatView.Streaming = true
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	_ = result.(ChatModel)
+
+	// Should NOT quit — just cancel.
+	if cmd != nil {
+		t.Error("expected nil cmd (no tea.Quit) when Ctrl+C during streaming")
+	}
+}
+
+func TestChatModelCtrlCDuringLoadingCancels(t *testing.T) {
+	t.Parallel()
+
+	m, _, _ := newTestChatModel()
+	m.ChatView.Loading = true
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	_ = result.(ChatModel)
+
+	if cmd != nil {
+		t.Error("expected nil cmd (no tea.Quit) when Ctrl+C during loading")
+	}
+}
+
+func TestChatModelCtrlCIdleQuits(t *testing.T) {
+	t.Parallel()
+
+	m, _, _ := newTestChatModel()
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+
+	// Should produce a quit command.
+	if cmd == nil {
+		t.Fatal("expected tea.Quit command when idle")
+	}
+}
+
+func TestChatModelNewConversationCancelsStreaming(t *testing.T) {
+	t.Parallel()
+
+	m, _, _ := newTestChatModel()
+	m.ActiveConv = &chat.Conversation{ID: "c1"}
+	m.streaming = true
+	m.ChatView.Streaming = true
+	m.ChatView.Loading = false
+	m.Focus = FocusSidebar
+	m.ChatView.Input.Blur()
+
+	// Press 'n' to create new conversation.
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = result.(ChatModel)
+
+	// Streaming state should be cleaned up.
+	if m.streaming {
+		t.Error("streaming should be false after new conversation")
+	}
+	if m.ChatView.Streaming {
+		t.Error("ChatView.Streaming should be false after new conversation")
+	}
+	// New conversation should be active.
+	if m.ActiveConv == nil {
+		t.Fatal("ActiveConv should be set")
+	}
+	if m.ActiveConv.ID == "c1" {
+		t.Error("ActiveConv should be a new conversation, not the old one")
+	}
+}
+
+func TestChatViewAppendStreamChunk(t *testing.T) {
+	t.Parallel()
+
+	cv := NewChatView()
+	cv.SetSize(80, 24)
+
+	// First chunk creates a new assistant message.
+	cv.AppendStreamChunk("Hello")
+
+	if len(cv.Messages) != 1 {
+		t.Fatalf("messages = %d, want 1", len(cv.Messages))
+	}
+	if cv.Messages[0].Role != chat.RoleAssistant {
+		t.Errorf("role = %q, want assistant", cv.Messages[0].Role)
+	}
+	if cv.Messages[0].Content != "Hello" {
+		t.Errorf("content = %q, want %q", cv.Messages[0].Content, "Hello")
+	}
+
+	// Second chunk appends to existing assistant message.
+	cv.AppendStreamChunk(" World")
+
+	if len(cv.Messages) != 1 {
+		t.Fatalf("messages = %d, want 1 (should append, not add new)", len(cv.Messages))
+	}
+	if cv.Messages[0].Content != "Hello World" {
+		t.Errorf("content = %q, want %q", cv.Messages[0].Content, "Hello World")
+	}
+}
+
+func TestChatViewAppendStreamChunkAfterUserMessage(t *testing.T) {
+	t.Parallel()
+
+	cv := NewChatView()
+	cv.SetSize(80, 24)
+
+	cv.AddMessage(chat.Message{
+		Role:      chat.RoleUser,
+		Content:   "Question?",
+		Timestamp: time.Now(),
+	})
+
+	// First stream chunk creates a NEW assistant message (doesn't append to user msg).
+	cv.AppendStreamChunk("Answer")
+
+	if len(cv.Messages) != 2 {
+		t.Fatalf("messages = %d, want 2", len(cv.Messages))
+	}
+	if cv.Messages[1].Role != chat.RoleAssistant {
+		t.Errorf("role = %q, want assistant", cv.Messages[1].Role)
+	}
+	if cv.Messages[1].Content != "Answer" {
+		t.Errorf("content = %q, want %q", cv.Messages[1].Content, "Answer")
+	}
+}
+
+func TestChatViewStreamingIndicator(t *testing.T) {
+	t.Parallel()
+
+	cv := NewChatView()
+	cv.SetSize(80, 24)
+	cv.Streaming = true
+
+	view := cv.View()
+
+	if !strings.Contains(view, "streaming") {
+		t.Error("expected 'streaming' indicator when Streaming is true")
+	}
+	// Should show cancel hint, not "enter: send".
+	if strings.Contains(view, "enter: send") {
+		t.Error("should not show 'enter: send' during streaming")
+	}
+	if !strings.Contains(view, "ctrl+c") {
+		t.Error("expected 'ctrl+c' cancel hint during streaming")
+	}
+}
+
+func TestChatViewLoadingIndicator(t *testing.T) {
+	t.Parallel()
+
+	cv := NewChatView()
+	cv.SetSize(80, 24)
+	cv.SetLoading(true)
+
+	view := cv.View()
+
+	if !strings.Contains(view, "thinking") {
+		t.Error("expected 'thinking' indicator when Loading is true")
+	}
+	if !strings.Contains(view, "ctrl+c") {
+		t.Error("expected 'ctrl+c' cancel hint during loading")
+	}
+	if strings.Contains(view, "enter: send") {
+		t.Error("should not show 'enter: send' during loading")
+	}
+}
+
+func TestChatViewIdleHint(t *testing.T) {
+	t.Parallel()
+
+	cv := NewChatView()
+	cv.SetSize(80, 24)
+
+	view := cv.View()
+
+	if !strings.Contains(view, "enter: send") {
+		t.Error("expected 'enter: send' hint when idle")
+	}
+}
+
+func TestChatModelResetStreamingState(t *testing.T) {
+	t.Parallel()
+
+	m, _, _ := newTestChatModel()
+	m.streaming = true
+	m.ChatView.Loading = true
+	m.ChatView.Streaming = true
+	m.streamChunks = make(<-chan string)
+	m.streamErrs = make(<-chan error)
+
+	m.resetStreamingState()
+
+	if m.streaming {
+		t.Error("streaming should be false")
+	}
+	if m.ChatView.Loading {
+		t.Error("Loading should be false")
+	}
+	if m.ChatView.Streaming {
+		t.Error("Streaming should be false")
+	}
+	if m.streamChunks != nil {
+		t.Error("streamChunks should be nil")
+	}
+	if m.streamErrs != nil {
+		t.Error("streamErrs should be nil")
+	}
+	// Context should be renewed (non-nil).
+	if m.ctx == nil {
+		t.Error("ctx should be renewed, not nil")
+	}
+	if m.cancel == nil {
+		t.Error("cancel should be renewed, not nil")
+	}
+}
