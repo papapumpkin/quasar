@@ -14,6 +14,8 @@
 {"issue_id":"quasar-0dkf.1","label":"review-finding"}
 {"issue_id":"quasar-0f8p","label":"quasar"}
 {"issue_id":"quasar-0f8p","label":"web"}
+{"issue_id":"quasar-0i31","label":"quasar"}
+{"issue_id":"quasar-0i31","label":"web"}
 {"issue_id":"quasar-0iy","label":"concurrency"}
 {"issue_id":"quasar-0iy","label":"contracts"}
 {"issue_id":"quasar-0iy","label":"nebula"}
@@ -645,6 +647,8 @@
 {"issue_id":"quasar-bnd0.2","label":"review-finding"}
 {"issue_id":"quasar-bnd0.3","label":"quasar"}
 {"issue_id":"quasar-bnd0.3","label":"review-finding"}
+{"issue_id":"quasar-bo3i","label":"quasar"}
+{"issue_id":"quasar-bo3i","label":"web"}
 {"issue_id":"quasar-bqch","label":"quasar"}
 {"issue_id":"quasar-bqch","label":"tui"}
 {"issue_id":"quasar-bqch.1","label":"quasar"}
@@ -924,6 +928,8 @@
 {"issue_id":"quasar-jw6","label":"quasar"}
 {"issue_id":"quasar-jw6","label":"tui"}
 {"issue_id":"quasar-jwnc","label":"quasar"}
+{"issue_id":"quasar-jzka","label":"quasar"}
+{"issue_id":"quasar-jzka","label":"web"}
 {"issue_id":"quasar-k1xh","label":"auto-healing"}
 {"issue_id":"quasar-k1xh","label":"quasar"}
 {"issue_id":"quasar-k1xh","label":"reliability"}
@@ -949,6 +955,8 @@
 {"issue_id":"quasar-k8z1","label":"web"}
 {"issue_id":"quasar-k920","label":"quasar"}
 {"issue_id":"quasar-k920","label":"web"}
+{"issue_id":"quasar-ka43","label":"quasar"}
+{"issue_id":"quasar-ka43","label":"web"}
 {"issue_id":"quasar-kae","label":"quasar"}
 {"issue_id":"quasar-kae","label":"tui"}
 {"issue_id":"quasar-kae","label":"visual"}
@@ -1334,6 +1342,8 @@
 {"issue_id":"quasar-trjs","label":"quality"}
 {"issue_id":"quasar-trjs","label":"quasar"}
 {"issue_id":"quasar-trjs","label":"reviewer"}
+{"issue_id":"quasar-tt45","label":"quasar"}
+{"issue_id":"quasar-tt45","label":"web"}
 {"issue_id":"quasar-tvyv","label":"auto-healing"}
 {"issue_id":"quasar-tvyv","label":"quasar"}
 {"issue_id":"quasar-tvyv","label":"reliability"}
@@ -1382,8 +1392,12 @@
 {"issue_id":"quasar-vcsj","label":"ux"}
 {"issue_id":"quasar-veqz","label":"quasar"}
 {"issue_id":"quasar-veqz","label":"web"}
+{"issue_id":"quasar-vey9","label":"quasar"}
+{"issue_id":"quasar-vey9","label":"web"}
 {"issue_id":"quasar-vobf","label":"quasar"}
 {"issue_id":"quasar-vobf","label":"web"}
+{"issue_id":"quasar-vogr","label":"quasar"}
+{"issue_id":"quasar-vogr","label":"web"}
 {"issue_id":"quasar-vopj","label":"cache"}
 {"issue_id":"quasar-vopj","label":"cost-optimization"}
 {"issue_id":"quasar-vopj","label":"quasar"}
@@ -1403,6 +1417,8 @@
 {"issue_id":"quasar-vwe","label":"relativity"}
 {"issue_id":"quasar-vwuj","label":"organization"}
 {"issue_id":"quasar-vwuj","label":"refactor"}
+{"issue_id":"quasar-vx0t","label":"quasar"}
+{"issue_id":"quasar-vx0t","label":"web"}
 {"issue_id":"quasar-w915","label":"quasar"}
 {"issue_id":"quasar-w915","label":"web"}
 {"issue_id":"quasar-wbas","label":"cost-optimization"}
