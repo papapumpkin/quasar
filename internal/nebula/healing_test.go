@@ -185,7 +185,7 @@ func TestAnalyzeFailure_Unhealable_ContextCanceled(t *testing.T) {
 		t.Error("expected healable = false for context.Canceled")
 	}
 	if !strings.Contains(diag.Summary, "canceled") {
-		t.Errorf("summary = %q, expected to contain 'cancelled'", diag.Summary)
+		t.Errorf("summary = %q, expected to contain 'canceled'", diag.Summary)
 	}
 }
 
@@ -316,7 +316,7 @@ func TestAnalyzeFailure_ContextCanceledWithStaleFilterFields(t *testing.T) {
 		t.Error("expected healable = false for context.Canceled even with filter fields populated")
 	}
 	if !strings.Contains(diag.Summary, "canceled") {
-		t.Errorf("summary = %q, expected to contain 'cancelled'", diag.Summary)
+		t.Errorf("summary = %q, expected to contain 'canceled'", diag.Summary)
 	}
 }
 

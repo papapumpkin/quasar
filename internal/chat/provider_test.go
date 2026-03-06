@@ -408,11 +408,8 @@ func TestChatStream_ChannelsClosed(t *testing.T) {
 	}
 
 	select {
-	case _, ok := <-errs:
-		if ok {
-			// If we got a value, it should be nil (indicating channel close after drain).
-			// Either way the channel should close.
-		}
+	case <-errs:
+		// Channel closed or value received — either is acceptable.
 	case <-time.After(2 * time.Second):
 		t.Error("errs channel was not closed")
 	}

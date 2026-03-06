@@ -451,7 +451,7 @@ func buildTUIWorkerOpts(
 		nebula.WithLogger(io.Discard),
 		nebula.WithBus(eventBus),
 		nebula.WithPrompter(tui.NewGater(tuiProgram)),
-		nebula.WithDialogue(tui.NewDialogueBridge(tuiProgram)),
+		nebula.WithDialog(tui.NewDialogBridge(tuiProgram)),
 	}
 	opts = append(opts, resumeOptions(ecfg.Resume, workDir)...)
 	return opts

@@ -1,5 +1,5 @@
 // Package chat provides types and persistence for user-initiated chat
-// conversations with AI models. Unlike the dialogue package (which handles
+// conversations with AI models. Unlike the dialog package (which handles
 // agent-human escalation), this package manages full conversational threads
 // that the user starts directly via the TUI.
 package chat

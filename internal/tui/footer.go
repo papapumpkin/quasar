@@ -98,7 +98,7 @@ func GateFooterBindings(km KeyMap) []key.Binding {
 	return []key.Binding{km.Accept, km.Reject, km.Retry, km.Skip, esc}
 }
 
-// HailOverlayFooterBindings returns footer bindings when the hail dialogue overlay is active.
+// HailOverlayFooterBindings returns footer bindings when the hail dialog overlay is active.
 func HailOverlayFooterBindings(km KeyMap) []key.Binding {
 	enter := key.NewBinding(
 		key.WithKeys("enter"),
@@ -117,8 +117,8 @@ func HailOverlayFooterBindings(km KeyMap) []key.Binding {
 	return []key.Binding{enter, submit, tab, esc}
 }
 
-// DialogueFooterBindings returns footer bindings for the interactive dialogue overlay.
-func DialogueFooterBindings() []key.Binding {
+// DialogFooterBindings returns footer bindings for the interactive dialog overlay.
+func DialogFooterBindings() []key.Binding {
 	return []key.Binding{
 		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "send")),
 		key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "close")),

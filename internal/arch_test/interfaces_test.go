@@ -17,12 +17,26 @@ var allowedColocations = map[string]map[string]bool{
 	"beads": {
 		"Client": true,
 	},
+	// Chat defines Provider and Store alongside their canonical implementations
+	// (ClaudeProvider and FileStore). Consumers import the interface types for
+	// testability; the concrete implementations are the sole backends.
+	"chat": {
+		"Provider": true,
+		"Store":    true,
+	},
 	// Bus defines the typed event bus interface alongside MemoryBus, the
 	// canonical in-process implementation. Consumers (tui, telemetry, nebula)
 	// import the Bus and Subscription interfaces.
 	"bus": {
 		"Bus":          true,
 		"Subscription": true,
+	},
+	// Dialog defines Session and DisplayHandle alongside MemSession, the sole
+	// in-process implementation. Consumers (tui, tycho) import the interface
+	// types; MemSession satisfies both for the in-process channel-based design.
+	"dialog": {
+		"Session":       true,
+		"DisplayHandle": true,
 	},
 	// Strategy pattern: multiple strategy implementations live alongside the interface.
 	"dag": {

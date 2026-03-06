@@ -595,7 +595,7 @@ func TestAppModelViewWithHail(t *testing.T) {
 	})
 }
 
-// --- Dialogue mode tests ---
+// --- Dialog mode tests ---
 
 func TestHailOverlay_TextInputWidth(t *testing.T) {
 	t.Parallel()

@@ -384,7 +384,7 @@ var (
 	styleHailOption = lipgloss.NewStyle().
 			Foreground(colorBlueshift)
 
-	// styleHailUserMsg styles composed dialogue entries in the hail overlay.
+	// styleHailUserMsg styles composed dialog entries in the hail overlay.
 	styleHailUserMsg = lipgloss.NewStyle().
 				Foreground(colorBlueshift).
 				Italic(true)
