@@ -1,9 +1,10 @@
 package tui
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -34,7 +35,9 @@ func (m ChatModel) startNewConversation() (tea.Model, tea.Cmd) {
 }
 
 // sendMessage sends the current input to the AI provider and returns
-// a command that delivers streaming response chunks.
+// a command that streams response chunks incrementally via MsgChatChunk
+// messages. Each chunk handler reads the next token from the provider's
+// channel, enabling real-time progressive rendering.
 func (m ChatModel) sendMessage() (tea.Model, tea.Cmd) {
 	text := m.ChatView.InputValue()
 	if text == "" {
@@ -66,41 +69,48 @@ func (m ChatModel) sendMessage() (tea.Model, tea.Cmd) {
 	m.ActiveConv.AutoTitle()
 	m.ChatView.Title = m.ActiveConv.Title
 
-	// Launch streaming inference.
-	//
-	// TODO: dispatch chunks incrementally for progressive rendering.
-	// Currently all chunks are collected into a single MsgChatResponse,
-	// making the UX identical to a non-streaming Chat() call. This is
-	// acceptable because ClaudeProvider.ChatStream also delivers the full
-	// response as one chunk. When true token-by-token streaming is added
-	// to the provider, this should be reworked to emit per-chunk messages
-	// using a tea.Cmd chain or tea.Program.Send().
-	convID := m.ActiveConv.ID
+	// Create a fresh context for this inference call so that Ctrl+C
+	// cancellation only affects the current request.
+	ctx, cancel := context.WithCancel(context.Background())
+	m.ctx = ctx
+	m.cancel = cancel
+
+	// Start streaming inference and store the channels for incremental
+	// reading via readNextChunk.
 	messages := make([]chat.Message, len(m.ActiveConv.Messages))
 	copy(messages, m.ActiveConv.Messages)
-	model := m.Model
-	ctx := m.ctx
-	provider := m.Provider
 
-	cmd := func() tea.Msg {
-		chunks, errs := provider.ChatStream(ctx, messages, model)
+	chunks, errs := m.Provider.ChatStream(ctx, messages, m.Model)
+	m.streamChunks = chunks
+	m.streamErrs = errs
+	m.streaming = true
 
-		var fullResponse strings.Builder
-		for chunk := range chunks {
-			fullResponse.WriteString(chunk)
-		}
+	return m, m.readNextChunk()
+}
 
-		if err := <-errs; err != nil {
-			return MsgChatDone{ConversationID: convID, Err: err}
-		}
-
-		return MsgChatResponse{
-			ConversationID: convID,
-			Content:        fullResponse.String(),
-		}
+// readNextChunk returns a tea.Cmd that reads the next token from the
+// active stream channels. It yields MsgChatChunk for each token,
+// MsgChatError if the provider reports an error, or MsgChatDone when
+// the stream completes successfully.
+func (m ChatModel) readNextChunk() tea.Cmd {
+	chunks := m.streamChunks
+	errs := m.streamErrs
+	convID := ""
+	if m.ActiveConv != nil {
+		convID = m.ActiveConv.ID
 	}
 
-	return m, cmd
+	return func() tea.Msg {
+		chunk, ok := <-chunks
+		if ok {
+			return MsgChatChunk{ConversationID: convID, Content: chunk}
+		}
+		// Chunks channel closed — check for error.
+		if err := <-errs; err != nil {
+			return MsgChatError{ConversationID: convID, Err: err}
+		}
+		return MsgChatDone{ConversationID: convID}
+	}
 }
 
 // renameConversation returns a tea.Cmd that updates the title of the selected
@@ -159,7 +169,40 @@ func (m ChatModel) handleConvLoaded(msg MsgConvLoaded) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleChatResponse processes an AI response chunk.
+// handleChatChunk processes a streaming token from the AI provider.
+// It appends the chunk to the in-progress assistant message (creating
+// one if this is the first chunk) and issues a command to read the
+// next chunk from the stream.
+func (m ChatModel) handleChatChunk(msg MsgChatChunk) (tea.Model, tea.Cmd) {
+	if m.ActiveConv == nil {
+		return m, nil
+	}
+
+	// Transition from "thinking…" to streaming on first chunk.
+	if m.ChatView.Loading {
+		m.ChatView.SetLoading(false)
+		m.ChatView.Streaming = true
+	}
+
+	// Append to existing assistant message or create a new one.
+	msgs := m.ActiveConv.Messages
+	if len(msgs) > 0 && msgs[len(msgs)-1].Role == chat.RoleAssistant && m.streaming {
+		m.ActiveConv.Messages[len(msgs)-1].Content += msg.Content
+	} else {
+		m.ActiveConv.Messages = append(m.ActiveConv.Messages, chat.Message{
+			Role:      chat.RoleAssistant,
+			Content:   msg.Content,
+			Timestamp: time.Now(),
+		})
+	}
+
+	// Update the chat view with the chunk.
+	m.ChatView.AppendStreamChunk(msg.Content)
+
+	return m, m.readNextChunk()
+}
+
+// handleChatResponse processes a complete AI response (non-streaming path).
 func (m ChatModel) handleChatResponse(msg MsgChatResponse) (tea.Model, tea.Cmd) {
 	if m.ActiveConv == nil {
 		return m, nil
@@ -181,12 +224,71 @@ func (m ChatModel) handleChatResponse(msg MsgChatResponse) (tea.Model, tea.Cmd) 
 	}
 }
 
-// handleChatDone processes the end of an AI inference call.
+// handleChatError processes an inference error. Context cancellation
+// errors are treated specially: the partial response is preserved with
+// a "[cancelled]" suffix. Other errors are displayed inline as system
+// messages.
+func (m ChatModel) handleChatError(msg MsgChatError) (tea.Model, tea.Cmd) {
+	m.ChatView.SetLoading(false)
+	m.ChatView.Streaming = false
+	m.streaming = false
+	m.streamChunks = nil
+	m.streamErrs = nil
+
+	// Renew context so the next request gets a fresh one.
+	ctx, cancel := context.WithCancel(context.Background())
+	m.ctx = ctx
+	m.cancel = cancel
+
+	if errors.Is(msg.Err, context.Canceled) {
+		// Preserve partial response with cancelled suffix.
+		if m.ActiveConv != nil {
+			msgs := m.ActiveConv.Messages
+			if len(msgs) > 0 && msgs[len(msgs)-1].Role == chat.RoleAssistant {
+				m.ActiveConv.Messages[len(msgs)-1].Content += " [cancelled]"
+				// Sync ChatView — replace last message content.
+				cvMsgs := m.ChatView.Messages
+				if len(cvMsgs) > 0 {
+					cvMsgs[len(cvMsgs)-1].Content = m.ActiveConv.Messages[len(msgs)-1].Content
+				}
+				m.ChatView.RefreshContent()
+			}
+		}
+		// Save partial conversation.
+		if m.ActiveConv != nil && m.Store != nil {
+			return m, m.saveConversation(m.ActiveConv)
+		}
+		return m, nil
+	}
+
+	// Non-cancellation error — show as system message.
+	errMsg := chat.Message{
+		Role:      chat.RoleSystem,
+		Content:   fmt.Sprintf("Error: %v", msg.Err),
+		Timestamp: time.Now(),
+	}
+	if m.ActiveConv != nil {
+		m.ActiveConv.Messages = append(m.ActiveConv.Messages, errMsg)
+	}
+	m.ChatView.AddMessage(errMsg)
+	return m, nil
+}
+
+// handleChatDone processes the successful end of an AI inference stream.
 func (m ChatModel) handleChatDone(msg MsgChatDone) (tea.Model, tea.Cmd) {
 	m.ChatView.SetLoading(false)
+	m.ChatView.Streaming = false
+	m.streaming = false
+	m.streamChunks = nil
+	m.streamErrs = nil
+
+	// Renew context for next request.
+	ctx, cancel := context.WithCancel(context.Background())
+	m.ctx = ctx
+	m.cancel = cancel
 
 	if msg.Err != nil {
-		// Show error as a system message.
+		// Legacy error path — show as system message.
 		errMsg := chat.Message{
 			Role:      chat.RoleSystem,
 			Content:   fmt.Sprintf("Error: %v", msg.Err),

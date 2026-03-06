@@ -5,7 +5,15 @@ import "github.com/papapumpkin/quasar/internal/chat"
 // Chat mode message types — sent by ChatModel to coordinate sidebar,
 // chat view, and store interactions.
 
-// MsgChatResponse delivers a streaming response chunk from the AI model.
+// MsgChatChunk delivers a single streaming token from the AI model.
+// The ChatModel appends the content to the in-progress assistant message
+// and issues a command to read the next chunk from the stream.
+type MsgChatChunk struct {
+	ConversationID string
+	Content        string
+}
+
+// MsgChatResponse delivers a complete AI response (non-streaming path).
 // The ChatModel appends the content to the active conversation's latest
 // assistant message.
 type MsgChatResponse struct {
@@ -17,6 +25,13 @@ type MsgChatResponse struct {
 // The ChatModel saves the conversation via the store and clears the loading
 // state.
 type MsgChatDone struct {
+	ConversationID string
+	Err            error
+}
+
+// MsgChatError delivers an inference error for inline display. The ChatModel
+// renders it as a system message and cleans up streaming state.
+type MsgChatError struct {
 	ConversationID string
 	Err            error
 }

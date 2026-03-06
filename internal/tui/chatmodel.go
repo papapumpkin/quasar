@@ -77,6 +77,13 @@ type ChatModel struct {
 	// ctx is the context for cancelling in-flight AI calls.
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	// streaming is true while chunk messages are being received from
+	// the provider. streamChunks and streamErrs hold the active channel
+	// pair returned by Provider.ChatStream.
+	streaming    bool
+	streamChunks <-chan string
+	streamErrs   <-chan error
 }
 
 // NewChatModel creates a ChatModel with the given store, provider, and model name.
@@ -174,11 +181,17 @@ func (m ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgConvLoaded:
 		return m.handleConvLoaded(msg)
 
+	case MsgChatChunk:
+		return m.handleChatChunk(msg)
+
 	case MsgChatResponse:
 		return m.handleChatResponse(msg)
 
 	case MsgChatDone:
 		return m.handleChatDone(msg)
+
+	case MsgChatError:
+		return m.handleChatError(msg)
 
 	case MsgConvDeleted:
 		return m.handleConvDeleted(msg)
