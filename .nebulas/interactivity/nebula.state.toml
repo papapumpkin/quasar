@@ -1,0 +1,100 @@
+version = 1
+nebula_name = 'interactivity'
+total_cost_usd = 36.64749365
+
+[phases]
+[phases.chat-model]
+bead_id = 'quasar-f4a'
+status = 'done'
+created_at = 2026-03-05T23:58:34.545180911-05:00
+updated_at = 2026-03-06T09:28:43.583061471-05:00
+
+[phases.chat-model.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-structured root ChatModel composing sidebar + chat view with clean focus management, comprehensive test coverage, and proper reuse of existing TUI infrastructure; three minor issues flagged for future streaming rework are acceptable for v1.'
+
+[phases.chat-provider]
+bead_id = 'quasar-3cc'
+status = 'done'
+created_at = 2026-03-05T23:58:34.341682515-05:00
+updated_at = 2026-03-06T00:09:39.315523448-05:00
+
+[phases.chat-provider.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = "Solid `Provider` interface and `ClaudeProvider` implementation that correctly wraps `agent.Invoker` for multi-turn chat, with comprehensive tests; two minor convention nits (sentinel error, hardcoded system prompt) that don't block approval."
+
+[phases.chat-store]
+bead_id = 'quasar-fo9'
+status = 'done'
+created_at = 2026-03-05T23:58:34.273971547-05:00
+updated_at = 2026-03-06T00:09:12.769085605-05:00
+
+[phases.chat-store.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean, well-tested chat persistence layer with JSON file-based storage; minor path traversal hardening and provider test coverage recommended but non-blocking.'
+
+[phases.chat-view]
+bead_id = 'quasar-lvm'
+status = 'done'
+created_at = 2026-03-05T23:58:34.408838197-05:00
+updated_at = 2026-03-06T00:18:15.334145174-05:00
+
+[phases.chat-view.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Both critical fixes (wrap-then-style ordering and batched plain-text styling) are correctly implemented with comprehensive edge-case test coverage; the ChatView is solid and ready for integration.'
+
+[phases.cli-command]
+bead_id = 'quasar-ksd'
+status = 'done'
+created_at = 2026-03-05T23:58:34.681871723-05:00
+updated_at = 2026-03-06T09:25:22.284956856-05:00
+
+[phases.cli-command.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean duplicate-method removal fix plus well-implemented `quasar chat` Cobra command with comprehensive test coverage and proper error handling throughout.'
+
+[phases.keybinds-polish]
+bead_id = 'quasar-2an'
+status = 'done'
+created_at = 2026-03-05T23:58:34.750330989-05:00
+updated_at = 2026-03-06T09:38:33.476592968-05:00
+
+[phases.keybinds-polish.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Vim keybindings, model cycling with position indicator, inline title editing, and empty state onboarding are all implemented correctly with thorough test coverage and clean static analysis.'
+
+[phases.sidebar]
+bead_id = 'quasar-cux'
+status = 'done'
+created_at = 2026-03-05T23:58:34.476971265-05:00
+updated_at = 2026-03-06T00:43:36.312963986-05:00
+
+[phases.sidebar.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Solid improvements to ChatSidebar: deterministic timestamp testing, proper scroll offset management with ensureCursorVisible(), consistent rendering with struct Offset, and comprehensive test coverage — all clean and well-structured.'
+
+[phases.streaming]
+bead_id = 'quasar-2mw'
+status = 'done'
+created_at = 2026-03-05T23:58:34.614763001-05:00
+updated_at = 2026-03-06T09:42:24.02532774-05:00
+
+[phases.streaming.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Streaming inference implementation is complete with correct async flow, ConversationID guards, DRY state cleanup, context-sensitive UI hints, and comprehensive test coverage — all prior findings are resolved.'

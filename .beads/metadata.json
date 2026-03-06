@@ -1,6 +1,7 @@
 {
   "database": "dolt",
-  "jsonl_export": "issues.jsonl",
   "backend": "dolt",
-  "dolt_database": "beads_quasar"
+  "dolt_mode": "server",
+  "dolt_database": "beads_quasar",
+  "project_id": "c5ec94c7-a378-49fa-8b65-6626053160c8"
 }
