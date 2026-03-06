@@ -3,49 +3,49 @@ nebula_name = 'meridian'
 
 [phases]
 [phases.cli-integration]
-bead_id = 'quasar-tfxm'
-status = 'skipped'
+bead_id = 'quasar-ka43'
+status = 'created'
 created_at = 2026-03-05T22:38:44.426671-05:00
-updated_at = 2026-03-05T22:38:44.509459-05:00
+updated_at = 2026-03-05T23:08:14.309927-05:00
 
 [phases.dag-visualization]
-bead_id = 'quasar-l3rh'
-status = 'skipped'
+bead_id = 'quasar-vogr'
+status = 'created'
 created_at = 2026-03-05T22:38:44.175536-05:00
-updated_at = 2026-03-05T22:38:44.509459-05:00
+updated_at = 2026-03-05T23:08:14.050949-05:00
 
 [phases.dashboard-page]
-bead_id = 'quasar-v18p'
-status = 'failed'
+bead_id = 'quasar-tt45'
+status = 'created'
 created_at = 2026-03-05T22:38:43.680521-05:00
-updated_at = 2026-03-05T22:38:44.509458-05:00
+updated_at = 2026-03-05T23:08:13.562149-05:00
 
 [phases.diff-viewer]
-bead_id = 'quasar-yc6p'
-status = 'skipped'
+bead_id = 'quasar-bo3i'
+status = 'created'
 created_at = 2026-03-05T22:38:44.046956-05:00
-updated_at = 2026-03-05T22:38:44.509459-05:00
+updated_at = 2026-03-05T23:08:13.930998-05:00
 
 [phases.gate-forms]
-bead_id = 'quasar-jhhj'
-status = 'skipped'
+bead_id = 'quasar-vey9'
+status = 'created'
 created_at = 2026-03-05T22:38:44.302695-05:00
-updated_at = 2026-03-05T22:38:44.509459-05:00
+updated_at = 2026-03-05T23:08:14.176801-05:00
 
 [phases.http-skeleton]
-bead_id = 'quasar-k8z1'
-status = 'skipped'
+bead_id = 'quasar-klud'
+status = 'created'
 created_at = 2026-03-05T22:38:43.544905-05:00
-updated_at = 2026-03-05T22:38:44.509459-05:00
+updated_at = 2026-03-05T23:08:13.436915-05:00
 
 [phases.phase-detail]
-bead_id = 'quasar-tnqi'
-status = 'skipped'
+bead_id = 'quasar-vx0t'
+status = 'created'
 created_at = 2026-03-05T22:38:43.924956-05:00
-updated_at = 2026-03-05T22:38:44.509459-05:00
+updated_at = 2026-03-05T23:08:13.808602-05:00
 
 [phases.sse-live-updates]
-bead_id = 'quasar-38qm'
-status = 'skipped'
+bead_id = 'quasar-jzka'
+status = 'created'
 created_at = 2026-03-05T22:38:43.802843-05:00
-updated_at = 2026-03-05T22:38:44.509459-05:00
+updated_at = 2026-03-05T23:08:13.682628-05:00
