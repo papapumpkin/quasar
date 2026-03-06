@@ -6,46 +6,46 @@ nebula_name = 'interactivity'
 bead_id = 'quasar-4se'
 status = 'created'
 created_at = 2026-03-05T23:58:34.545180911-05:00
-updated_at = 2026-03-05T23:58:34.545180911-05:00
+updated_at = 2026-03-06T00:02:55.170462441-05:00
 
 [phases.chat-provider]
-bead_id = 'quasar-aw6'
+bead_id = 'quasar-3oz'
 status = 'failed'
 created_at = 2026-03-05T23:58:34.341682515-05:00
-updated_at = 2026-03-06T00:02:24.246321837-05:00
+updated_at = 2026-03-06T00:03:34.71299254-05:00
 
 [phases.chat-store]
-bead_id = 'quasar-96a'
+bead_id = 'quasar-bas'
 status = 'failed'
 created_at = 2026-03-05T23:58:34.273971547-05:00
-updated_at = 2026-03-06T00:02:24.240860366-05:00
+updated_at = 2026-03-06T00:03:34.71329946-05:00
 
 [phases.chat-view]
-bead_id = 'quasar-1em'
+bead_id = 'quasar-w1m'
 status = 'failed'
 created_at = 2026-03-05T23:58:34.408838197-05:00
-updated_at = 2026-03-06T00:02:24.246107842-05:00
+updated_at = 2026-03-06T00:03:34.718547317-05:00
 
 [phases.cli-command]
 bead_id = 'quasar-cfx'
 status = 'created'
 created_at = 2026-03-05T23:58:34.681871723-05:00
-updated_at = 2026-03-05T23:58:34.681871723-05:00
+updated_at = 2026-03-06T00:02:55.17063194-05:00
 
 [phases.keybinds-polish]
 bead_id = 'quasar-1mz'
 status = 'created'
 created_at = 2026-03-05T23:58:34.750330989-05:00
-updated_at = 2026-03-05T23:58:34.750330989-05:00
+updated_at = 2026-03-06T00:02:55.170712239-05:00
 
 [phases.sidebar]
-bead_id = 'quasar-kr4'
+bead_id = 'quasar-rq1'
 status = 'failed'
 created_at = 2026-03-05T23:58:34.476971265-05:00
-updated_at = 2026-03-06T00:02:24.246439745-05:00
+updated_at = 2026-03-06T00:03:34.718434996-05:00
 
 [phases.streaming]
 bead_id = 'quasar-y62'
 status = 'created'
 created_at = 2026-03-05T23:58:34.614763001-05:00
-updated_at = 2026-03-05T23:58:34.614763001-05:00
+updated_at = 2026-03-06T00:02:55.170549183-05:00
