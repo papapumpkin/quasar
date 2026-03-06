@@ -1,0 +1,40 @@
+[nebula]
+name = "interactivity"
+description = "Chat TUI for conversing with AI models, modeled after MoonKraken/shore. Left sidebar lists saved conversations, main area shows markdown-styled chat with streaming responses. Vim-style navigation."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "tui", "chat"]
+assignee = ""
+
+[execution]
+max_workers = 3
+max_review_cycles = 5
+max_budget_usd = 80.0
+model = ""
+gate = "trust"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+  "Add a chat mode to Quasar's BubbleTea TUI, inspired by Shore (MoonKraken/shore)",
+  "Left sidebar shows saved conversations, togglable with vim keys",
+  "Main panel renders markdown-styled chat messages with streaming AI responses",
+  "Persist conversations as JSON files (no new SQLite dependency)",
+  "Reuse existing agent.Invoker for model interaction",
+  "Integrate as `quasar chat` CLI command",
+]
+constraints = [
+  "No new SQLite interface — use JSON file persistence",
+  "Build on existing BubbleTea TUI infrastructure in internal/tui",
+  "Follow existing patterns: bridge, message types, lipgloss styles",
+  "Existing dialogue package is for agent-human escalation — this is separate user-initiated chat",
+  "All UI to stderr, stdout reserved for structured data",
+  "Stdlib testing only, table-driven tests with t.Run",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []
