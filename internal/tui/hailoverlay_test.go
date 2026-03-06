@@ -326,6 +326,46 @@ func TestHailOverlayView(t *testing.T) {
 		}
 	})
 
+	t.Run("shows source and affects when set", func(t *testing.T) {
+		t.Parallel()
+		msg := MsgHail{
+			PhaseID: "db-migrations",
+			Discovery: fabric.Discovery{
+				Kind:       "file_conflict",
+				Detail:     "Conflict detected.",
+				SourceTask: "api-handler",
+				Affects:    "schema.go, types.go",
+			},
+		}
+		h := NewHailOverlay(msg, nil)
+		view := h.View(80, 24)
+
+		if !strings.Contains(view, "source: api-handler") {
+			t.Error("expected overlay to contain source task")
+		}
+		if !strings.Contains(view, "affects: schema.go, types.go") {
+			t.Error("expected overlay to contain affects info")
+		}
+	})
+
+	t.Run("hides source when same as phase", func(t *testing.T) {
+		t.Parallel()
+		msg := MsgHail{
+			PhaseID: "db-migrations",
+			Discovery: fabric.Discovery{
+				Kind:       "file_conflict",
+				Detail:     "Conflict detected.",
+				SourceTask: "db-migrations",
+			},
+		}
+		h := NewHailOverlay(msg, nil)
+		view := h.View(80, 24)
+
+		if strings.Contains(view, "source:") {
+			t.Error("expected source line to be hidden when same as phase")
+		}
+	})
+
 	t.Run("renders detail text without option lines", func(t *testing.T) {
 		t.Parallel()
 		h := makeTestOverlay()
@@ -422,7 +462,7 @@ func TestAppModelMsgHailShowsOverlay(t *testing.T) {
 		}
 	})
 
-	t.Run("hail falls back to toast when not at depth phases", func(t *testing.T) {
+	t.Run("hail shows overlay at any depth in nebula mode", func(t *testing.T) {
 		t.Parallel()
 		m := NewAppModel(ModeNebula)
 		m.DisableSplash()
@@ -442,8 +482,54 @@ func TestAppModelMsgHailShowsOverlay(t *testing.T) {
 		result, _ := m.Update(msg)
 		updated := result.(AppModel)
 
-		if updated.Hail != nil {
-			t.Error("expected Hail overlay to be nil when drilled into phase loop")
+		if updated.Hail == nil {
+			t.Error("expected Hail overlay to be shown even when drilled into phase loop")
+		}
+	})
+
+	t.Run("hail queued when overlay already active", func(t *testing.T) {
+		t.Parallel()
+		m := NewAppModel(ModeNebula)
+		m.DisableSplash()
+		m.Width = 120
+		m.Height = 40
+		m.ActiveTab = TabBoard
+		m.Depth = DepthPhases
+
+		// First hail — creates overlay.
+		msg1 := MsgHail{
+			PhaseID: "phase-1",
+			Discovery: fabric.Discovery{
+				Kind:   "file_conflict",
+				Detail: "First conflict.",
+			},
+		}
+		result, _ := m.Update(msg1)
+		m = result.(AppModel)
+
+		if m.Hail == nil {
+			t.Fatal("expected first hail to create overlay")
+		}
+
+		// Second hail — should be queued.
+		msg2 := MsgHail{
+			PhaseID: "phase-2",
+			Discovery: fabric.Discovery{
+				Kind:   "ambiguity",
+				Detail: "Second issue.",
+			},
+		}
+		result, _ = m.Update(msg2)
+		m = result.(AppModel)
+
+		if m.Hail.PhaseID != "phase-1" {
+			t.Error("expected original hail overlay to remain active")
+		}
+		if len(m.PendingHails) != 1 {
+			t.Fatalf("expected 1 pending hail, got %d", len(m.PendingHails))
+		}
+		if m.PendingHails[0].Kind != "ambiguity" {
+			t.Errorf("expected pending hail kind %q, got %q", "ambiguity", m.PendingHails[0].Kind)
 		}
 	})
 }
@@ -721,19 +807,40 @@ func TestHailOverlay_ViewWithEntries(t *testing.T) {
 		}
 	})
 
-	t.Run("footer hint changes with entries", func(t *testing.T) {
+	t.Run("footer hint changes with entries for informational hail", func(t *testing.T) {
 		t.Parallel()
-		h := makeTestOverlay()
+		h := makeTestOverlay() // ResponseCh is nil
 
 		viewEmpty := h.View(80, 24)
-		if !strings.Contains(viewEmpty, "enter: add message") {
-			t.Error("expected empty-state hint")
+		if !strings.Contains(viewEmpty, "ctrl+d: acknowledge") {
+			t.Error("expected informational empty-state hint with acknowledge")
 		}
 
 		h.AddEntry("something")
 		viewWithEntries := h.View(80, 24)
-		if !strings.Contains(viewWithEntries, "ctrl+d: submit") {
-			t.Error("expected entries-state hint with ctrl+d")
+		if !strings.Contains(viewWithEntries, "ctrl+d: note") {
+			t.Error("expected informational entries-state hint with note")
+		}
+	})
+
+	t.Run("footer hints show send for interactive hail", func(t *testing.T) {
+		t.Parallel()
+		ch := make(chan string, 1)
+		msg := MsgHail{
+			PhaseID:   "p1",
+			Discovery: fabric.Discovery{Kind: "test", Detail: "detail"},
+		}
+		h := NewHailOverlay(msg, ch)
+
+		viewEmpty := h.View(80, 24)
+		if !strings.Contains(viewEmpty, "ctrl+d: send") {
+			t.Error("expected interactive empty-state hint with send")
+		}
+
+		h.AddEntry("something")
+		viewWithEntries := h.View(80, 24)
+		if !strings.Contains(viewWithEntries, "ctrl+d: send") {
+			t.Error("expected interactive entries-state hint with send")
 		}
 	})
 }

@@ -562,12 +562,26 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case MsgHail:
-		// Show the hail overlay when the board view is active; otherwise fallback to a toast.
-		if m.Mode == ModeNebula && m.BoardActive && m.ActiveTab == TabBoard && m.Depth == DepthPhases {
-			m.Hail = NewHailOverlay(msg, msg.ResponseCh)
-			cmds = append(cmds, m.Hail.Input.Focus())
+		// Show the hail overlay in any nebula view; queue if one is already active.
+		if m.Mode == ModeNebula {
+			if m.Hail != nil {
+				// Already showing a hail — queue for later.
+				hailInfo := ui.HailInfo{
+					Kind:    msg.Discovery.Kind,
+					Summary: msg.Discovery.Detail,
+					Detail:  msg.Discovery.Detail,
+				}
+				m.PendingHails = append(m.PendingHails, hailInfo)
+				m.syncHailBadge()
+				toast, cmd := NewToast("new hail queued — press H when ready", true)
+				m.Toasts = append(m.Toasts, toast)
+				cmds = append(cmds, cmd)
+			} else {
+				m.Hail = NewHailOverlay(msg, msg.ResponseCh)
+				cmds = append(cmds, m.Hail.Input.Focus())
+			}
 		} else {
-			toast, cmd := NewToast(fmt.Sprintf("⚠ hail from %s: %s", msg.PhaseID, msg.Discovery.Detail), true)
+			toast, cmd := NewToast(fmt.Sprintf("hail from %s: %s", msg.PhaseID, msg.Discovery.Detail), true)
 			m.Toasts = append(m.Toasts, toast)
 			cmds = append(cmds, cmd)
 		}
@@ -1614,10 +1628,21 @@ func (m AppModel) handleHailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case msg.String() == "ctrl+d":
 		// Ctrl+D: submit all composed entries + remaining input.
 		response := m.Hail.ComposeResolution()
+		isInteractive := m.Hail.ResponseCh != nil
 		if response != "" {
 			m.resolveHail(response)
+		} else {
+			m.resolveHail("")
 		}
-		return m, nil
+		var toastMsg string
+		if isInteractive {
+			toastMsg = "response sent to agent"
+		} else {
+			toastMsg = "hail acknowledged"
+		}
+		toast, cmd := NewToast(toastMsg, false)
+		m.Toasts = append(m.Toasts, toast)
+		return m, cmd
 
 	case msg.String() == "tab":
 		// Tab: toggle between compose and scroll modes.
@@ -1633,8 +1658,17 @@ func (m AppModel) handleHailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(val) == 1 && len(m.Hail.Options) > 0 && len(m.Hail.Entries) == 0 {
 			idx := int(val[0] - 'a')
 			if idx >= 0 && idx < len(m.Hail.Options) {
+				isInteractive := m.Hail.ResponseCh != nil
 				m.resolveHail(m.Hail.Options[idx])
-				return m, nil
+				var toastMsg string
+				if isInteractive {
+					toastMsg = "response sent to agent"
+				} else {
+					toastMsg = "hail acknowledged"
+				}
+				toast, cmd := NewToast(toastMsg, false)
+				m.Toasts = append(m.Toasts, toast)
+				return m, cmd
 			}
 		}
 		// Add as dialogue entry.

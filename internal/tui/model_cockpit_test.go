@@ -339,7 +339,7 @@ func TestMsgHailTriggersOverlayWhenBoardActive(t *testing.T) {
 	}
 }
 
-func TestMsgHailShowsToastWhenBoardNotActive(t *testing.T) {
+func TestMsgHailShowsOverlayWhenBoardNotActive(t *testing.T) {
 	t.Parallel()
 
 	m := newNebulaModelWithPhases("", []PhaseEntry{
@@ -353,11 +353,8 @@ func TestMsgHailShowsToastWhenBoardNotActive(t *testing.T) {
 	})
 	updated := result.(AppModel)
 
-	if updated.Hail != nil {
-		t.Error("expected Hail overlay to NOT be set when board is not active")
-	}
-	if len(updated.Toasts) != 1 {
-		t.Errorf("expected 1 toast fallback when board is not active, got %d", len(updated.Toasts))
+	if updated.Hail == nil {
+		t.Error("expected Hail overlay to be set even when board is not active")
 	}
 }
 

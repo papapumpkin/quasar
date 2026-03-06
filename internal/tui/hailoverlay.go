@@ -211,6 +211,15 @@ func (h *HailOverlay) View(width, _ int) string {
 		b.WriteString("\n")
 	}
 
+	if h.Discovery.SourceTask != "" && h.Discovery.SourceTask != h.PhaseID {
+		b.WriteString(styleHailContext.Render("source: " + h.Discovery.SourceTask))
+		b.WriteString("\n")
+	}
+	if h.Discovery.Affects != "" {
+		b.WriteString(styleHailContext.Render("affects: " + h.Discovery.Affects))
+		b.WriteString("\n")
+	}
+
 	kindLine := fmt.Sprintf("kind: %s", h.Discovery.Kind)
 	b.WriteString(styleHailKind.Render(kindLine))
 	b.WriteString("\n\n")
@@ -246,12 +255,20 @@ func (h *HailOverlay) View(width, _ int) string {
 	b.WriteString(h.Input.View())
 	b.WriteString("\n")
 
-	// Footer hints.
+	// Footer hints — vary based on whether response reaches a blocked agent.
 	var hint string
-	if len(h.Entries) > 0 {
-		hint = "enter: add  ctrl+d: submit  tab: scroll  esc: dismiss"
+	if h.ResponseCh != nil {
+		if len(h.Entries) > 0 {
+			hint = "enter: add  ctrl+d: send  tab: scroll  esc: dismiss"
+		} else {
+			hint = "enter: add message  ctrl+d: send  esc: dismiss"
+		}
 	} else {
-		hint = "enter: add message  ctrl+d: submit  esc: dismiss"
+		if len(h.Entries) > 0 {
+			hint = "enter: add  ctrl+d: note  tab: scroll  esc: dismiss"
+		} else {
+			hint = "enter: add note  ctrl+d: acknowledge  esc: dismiss"
+		}
 	}
 	b.WriteString(styleHailFooterHint.Render(hint))
 

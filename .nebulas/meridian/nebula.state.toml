@@ -3,49 +3,49 @@ nebula_name = 'meridian'
 
 [phases]
 [phases.cli-integration]
-bead_id = 'quasar-aocm'
+bead_id = 'quasar-disj'
 status = 'skipped'
 created_at = 2026-03-03T16:41:06.213513-05:00
-updated_at = 2026-03-03T18:57:44.272664-05:00
+updated_at = 2026-03-05T22:20:06.435242-05:00
 
 [phases.dag-visualization]
-bead_id = 'quasar-rkiy'
+bead_id = 'quasar-3c4k'
 status = 'skipped'
 created_at = 2026-03-03T16:41:05.972557-05:00
-updated_at = 2026-03-03T18:57:44.272664-05:00
+updated_at = 2026-03-05T22:20:06.435242-05:00
 
 [phases.dashboard-page]
-bead_id = 'quasar-k920'
+bead_id = 'quasar-yahx'
 status = 'failed'
 created_at = 2026-03-03T16:41:05.476312-05:00
-updated_at = 2026-03-03T18:57:44.272663-05:00
+updated_at = 2026-03-05T22:20:06.43524-05:00
 
 [phases.diff-viewer]
-bead_id = 'quasar-5lsm'
+bead_id = 'quasar-ww0n'
 status = 'skipped'
 created_at = 2026-03-03T16:41:05.847704-05:00
-updated_at = 2026-03-03T18:57:44.272664-05:00
+updated_at = 2026-03-05T22:20:06.435242-05:00
 
 [phases.gate-forms]
-bead_id = 'quasar-vobf'
+bead_id = 'quasar-ybe4'
 status = 'skipped'
 created_at = 2026-03-03T16:41:06.091686-05:00
-updated_at = 2026-03-03T18:57:44.272664-05:00
+updated_at = 2026-03-05T22:20:06.435242-05:00
 
 [phases.http-skeleton]
-bead_id = 'quasar-mhpp'
+bead_id = 'quasar-hjzg'
 status = 'skipped'
 created_at = 2026-03-03T16:41:05.352936-05:00
-updated_at = 2026-03-03T18:57:44.272663-05:00
+updated_at = 2026-03-05T22:20:06.435241-05:00
 
 [phases.phase-detail]
-bead_id = 'quasar-ksn1'
+bead_id = 'quasar-b11j'
 status = 'skipped'
 created_at = 2026-03-03T16:41:05.724553-05:00
-updated_at = 2026-03-03T18:57:44.272664-05:00
+updated_at = 2026-03-05T22:20:06.435241-05:00
 
 [phases.sse-live-updates]
-bead_id = 'quasar-c2jn'
+bead_id = 'quasar-6ij5'
 status = 'skipped'
 created_at = 2026-03-03T16:41:05.603521-05:00
-updated_at = 2026-03-03T18:57:44.272664-05:00
+updated_at = 2026-03-05T22:20:06.435241-05:00

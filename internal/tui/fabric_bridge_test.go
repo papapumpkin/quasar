@@ -98,7 +98,7 @@ func TestAppModelHandlesMsgHail(t *testing.T) {
 		}
 	})
 
-	t.Run("falls back to toast outside board view", func(t *testing.T) {
+	t.Run("shows overlay on any tab in nebula mode", func(t *testing.T) {
 		t.Parallel()
 		m := NewAppModel(ModeNebula)
 		m.Detail = NewDetailPanel(80, 10)
@@ -110,11 +110,8 @@ func TestAppModelHandlesMsgHail(t *testing.T) {
 		tm, _ = tm.Update(MsgHail{PhaseID: "phase-3", Discovery: disc})
 		am := tm.(AppModel)
 
-		if am.Hail != nil {
-			t.Error("expected hail overlay to be nil outside board view")
-		}
-		if len(am.Toasts) == 0 {
-			t.Error("expected at least one toast notification for hail")
+		if am.Hail == nil {
+			t.Error("expected hail overlay to be shown on any tab in nebula mode")
 		}
 	})
 }
