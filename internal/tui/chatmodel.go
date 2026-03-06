@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -42,93 +43,6 @@ const sidebarWidth = 28
 // sidebarMinTermWidth is the minimum terminal width to show the sidebar.
 // Below this width the sidebar is hidden to preserve chat area space.
 const sidebarMinTermWidth = 60
-
-// ChatSidebar holds the state for the conversation list panel.
-type ChatSidebar struct {
-	Conversations []chat.Conversation
-	Cursor        int
-	Offset        int    // scroll offset for long lists
-	SearchQuery   string // active search filter (empty = no filter)
-	filtered      []int  // indices into Conversations matching the search
-}
-
-// SelectedConversation returns the currently highlighted conversation, or nil
-// if the list is empty.
-func (s *ChatSidebar) SelectedConversation() *chat.Conversation {
-	list := s.visibleList()
-	if len(list) == 0 {
-		return nil
-	}
-	if s.Cursor < 0 || s.Cursor >= len(list) {
-		return nil
-	}
-	return list[s.Cursor]
-}
-
-// visibleList returns the conversations that match the current search filter.
-// If no filter is active, all conversations are returned.
-func (s *ChatSidebar) visibleList() []*chat.Conversation {
-	if s.SearchQuery == "" {
-		result := make([]*chat.Conversation, len(s.Conversations))
-		for i := range s.Conversations {
-			result[i] = &s.Conversations[i]
-		}
-		return result
-	}
-	result := make([]*chat.Conversation, 0, len(s.filtered))
-	for _, idx := range s.filtered {
-		if idx < len(s.Conversations) {
-			result = append(result, &s.Conversations[idx])
-		}
-	}
-	return result
-}
-
-// visibleCount returns the number of conversations visible after filtering.
-func (s *ChatSidebar) visibleCount() int {
-	if s.SearchQuery == "" {
-		return len(s.Conversations)
-	}
-	return len(s.filtered)
-}
-
-// updateFilter recomputes the filtered index list based on the search query.
-func (s *ChatSidebar) updateFilter() {
-	if s.SearchQuery == "" {
-		s.filtered = nil
-		return
-	}
-	q := strings.ToLower(s.SearchQuery)
-	s.filtered = s.filtered[:0]
-	for i, c := range s.Conversations {
-		title := strings.ToLower(c.AutoTitle())
-		if strings.Contains(title, q) {
-			s.filtered = append(s.filtered, i)
-		}
-	}
-	// Clamp cursor.
-	if s.Cursor >= len(s.filtered) {
-		s.Cursor = len(s.filtered) - 1
-	}
-	if s.Cursor < 0 {
-		s.Cursor = 0
-	}
-}
-
-// clampCursor ensures the cursor is within bounds.
-func (s *ChatSidebar) clampCursor() {
-	count := s.visibleCount()
-	if count == 0 {
-		s.Cursor = 0
-		return
-	}
-	if s.Cursor >= count {
-		s.Cursor = count - 1
-	}
-	if s.Cursor < 0 {
-		s.Cursor = 0
-	}
-}
 
 // ChatModel is the root BubbleTea model for chat mode. It composes a
 // sidebar (conversation list) and a chat view (message thread + input)
@@ -413,11 +327,12 @@ func (m ChatModel) renderFooter() string {
 			add("n", "new chat")
 			add("d", "delete")
 			add("/", "search")
+			add("q", "quit")
 		} else {
 			add("enter", "send")
 			add("j/k", "scroll")
+			add("ctrl+c", "quit")
 		}
-		add("q", "quit")
 	}
 
 	line := strings.Join(parts, "  ")
@@ -710,6 +625,14 @@ func (m ChatModel) sendMessage() (tea.Model, tea.Cmd) {
 	m.ChatView.Title = m.ActiveConv.Title
 
 	// Launch streaming inference.
+	//
+	// TODO: dispatch chunks incrementally for progressive rendering.
+	// Currently all chunks are collected into a single MsgChatResponse,
+	// making the UX identical to a non-streaming Chat() call. This is
+	// acceptable because ClaudeProvider.ChatStream also delivers the full
+	// response as one chunk. When true token-by-token streaming is added
+	// to the provider, this should be reworked to emit per-chunk messages
+	// using a tea.Cmd chain or tea.Program.Send().
 	convID := m.ActiveConv.ID
 	messages := make([]chat.Message, len(m.ActiveConv.Messages))
 	copy(messages, m.ActiveConv.Messages)
@@ -742,7 +665,7 @@ func (m ChatModel) sendMessage() (tea.Model, tea.Cmd) {
 func (m ChatModel) handleConvListUpdated(msg MsgConvListUpdated) (tea.Model, tea.Cmd) {
 	if msg.Err != nil {
 		// Log error but don't crash — sidebar stays with old data.
-		fmt.Fprintf(m.stderrWriter(), "chat: failed to list conversations: %v\n", msg.Err)
+		fmt.Fprintf(os.Stderr, "chat: failed to list conversations: %v\n", msg.Err)
 		return m, nil
 	}
 	m.Sidebar.Conversations = msg.Conversations
@@ -756,7 +679,7 @@ func (m ChatModel) handleConvListUpdated(msg MsgConvListUpdated) (tea.Model, tea
 // handleConvLoaded processes a loaded conversation.
 func (m ChatModel) handleConvLoaded(msg MsgConvLoaded) (tea.Model, tea.Cmd) {
 	if msg.Err != nil {
-		fmt.Fprintf(m.stderrWriter(), "chat: failed to load conversation: %v\n", msg.Err)
+		fmt.Fprintf(os.Stderr, "chat: failed to load conversation: %v\n", msg.Err)
 		return m, nil
 	}
 
@@ -824,7 +747,7 @@ func (m ChatModel) handleChatDone(msg MsgChatDone) (tea.Model, tea.Cmd) {
 // handleConvDeleted processes a conversation deletion result.
 func (m ChatModel) handleConvDeleted(msg MsgConvDeleted) (tea.Model, tea.Cmd) {
 	if msg.Err != nil {
-		fmt.Fprintf(m.stderrWriter(), "chat: failed to delete conversation: %v\n", msg.Err)
+		fmt.Fprintf(os.Stderr, "chat: failed to delete conversation: %v\n", msg.Err)
 		return m, nil
 	}
 
@@ -878,11 +801,3 @@ func (m ChatModel) deleteConversation(id string) tea.Cmd {
 	}
 }
 
-// stderrWriter returns a writer suitable for debug output.
-// This is a helper to keep import of "os" out of this file; callers
-// can substitute in tests.
-type stderrW struct{}
-
-func (stderrW) Write(p []byte) (int, error) { return len(p), nil }
-
-func (m ChatModel) stderrWriter() stderrW { return stderrW{} }

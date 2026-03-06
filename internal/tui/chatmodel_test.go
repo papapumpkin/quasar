@@ -839,13 +839,13 @@ func TestChatModelFooter(t *testing.T) {
 			name:     "sidebar normal",
 			focus:    FocusSidebar,
 			state:    ChatStateNormal,
-			contains: []string{"tab", "j/k", "navigate", "enter", "open", "n", "new chat"},
+			contains: []string{"tab", "j/k", "navigate", "enter", "open", "n", "new chat", "q", "quit"},
 		},
 		{
 			name:     "chat area normal",
 			focus:    FocusChatArea,
 			state:    ChatStateNormal,
-			contains: []string{"tab", "enter", "send", "j/k", "scroll"},
+			contains: []string{"tab", "enter", "send", "j/k", "scroll", "ctrl+c", "quit"},
 		},
 		{
 			name:     "search mode",
