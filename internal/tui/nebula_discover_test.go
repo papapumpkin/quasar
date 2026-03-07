@@ -164,7 +164,7 @@ func TestClassifyNebulaStatus(t *testing.T) {
 		{
 			name:   "all done means done",
 			phases: 1,
-			stateToml: `[phases.p1]
+			stateToml: `[phases.phase-1]
 bead_id = "b1"
 status = "done"
 created_at = 2024-01-01T00:00:00Z
@@ -176,8 +176,32 @@ updated_at = 2024-01-01T00:00:00Z
 		{
 			name:   "some done some pending means in_progress",
 			phases: 2,
-			stateToml: `[phases.p1]
+			stateToml: `[phases.phase-1]
 bead_id = "b1"
+status = "done"
+created_at = 2024-01-01T00:00:00Z
+updated_at = 2024-01-01T00:00:00Z
+`,
+			wantStatus: "in_progress",
+			wantDone:   1,
+		},
+		{
+			name:   "extra state entries do not cause false done",
+			phases: 2,
+			stateToml: `[phases.phase-1]
+bead_id = "b1"
+status = "done"
+created_at = 2024-01-01T00:00:00Z
+updated_at = 2024-01-01T00:00:00Z
+
+[phases.phase-2]
+bead_id = "b2"
+status = "in_progress"
+created_at = 2024-01-01T00:00:00Z
+updated_at = 2024-01-01T00:00:00Z
+
+[phases.hot-added-phase]
+bead_id = "b3"
 status = "done"
 created_at = 2024-01-01T00:00:00Z
 updated_at = 2024-01-01T00:00:00Z

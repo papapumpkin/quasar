@@ -1,0 +1,39 @@
+[nebula]
+name = "lensing"
+description = "Improve agent visibility and information richness across the TUI so developers can intuit what agents are doing, provide timely feedback, and chat with agents that carry full execution context."
+
+[defaults]
+type = "feature"
+priority = 2
+labels = ["quasar", "tui", "ux"]
+assignee = ""
+
+[execution]
+max_workers = 4
+max_review_cycles = 5
+max_budget_usd = 60.0
+model = ""
+gate = "trust"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Surface agent thinking and progress in real time so developers can intuit whether work is on track",
+    "Upgrade diff rendering to show richer, more navigable change summaries",
+    "Provide structured work summaries per phase so developers get the 'why' not just the 'what'",
+    "Make chat contextual — seed agent conversations with execution context so feedback is productive",
+    "Reduce time-to-insight: a developer glancing at the board should immediately know what each agent is doing and whether it needs attention",
+]
+constraints = [
+    "Follow existing patterns: interfaces defined at consumer, constructor injection, context propagation",
+    "All TUI rendering uses lipgloss and bubbletea — no external TUI libraries",
+    "All new files must have corresponding _test.go files using stdlib testing only",
+    "Use canonical vocabulary: Fabric, Entanglement, Discovery, Hail, Quasar (worker), Epoch, Pulse",
+    "Do not break existing keybindings or navigation flows",
+    "Worker cards and board view must remain performant with 8+ concurrent phases",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []
