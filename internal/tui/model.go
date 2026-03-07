@@ -109,8 +109,8 @@ type AppModel struct {
 	StaleItems       []tycho.StaleItem     // latest stale warning items
 
 	// File impact state — aggregate file footprint across phases.
-	ImpactView ImpactView                  // persistent impact viewer with viewport
-	PhaseFiles map[string][]FileStatEntry  // phaseID → file stats (populated from diffs)
+	ImpactView ImpactView                 // persistent impact viewer with viewport
+	PhaseFiles map[string][]FileStatEntry // phaseID → file stats (populated from diffs)
 
 	// Hail tracking — pending hails from agents that need human attention.
 	PendingHails []ui.HailInfo    // unresolved hails tracked via MsgHailReceived/MsgHailResolved
