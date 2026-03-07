@@ -1,12 +1,19 @@
 version = 1
 nebula_name = 'lensing'
+total_cost_usd = 5.0366215
 
 [phases]
 [phases.activity-stream]
 bead_id = 'quasar-ox8'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-06T22:50:44.374001274-05:00
-updated_at = 2026-03-06T22:50:44.90314672-05:00
+updated_at = 2026-03-06T23:00:45.50682614-05:00
+
+[phases.activity-stream.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Duplicate type declarations removed from nebulaview.go; phase_entry.go confirmed as sole canonical location — clean fix with no functional changes and comprehensive existing test coverage.'
 
 [phases.board-richness]
 bead_id = 'quasar-4yz'
@@ -16,9 +23,9 @@ updated_at = 2026-03-06T22:50:44.901577088-05:00
 
 [phases.contextual-chat]
 bead_id = 'quasar-c69'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-06T22:50:44.585036431-05:00
-updated_at = 2026-03-06T22:50:44.585036431-05:00
+updated_at = 2026-03-06T23:00:45.572350684-05:00
 
 [phases.rich-diff-view]
 bead_id = 'quasar-dfq'
