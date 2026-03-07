@@ -26,6 +26,12 @@ type KeyMap struct {
 	// Diff file list keys.
 	OpenDiff key.Binding
 
+	// Side-by-side toggle — switches between unified and side-by-side diff rendering.
+	SideBySide key.Binding
+
+	// ToggleHunk collapses/expands a hunk in the diff view.
+	ToggleHunk key.Binding
+
 	// Board/table view toggle.
 	BoardToggle key.Binding
 
@@ -112,6 +118,14 @@ func DefaultKeyMap() KeyMap {
 		OpenDiff: key.NewBinding(
 			key.WithKeys("enter"),
 			key.WithHelp("⏎", "open diff"),
+		),
+		SideBySide: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "side-by-side"),
+		),
+		ToggleHunk: key.NewBinding(
+			key.WithKeys(" "),
+			key.WithHelp("space", "toggle hunk"),
 		),
 		BoardToggle: key.NewBinding(
 			key.WithKeys("v"),

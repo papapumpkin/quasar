@@ -134,6 +134,44 @@ var (
 				Bold(true)
 )
 
+// Health dot indicators for board cards.
+const (
+	healthDot = "●"
+)
+
+// Health dot styles — colored indicators for phase health signals.
+var (
+	// styleHealthGreen styles the health dot for healthy phases.
+	styleHealthGreen = lipgloss.NewStyle().Foreground(colorSuccess)
+
+	// styleHealthYellow styles the health dot for phases needing attention.
+	styleHealthYellow = lipgloss.NewStyle().Foreground(colorAccent)
+
+	// styleHealthRed styles the health dot for critical/struggling phases.
+	styleHealthRed = lipgloss.NewStyle().Foreground(colorDanger)
+
+	// styleCardSubtitle styles the dim activity subtitle on board cards.
+	styleCardSubtitle = lipgloss.NewStyle().Foreground(colorMuted)
+
+	// styleCardCost styles the cost badge on board cards.
+	styleCardCost = lipgloss.NewStyle().Foreground(colorAccent)
+
+	// styleCardCostDanger styles the cost badge when approaching budget.
+	styleCardCostDanger = lipgloss.NewStyle().Foreground(colorDanger)
+
+	// styleAttentionMarker styles the attention marker for hails/gate prompts.
+	styleAttentionMarker = lipgloss.NewStyle().Foreground(colorDanger).Bold(true)
+
+	// styleProgressGreen styles the progress indicator for early cycles.
+	styleProgressGreen = lipgloss.NewStyle().Foreground(colorSuccess)
+
+	// styleProgressYellow styles the progress indicator for >60% of max cycles.
+	styleProgressYellow = lipgloss.NewStyle().Foreground(colorAccent)
+
+	// styleProgressRed styles the progress indicator for final cycle.
+	styleProgressRed = lipgloss.NewStyle().Foreground(colorDanger)
+)
+
 // styleTreeConnector styles the tree-drawing characters (├──, └──) in the cycle timeline.
 var styleTreeConnector = lipgloss.NewStyle().
 	Foreground(colorMuted)
@@ -216,6 +254,31 @@ var (
 	// styleDiffSep styles the column separator between left and right panes.
 	styleDiffSep = lipgloss.NewStyle().
 			Foreground(colorMuted)
+
+	// styleDiffHunkCtx styles the function/method context label above a hunk.
+	styleDiffHunkCtx = lipgloss.NewStyle().
+				Foreground(colorNebula).
+				Bold(true)
+
+	// styleDiffChangeAdded styles the "A" (added) glyph in the file list.
+	styleDiffChangeAdded = lipgloss.NewStyle().
+				Foreground(colorSuccess).
+				Bold(true)
+
+	// styleDiffChangeDeleted styles the "D" (deleted) glyph in the file list.
+	styleDiffChangeDeleted = lipgloss.NewStyle().
+				Foreground(colorDanger).
+				Bold(true)
+
+	// styleDiffChangeRenamed styles the "R" (renamed) glyph in the file list.
+	styleDiffChangeRenamed = lipgloss.NewStyle().
+				Foreground(colorAccent).
+				Bold(true)
+
+	// styleDiffChangeModified styles the "M" (modified) glyph in the file list.
+	styleDiffChangeModified = lipgloss.NewStyle().
+				Foreground(colorBlue).
+				Bold(true)
 
 	// styleDiffStat styles the stat summary line.
 	styleDiffStat = lipgloss.NewStyle().

@@ -185,6 +185,14 @@ type MsgPhaseInfo struct {
 	Msg     string
 }
 
+// MsgWorkerActivity carries a real-time activity update from an agent.
+// The TUI routes it to the correct worker card based on PhaseID (nebula mode)
+// or displays it inline (loop mode).
+type MsgWorkerActivity struct {
+	PhaseID  string // empty in loop mode
+	Activity string // short human-readable summary (e.g. "reading internal/loop/run.go")
+}
+
 // Nebula initialization and lifecycle messages.
 
 // PhaseInfo carries phase metadata for populating the NebulaView at startup.

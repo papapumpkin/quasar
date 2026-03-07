@@ -89,6 +89,9 @@
 {"issue_id":"quasar-lvm.2","label":"quasar"}
 {"issue_id":"quasar-lvm.2","label":"review-finding"}
 {"issue_id":"quasar-lvm.2","label":"tui"}
+{"issue_id":"quasar-ox8","label":"quasar"}
+{"issue_id":"quasar-ox8","label":"tui"}
+{"issue_id":"quasar-ox8","label":"ux"}
 {"issue_id":"quasar-rq1","label":"chat"}
 {"issue_id":"quasar-rq1","label":"quasar"}
 {"issue_id":"quasar-rq1","label":"tui"}

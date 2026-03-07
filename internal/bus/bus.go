@@ -69,6 +69,7 @@ const (
 	KindPhaseFindingLifecycle Kind = "phase.finding.lifecycle"
 	KindPhaseHailReceived     Kind = "phase.hail.received"
 	KindPhaseHailResolved     Kind = "phase.hail.resolved"
+	KindPhaseActivity         Kind = "phase.activity"
 )
 
 // Single-task lifecycle event kinds — correspond to Msg* TUI messages (loop mode).

@@ -11,18 +11,20 @@ import (
 
 // AgentEntry represents one agent invocation within a cycle.
 type AgentEntry struct {
-	Role       string
-	Done       bool
-	CostUSD    float64
-	DurationMs int64
-	IssueCount int
-	Output     string
-	Diff       string
-	DiffFiles  []FileStatEntry // parsed file stats for the diff
-	BaseRef    string          // git ref before this cycle
-	HeadRef    string          // git ref after this cycle
-	WorkDir    string          // working directory for git operations
-	StartedAt  time.Time
+	Role         string
+	Done         bool
+	CostUSD      float64
+	DurationMs   int64
+	IssueCount   int
+	Output       string
+	Summary      string       // extracted 2-3 line summary of what the agent did
+	Satisfaction Satisfaction // reviewer satisfaction level (only set for reviewers)
+	Diff         string
+	DiffFiles    []FileStatEntry // parsed file stats for the diff
+	BaseRef      string          // git ref before this cycle
+	HeadRef      string          // git ref after this cycle
+	WorkDir      string          // working directory for git operations
+	StartedAt    time.Time
 }
 
 // CycleEntry represents one coder-reviewer cycle.
@@ -122,12 +124,14 @@ func (lv *LoopView) FinishAgent(role string, costUSD float64, durationMs int64) 
 	}
 }
 
-// SetAgentOutput stores agent output for drill-down.
-// It first tries to find an exact cycle+role match. If no match is found
-// (e.g. due to message ordering or off-by-one), it falls back to the most
-// recent agent with the given role across all cycles, ensuring output is
+// SetAgentOutput stores agent output for drill-down and extracts a concise
+// summary. It first tries to find an exact cycle+role match. If no match is
+// found (e.g. due to message ordering or off-by-one), it falls back to the
+// most recent agent with the given role across all cycles, ensuring output is
 // never silently dropped.
 func (lv *LoopView) SetAgentOutput(role string, cycle int, output string) {
+	summary := ExtractAgentSummary(output)
+
 	// Try exact cycle match first.
 	for i := range lv.Cycles {
 		if lv.Cycles[i].Number != cycle {
@@ -136,6 +140,7 @@ func (lv *LoopView) SetAgentOutput(role string, cycle int, output string) {
 		for j := range lv.Cycles[i].Agents {
 			if lv.Cycles[i].Agents[j].Role == role {
 				lv.Cycles[i].Agents[j].Output = output
+				lv.Cycles[i].Agents[j].Summary = summary
 				return
 			}
 		}
@@ -146,6 +151,7 @@ func (lv *LoopView) SetAgentOutput(role string, cycle int, output string) {
 		for j := len(lv.Cycles[i].Agents) - 1; j >= 0; j-- {
 			if lv.Cycles[i].Agents[j].Role == role {
 				lv.Cycles[i].Agents[j].Output = output
+				lv.Cycles[i].Agents[j].Summary = summary
 				return
 			}
 		}
@@ -209,6 +215,21 @@ func (lv *LoopView) SetAgentDiffFiles(role string, cycle int, files []FileStatEn
 				lv.Cycles[i].Agents[j].WorkDir = workDir
 				return
 			}
+		}
+	}
+}
+
+// SetSatisfaction sets the reviewer satisfaction level on the last reviewer in
+// the current cycle.
+func (lv *LoopView) SetSatisfaction(s Satisfaction) {
+	if len(lv.Cycles) == 0 {
+		return
+	}
+	c := &lv.Cycles[len(lv.Cycles)-1]
+	for i := len(c.Agents) - 1; i >= 0; i-- {
+		if c.Agents[i].Role == "reviewer" {
+			c.Agents[i].Satisfaction = s
+			return
 		}
 	}
 }
@@ -304,6 +325,10 @@ func (lv LoopView) View() string {
 				if a.Role == "reviewer" && a.IssueCount > 0 {
 					stats += fmt.Sprintf("  → %d issue(s)", a.IssueCount)
 				}
+				// Append reviewer satisfaction badge.
+				if a.Role == "reviewer" && a.Satisfaction != SatisfactionNone {
+					stats += "  " + SatisfactionBadge(a.Satisfaction)
+				}
 				var styledStats string
 				if selected {
 					styledStats = stylePhaseDetail.
@@ -341,6 +366,22 @@ func (lv LoopView) View() string {
 
 			b.WriteString(line)
 			b.WriteString("\n")
+
+			// Show summary snippet below done agents (2-3 lines, indented).
+			if a.Done && a.Summary != "" {
+				summaryLines := strings.SplitN(a.Summary, "\n", maxSummaryLines+1)
+				if len(summaryLines) > maxSummaryLines {
+					summaryLines = summaryLines[:maxSummaryLines]
+				}
+				continuation := "│   "
+				if isLast {
+					continuation = "    "
+				}
+				for _, sl := range summaryLines {
+					summaryText := styleDetailDim.Render(TruncateWithEllipsis(sl, lv.Width-10))
+					b.WriteString("  " + styleTreeConnector.Render(continuation) + summaryText + "\n")
+				}
+			}
 			idx++
 		}
 	}

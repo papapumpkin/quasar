@@ -152,12 +152,14 @@ func (d DetailPanel) linesBelow() int {
 
 // AgentContext holds the contextual information for a selected agent entry.
 type AgentContext struct {
-	Role       string
-	Cycle      int
-	DurationMs int64
-	CostUSD    float64
-	IssueCount int
-	Done       bool
+	Role         string
+	Cycle        int
+	DurationMs   int64
+	CostUSD      float64
+	IssueCount   int
+	Done         bool
+	Summary      string       // extracted summary of what the agent did
+	Satisfaction Satisfaction // reviewer satisfaction level
 }
 
 // PhaseContext holds the contextual information for a selected phase.
@@ -203,6 +205,17 @@ func FormatAgentHeader(ctx AgentContext) string {
 		b.WriteString("  ")
 		b.WriteString(label("issues: "))
 		b.WriteString(value(fmt.Sprintf("%d", ctx.IssueCount)))
+	}
+
+	if ctx.Satisfaction != SatisfactionNone {
+		b.WriteString("  ")
+		b.WriteString(SatisfactionBadge(ctx.Satisfaction))
+	}
+
+	if ctx.Summary != "" {
+		b.WriteString("\n")
+		b.WriteString(label("summary: "))
+		b.WriteString(value(ctx.Summary))
 	}
 
 	return b.String()

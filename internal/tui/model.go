@@ -69,11 +69,14 @@ type AppModel struct {
 	PhaseLoops   map[string]*LoopView // per-phase cycle timelines
 
 	// Detail panel state.
-	ShowPlan     bool          // whether the plan viewer is toggled on
-	ShowDiff     bool          // whether the diff viewer is toggled on (vs raw output)
-	DiffFileList *FileListView // navigable file list when diff view is active
-	DiffFileOpen bool          // whether user has opened a single file's diff (Enter on file list)
-	ShowBeads    bool          // whether the bead tracker is toggled on
+	ShowPlan       bool          // whether the plan viewer is toggled on
+	ShowDiff       bool          // whether the diff viewer is toggled on (vs raw output)
+	DiffFileList   *FileListView // navigable file list when diff view is active
+	DiffFileOpen   bool          // whether user has opened a single file's diff (Enter on file list)
+	DiffSideBySide bool          // whether diff is rendered side-by-side (true) or unified (false)
+	DiffCollapsed  map[int]bool  // hunk index → collapsed state when viewing a single file diff
+	DiffHunkCount  int           // number of hunks in the currently viewed file
+	ShowBeads      bool          // whether the bead tracker is toggled on
 
 	// Bead hierarchy state.
 	LoopBeads  *BeadInfo            // bead hierarchy for loop mode
@@ -310,6 +313,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgCycleSummary:
 		m.StatusBar.CostUSD = msg.Data.TotalCostUSD
 		m.LoopView.Approved = msg.Data.Approved
+		if msg.Data.Phase == "review_complete" {
+			sat := SatisfactionFromReview(msg.Data.Approved, msg.Data.IssueCount)
+			m.LoopView.SetSatisfaction(sat)
+		}
 	case MsgIssuesFound:
 		m.LoopView.SetIssueCount(msg.Count)
 	case MsgApproved:
@@ -359,6 +366,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseDone)
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
 			lv.Approved = true
+			// Extract completion note from last reviewer summary.
+			if note := lastReviewerSummary(lv); note != "" {
+				m.NebulaView.SetPhaseCompletionNote(msg.PhaseID, note)
+			}
 		}
 		m.NebulaView.SetPhaseCost(msg.PhaseID, msg.TotalCost)
 		// Remove worker card when phase completes.
@@ -378,9 +389,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lv := m.ensurePhaseLoop(msg.PhaseID)
 		lv.StartAgent(msg.Role)
 		// Update worker card agent role and activity.
+		activity := activityFromRole(msg.Role)
 		if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
 			wc.AgentRole = msg.Role
-			wc.Activity = activityFromRole(msg.Role)
+			wc.Activity = activity
+		}
+		// Propagate activity to board card.
+		m.NebulaView.SetPhaseActivity(msg.PhaseID, activity)
+	case MsgWorkerActivity:
+		if msg.PhaseID != "" {
+			if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
+				wc.Stream.Push(msg.Activity)
+			}
 		}
 	case MsgPhaseAgentDone:
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
@@ -419,8 +439,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgPhaseCycleSummary:
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
 			lv.Approved = msg.Data.Approved
+			if msg.Data.Phase == "review_complete" {
+				sat := SatisfactionFromReview(msg.Data.Approved, msg.Data.IssueCount)
+				lv.SetSatisfaction(sat)
+			}
 		}
 		m.NebulaView.SetPhaseCost(msg.PhaseID, msg.Data.TotalCostUSD)
+		m.NebulaView.SetPhaseReviewerSatisfied(msg.PhaseID, msg.Data.Approved)
+		if msg.Data.MaxBudgetUSD > 0 {
+			m.NebulaView.SetPhaseMaxBudget(msg.PhaseID, msg.Data.MaxBudgetUSD)
+		}
 		if m.FocusedPhase == msg.PhaseID {
 			m.updateDetailFromSelection()
 		}
@@ -454,6 +482,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgPhaseError:
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseFailed)
 		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseFailed)
+		// Set completion note from error message.
+		m.NebulaView.SetPhaseCompletionNote(msg.PhaseID, msg.Msg)
 		// Remove worker card on failure.
 		delete(m.WorkerCards, msg.PhaseID)
 		m.addMessage("[%s] %s", msg.PhaseID, msg.Msg)
@@ -606,14 +636,24 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Toasts = append(m.Toasts, toast)
 			cmds = append(cmds, cmd)
 		}
+		// Mark the phase card with an attention indicator.
+		if msg.PhaseID != "" {
+			m.NebulaView.SetPhaseHails(msg.PhaseID, true)
+		}
 
 	case MsgHailReceived:
 		m.PendingHails = append(m.PendingHails, msg.Hail)
 		m.syncHailBadge()
+		if msg.PhaseID != "" {
+			m.syncPhaseHails(msg.PhaseID)
+		}
 
 	case MsgHailResolved:
 		m.removePendingHail(msg.ID)
 		m.syncHailBadge()
+		if msg.PhaseID != "" {
+			m.syncPhaseHails(msg.PhaseID)
+		}
 
 	// --- Interactive dialog ---
 	case MsgDialogOpen:
@@ -893,7 +933,16 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.Keys.Back):
 			// Return to the file list without leaving diff mode.
 			m.DiffFileOpen = false
+			m.DiffCollapsed = nil
+			m.DiffHunkCount = 0
 			m.updateDetailFromSelection()
+			return m, nil
+		case key.Matches(msg, m.Keys.SideBySide):
+			m.DiffSideBySide = !m.DiffSideBySide
+			m.refreshFileDiff()
+			return m, nil
+		case key.Matches(msg, m.Keys.ToggleHunk):
+			m.toggleCurrentHunk()
 			return m, nil
 		}
 	}
@@ -908,6 +957,10 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case key.Matches(msg, m.Keys.Down):
 			m.DiffFileList.MoveDown()
+			m.updateDetailFromSelection()
+			return m, nil
+		case key.Matches(msg, m.Keys.SideBySide):
+			m.DiffSideBySide = !m.DiffSideBySide
 			m.updateDetailFromSelection()
 			return m, nil
 		}
@@ -1428,10 +1481,78 @@ func (m AppModel) showFileDiff() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	body := RenderSingleFileDiff(rawDiff, file.Path, m.contentWidth()-4)
+	m.DiffCollapsed = make(map[int]bool)
+	m.DiffHunkCount = HunkCount(rawDiff, file.Path)
+	opts := DiffRenderOpts{
+		SideBySide:     m.DiffSideBySide,
+		CollapsedHunks: m.DiffCollapsed,
+	}
+	body := RenderSingleFileDiffWithOpts(rawDiff, file.Path, m.contentWidth()-4, opts)
 	m.Detail.SetContent(file.Path, body)
 	m.DiffFileOpen = true
 	return m, nil
+}
+
+// refreshFileDiff re-renders the currently open file diff with current state.
+func (m *AppModel) refreshFileDiff() {
+	fl := m.DiffFileList
+	if fl == nil || len(fl.Files) == 0 {
+		return
+	}
+	file := fl.SelectedFile()
+	rawDiff := m.selectedAgentDiff()
+	if rawDiff == "" {
+		return
+	}
+	opts := DiffRenderOpts{
+		SideBySide:     m.DiffSideBySide,
+		CollapsedHunks: m.DiffCollapsed,
+	}
+	body := RenderSingleFileDiffWithOpts(rawDiff, file.Path, m.contentWidth()-4, opts)
+	m.Detail.SetContent(file.Path, body)
+}
+
+// toggleCurrentHunk toggles the collapse state of hunks sequentially.
+// Collapses the first expanded hunk, or expands all if all are collapsed.
+func (m *AppModel) toggleCurrentHunk() {
+	if m.DiffCollapsed == nil {
+		m.DiffCollapsed = make(map[int]bool)
+	}
+	if m.DiffHunkCount <= 0 {
+		return
+	}
+	toggled := false
+	for i := 0; i < m.DiffHunkCount; i++ {
+		if !m.DiffCollapsed[i] {
+			m.DiffCollapsed[i] = true
+			toggled = true
+			break
+		}
+	}
+	if !toggled {
+		// All collapsed — expand all.
+		for i := 0; i < m.DiffHunkCount; i++ {
+			delete(m.DiffCollapsed, i)
+		}
+	}
+	m.refreshFileDiff()
+}
+
+// selectedAgentDiff returns the raw diff text for the currently selected agent.
+func (m *AppModel) selectedAgentDiff() string {
+	switch m.Mode {
+	case ModeLoop:
+		if agent := m.LoopView.SelectedAgent(); agent != nil {
+			return agent.Diff
+		}
+	case ModeNebula:
+		if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
+			if agent := lv.SelectedAgent(); agent != nil {
+				return agent.Diff
+			}
+		}
+	}
+	return ""
 }
 
 // handleBeadsKey toggles the bead tracker view in the detail panel.
@@ -1785,6 +1906,14 @@ func (m *AppModel) syncHailBadge() {
 	m.Keys.HailList.SetEnabled(len(m.PendingHails) > 0)
 }
 
+// syncPhaseHails updates the HasPendingHails flag on the PhaseEntry for the
+// given phase. When a hail is resolved, this clears the flag if no active
+// hail overlay references this phase.
+func (m *AppModel) syncPhaseHails(phaseID string) {
+	hasPending := m.Hail != nil && m.Hail.PhaseID == phaseID
+	m.NebulaView.SetPhaseHails(phaseID, hasPending)
+}
+
 // removePendingHail removes a hail by ID from PendingHails.
 func (m *AppModel) removePendingHail(id string) {
 	for i, h := range m.PendingHails {
@@ -1950,12 +2079,14 @@ func (m *AppModel) updateDetailFromSelection() {
 			return
 		}
 		header := FormatAgentHeader(AgentContext{
-			Role:       agent.Role,
-			Cycle:      m.LoopView.SelectedCycleNumber(),
-			DurationMs: agent.DurationMs,
-			CostUSD:    agent.CostUSD,
-			IssueCount: agent.IssueCount,
-			Done:       agent.Done,
+			Role:         agent.Role,
+			Cycle:        m.LoopView.SelectedCycleNumber(),
+			DurationMs:   agent.DurationMs,
+			CostUSD:      agent.CostUSD,
+			IssueCount:   agent.IssueCount,
+			Done:         agent.Done,
+			Summary:      agent.Summary,
+			Satisfaction: agent.Satisfaction,
 		})
 		if m.ShowDiff && agent.Diff != "" {
 			var body string
@@ -2028,6 +2159,13 @@ func (m *AppModel) updateNebulaDetail() {
 
 	switch m.Depth {
 	case DepthPhaseLoop:
+		// For completed/failed phases, show a structured completion summary.
+		if fp := m.findPhase(m.FocusedPhase); fp != nil && (fp.Status == PhaseDone || fp.Status == PhaseFailed) {
+			lv := m.PhaseLoops[m.FocusedPhase]
+			summaryBody := FormatPhaseSummary(*fp, lv)
+			m.Detail.SetContentWithHeader(m.FocusedPhase+" summary", phaseHeader, summaryBody)
+			return
+		}
 		// Show phase summary card in the detail panel.
 		if phaseHeader != "" {
 			m.Detail.SetContentWithHeader(m.FocusedPhase+" summary", phaseHeader, "(select an agent row and press enter to view output)")
@@ -2049,12 +2187,14 @@ func (m *AppModel) updateNebulaDetail() {
 
 		// Build combined header: phase context + agent context.
 		agentHeader := FormatAgentHeader(AgentContext{
-			Role:       agent.Role,
-			Cycle:      lv.SelectedCycleNumber(),
-			DurationMs: agent.DurationMs,
-			CostUSD:    agent.CostUSD,
-			IssueCount: agent.IssueCount,
-			Done:       agent.Done,
+			Role:         agent.Role,
+			Cycle:        lv.SelectedCycleNumber(),
+			DurationMs:   agent.DurationMs,
+			CostUSD:      agent.CostUSD,
+			IssueCount:   agent.IssueCount,
+			Done:         agent.Done,
+			Summary:      agent.Summary,
+			Satisfaction: agent.Satisfaction,
 		})
 		header := agentHeader
 		if phaseHeader != "" {
@@ -2455,6 +2595,11 @@ func (m AppModel) renderMainView() string {
 func (m AppModel) buildFooter() Footer {
 	f := Footer{Width: m.Width}
 
+	// When viewing a single file diff, show file-open bindings.
+	if m.ShowDiff && m.DiffFileList != nil && m.DiffFileOpen {
+		f.Bindings = DiffFileOpenFooterBindings(m.Keys)
+		return f
+	}
 	// When the diff file list is active, show dedicated diff-mode bindings.
 	if m.ShowDiff && m.DiffFileList != nil {
 		f.Bindings = DiffFileListFooterBindings(m.Keys)

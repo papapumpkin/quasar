@@ -53,6 +53,7 @@ type UI interface {
 	FindingLifecycle(cycle int, summary FindingLifecycleData)
 	HailReceived(h HailInfo)
 	HailResolved(id, resolution string)
+	ActivityUpdate(activity string)
 }
 
 // BeadChild carries display information for a child bead in the hierarchy.
@@ -206,6 +207,12 @@ func (p *Printer) HailReceived(h HailInfo) {
 // HailResolved prints a brief confirmation that a hail was resolved.
 func (p *Printer) HailResolved(id, resolution string) {
 	fmt.Fprintf(os.Stderr, green+"✓ hail resolved"+reset+" [%s] %s\n", id, resolution)
+}
+
+// ActivityUpdate prints a dim activity line to stderr. This surfaces real-time
+// tool-use events (file reads, edits, bash commands) from the agent.
+func (p *Printer) ActivityUpdate(activity string) {
+	fmt.Fprintf(os.Stderr, dim+"  ↳ %s"+reset+"\n", activity)
 }
 
 // TaskStarted prints a status line when a task begins.

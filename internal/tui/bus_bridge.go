@@ -197,6 +197,13 @@ func (b *BusUIBridge) BeadUpdate(taskBeadID, title, status string, children []ui
 	b.publish(ev)
 }
 
+// ActivityUpdate publishes KindPhaseActivity with a short activity summary.
+func (b *BusUIBridge) ActivityUpdate(activity string) {
+	ev := bus.NewPhase(bus.KindPhaseActivity, b.phaseID)
+	ev.Message = activity
+	b.publish(ev)
+}
+
 // FindingLifecycle is a no-op for BusUIBridge; finding lifecycle data is
 // surfaced through the phase detail view rather than as a standalone message.
 func (b *BusUIBridge) FindingLifecycle(cycle int, summary ui.FindingLifecycleData) {}

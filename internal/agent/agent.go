@@ -51,6 +51,22 @@ type ReviewReport struct {
 	Summary          string `toml:"summary"`
 }
 
+// ActivityEvent describes a single tool-use or reasoning step observed during
+// an agent invocation. Consumers display these as a rolling status line so
+// developers can intuit whether work is on track.
+type ActivityEvent struct {
+	// Kind classifies the activity: "read", "edit", "bash", "think", etc.
+	Kind string
+	// Summary is a short human-readable description (e.g. "reading internal/loop/run.go").
+	Summary string
+}
+
+// ActivityCallback is invoked by the Invoker for each observable tool-use or
+// reasoning step during a streaming invocation. Implementations must be safe
+// for concurrent use — the callback may be called from a dedicated reader
+// goroutine.
+type ActivityCallback func(ActivityEvent)
+
 // Invoker abstracts the execution of an agent, allowing different backends
 // (e.g. Claude CLI, mocks) to satisfy the interface.
 type Invoker interface {

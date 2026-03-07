@@ -4,12 +4,71 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
 
+// activityStreamSize is the maximum number of entries in the activity ring buffer.
+const activityStreamSize = 5
+
+// staleActivityThreshold is how long an activity entry can sit without an update
+// before being considered stale and rendered with dimmed/elapsed styling.
+const staleActivityThreshold = 5 * time.Second
+
+// ActivityEntry is a single timestamped activity event in the ring buffer.
+type ActivityEntry struct {
+	Text string
+	Time time.Time
+}
+
+// ActivityStream is a fixed-size ring buffer of recent activity events.
+// It stores the last activityStreamSize entries for rolling display.
+type ActivityStream struct {
+	entries [activityStreamSize]ActivityEntry
+	head    int // index of the next write slot
+	count   int // number of valid entries (≤ activityStreamSize)
+}
+
+// Push adds a new activity entry to the ring buffer.
+func (s *ActivityStream) Push(text string) {
+	s.entries[s.head] = ActivityEntry{Text: text, Time: time.Now()}
+	s.head = (s.head + 1) % activityStreamSize
+	if s.count < activityStreamSize {
+		s.count++
+	}
+}
+
+// Latest returns the most recent activity entry.
+// Returns a zero ActivityEntry if the buffer is empty.
+func (s *ActivityStream) Latest() ActivityEntry {
+	if s.count == 0 {
+		return ActivityEntry{}
+	}
+	idx := (s.head - 1 + activityStreamSize) % activityStreamSize
+	return s.entries[idx]
+}
+
+// Entries returns up to n most recent entries, newest first.
+func (s *ActivityStream) Entries(n int) []ActivityEntry {
+	if n > s.count {
+		n = s.count
+	}
+	result := make([]ActivityEntry, n)
+	for i := 0; i < n; i++ {
+		idx := (s.head - 1 - i + activityStreamSize*2) % activityStreamSize
+		result[i] = s.entries[idx]
+	}
+	return result
+}
+
+// Len returns the number of entries in the buffer.
+func (s *ActivityStream) Len() int {
+	return s.count
+}
+
 // WorkerCard holds live state for an active quasar (worker) processing a phase.
-// Data is populated from existing MsgPhase* messages — no new message types required.
+// Data is populated from MsgPhase* and MsgWorkerActivity messages.
 type WorkerCard struct {
 	PhaseID    string   // phase being executed
 	QuasarID   string   // worker identifier (e.g. "q-1")
@@ -19,6 +78,9 @@ type WorkerCard struct {
 	Claims     []string // file paths currently touched by this quasar
 	Activity   string   // human-readable activity: "coding...", "reviewing..."
 	AgentRole  string   // "coder" or "reviewer"
+
+	// Stream holds the rolling ring buffer of real-time activity events.
+	Stream ActivityStream
 }
 
 // workerCardMinWidth is the minimum width for a single worker card.
@@ -152,6 +214,12 @@ func (wc *WorkerCard) View(width int) string {
 	}
 	b.WriteString(actStyle.Render(activity))
 
+	// Rolling activity stream line — shows latest real-time action from the agent.
+	if streamLine := wc.renderStreamLine(innerWidth); streamLine != "" {
+		b.WriteString("\n")
+		b.WriteString(streamLine)
+	}
+
 	// Wrap in a rounded border box.
 	cardStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -160,6 +228,50 @@ func (wc *WorkerCard) View(width int) string {
 		Padding(0, 1)
 
 	return cardStyle.Render(b.String())
+}
+
+// renderStreamLine renders the latest activity stream entry. When the entry is
+// stale (older than staleActivityThreshold), it appends elapsed time and dims
+// the text. Returns an empty string if the stream is empty.
+func (wc *WorkerCard) renderStreamLine(maxWidth int) string {
+	latest := wc.Stream.Latest()
+	if latest.Text == "" {
+		return ""
+	}
+
+	elapsed := time.Since(latest.Time)
+	stale := elapsed >= staleActivityThreshold
+
+	text := latest.Text
+	if stale {
+		suffix := fmt.Sprintf(" (%s ago)", formatDurationBrief(elapsed))
+		available := maxWidth - len(suffix) - 2 // "↳ " prefix
+		if available > 0 && len(text) > available {
+			text = TruncateWithEllipsis(text, available)
+		}
+		text = "↳ " + text + suffix
+	} else {
+		text = "↳ " + text
+	}
+	text = TruncateWithEllipsis(text, maxWidth)
+
+	style := lipgloss.NewStyle().Foreground(colorMuted)
+	if !stale {
+		style = style.Foreground(colorMutedLight)
+	}
+	return style.Render(text)
+}
+
+// formatDurationBrief returns a compact human-readable duration string.
+func formatDurationBrief(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm%ds", int(d.Minutes()), int(d.Seconds())%60)
+	default:
+		return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
+	}
 }
 
 // activityFromRole returns a default activity string based on the agent role.

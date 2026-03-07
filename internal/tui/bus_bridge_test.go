@@ -460,6 +460,28 @@ func TestBusUIBridgeHailResolved(t *testing.T) {
 	}
 }
 
+func TestBusUIBridgeActivityUpdate(t *testing.T) {
+	t.Parallel()
+	b := bus.NewMemoryBus()
+	defer b.Close()
+	sub := b.Subscribe("test", 16)
+	defer sub.Unsubscribe()
+
+	bridge := NewBusUIBridge(b, "phase-act", "/tmp/work")
+	bridge.ActivityUpdate("reading internal/loop/run.go")
+
+	ev := mustDrain(t, sub)
+	if ev.Kind != bus.KindPhaseActivity {
+		t.Errorf("Kind = %q, want %q", ev.Kind, bus.KindPhaseActivity)
+	}
+	if ev.PhaseID != "phase-act" {
+		t.Errorf("PhaseID = %q, want %q", ev.PhaseID, "phase-act")
+	}
+	if ev.Message != "reading internal/loop/run.go" {
+		t.Errorf("Message = %q, want %q", ev.Message, "reading internal/loop/run.go")
+	}
+}
+
 func TestBusUIBridgeScratchpadOnTaskStarted(t *testing.T) {
 	t.Parallel()
 	b := bus.NewMemoryBus()
