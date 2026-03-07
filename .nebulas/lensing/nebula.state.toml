@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'lensing'
-total_cost_usd = 5.0366215
+total_cost_usd = 12.863297249999999
 
 [phases]
 [phases.activity-stream]
@@ -35,12 +35,18 @@ updated_at = 2026-03-06T22:50:44.902443812-05:00
 
 [phases.scope-impact]
 bead_id = 'quasar-n10'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-06T22:50:44.723808423-05:00
-updated_at = 2026-03-06T22:50:44.723808423-05:00
+updated_at = 2026-03-06T23:01:27.613597351-05:00
 
 [phases.work-summary]
 bead_id = 'quasar-1q9'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-06T22:50:44.514881632-05:00
-updated_at = 2026-03-06T22:50:44.90386591-05:00
+updated_at = 2026-03-06T23:01:27.548282971-05:00
+
+[phases.work-summary.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented structured work summaries with per-cycle summary extraction, reviewer satisfaction badges, phase completion panels, and detail panel headers — all backed by comprehensive tests and cleanly integrated into the existing TUI architecture.'
