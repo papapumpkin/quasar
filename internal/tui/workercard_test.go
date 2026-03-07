@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestWorkerCardView_BasicContent(t *testing.T) {
@@ -368,5 +369,178 @@ func TestWorkerCardLifecycle(t *testing.T) {
 	delete(m.WorkerCards, "alpha")
 	if len(m.WorkerCards) != 0 {
 		t.Fatalf("expected 0 worker cards after delete, got %d", len(m.WorkerCards))
+	}
+}
+
+func TestActivityStream_PushAndLatest(t *testing.T) {
+	t.Parallel()
+	var s ActivityStream
+
+	// Empty stream.
+	if got := s.Latest(); got.Text != "" {
+		t.Errorf("expected empty latest, got %q", got.Text)
+	}
+	if s.Len() != 0 {
+		t.Errorf("expected Len()=0, got %d", s.Len())
+	}
+
+	// Push one entry.
+	s.Push("reading foo.go")
+	if got := s.Latest(); got.Text != "reading foo.go" {
+		t.Errorf("Latest().Text = %q, want 'reading foo.go'", got.Text)
+	}
+	if s.Len() != 1 {
+		t.Errorf("expected Len()=1, got %d", s.Len())
+	}
+
+	// Push another.
+	s.Push("editing bar.go")
+	if got := s.Latest(); got.Text != "editing bar.go" {
+		t.Errorf("Latest().Text = %q, want 'editing bar.go'", got.Text)
+	}
+	if s.Len() != 2 {
+		t.Errorf("expected Len()=2, got %d", s.Len())
+	}
+}
+
+func TestActivityStream_RingOverflow(t *testing.T) {
+	t.Parallel()
+	var s ActivityStream
+
+	// Push more than activityStreamSize entries.
+	for i := 0; i < activityStreamSize+3; i++ {
+		s.Push(strings.Repeat("x", i+1))
+	}
+
+	// Count should be capped at activityStreamSize.
+	if s.Len() != activityStreamSize {
+		t.Errorf("Len() = %d, want %d", s.Len(), activityStreamSize)
+	}
+
+	// Latest should be the last pushed entry.
+	last := strings.Repeat("x", activityStreamSize+3)
+	if got := s.Latest(); got.Text != last {
+		t.Errorf("Latest().Text = %q, want %q", got.Text, last)
+	}
+}
+
+func TestActivityStream_Entries(t *testing.T) {
+	t.Parallel()
+	var s ActivityStream
+
+	s.Push("first")
+	s.Push("second")
+	s.Push("third")
+
+	entries := s.Entries(2)
+	if len(entries) != 2 {
+		t.Fatalf("Entries(2) returned %d entries, want 2", len(entries))
+	}
+	// Newest first.
+	if entries[0].Text != "third" {
+		t.Errorf("entries[0].Text = %q, want 'third'", entries[0].Text)
+	}
+	if entries[1].Text != "second" {
+		t.Errorf("entries[1].Text = %q, want 'second'", entries[1].Text)
+	}
+
+	// Request more than available.
+	all := s.Entries(10)
+	if len(all) != 3 {
+		t.Errorf("Entries(10) returned %d entries, want 3", len(all))
+	}
+}
+
+func TestWorkerCardView_WithStreamActivity(t *testing.T) {
+	t.Parallel()
+	wc := &WorkerCard{
+		PhaseID:   "build-phase",
+		QuasarID:  "q-1",
+		Cycle:     1,
+		MaxCycles: 3,
+		AgentRole: "coder",
+		Activity:  "coding...",
+	}
+	// Push a recent activity.
+	wc.Stream.Push("reading internal/loop/run.go")
+
+	out := wc.View(50)
+	if !strings.Contains(out, "↳") {
+		t.Errorf("expected stream line with ↳ prefix, got:\n%s", out)
+	}
+	if !strings.Contains(out, "reading internal/loop/run.go") {
+		t.Errorf("expected stream activity text, got:\n%s", out)
+	}
+}
+
+func TestWorkerCardView_EmptyStream(t *testing.T) {
+	t.Parallel()
+	wc := &WorkerCard{
+		PhaseID:   "clean-phase",
+		QuasarID:  "q-1",
+		AgentRole: "coder",
+	}
+	out := wc.View(40)
+	// No stream activity line should appear.
+	if strings.Contains(out, "↳") {
+		t.Errorf("unexpected stream line in card with empty stream:\n%s", out)
+	}
+}
+
+func TestRenderStreamLine_StaleEntry(t *testing.T) {
+	t.Parallel()
+	wc := &WorkerCard{
+		PhaseID:  "stale-phase",
+		QuasarID: "q-1",
+	}
+	// Manually inject a stale entry.
+	wc.Stream.entries[0] = ActivityEntry{
+		Text: "reading old.go",
+		Time: time.Now().Add(-10 * time.Second),
+	}
+	wc.Stream.head = 1
+	wc.Stream.count = 1
+
+	line := wc.renderStreamLine(50)
+	if !strings.Contains(line, "ago") {
+		t.Errorf("stale entry should show elapsed time, got: %q", line)
+	}
+}
+
+func TestRenderStreamLine_FreshEntry(t *testing.T) {
+	t.Parallel()
+	wc := &WorkerCard{
+		PhaseID:  "fresh-phase",
+		QuasarID: "q-1",
+	}
+	wc.Stream.Push("editing new.go")
+
+	line := wc.renderStreamLine(50)
+	if strings.Contains(line, "ago") {
+		t.Errorf("fresh entry should not show elapsed time, got: %q", line)
+	}
+	if !strings.Contains(line, "editing new.go") {
+		t.Errorf("expected activity text in line, got: %q", line)
+	}
+}
+
+func TestFormatDurationBrief(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		d    time.Duration
+		want string
+	}{
+		{3 * time.Second, "3s"},
+		{45 * time.Second, "45s"},
+		{90 * time.Second, "1m30s"},
+		{2*time.Hour + 5*time.Minute, "2h5m"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.want, func(t *testing.T) {
+			got := formatDurationBrief(tc.d)
+			if got != tc.want {
+				t.Errorf("formatDurationBrief(%v) = %q, want %q", tc.d, got, tc.want)
+			}
+		})
 	}
 }

@@ -26,11 +26,20 @@ type KeyMap struct {
 	// Diff file list keys.
 	OpenDiff key.Binding
 
+	// Side-by-side toggle — switches between unified and side-by-side diff rendering.
+	SideBySide key.Binding
+
+	// ToggleHunk collapses/expands a hunk in the diff view.
+	ToggleHunk key.Binding
+
 	// Board/table view toggle.
 	BoardToggle key.Binding
 
 	// Hail list — opens the pending hails overlay.
 	HailList key.Binding
+
+	// ChatPhase — opens a contextual chat for the selected phase.
+	ChatPhase key.Binding
 }
 
 // DefaultKeyMap returns the default keybinding configuration.
@@ -113,6 +122,14 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("enter"),
 			key.WithHelp("⏎", "open diff"),
 		),
+		SideBySide: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "side-by-side"),
+		),
+		ToggleHunk: key.NewBinding(
+			key.WithKeys(" "),
+			key.WithHelp("space", "toggle hunk"),
+		),
 		BoardToggle: key.NewBinding(
 			key.WithKeys("v"),
 			key.WithHelp("v", "board"),
@@ -121,6 +138,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("H"),
 			key.WithHelp("H", "hails"),
 			key.WithDisabled(),
+		),
+		ChatPhase: key.NewBinding(
+			key.WithKeys("c"),
+			key.WithHelp("c", "chat about phase"),
 		),
 	}
 }

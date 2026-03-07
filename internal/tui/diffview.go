@@ -30,13 +30,43 @@ const (
 
 // DiffHunk is a contiguous range of changes within a file.
 type DiffHunk struct {
-	Lines []DiffLine
+	Header string // function/method context from @@ line (e.g. "func (l *Loop) Run")
+	Lines  []DiffLine
+}
+
+// ChangeType classifies how a file was modified in a diff.
+type ChangeType int
+
+const (
+	// ChangeModified indicates the file was modified.
+	ChangeModified ChangeType = iota
+	// ChangeAdded indicates the file was newly added.
+	ChangeAdded
+	// ChangeDeleted indicates the file was deleted.
+	ChangeDeleted
+	// ChangeRenamed indicates the file was renamed.
+	ChangeRenamed
+)
+
+// ChangeTypeGlyph returns a single-character glyph for the change type.
+func ChangeTypeGlyph(ct ChangeType) string {
+	switch ct {
+	case ChangeAdded:
+		return "A"
+	case ChangeDeleted:
+		return "D"
+	case ChangeRenamed:
+		return "R"
+	default:
+		return "M"
+	}
 }
 
 // FileDiff represents the diff for a single file.
 type FileDiff struct {
-	Path  string
-	Hunks []DiffHunk
+	Path   string
+	Change ChangeType
+	Hunks  []DiffHunk
 }
 
 // DiffStat holds the summary statistics for a diff.
@@ -52,6 +82,13 @@ type FileStatEntry struct {
 	Path      string
 	Additions int
 	Deletions int
+	Change    ChangeType
+}
+
+// DiffRenderOpts controls how a diff is rendered.
+type DiffRenderOpts struct {
+	SideBySide     bool
+	CollapsedHunks map[int]bool // hunk index → collapsed
 }
 
 // ParseUnifiedDiff parses a unified diff string into structured FileDiff slices.
@@ -75,28 +112,41 @@ func ParseUnifiedDiff(raw string) []FileDiff {
 			continue
 		}
 
-		// Skip index, ---, +++ lines.
+		// Detect change type from header metadata lines.
+		if current != nil {
+			if strings.HasPrefix(line, "new file mode") {
+				current.Change = ChangeAdded
+				continue
+			}
+			if strings.HasPrefix(line, "deleted file mode") {
+				current.Change = ChangeDeleted
+				continue
+			}
+			if strings.HasPrefix(line, "rename from") || strings.HasPrefix(line, "rename to") {
+				current.Change = ChangeRenamed
+				continue
+			}
+		}
+
+		// Skip index, ---, +++ and other metadata lines.
 		if strings.HasPrefix(line, "index ") ||
 			strings.HasPrefix(line, "--- ") ||
 			strings.HasPrefix(line, "+++ ") ||
-			strings.HasPrefix(line, "new file mode") ||
-			strings.HasPrefix(line, "deleted file mode") ||
 			strings.HasPrefix(line, "old mode") ||
 			strings.HasPrefix(line, "new mode") ||
 			strings.HasPrefix(line, "similarity index") ||
-			strings.HasPrefix(line, "rename from") ||
-			strings.HasPrefix(line, "rename to") ||
 			strings.HasPrefix(line, "Binary files") {
 			continue
 		}
 
-		// Parse hunk header: @@ -oldStart,oldCount +newStart,newCount @@
+		// Parse hunk header: @@ -oldStart,oldCount +newStart,newCount @@ optional context
 		if strings.HasPrefix(line, "@@ ") {
 			if current == nil {
 				continue
 			}
 			oldStart, newStart := parseHunkHeader(line)
-			hunk := DiffHunk{}
+			hunkCtx := parseHunkContext(line)
+			hunk := DiffHunk{Header: hunkCtx}
 			oldNum := oldStart
 			newNum := newStart
 
@@ -219,6 +269,20 @@ func parseHunkHeader(line string) (oldStart, newStart int) {
 	return
 }
 
+// parseHunkContext extracts the function/method context string from a hunk header.
+// Input: "@@ -10,7 +10,12 @@ func Login(w http.ResponseWriter) {"
+// Output: "func Login(w http.ResponseWriter) {"
+func parseHunkContext(line string) string {
+	// Find the closing @@ marker.
+	idx := strings.Index(line[3:], " @@")
+	if idx < 0 {
+		return ""
+	}
+	after := line[3+idx+3:] // skip past " @@"
+	ctx := strings.TrimSpace(after)
+	return ctx
+}
+
 // parseRangeStart parses "-N,M" or "+N,M" returning N.
 func parseRangeStart(s string) int {
 	s = strings.TrimLeft(s, "-+")
@@ -250,6 +314,7 @@ func ComputeDiffStat(files []FileDiff) DiffStat {
 			Path:      f.Path,
 			Additions: adds,
 			Deletions: dels,
+			Change:    f.Change,
 		})
 	}
 	return stat
@@ -398,8 +463,35 @@ func pluralS(n int) string {
 	return "s"
 }
 
+// RenderStatBar renders a proportional addition/deletion bar of the given width.
+// For example, with 5 additions and 3 deletions at width 8: "+++++---"
+func RenderStatBar(adds, dels, barWidth int) string {
+	total := adds + dels
+	if total == 0 || barWidth <= 0 {
+		return ""
+	}
+	addCols := (adds * barWidth) / total
+	delCols := barWidth - addCols
+	// Ensure at least one column for non-zero counts.
+	if adds > 0 && addCols == 0 {
+		addCols = 1
+		delCols = barWidth - 1
+	}
+	if dels > 0 && delCols == 0 {
+		delCols = 1
+		addCols = barWidth - 1
+	}
+	return styleDiffStatAdd.Render(strings.Repeat("+", addCols)) +
+		styleDiffStatDel.Render(strings.Repeat("-", delCols))
+}
+
 // renderFileDiff renders a single file's diff in side-by-side format.
 func renderFileDiff(f FileDiff, width int) string {
+	return renderFileDiffWithOpts(f, width, DiffRenderOpts{SideBySide: true})
+}
+
+// renderFileDiffWithOpts renders a single file's diff with configurable options.
+func renderFileDiffWithOpts(f FileDiff, width int, opts DiffRenderOpts) string {
 	var b strings.Builder
 
 	// File header.
@@ -411,32 +503,134 @@ func renderFileDiff(f FileDiff, width int) string {
 	b.WriteString(styleDiffHeader.Render(header))
 	b.WriteString("\n")
 
-	// Line number width (4 chars is enough for most files).
+	for hi, hunk := range f.Hunks {
+		// Render hunk context header if present.
+		if hunk.Header != "" {
+			ctx := styleDiffHunkCtx.Render("  @ " + hunk.Header)
+			b.WriteString(ctx)
+			b.WriteString("\n")
+		}
+
+		// Check if hunk is collapsed.
+		if opts.CollapsedHunks != nil && opts.CollapsedHunks[hi] {
+			adds, dels := countHunkChanges(hunk)
+			summary := fmt.Sprintf("  ▸ %d lines (+%d -%d)", len(hunk.Lines), adds, dels)
+			b.WriteString(styleDiffContext.Render(summary))
+			b.WriteString("\n")
+			continue
+		}
+
+		if opts.SideBySide {
+			b.WriteString(renderHunkSideBySide(hunk, width))
+		} else {
+			b.WriteString(renderHunkUnified(hunk))
+		}
+	}
+
+	return b.String()
+}
+
+// countHunkChanges counts additions and deletions in a hunk.
+func countHunkChanges(hunk DiffHunk) (adds, dels int) {
+	for _, l := range hunk.Lines {
+		switch l.Type {
+		case DiffLineAdd:
+			adds++
+		case DiffLineRemove:
+			dels++
+		}
+	}
+	return
+}
+
+// renderHunkSideBySide renders a hunk in side-by-side format.
+func renderHunkSideBySide(hunk DiffHunk, width int) string {
 	const numWidth = 4
 	sep := styleDiffSep.Render(" │ ")
 	sepLen := 3
 
-	// Each side gets: numWidth + 1(space) + content.
-	// Total: numWidth + 1 + content + sep + numWidth + 1 + content.
 	sideWidth := (width - sepLen) / 2
 	contentWidth := sideWidth - numWidth - 1
 	if contentWidth < 10 {
 		contentWidth = 10
 	}
 
-	for _, hunk := range f.Hunks {
-		pairs := BuildSideBySidePairs(hunk)
-		for _, pair := range pairs {
-			left := renderSideLine(pair.Left, numWidth, contentWidth, true)
-			right := renderSideLine(pair.Right, numWidth, contentWidth, false)
-			b.WriteString(left)
-			b.WriteString(sep)
-			b.WriteString(right)
-			b.WriteString("\n")
+	var b strings.Builder
+	pairs := BuildSideBySidePairs(hunk)
+	for _, pair := range pairs {
+		left := renderSideLine(pair.Left, numWidth, contentWidth, true)
+		right := renderSideLine(pair.Right, numWidth, contentWidth, false)
+		b.WriteString(left)
+		b.WriteString(sep)
+		b.WriteString(right)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// renderHunkUnified renders a hunk in traditional unified diff format.
+func renderHunkUnified(hunk DiffHunk) string {
+	const numWidth = 4
+	var b strings.Builder
+	for _, line := range hunk.Lines {
+		var prefix, numStr string
+		switch line.Type {
+		case DiffLineAdd:
+			prefix = "+"
+			if line.NewNum > 0 {
+				numStr = fmt.Sprintf("%*d", numWidth, line.NewNum)
+			}
+		case DiffLineRemove:
+			prefix = "-"
+			if line.OldNum > 0 {
+				numStr = fmt.Sprintf("%*d", numWidth, line.OldNum)
+			}
+		default:
+			prefix = " "
+			if line.NewNum > 0 {
+				numStr = fmt.Sprintf("%*d", numWidth, line.NewNum)
+			}
+		}
+		if numStr == "" {
+			numStr = strings.Repeat(" ", numWidth)
+		}
+		rendered := styleDiffLineNum.Render(numStr) + " "
+		content := prefix + line.Content
+		switch line.Type {
+		case DiffLineAdd:
+			rendered += styleDiffAdd.Render(content)
+		case DiffLineRemove:
+			rendered += styleDiffRemove.Render(content)
+		default:
+			rendered += styleDiffContext.Render(content)
+		}
+		b.WriteString(rendered)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// RenderSingleFileDiffWithOpts parses a raw unified diff and renders the diff for a single file
+// with the given render options (side-by-side, collapsed hunks).
+func RenderSingleFileDiffWithOpts(raw string, path string, width int, opts DiffRenderOpts) string {
+	files := ParseUnifiedDiff(raw)
+	for _, f := range files {
+		if f.Path == path {
+			return renderFileDiffWithOpts(f, width, opts)
 		}
 	}
+	return styleDiffContext.Render("(no diff for " + path + ")")
+}
 
-	return b.String()
+// HunkCount returns the number of hunks for the given file path in a raw diff.
+func HunkCount(raw string, path string) int {
+	files := ParseUnifiedDiff(raw)
+	for _, f := range files {
+		if f.Path == path {
+			return len(f.Hunks)
+		}
+	}
+	return 0
 }
 
 // renderSideLine renders one side (left or right) of a side-by-side diff row.

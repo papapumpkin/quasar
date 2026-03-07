@@ -1677,3 +1677,234 @@ func TestChatModelResetStreamingState(t *testing.T) {
 		t.Error("cancel should be renewed, not nil")
 	}
 }
+
+func TestStartPhaseChat(t *testing.T) {
+	t.Parallel()
+
+	store := &mockStore{}
+	provider := &mockProvider{response: "ok"}
+	m := NewChatModel(store, provider, "claude-3")
+
+	pc := chat.PhaseContext{
+		PhaseID:          "fix-tests",
+		PhaseSpec:        "## Problem\nTests are failing.",
+		Cycle:            2,
+		MaxCycles:        5,
+		LastSummary:      "Added missing assertions",
+		DiffStat:         "+10 -3 across 2 files",
+		ReviewerFindings: "Need more edge cases",
+	}
+
+	m.StartPhaseChat(pc)
+
+	// Verify conversation was created with phase linkage.
+	if m.ActiveConv == nil {
+		t.Fatal("ActiveConv should not be nil")
+	}
+	if m.ActiveConv.PhaseID != "fix-tests" {
+		t.Errorf("PhaseID = %q, want %q", m.ActiveConv.PhaseID, "fix-tests")
+	}
+
+	// Verify system message was seeded.
+	if len(m.ActiveConv.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(m.ActiveConv.Messages))
+	}
+	sysMsg := m.ActiveConv.Messages[0]
+	if sysMsg.Role != chat.RoleSystem {
+		t.Errorf("Message[0].Role = %q, want %q", sysMsg.Role, chat.RoleSystem)
+	}
+	if !strings.Contains(sysMsg.Content, "fix-tests") {
+		t.Error("system message should contain phase ID")
+	}
+	if !strings.Contains(sysMsg.Content, "Tests are failing") {
+		t.Error("system message should contain phase spec")
+	}
+	if !strings.Contains(sysMsg.Content, "Added missing assertions") {
+		t.Error("system message should contain last summary")
+	}
+
+	// Verify chat view state.
+	if m.ChatView.PhaseBadge != "fix-tests" {
+		t.Errorf("PhaseBadge = %q, want %q", m.ChatView.PhaseBadge, "fix-tests")
+	}
+	if !strings.Contains(m.ChatView.Title, "fix-tests") {
+		t.Errorf("Title = %q, want containing 'fix-tests'", m.ChatView.Title)
+	}
+	if m.PhaseContext == nil {
+		t.Fatal("PhaseContext should not be nil")
+	}
+}
+
+func TestRefreshPhaseContext(t *testing.T) {
+	t.Parallel()
+
+	store := &mockStore{}
+	provider := &mockProvider{response: "ok"}
+	m := NewChatModel(store, provider, "claude-3")
+
+	// Start a phase chat first.
+	pc := chat.PhaseContext{
+		PhaseID: "task-1",
+		Cycle:   1,
+	}
+	m.StartPhaseChat(pc)
+
+	initialMsgCount := len(m.ActiveConv.Messages)
+
+	// Refresh with updated context.
+	updated := chat.PhaseContext{
+		PhaseID:     "task-1",
+		Cycle:       3,
+		MaxCycles:   5,
+		LastSummary: "Refactored module structure",
+	}
+	m.RefreshPhaseContext(updated)
+
+	// Should have one more message.
+	if len(m.ActiveConv.Messages) != initialMsgCount+1 {
+		t.Fatalf("expected %d messages, got %d", initialMsgCount+1, len(m.ActiveConv.Messages))
+	}
+
+	lastMsg := m.ActiveConv.Messages[len(m.ActiveConv.Messages)-1]
+	if lastMsg.Role != chat.RoleSystem {
+		t.Errorf("last message Role = %q, want %q", lastMsg.Role, chat.RoleSystem)
+	}
+	if !strings.Contains(lastMsg.Content, "Context Refresh") {
+		t.Error("refresh message should contain 'Context Refresh'")
+	}
+	if !strings.Contains(lastMsg.Content, "Refactored module structure") {
+		t.Error("refresh message should contain updated summary")
+	}
+	if m.PhaseContext.Cycle != 3 {
+		t.Errorf("PhaseContext.Cycle = %d, want 3", m.PhaseContext.Cycle)
+	}
+}
+
+func TestStartPhaseChat_ClearsOnNewConversation(t *testing.T) {
+	t.Parallel()
+
+	store := &mockStore{}
+	m := NewChatModel(store, nil, "claude-3")
+
+	// Start a phase chat.
+	pc := chat.PhaseContext{PhaseID: "phase-1"}
+	m.StartPhaseChat(pc)
+
+	if m.ChatView.PhaseBadge != "phase-1" {
+		t.Fatal("phase badge should be set")
+	}
+
+	// Start a new regular conversation.
+	model, _ := m.startNewConversation()
+	if cm, ok := model.(ChatModel); ok {
+		m = cm
+	}
+
+	// Phase context should be cleared.
+	if m.PhaseContext != nil {
+		t.Error("PhaseContext should be nil after new conversation")
+	}
+	if m.ChatView.PhaseBadge != "" {
+		t.Errorf("PhaseBadge = %q, want empty", m.ChatView.PhaseBadge)
+	}
+}
+
+func TestSendMessage_NilProvider(t *testing.T) {
+	t.Parallel()
+
+	store := &mockStore{}
+	// Create chat model with nil provider and a phase chat (which has no provider).
+	m := NewChatModel(store, nil, "claude-3")
+	m.StartPhaseChat(chat.PhaseContext{PhaseID: "test-phase"})
+	m.ChatView.SetSize(80, 24)
+	m.ChatView.Input.SetValue("Hello")
+
+	// sendMessage should not panic with nil provider.
+	model, _ := m.sendMessage()
+	cm, ok := model.(ChatModel)
+	if !ok {
+		t.Fatal("expected ChatModel")
+	}
+
+	// Should have appended a system error message instead of crashing.
+	found := false
+	for _, msg := range cm.ActiveConv.Messages {
+		if msg.Role == chat.RoleSystem && strings.Contains(msg.Content, "No AI provider configured") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected system message about missing provider")
+	}
+}
+
+func TestHandleConvLoaded_RestoresPhaseContext(t *testing.T) {
+	t.Parallel()
+
+	store := &mockStore{
+		conversations: []chat.Conversation{
+			{
+				ID:      "conv-1",
+				PhaseID: "phase-42",
+				Title:   "Phase chat",
+				Messages: []chat.Message{
+					{Role: chat.RoleSystem, Content: "context"},
+				},
+			},
+		},
+	}
+	m := NewChatModel(store, nil, "claude-3")
+
+	// Simulate loading a phase-linked conversation.
+	conv, _ := store.Load("conv-1")
+	model, _ := m.handleConvLoaded(MsgConvLoaded{Conversation: conv})
+	cm, ok := model.(ChatModel)
+	if !ok {
+		t.Fatal("expected ChatModel")
+	}
+
+	if cm.ChatView.PhaseBadge != "phase-42" {
+		t.Errorf("PhaseBadge = %q, want %q", cm.ChatView.PhaseBadge, "phase-42")
+	}
+	if cm.PhaseContext == nil {
+		t.Fatal("PhaseContext should be restored for phase-linked conversation")
+	}
+	if cm.PhaseContext.PhaseID != "phase-42" {
+		t.Errorf("PhaseContext.PhaseID = %q, want %q", cm.PhaseContext.PhaseID, "phase-42")
+	}
+}
+
+func TestHandleConvLoaded_NoPhaseContext(t *testing.T) {
+	t.Parallel()
+
+	store := &mockStore{
+		conversations: []chat.Conversation{
+			{
+				ID:    "conv-2",
+				Title: "Regular chat",
+				Messages: []chat.Message{
+					{Role: chat.RoleUser, Content: "hi"},
+				},
+			},
+		},
+	}
+	m := NewChatModel(store, nil, "claude-3")
+
+	// Set a pre-existing phase context to verify it gets cleared.
+	m.PhaseContext = &chat.PhaseContext{PhaseID: "old-phase"}
+
+	conv, _ := store.Load("conv-2")
+	model, _ := m.handleConvLoaded(MsgConvLoaded{Conversation: conv})
+	cm, ok := model.(ChatModel)
+	if !ok {
+		t.Fatal("expected ChatModel")
+	}
+
+	if cm.PhaseContext != nil {
+		t.Error("PhaseContext should be nil for non-phase conversation")
+	}
+	if cm.ChatView.PhaseBadge != "" {
+		t.Errorf("PhaseBadge = %q, want empty", cm.ChatView.PhaseBadge)
+	}
+}

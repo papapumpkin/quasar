@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/papapumpkin/quasar/internal/chat"
 	"github.com/papapumpkin/quasar/internal/dialog"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/nebula"
@@ -69,11 +70,14 @@ type AppModel struct {
 	PhaseLoops   map[string]*LoopView // per-phase cycle timelines
 
 	// Detail panel state.
-	ShowPlan     bool          // whether the plan viewer is toggled on
-	ShowDiff     bool          // whether the diff viewer is toggled on (vs raw output)
-	DiffFileList *FileListView // navigable file list when diff view is active
-	DiffFileOpen bool          // whether user has opened a single file's diff (Enter on file list)
-	ShowBeads    bool          // whether the bead tracker is toggled on
+	ShowPlan       bool          // whether the plan viewer is toggled on
+	ShowDiff       bool          // whether the diff viewer is toggled on (vs raw output)
+	DiffFileList   *FileListView // navigable file list when diff view is active
+	DiffFileOpen   bool          // whether user has opened a single file's diff (Enter on file list)
+	DiffSideBySide bool          // whether diff is rendered side-by-side (true) or unified (false)
+	DiffCollapsed  map[int]bool  // hunk index → collapsed state when viewing a single file diff
+	DiffHunkCount  int           // number of hunks in the currently viewed file
+	ShowBeads      bool          // whether the bead tracker is toggled on
 
 	// Bead hierarchy state.
 	LoopBeads  *BeadInfo            // bead hierarchy for loop mode
@@ -103,6 +107,10 @@ type AppModel struct {
 	Scratchpad       []MsgScratchpadEntry  // timestamped scratchpad notes
 	ScratchpadView   ScratchpadView        // persistent scratchpad viewer with viewport
 	StaleItems       []tycho.StaleItem     // latest stale warning items
+
+	// File impact state — aggregate file footprint across phases.
+	ImpactView ImpactView                 // persistent impact viewer with viewport
+	PhaseFiles map[string][]FileStatEntry // phaseID → file stats (populated from diffs)
 
 	// Hail tracking — pending hails from agents that need human attention.
 	PendingHails []ui.HailInfo    // unresolved hails tracked via MsgHailReceived/MsgHailResolved
@@ -136,6 +144,9 @@ type AppModel struct {
 
 	// Splash screen state — nil means splash is disabled (e.g. --no-splash).
 	Splash *SplashModel
+
+	// Embedded phase chat state — non-nil when a contextual chat is active.
+	PhaseChat *ChatModel // embedded chat model for phase-linked conversations
 }
 
 // NewAppModel creates a root model configured for the given mode.
@@ -153,6 +164,8 @@ func NewAppModel(mode Mode) AppModel {
 		StartTime:   time.Now(),
 		PhaseLoops:  make(map[string]*LoopView),
 		PhaseBeads:  make(map[string]*BeadInfo),
+		PhaseFiles:  make(map[string][]FileStatEntry),
+		ImpactView:  NewImpactView(),
 		Thresholds:  DefaultResourceThresholds(),
 		Splash:      &splash,
 	}
@@ -219,6 +232,11 @@ func waitForDialogMsg(sess *dialog.MemSession) tea.Cmd {
 
 // Update handles all messages.
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Delegate to embedded phase chat when active.
+	if m.PhaseChat != nil {
+		return m.updatePhaseChat(msg)
+	}
+
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -240,6 +258,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Board.Width = contentWidth
 		m.Board.Height = detailHeight
 		m.EntanglementView.SetSize(contentWidth, detailHeight)
+		m.ImpactView.SetSize(contentWidth, detailHeight)
 
 		// Board view sizing: on the first resize, default to board if wide enough.
 		// On subsequent resizes, auto-fallback to table if terminal shrinks below threshold.
@@ -310,6 +329,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgCycleSummary:
 		m.StatusBar.CostUSD = msg.Data.TotalCostUSD
 		m.LoopView.Approved = msg.Data.Approved
+		if msg.Data.Phase == "review_complete" {
+			sat := SatisfactionFromReview(msg.Data.Approved, msg.Data.IssueCount)
+			m.LoopView.SetSatisfaction(sat)
+		}
 	case MsgIssuesFound:
 		m.LoopView.SetIssueCount(msg.Count)
 	case MsgApproved:
@@ -359,6 +382,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseDone)
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
 			lv.Approved = true
+			// Extract completion note from last reviewer summary.
+			if note := lastReviewerSummary(lv); note != "" {
+				m.NebulaView.SetPhaseCompletionNote(msg.PhaseID, note)
+			}
 		}
 		m.NebulaView.SetPhaseCost(msg.PhaseID, msg.TotalCost)
 		// Remove worker card when phase completes.
@@ -378,9 +405,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lv := m.ensurePhaseLoop(msg.PhaseID)
 		lv.StartAgent(msg.Role)
 		// Update worker card agent role and activity.
+		activity := activityFromRole(msg.Role)
 		if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
 			wc.AgentRole = msg.Role
-			wc.Activity = activityFromRole(msg.Role)
+			wc.Activity = activity
+		}
+		// Propagate activity to board card.
+		m.NebulaView.SetPhaseActivity(msg.PhaseID, activity)
+	case MsgWorkerActivity:
+		if msg.PhaseID != "" {
+			if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
+				wc.Stream.Push(msg.Activity)
+			}
 		}
 	case MsgPhaseAgentDone:
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
@@ -416,11 +452,24 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			wc.Claims = claims
 		}
+		// Track file impacts per phase for the aggregate impact view.
+		if len(msg.Files) > 0 {
+			m.PhaseFiles[msg.PhaseID] = msg.Files
+			m.ImpactView.Rebuild(m.PhaseFiles)
+		}
 	case MsgPhaseCycleSummary:
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
 			lv.Approved = msg.Data.Approved
+			if msg.Data.Phase == "review_complete" {
+				sat := SatisfactionFromReview(msg.Data.Approved, msg.Data.IssueCount)
+				lv.SetSatisfaction(sat)
+			}
 		}
 		m.NebulaView.SetPhaseCost(msg.PhaseID, msg.Data.TotalCostUSD)
+		m.NebulaView.SetPhaseReviewerSatisfied(msg.PhaseID, msg.Data.Approved)
+		if msg.Data.MaxBudgetUSD > 0 {
+			m.NebulaView.SetPhaseMaxBudget(msg.PhaseID, msg.Data.MaxBudgetUSD)
+		}
 		if m.FocusedPhase == msg.PhaseID {
 			m.updateDetailFromSelection()
 		}
@@ -454,6 +503,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgPhaseError:
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseFailed)
 		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseFailed)
+		// Set completion note from error message.
+		m.NebulaView.SetPhaseCompletionNote(msg.PhaseID, msg.Msg)
 		// Remove worker card on failure.
 		delete(m.WorkerCards, msg.PhaseID)
 		m.addMessage("[%s] %s", msg.PhaseID, msg.Msg)
@@ -606,14 +657,24 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Toasts = append(m.Toasts, toast)
 			cmds = append(cmds, cmd)
 		}
+		// Mark the phase card with an attention indicator.
+		if msg.PhaseID != "" {
+			m.NebulaView.SetPhaseHails(msg.PhaseID, true)
+		}
 
 	case MsgHailReceived:
 		m.PendingHails = append(m.PendingHails, msg.Hail)
 		m.syncHailBadge()
+		if msg.PhaseID != "" {
+			m.syncPhaseHails(msg.PhaseID)
+		}
 
 	case MsgHailResolved:
 		m.removePendingHail(msg.ID)
 		m.syncHailBadge()
+		if msg.PhaseID != "" {
+			m.syncPhaseHails(msg.PhaseID)
+		}
 
 	// --- Interactive dialog ---
 	case MsgDialogOpen:
@@ -633,6 +694,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.Dialog != nil && m.Dialog.Session.ID() == msg.SessionID {
 			m.Dialog = nil
 		}
+
+	case MsgOpenPhaseChat:
+		m.openEmbeddedPhaseChat(msg)
 
 	case MsgScratchpadEntry:
 		m.Scratchpad = append(m.Scratchpad, msg)
@@ -893,7 +957,16 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.Keys.Back):
 			// Return to the file list without leaving diff mode.
 			m.DiffFileOpen = false
+			m.DiffCollapsed = nil
+			m.DiffHunkCount = 0
 			m.updateDetailFromSelection()
+			return m, nil
+		case key.Matches(msg, m.Keys.SideBySide):
+			m.DiffSideBySide = !m.DiffSideBySide
+			m.refreshFileDiff()
+			return m, nil
+		case key.Matches(msg, m.Keys.ToggleHunk):
+			m.toggleCurrentHunk()
 			return m, nil
 		}
 	}
@@ -908,6 +981,10 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case key.Matches(msg, m.Keys.Down):
 			m.DiffFileList.MoveDown()
+			m.updateDetailFromSelection()
+			return m, nil
+		case key.Matches(msg, m.Keys.SideBySide):
+			m.DiffSideBySide = !m.DiffSideBySide
 			m.updateDetailFromSelection()
 			return m, nil
 		}
@@ -980,7 +1057,7 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "shift+tab":
 			m.ActiveTab = m.ActiveTab.Prev()
 			return m, nil
-		case "1", "2", "3", "4":
+		case "1", "2", "3", "4", "5":
 			n := int(msg.String()[0] - '0')
 			if tab, ok := TabFromNumber(n); ok {
 				m.ActiveTab = tab
@@ -997,6 +1074,13 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.Board.MoveRight()
 				return m, nil
 			}
+		}
+	}
+
+	// Board tab: contextual chat keybinding.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.ActiveTab == TabBoard {
+		if key.Matches(msg, m.Keys.ChatPhase) {
+			return m.openPhaseChat()
 		}
 	}
 
@@ -1058,6 +1142,28 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if msg.String() == "g" || msg.String() == "G" {
 			m.EntanglementView.Update(msg)
+			return m, nil
+		}
+	}
+
+	// Impact tab key handling — scroll viewport and navigate phase groups.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.ActiveTab == TabImpact {
+		switch {
+		case key.Matches(msg, m.Keys.Up):
+			m.ImpactView.MoveUp()
+			return m, nil
+		case key.Matches(msg, m.Keys.Down):
+			m.ImpactView.MoveDown()
+			return m, nil
+		case key.Matches(msg, m.Keys.PageUp),
+			key.Matches(msg, m.Keys.PageDown),
+			key.Matches(msg, m.Keys.Home),
+			key.Matches(msg, m.Keys.End):
+			m.ImpactView.Update(msg)
+			return m, nil
+		}
+		if msg.String() == "g" || msg.String() == "G" {
+			m.ImpactView.Update(msg)
 			return m, nil
 		}
 	}
@@ -1428,10 +1534,78 @@ func (m AppModel) showFileDiff() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	body := RenderSingleFileDiff(rawDiff, file.Path, m.contentWidth()-4)
+	m.DiffCollapsed = make(map[int]bool)
+	m.DiffHunkCount = HunkCount(rawDiff, file.Path)
+	opts := DiffRenderOpts{
+		SideBySide:     m.DiffSideBySide,
+		CollapsedHunks: m.DiffCollapsed,
+	}
+	body := RenderSingleFileDiffWithOpts(rawDiff, file.Path, m.contentWidth()-4, opts)
 	m.Detail.SetContent(file.Path, body)
 	m.DiffFileOpen = true
 	return m, nil
+}
+
+// refreshFileDiff re-renders the currently open file diff with current state.
+func (m *AppModel) refreshFileDiff() {
+	fl := m.DiffFileList
+	if fl == nil || len(fl.Files) == 0 {
+		return
+	}
+	file := fl.SelectedFile()
+	rawDiff := m.selectedAgentDiff()
+	if rawDiff == "" {
+		return
+	}
+	opts := DiffRenderOpts{
+		SideBySide:     m.DiffSideBySide,
+		CollapsedHunks: m.DiffCollapsed,
+	}
+	body := RenderSingleFileDiffWithOpts(rawDiff, file.Path, m.contentWidth()-4, opts)
+	m.Detail.SetContent(file.Path, body)
+}
+
+// toggleCurrentHunk toggles the collapse state of hunks sequentially.
+// Collapses the first expanded hunk, or expands all if all are collapsed.
+func (m *AppModel) toggleCurrentHunk() {
+	if m.DiffCollapsed == nil {
+		m.DiffCollapsed = make(map[int]bool)
+	}
+	if m.DiffHunkCount <= 0 {
+		return
+	}
+	toggled := false
+	for i := 0; i < m.DiffHunkCount; i++ {
+		if !m.DiffCollapsed[i] {
+			m.DiffCollapsed[i] = true
+			toggled = true
+			break
+		}
+	}
+	if !toggled {
+		// All collapsed — expand all.
+		for i := 0; i < m.DiffHunkCount; i++ {
+			delete(m.DiffCollapsed, i)
+		}
+	}
+	m.refreshFileDiff()
+}
+
+// selectedAgentDiff returns the raw diff text for the currently selected agent.
+func (m *AppModel) selectedAgentDiff() string {
+	switch m.Mode {
+	case ModeLoop:
+		if agent := m.LoopView.SelectedAgent(); agent != nil {
+			return agent.Diff
+		}
+	case ModeNebula:
+		if lv := m.PhaseLoops[m.FocusedPhase]; lv != nil {
+			if agent := lv.SelectedAgent(); agent != nil {
+				return agent.Diff
+			}
+		}
+	}
+	return ""
 }
 
 // handleBeadsKey toggles the bead tracker view in the detail panel.
@@ -1785,6 +1959,14 @@ func (m *AppModel) syncHailBadge() {
 	m.Keys.HailList.SetEnabled(len(m.PendingHails) > 0)
 }
 
+// syncPhaseHails updates the HasPendingHails flag on the PhaseEntry for the
+// given phase. When a hail is resolved, this clears the flag if no active
+// hail overlay references this phase.
+func (m *AppModel) syncPhaseHails(phaseID string) {
+	hasPending := m.Hail != nil && m.Hail.PhaseID == phaseID
+	m.NebulaView.SetPhaseHails(phaseID, hasPending)
+}
+
 // removePendingHail removes a hail by ID from PendingHails.
 func (m *AppModel) removePendingHail(id string) {
 	for i, h := range m.PendingHails {
@@ -1843,6 +2025,72 @@ func (m *AppModel) openHailList() tea.Cmd {
 	m.HailList = NewHailListOverlay(m.PendingHails)
 	m.HailList.Width = m.Width
 	return nil
+}
+
+// openPhaseChat builds a PhaseContext from the selected phase's execution
+// state and emits MsgOpenPhaseChat so the cockpit can transition to chat mode.
+func (m *AppModel) openPhaseChat() (tea.Model, tea.Cmd) {
+	// Determine the selected phase based on view mode.
+	var phase *PhaseEntry
+	if m.BoardActive {
+		phase = m.Board.SelectedPhase()
+	} else {
+		idx := m.NebulaView.Cursor
+		if idx >= 0 && idx < len(m.NebulaView.Phases) {
+			phase = &m.NebulaView.Phases[idx]
+		}
+	}
+	if phase == nil {
+		return m, nil
+	}
+
+	// Gather execution context from per-phase loop view.
+	var lastSummary, reviewerFindings, diffStat string
+	var cycle, maxCycles int
+	var fileClaims []string
+
+	cycle = phase.Cycles
+	maxCycles = phase.MaxCycles
+
+	if lv, ok := m.PhaseLoops[phase.ID]; ok {
+		lastSummary = lastAgentSummary(lv)
+		reviewerFindings = lastReviewerSummary(lv)
+		files := aggregateFiles(lv)
+		if len(files) > 0 {
+			diffStat = FormatFileSummary(files)
+			for _, f := range files {
+				fileClaims = append(fileClaims, f.Path)
+			}
+		}
+	}
+
+	return m, func() tea.Msg {
+		return MsgOpenPhaseChat{
+			PhaseContext: chat.PhaseContext{
+				PhaseID:          phase.ID,
+				PhaseSpec:        phase.PlanBody,
+				Cycle:            cycle,
+				MaxCycles:        maxCycles,
+				LastSummary:      lastSummary,
+				DiffStat:         diffStat,
+				ReviewerFindings: reviewerFindings,
+				FileClaims:       fileClaims,
+			},
+		}
+	}
+}
+
+// lastAgentSummary returns the summary from the most recent agent (coder or reviewer).
+func lastAgentSummary(lv *LoopView) string {
+	for i := len(lv.Cycles) - 1; i >= 0; i-- {
+		for j := len(lv.Cycles[i].Agents) - 1; j >= 0; j-- {
+			a := lv.Cycles[i].Agents[j]
+			if a.Summary != "" {
+				return a.Summary
+			}
+		}
+	}
+	return ""
 }
 
 // moveUp delegates to the active view based on depth.
@@ -1950,12 +2198,14 @@ func (m *AppModel) updateDetailFromSelection() {
 			return
 		}
 		header := FormatAgentHeader(AgentContext{
-			Role:       agent.Role,
-			Cycle:      m.LoopView.SelectedCycleNumber(),
-			DurationMs: agent.DurationMs,
-			CostUSD:    agent.CostUSD,
-			IssueCount: agent.IssueCount,
-			Done:       agent.Done,
+			Role:         agent.Role,
+			Cycle:        m.LoopView.SelectedCycleNumber(),
+			DurationMs:   agent.DurationMs,
+			CostUSD:      agent.CostUSD,
+			IssueCount:   agent.IssueCount,
+			Done:         agent.Done,
+			Summary:      agent.Summary,
+			Satisfaction: agent.Satisfaction,
 		})
 		if m.ShowDiff && agent.Diff != "" {
 			var body string
@@ -2026,8 +2276,25 @@ func (m *AppModel) updateNebulaDetail() {
 		}
 	}
 
+	// Append file scope section to the phase header if available.
+	if files, ok := m.PhaseFiles[m.FocusedPhase]; ok && len(files) > 0 {
+		scopeSection := FileScopeSection(files, m.contentWidth()-4)
+		if phaseHeader != "" {
+			phaseHeader = phaseHeader + "\n" + scopeSection
+		} else {
+			phaseHeader = scopeSection
+		}
+	}
+
 	switch m.Depth {
 	case DepthPhaseLoop:
+		// For completed/failed phases, show a structured completion summary.
+		if fp := m.findPhase(m.FocusedPhase); fp != nil && (fp.Status == PhaseDone || fp.Status == PhaseFailed) {
+			lv := m.PhaseLoops[m.FocusedPhase]
+			summaryBody := FormatPhaseSummary(*fp, lv)
+			m.Detail.SetContentWithHeader(m.FocusedPhase+" summary", phaseHeader, summaryBody)
+			return
+		}
 		// Show phase summary card in the detail panel.
 		if phaseHeader != "" {
 			m.Detail.SetContentWithHeader(m.FocusedPhase+" summary", phaseHeader, "(select an agent row and press enter to view output)")
@@ -2049,12 +2316,14 @@ func (m *AppModel) updateNebulaDetail() {
 
 		// Build combined header: phase context + agent context.
 		agentHeader := FormatAgentHeader(AgentContext{
-			Role:       agent.Role,
-			Cycle:      lv.SelectedCycleNumber(),
-			DurationMs: agent.DurationMs,
-			CostUSD:    agent.CostUSD,
-			IssueCount: agent.IssueCount,
-			Done:       agent.Done,
+			Role:         agent.Role,
+			Cycle:        lv.SelectedCycleNumber(),
+			DurationMs:   agent.DurationMs,
+			CostUSD:      agent.CostUSD,
+			IssueCount:   agent.IssueCount,
+			Done:         agent.Done,
+			Summary:      agent.Summary,
+			Satisfaction: agent.Satisfaction,
 		})
 		header := agentHeader
 		if phaseHeader != "" {
@@ -2102,6 +2371,105 @@ func (m *AppModel) addMessage(format string, args ...any) {
 		msg = fmt.Sprintf(format, args...)
 	}
 	m.Messages = append(m.Messages, msg)
+}
+
+// openEmbeddedPhaseChat creates an embedded ChatModel seeded with phase context.
+// The chat takes over the full screen until the user presses Esc.
+func (m *AppModel) openEmbeddedPhaseChat(msg MsgOpenPhaseChat) {
+	// Create a store for persistence. If it fails, proceed without persistence.
+	chatDir, err := chat.DefaultDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "chat: failed to determine chat directory: %v\n", err)
+		return
+	}
+	store, err := chat.NewFileStore(chatDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "chat: failed to initialize chat store: %v\n", err)
+		return
+	}
+
+	// Create the chat model without a provider — the user can type messages
+	// but inference requires a provider to be wired. For now, use a nil-safe
+	// model that shows the context.
+	cm := NewChatModel(store, nil, "")
+	cm.StartPhaseChat(msg.PhaseContext)
+	cm.Width = m.Width
+	cm.Height = m.Height
+	cm.recalcLayout()
+	m.PhaseChat = &cm
+}
+
+// updatePhaseChat delegates message handling to the embedded phase chat.
+// It intercepts Esc to close the chat and return to the cockpit.
+func (m AppModel) updatePhaseChat(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		// Esc closes the embedded chat and returns to the board.
+		if keyMsg.Type == tea.KeyEsc && m.PhaseChat.InputMode == ChatModeNormal {
+			// Save conversation before closing.
+			if m.PhaseChat.ActiveConv != nil && m.PhaseChat.Store != nil {
+				if err := m.PhaseChat.Store.Save(m.PhaseChat.ActiveConv); err != nil {
+					fmt.Fprintf(os.Stderr, "chat: failed to save conversation: %v\n", err)
+				}
+			}
+			m.PhaseChat = nil
+			return m, nil
+		}
+	}
+
+	// Forward window size to the embedded chat.
+	if wsMsg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.Width = wsMsg.Width
+		m.Height = wsMsg.Height
+	}
+
+	// Handle /refresh command: intercept before the chat model processes it.
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
+		if m.PhaseChat.InputMode == ChatModeCompose {
+			input := m.PhaseChat.ChatView.InputValue()
+			if input == "/refresh" && m.PhaseChat.PhaseContext != nil {
+				m.PhaseChat.ChatView.ClearInput()
+				// Re-gather context from the current phase state.
+				pc := m.gatherPhaseContext(m.PhaseChat.PhaseContext.PhaseID)
+				m.PhaseChat.RefreshPhaseContext(pc)
+				return m, nil
+			}
+		}
+	}
+
+	// Delegate to the embedded ChatModel.
+	model, cmd := m.PhaseChat.Update(msg)
+	if cm, ok := model.(ChatModel); ok {
+		m.PhaseChat = &cm
+	}
+	return m, cmd
+}
+
+// gatherPhaseContext assembles the latest execution state for a phase.
+func (m *AppModel) gatherPhaseContext(phaseID string) chat.PhaseContext {
+	pc := chat.PhaseContext{PhaseID: phaseID}
+
+	phase := m.findPhase(phaseID)
+	if phase == nil {
+		return pc
+	}
+
+	pc.PhaseSpec = phase.PlanBody
+	pc.Cycle = phase.Cycles
+	pc.MaxCycles = phase.MaxCycles
+
+	if lv, ok := m.PhaseLoops[phaseID]; ok {
+		pc.LastSummary = lastAgentSummary(lv)
+		pc.ReviewerFindings = lastReviewerSummary(lv)
+		files := aggregateFiles(lv)
+		if len(files) > 0 {
+			pc.DiffStat = FormatFileSummary(files)
+			for _, f := range files {
+				pc.FileClaims = append(pc.FileClaims, f.Path)
+			}
+		}
+	}
+
+	return pc
 }
 
 // detailHeight computes available height for the detail panel.
@@ -2201,6 +2569,11 @@ func (m AppModel) View() string {
 	// Terminal too small — show a centered message instead of broken layout.
 	if m.Width < MinWidth || m.Height < MinHeight {
 		return m.renderTooSmall()
+	}
+
+	// Embedded phase chat — full-screen takeover.
+	if m.PhaseChat != nil {
+		return m.PhaseChat.View()
 	}
 
 	// Splash screen — show binary-star animation until it finishes or is skipped.
@@ -2435,6 +2808,9 @@ func (m AppModel) renderMainView() string {
 				return m.Graph.View()
 			case TabScratchpad:
 				return m.ScratchpadView.View()
+			case TabImpact:
+				m.ImpactView.SetSize(w, m.detailHeight())
+				return m.ImpactView.View()
 			default:
 				m.NebulaView.Width = w
 				return m.NebulaView.View()
@@ -2455,6 +2831,11 @@ func (m AppModel) renderMainView() string {
 func (m AppModel) buildFooter() Footer {
 	f := Footer{Width: m.Width}
 
+	// When viewing a single file diff, show file-open bindings.
+	if m.ShowDiff && m.DiffFileList != nil && m.DiffFileOpen {
+		f.Bindings = DiffFileOpenFooterBindings(m.Keys)
+		return f
+	}
 	// When the diff file list is active, show dedicated diff-mode bindings.
 	if m.ShowDiff && m.DiffFileList != nil {
 		f.Bindings = DiffFileListFooterBindings(m.Keys)

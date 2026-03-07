@@ -62,7 +62,12 @@ func NebulaDetailFooterBindings(km KeyMap) []key.Binding {
 func DiffFileListFooterBindings(km KeyMap) []key.Binding {
 	diffToggle := km.Diff
 	diffToggle.SetHelp("d", "close")
-	return []key.Binding{km.Up, km.Down, km.OpenDiff, diffToggle, km.Quit}
+	return []key.Binding{km.Up, km.Down, km.OpenDiff, km.SideBySide, diffToggle, km.Quit}
+}
+
+// DiffFileOpenFooterBindings returns footer bindings when viewing a single file's diff.
+func DiffFileOpenFooterBindings(km KeyMap) []key.Binding {
+	return []key.Binding{km.Up, km.Down, km.ToggleHunk, km.SideBySide, km.Back, km.Quit}
 }
 
 // HomeFooterBindings returns footer bindings for home mode.

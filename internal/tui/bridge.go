@@ -117,6 +117,11 @@ func (b *UIBridge) AgentOutput(role string, cycle int, output string) {
 	b.program.Send(MsgAgentOutput{Role: role, Cycle: cycle, Output: output})
 }
 
+// ActivityUpdate sends MsgWorkerActivity for the single-task loop.
+func (b *UIBridge) ActivityUpdate(activity string) {
+	b.program.Send(MsgWorkerActivity{Activity: activity})
+}
+
 // RefactorApplied is a no-op for the single-task UIBridge; refactor indicators
 // are only meaningful in nebula phase views where PhaseUIBridge is used.
 func (b *UIBridge) RefactorApplied(phaseID string) {}
@@ -378,6 +383,11 @@ func (b *PhaseUIBridge) RefactorApplied(phaseID string) {
 func (b *PhaseUIBridge) BeadUpdate(taskBeadID, title, status string, children []ui.BeadChild) {
 	root := buildBeadInfoTree(taskBeadID, title, status, children)
 	b.program.Send(MsgPhaseBeadUpdate{PhaseID: b.phaseID, TaskBeadID: taskBeadID, Root: root})
+}
+
+// ActivityUpdate sends MsgWorkerActivity tagged with this phase's ID.
+func (b *PhaseUIBridge) ActivityUpdate(activity string) {
+	b.program.Send(MsgWorkerActivity{PhaseID: b.phaseID, Activity: activity})
 }
 
 // FindingLifecycle is a no-op for PhaseUIBridge; finding lifecycle data is

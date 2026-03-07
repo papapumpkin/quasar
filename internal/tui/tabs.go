@@ -19,10 +19,12 @@ const (
 	TabGraph
 	// TabScratchpad shows telemetry-fed shared notes.
 	TabScratchpad
+	// TabImpact shows aggregate file impact across phases.
+	TabImpact
 )
 
 // cockpitTabCount is the total number of cockpit tabs.
-const cockpitTabCount = 4
+const cockpitTabCount = 5
 
 // tabLabels maps each tab to its display label.
 var tabLabels = [cockpitTabCount]string{
@@ -30,6 +32,7 @@ var tabLabels = [cockpitTabCount]string{
 	TabEntanglements: "entanglements",
 	TabGraph:         "graph",
 	TabScratchpad:    "scratchpad",
+	TabImpact:        "impact",
 }
 
 // Label returns the display label for a tab.

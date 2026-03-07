@@ -114,6 +114,8 @@ func (s *BusSubscriber) mapEvent(ev bus.Event) tea.Msg {
 			return nil
 		}
 		return MsgHailResolved{PhaseID: ev.PhaseID, ID: ev.HailResolved.ID, Resolution: ev.HailResolved.Resolution}
+	case bus.KindPhaseActivity:
+		return MsgWorkerActivity{PhaseID: ev.PhaseID, Activity: ev.Message}
 
 	// ── Single-task lifecycle (loop mode) ─────────────────────────────
 	case bus.KindTaskStarted:

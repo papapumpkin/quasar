@@ -946,6 +946,28 @@ func TestMapEvent_HailResolved(t *testing.T) {
 	})
 }
 
+func TestMapEvent_PhaseActivity(t *testing.T) {
+	t.Parallel()
+	sub := &BusSubscriber{done: make(chan struct{})}
+
+	ev := bus.Event{
+		Kind:    bus.KindPhaseActivity,
+		PhaseID: "p1",
+		Message: "reading foo.go",
+	}
+	msg := sub.mapEvent(ev)
+	m, ok := msg.(MsgWorkerActivity)
+	if !ok {
+		t.Fatalf("expected MsgWorkerActivity, got %T", msg)
+	}
+	if m.PhaseID != "p1" {
+		t.Errorf("PhaseID = %q, want %q", m.PhaseID, "p1")
+	}
+	if m.Activity != "reading foo.go" {
+		t.Errorf("Activity = %q, want %q", m.Activity, "reading foo.go")
+	}
+}
+
 func TestMapEvent_StaleWarning(t *testing.T) {
 	t.Parallel()
 	sub := &BusSubscriber{done: make(chan struct{})}

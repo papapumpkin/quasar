@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -324,44 +323,4 @@ func (bv BoardView) columnWidth(numCols int) int {
 	return w
 }
 
-// renderBoardEntry renders a single phase card within a column.
-func (bv BoardView) renderBoardEntry(p PhaseEntry, selected bool, colWidth int) string {
-	icon, _ := phaseIconAndStyleStatic(p)
-	titleWidth := colWidth - 4 // icon + space + padding
-	if titleWidth < 4 {
-		titleWidth = 4
-	}
-	title := TruncateWithEllipsis(p.Title, titleWidth)
-	if title == "" {
-		title = TruncateWithEllipsis(p.ID, titleWidth)
-	}
-
-	var line string
-	if selected {
-		indicator := styleSelectionIndicator.Render(selectionIndicator)
-		styledTitle := styleRowSelected.Render(title)
-		line = fmt.Sprintf("%s %s %s", indicator, icon, styledTitle)
-	} else {
-		line = fmt.Sprintf("  %s %s", icon, title)
-	}
-
-	return line
-}
-
-// phaseIconAndStyleStatic returns the status icon for a phase (package-level, no spinner).
-func phaseIconAndStyleStatic(p PhaseEntry) (string, lipgloss.Style) {
-	switch p.Status {
-	case PhaseDone:
-		return styleRowDone.Render(iconDone), styleRowDone
-	case PhaseWorking:
-		return styleRowWorking.Render(iconWorking), styleRowWorking
-	case PhaseFailed:
-		return styleRowFailed.Render(iconFailed), styleRowFailed
-	case PhaseGate:
-		return styleRowGate.Render(iconGate), styleRowGate
-	case PhaseSkipped:
-		return styleRowWaiting.Render(iconSkipped), styleRowWaiting
-	default:
-		return styleRowWaiting.Render(iconWaiting), styleRowWaiting
-	}
-}
+// Card rendering functions are in boardcard.go.

@@ -165,6 +165,58 @@ func TestFileListView_View_LongPathTruncation(t *testing.T) {
 	}
 }
 
+func TestFileListView_View_ShowsChangeGlyphs(t *testing.T) {
+	t.Parallel()
+	files := []FileStatEntry{
+		{Path: "new.go", Additions: 10, Deletions: 0, Change: ChangeAdded},
+		{Path: "old.go", Additions: 0, Deletions: 5, Change: ChangeDeleted},
+		{Path: "moved.go", Additions: 2, Deletions: 1, Change: ChangeRenamed},
+		{Path: "edit.go", Additions: 3, Deletions: 3, Change: ChangeModified},
+	}
+	v := NewFileListView(files, 100, "", "", "")
+	got := v.View()
+	if !strings.Contains(got, "A") {
+		t.Error("View() should contain 'A' glyph for added file")
+	}
+	if !strings.Contains(got, "D") {
+		t.Error("View() should contain 'D' glyph for deleted file")
+	}
+	if !strings.Contains(got, "R") {
+		t.Error("View() should contain 'R' glyph for renamed file")
+	}
+	if !strings.Contains(got, "M") {
+		t.Error("View() should contain 'M' glyph for modified file")
+	}
+}
+
+func TestFileListView_View_ShowsStatBars(t *testing.T) {
+	t.Parallel()
+	files := []FileStatEntry{
+		{Path: "model.go", Additions: 42, Deletions: 15},
+	}
+	v := NewFileListView(files, 100, "", "", "")
+	got := v.View()
+	// Stat bar should contain + and - characters.
+	if !strings.Contains(got, "+") {
+		t.Error("View() should contain '+' in stat bar")
+	}
+	if !strings.Contains(got, "-") {
+		t.Error("View() should contain '-' in stat bar")
+	}
+}
+
+func TestFileListView_View_ShowsSideBySideHint(t *testing.T) {
+	t.Parallel()
+	files := []FileStatEntry{
+		{Path: "a.go", Additions: 1, Deletions: 0},
+	}
+	v := NewFileListView(files, 100, "", "", "")
+	got := v.View()
+	if !strings.Contains(got, "side-by-side") {
+		t.Error("View() should contain 'side-by-side' hint")
+	}
+}
+
 func TestFileListView_CursorIndicatorMovesWithSelection(t *testing.T) {
 	t.Parallel()
 	files := []FileStatEntry{

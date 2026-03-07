@@ -9,53 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// PhaseStatus represents the display state of a nebula phase.
-type PhaseStatus int
-
-const (
-	PhaseWaiting PhaseStatus = iota
-	PhaseWorking
-	PhaseDone
-	PhaseFailed
-	PhaseGate
-	PhaseSkipped
-)
-
-// PhaseStatusFromString maps a nebula state status string to a TUI PhaseStatus.
-// This is used when initializing the TUI from saved state.
-func PhaseStatusFromString(s string) PhaseStatus {
-	switch s {
-	case "done":
-		return PhaseDone
-	case "failed":
-		return PhaseFailed
-	case "in_progress":
-		return PhaseWorking
-	case "skipped":
-		return PhaseSkipped
-	case "gate":
-		return PhaseGate
-	default:
-		return PhaseWaiting
-	}
-}
-
-// PhaseEntry represents one phase in the nebula view.
-type PhaseEntry struct {
-	ID          string
-	Title       string
-	Status      PhaseStatus
-	Wave        int
-	CostUSD     float64
-	Cycles      int
-	MaxCycles   int
-	BlockedBy   string
-	DependsOn   []string // original dependency IDs from the phase spec
-	StartedAt   time.Time
-	CompletedAt time.Time // set when phase reaches a terminal state
-	PlanBody    string    // markdown content from the phase file
-	Refactored  bool      // true when a mid-run refactor was applied this cycle
-}
+// PhaseEntry, PhaseStatus, PhaseHealth types are in phase_entry.go.
 
 // NebulaView renders the phase table for multi-task orchestration.
 type NebulaView struct {
@@ -226,6 +180,46 @@ func (nv *NebulaView) SetPhaseRefactored(phaseID string, refactored bool) {
 	for i := range nv.Phases {
 		if nv.Phases[i].ID == phaseID {
 			nv.Phases[i].Refactored = refactored
+			return
+		}
+	}
+}
+
+// SetPhaseActivity updates the last activity string for a phase.
+func (nv *NebulaView) SetPhaseActivity(phaseID string, activity string) {
+	for i := range nv.Phases {
+		if nv.Phases[i].ID == phaseID {
+			nv.Phases[i].LastActivity = activity
+			return
+		}
+	}
+}
+
+// SetPhaseHails updates whether a phase has unresolved hails.
+func (nv *NebulaView) SetPhaseHails(phaseID string, hasPending bool) {
+	for i := range nv.Phases {
+		if nv.Phases[i].ID == phaseID {
+			nv.Phases[i].HasPendingHails = hasPending
+			return
+		}
+	}
+}
+
+// SetPhaseReviewerSatisfied updates the reviewer satisfaction state for a phase.
+func (nv *NebulaView) SetPhaseReviewerSatisfied(phaseID string, satisfied bool) {
+	for i := range nv.Phases {
+		if nv.Phases[i].ID == phaseID {
+			nv.Phases[i].ReviewerSatisfied = satisfied
+			return
+		}
+	}
+}
+
+// SetPhaseMaxBudget updates the per-phase budget cap.
+func (nv *NebulaView) SetPhaseMaxBudget(phaseID string, budget float64) {
+	for i := range nv.Phases {
+		if nv.Phases[i].ID == phaseID {
+			nv.Phases[i].MaxBudgetUSD = budget
 			return
 		}
 	}

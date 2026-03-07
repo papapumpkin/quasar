@@ -63,6 +63,10 @@ type ChatModel struct {
 
 	ActiveConv *chat.Conversation // currently loaded conversation
 
+	// PhaseContext holds the initial context for phase-linked conversations.
+	// When non-nil, the chat was launched from a phase on the board.
+	PhaseContext *chat.PhaseContext
+
 	Width  int
 	Height int
 

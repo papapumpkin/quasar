@@ -34,6 +34,7 @@ type Conversation struct {
 	ID        string    `json:"id"`
 	Title     string    `json:"title"`
 	Model     string    `json:"model,omitempty"`
+	PhaseID   string    `json:"phase_id,omitempty"` // linked phase ID for context-aware chats
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Messages  []Message `json:"messages"`

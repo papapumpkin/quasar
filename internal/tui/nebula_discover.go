@@ -128,6 +128,8 @@ func DiscoverAllNebulae(nebulaeDir string) ([]NebulaChoice, error) {
 }
 
 // classifyNebulaStatus determines the status of a nebula based on its state.
+// It iterates over the manifest phases (not the state map) so that extra state
+// entries from hot-added or decomposed phases don't inflate the resolved count.
 func classifyNebulaStatus(n *nebula.Nebula, state *nebula.State) (status string, doneCount int) {
 	if len(state.Phases) == 0 {
 		return "ready", 0
@@ -136,7 +138,11 @@ func classifyNebulaStatus(n *nebula.Nebula, state *nebula.State) (status string,
 	totalPhases := len(n.Phases)
 	var resolved int
 
-	for _, ps := range state.Phases {
+	for _, phase := range n.Phases {
+		ps, ok := state.Phases[phase.ID]
+		if !ok {
+			continue
+		}
 		switch ps.Status {
 		case nebula.PhaseStatusDone:
 			doneCount++

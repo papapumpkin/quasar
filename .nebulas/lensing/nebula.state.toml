@@ -1,0 +1,76 @@
+version = 1
+nebula_name = 'lensing'
+total_cost_usd = 42.849545
+
+[phases]
+[phases.activity-stream]
+bead_id = 'quasar-ox8'
+status = 'done'
+created_at = 2026-03-06T22:50:44.374001274-05:00
+updated_at = 2026-03-06T23:00:45.50682614-05:00
+
+[phases.activity-stream.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Duplicate type declarations removed from nebulaview.go; phase_entry.go confirmed as sole canonical location — clean fix with no functional changes and comprehensive existing test coverage.'
+
+[phases.board-richness]
+bead_id = 'quasar-4yz'
+status = 'done'
+created_at = 2026-03-06T22:50:44.655345387-05:00
+updated_at = 2026-03-06T23:03:12.791478684-05:00
+
+[phases.board-richness.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Enriched board phase cards with progress indicators, health dots, cost badges, activity subtitles, and attention markers — all well-tested and following existing patterns, with one minor known limitation in hail state tracking.'
+
+[phases.contextual-chat]
+bead_id = 'quasar-c69'
+status = 'done'
+created_at = 2026-03-06T22:50:44.585036431-05:00
+updated_at = 2026-03-06T23:18:04.115456693-05:00
+
+[phases.contextual-chat.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'All three prior issues (nil-provider panic, message type field duplication, broken /refresh on resumed conversations) are correctly fixed with appropriate tests and clean code.'
+
+[phases.rich-diff-view]
+bead_id = 'quasar-dfq'
+status = 'done'
+created_at = 2026-03-06T22:50:44.446505714-05:00
+updated_at = 2026-03-06T23:02:29.809092011-05:00
+
+[phases.rich-diff-view.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Solid diff rendering upgrade adding stat bars, change-type glyphs, hunk context headers, collapsible hunks, and side-by-side toggle — well-tested with only minor performance and UX polish opportunities.'
+
+[phases.scope-impact]
+bead_id = 'quasar-n10'
+status = 'done'
+created_at = 2026-03-06T22:50:44.723808423-05:00
+updated_at = 2026-03-06T23:13:17.480143303-05:00
+
+[phases.scope-impact.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'File impact view with cross-phase overlap detection is well-implemented, all prior findings resolved, clean architecture and thorough tests.'
+
+[phases.work-summary]
+bead_id = 'quasar-1q9'
+status = 'done'
+created_at = 2026-03-06T22:50:44.514881632-05:00
+updated_at = 2026-03-06T23:01:27.548282971-05:00
+
+[phases.work-summary.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented structured work summaries with per-cycle summary extraction, reviewer satisfaction badges, phase completion panels, and detail panel headers — all backed by comprehensive tests and cleanly integrated into the existing TUI architecture.'

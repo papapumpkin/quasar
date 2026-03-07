@@ -49,6 +49,9 @@ func (v *FileListView) View() string {
 		maxPath = available
 	}
 
+	// Determine stat bar width (fixed at 20 or available space).
+	const statBarWidth = 20
+
 	var b strings.Builder
 	for i, f := range v.Files {
 		indicator := "  "
@@ -57,6 +60,9 @@ func (v *FileListView) View() string {
 			indicator = styleSelectionIndicator.Render("▸") + " "
 			pathStyle = pathStyle.Bold(true)
 		}
+
+		// Change-type glyph.
+		glyph := styledChangeGlyph(f.Change)
 
 		path := f.Path
 		if len(path) > available {
@@ -74,12 +80,16 @@ func (v *FileListView) View() string {
 
 		add := styleDiffStatAdd.Render(fmt.Sprintf("+%d", f.Additions))
 		del := styleDiffStatDel.Render(fmt.Sprintf("-%d", f.Deletions))
-		stat := fmt.Sprintf("| %s %s", add, del)
+		bar := RenderStatBar(f.Additions, f.Deletions, statBarWidth)
+		stat := fmt.Sprintf("| %s %s ", add, del)
 
 		b.WriteString(indicator)
+		b.WriteString(glyph)
+		b.WriteString(" ")
 		b.WriteString(pathStyle.Render(padded))
 		b.WriteString(" ")
 		b.WriteString(stat)
+		b.WriteString(bar)
 		if i < len(v.Files)-1 {
 			b.WriteString("\n")
 		}
@@ -87,7 +97,7 @@ func (v *FileListView) View() string {
 
 	b.WriteString("\n\n")
 	hint := lipgloss.NewStyle().Foreground(colorMuted)
-	b.WriteString(hint.Render("  ↑↓ navigate  ⏎ open diff"))
+	b.WriteString(hint.Render("  ↑↓ navigate  ⏎ open diff  s side-by-side"))
 
 	return b.String()
 }
@@ -111,6 +121,21 @@ func (v *FileListView) MoveDown() {
 	v.Cursor++
 	if v.Cursor >= len(v.Files) {
 		v.Cursor = 0
+	}
+}
+
+// styledChangeGlyph returns a color-coded single-character glyph for the change type.
+func styledChangeGlyph(ct ChangeType) string {
+	g := ChangeTypeGlyph(ct)
+	switch ct {
+	case ChangeAdded:
+		return styleDiffChangeAdded.Render(g)
+	case ChangeDeleted:
+		return styleDiffChangeDeleted.Render(g)
+	case ChangeRenamed:
+		return styleDiffChangeRenamed.Render(g)
+	default:
+		return styleDiffChangeModified.Render(g)
 	}
 }
 

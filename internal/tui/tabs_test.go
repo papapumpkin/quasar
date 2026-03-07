@@ -17,6 +17,7 @@ func TestCockpitTabLabel(t *testing.T) {
 		{TabEntanglements, "entanglements"},
 		{TabGraph, "graph"},
 		{TabScratchpad, "scratchpad"},
+		{TabImpact, "impact"},
 		{CockpitTab(99), "unknown"},
 	}
 	for _, tt := range tests {
@@ -38,7 +39,8 @@ func TestCockpitTabNext(t *testing.T) {
 		{TabBoard, TabEntanglements},
 		{TabEntanglements, TabGraph},
 		{TabGraph, TabScratchpad},
-		{TabScratchpad, TabBoard}, // wraps around
+		{TabScratchpad, TabImpact},
+		{TabImpact, TabBoard}, // wraps around
 	}
 	for _, tt := range tests {
 		t.Run(tt.start.Label()+"->next", func(t *testing.T) {
@@ -56,10 +58,11 @@ func TestCockpitTabPrev(t *testing.T) {
 		start CockpitTab
 		want  CockpitTab
 	}{
-		{TabBoard, TabScratchpad}, // wraps around
+		{TabBoard, TabImpact}, // wraps around
 		{TabEntanglements, TabBoard},
 		{TabGraph, TabEntanglements},
 		{TabScratchpad, TabGraph},
+		{TabImpact, TabScratchpad},
 	}
 	for _, tt := range tests {
 		t.Run(tt.start.Label()+"->prev", func(t *testing.T) {
@@ -82,8 +85,9 @@ func TestTabFromNumber(t *testing.T) {
 		{2, TabEntanglements, true},
 		{3, TabGraph, true},
 		{4, TabScratchpad, true},
+		{5, TabImpact, true},
 		{0, TabBoard, false},
-		{5, TabBoard, false},
+		{6, TabBoard, false},
 		{-1, TabBoard, false},
 	}
 	for _, tt := range tests {
@@ -108,22 +112,22 @@ func TestTabBarView(t *testing.T) {
 		{
 			name:      "board active",
 			activeTab: TabBoard,
-			wantParts: []string{"[1] board", "[2] entanglements", "[3] graph", "[4] scratchpad"},
+			wantParts: []string{"[1] board", "[2] entanglements", "[3] graph", "[4] scratchpad", "[5] impact"},
 		},
 		{
 			name:      "entanglements active",
 			activeTab: TabEntanglements,
-			wantParts: []string{"[1] board", "[2] entanglements", "[3] graph", "[4] scratchpad"},
+			wantParts: []string{"[1] board", "[2] entanglements", "[3] graph", "[4] scratchpad", "[5] impact"},
 		},
 		{
 			name:      "graph active",
 			activeTab: TabGraph,
-			wantParts: []string{"[1] board", "[2] entanglements", "[3] graph", "[4] scratchpad"},
+			wantParts: []string{"[1] board", "[2] entanglements", "[3] graph", "[4] scratchpad", "[5] impact"},
 		},
 		{
 			name:      "scratchpad active",
 			activeTab: TabScratchpad,
-			wantParts: []string{"[1] board", "[2] entanglements", "[3] graph", "[4] scratchpad"},
+			wantParts: []string{"[1] board", "[2] entanglements", "[3] graph", "[4] scratchpad", "[5] impact"},
 		},
 	}
 	for _, tt := range tests {
@@ -224,8 +228,14 @@ func TestTabKeyTabCyclesForward(t *testing.T) {
 
 	updated, _ = m.Update(msg)
 	m = updated.(AppModel)
+	if m.ActiveTab != TabImpact {
+		t.Errorf("after 4x Tab: ActiveTab = %d, want TabImpact(%d)", m.ActiveTab, TabImpact)
+	}
+
+	updated, _ = m.Update(msg)
+	m = updated.(AppModel)
 	if m.ActiveTab != TabBoard {
-		t.Errorf("after 4x Tab (wrap): ActiveTab = %d, want TabBoard(%d)", m.ActiveTab, TabBoard)
+		t.Errorf("after 5x Tab (wrap): ActiveTab = %d, want TabBoard(%d)", m.ActiveTab, TabBoard)
 	}
 }
 
@@ -236,8 +246,8 @@ func TestTabKeyShiftTabCyclesBackward(t *testing.T) {
 
 	updated, _ := m.Update(msg)
 	m = updated.(AppModel)
-	if m.ActiveTab != TabScratchpad {
-		t.Errorf("after Shift+Tab: ActiveTab = %d, want TabScratchpad(%d)", m.ActiveTab, TabScratchpad)
+	if m.ActiveTab != TabImpact {
+		t.Errorf("after Shift+Tab: ActiveTab = %d, want TabImpact(%d)", m.ActiveTab, TabImpact)
 	}
 }
 
@@ -251,6 +261,7 @@ func TestTabKeyNumberDirectJump(t *testing.T) {
 		{"2", TabEntanglements},
 		{"3", TabGraph},
 		{"4", TabScratchpad},
+		{"5", TabImpact},
 	}
 	for _, tt := range tests {
 		t.Run("key-"+tt.key, func(t *testing.T) {
@@ -311,6 +322,9 @@ func TestTabBarRenderedInNebulaView(t *testing.T) {
 	}
 	if !strings.Contains(view, "[4] scratchpad") {
 		t.Error("tab bar missing scratchpad label")
+	}
+	if !strings.Contains(view, "[5] impact") {
+		t.Error("tab bar missing impact label")
 	}
 }
 
