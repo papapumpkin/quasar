@@ -37,6 +37,9 @@ type KeyMap struct {
 
 	// Hail list — opens the pending hails overlay.
 	HailList key.Binding
+
+	// ChatPhase — opens a contextual chat for the selected phase.
+	ChatPhase key.Binding
 }
 
 // DefaultKeyMap returns the default keybinding configuration.
@@ -135,6 +138,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("H"),
 			key.WithHelp("H", "hails"),
 			key.WithDisabled(),
+		),
+		ChatPhase: key.NewBinding(
+			key.WithKeys("c"),
+			key.WithHelp("c", "chat about phase"),
 		),
 	}
 }

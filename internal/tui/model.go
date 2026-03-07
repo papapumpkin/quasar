@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/papapumpkin/quasar/internal/chat"
 	"github.com/papapumpkin/quasar/internal/dialog"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/nebula"
@@ -107,6 +108,10 @@ type AppModel struct {
 	ScratchpadView   ScratchpadView        // persistent scratchpad viewer with viewport
 	StaleItems       []tycho.StaleItem     // latest stale warning items
 
+	// File impact state — aggregate file footprint across phases.
+	ImpactView ImpactView                  // persistent impact viewer with viewport
+	PhaseFiles map[string][]FileStatEntry  // phaseID → file stats (populated from diffs)
+
 	// Hail tracking — pending hails from agents that need human attention.
 	PendingHails []ui.HailInfo    // unresolved hails tracked via MsgHailReceived/MsgHailResolved
 	HailList     *HailListOverlay // non-nil when the hail list overlay is active
@@ -139,6 +144,9 @@ type AppModel struct {
 
 	// Splash screen state — nil means splash is disabled (e.g. --no-splash).
 	Splash *SplashModel
+
+	// Embedded phase chat state — non-nil when a contextual chat is active.
+	PhaseChat *ChatModel // embedded chat model for phase-linked conversations
 }
 
 // NewAppModel creates a root model configured for the given mode.
@@ -156,6 +164,8 @@ func NewAppModel(mode Mode) AppModel {
 		StartTime:   time.Now(),
 		PhaseLoops:  make(map[string]*LoopView),
 		PhaseBeads:  make(map[string]*BeadInfo),
+		PhaseFiles:  make(map[string][]FileStatEntry),
+		ImpactView:  NewImpactView(),
 		Thresholds:  DefaultResourceThresholds(),
 		Splash:      &splash,
 	}
@@ -222,6 +232,11 @@ func waitForDialogMsg(sess *dialog.MemSession) tea.Cmd {
 
 // Update handles all messages.
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Delegate to embedded phase chat when active.
+	if m.PhaseChat != nil {
+		return m.updatePhaseChat(msg)
+	}
+
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -243,6 +258,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Board.Width = contentWidth
 		m.Board.Height = detailHeight
 		m.EntanglementView.SetSize(contentWidth, detailHeight)
+		m.ImpactView.SetSize(contentWidth, detailHeight)
 
 		// Board view sizing: on the first resize, default to board if wide enough.
 		// On subsequent resizes, auto-fallback to table if terminal shrinks below threshold.
@@ -435,6 +451,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				claims[i] = f.Path
 			}
 			wc.Claims = claims
+		}
+		// Track file impacts per phase for the aggregate impact view.
+		if len(msg.Files) > 0 {
+			m.PhaseFiles[msg.PhaseID] = msg.Files
+			m.ImpactView.Rebuild(m.PhaseFiles)
 		}
 	case MsgPhaseCycleSummary:
 		if lv := m.PhaseLoops[msg.PhaseID]; lv != nil {
@@ -673,6 +694,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.Dialog != nil && m.Dialog.Session.ID() == msg.SessionID {
 			m.Dialog = nil
 		}
+
+	case MsgOpenPhaseChat:
+		m.openEmbeddedPhaseChat(msg)
 
 	case MsgScratchpadEntry:
 		m.Scratchpad = append(m.Scratchpad, msg)
@@ -1033,7 +1057,7 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "shift+tab":
 			m.ActiveTab = m.ActiveTab.Prev()
 			return m, nil
-		case "1", "2", "3", "4":
+		case "1", "2", "3", "4", "5":
 			n := int(msg.String()[0] - '0')
 			if tab, ok := TabFromNumber(n); ok {
 				m.ActiveTab = tab
@@ -1050,6 +1074,13 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.Board.MoveRight()
 				return m, nil
 			}
+		}
+	}
+
+	// Board tab: contextual chat keybinding.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.ActiveTab == TabBoard {
+		if key.Matches(msg, m.Keys.ChatPhase) {
+			return m.openPhaseChat()
 		}
 	}
 
@@ -1111,6 +1142,28 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if msg.String() == "g" || msg.String() == "G" {
 			m.EntanglementView.Update(msg)
+			return m, nil
+		}
+	}
+
+	// Impact tab key handling — scroll viewport and navigate phase groups.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.ActiveTab == TabImpact {
+		switch {
+		case key.Matches(msg, m.Keys.Up):
+			m.ImpactView.MoveUp()
+			return m, nil
+		case key.Matches(msg, m.Keys.Down):
+			m.ImpactView.MoveDown()
+			return m, nil
+		case key.Matches(msg, m.Keys.PageUp),
+			key.Matches(msg, m.Keys.PageDown),
+			key.Matches(msg, m.Keys.Home),
+			key.Matches(msg, m.Keys.End):
+			m.ImpactView.Update(msg)
+			return m, nil
+		}
+		if msg.String() == "g" || msg.String() == "G" {
+			m.ImpactView.Update(msg)
 			return m, nil
 		}
 	}
@@ -1974,6 +2027,70 @@ func (m *AppModel) openHailList() tea.Cmd {
 	return nil
 }
 
+// openPhaseChat builds a PhaseContext from the selected phase's execution
+// state and emits MsgOpenPhaseChat so the cockpit can transition to chat mode.
+func (m *AppModel) openPhaseChat() (tea.Model, tea.Cmd) {
+	// Determine the selected phase based on view mode.
+	var phase *PhaseEntry
+	if m.BoardActive {
+		phase = m.Board.SelectedPhase()
+	} else {
+		idx := m.NebulaView.Cursor
+		if idx >= 0 && idx < len(m.NebulaView.Phases) {
+			phase = &m.NebulaView.Phases[idx]
+		}
+	}
+	if phase == nil {
+		return m, nil
+	}
+
+	// Gather execution context from per-phase loop view.
+	var lastSummary, reviewerFindings, diffStat string
+	var cycle, maxCycles int
+	var fileClaims []string
+
+	cycle = phase.Cycles
+	maxCycles = phase.MaxCycles
+
+	if lv, ok := m.PhaseLoops[phase.ID]; ok {
+		lastSummary = lastAgentSummary(lv)
+		reviewerFindings = lastReviewerSummary(lv)
+		files := aggregateFiles(lv)
+		if len(files) > 0 {
+			diffStat = FormatFileSummary(files)
+			for _, f := range files {
+				fileClaims = append(fileClaims, f.Path)
+			}
+		}
+	}
+
+	return m, func() tea.Msg {
+		return MsgOpenPhaseChat{
+			PhaseID:          phase.ID,
+			PhaseSpec:        phase.PlanBody,
+			Cycle:            cycle,
+			MaxCycles:        maxCycles,
+			LastSummary:      lastSummary,
+			DiffStat:         diffStat,
+			ReviewerFindings: reviewerFindings,
+			FileClaims:       fileClaims,
+		}
+	}
+}
+
+// lastAgentSummary returns the summary from the most recent agent (coder or reviewer).
+func lastAgentSummary(lv *LoopView) string {
+	for i := len(lv.Cycles) - 1; i >= 0; i-- {
+		for j := len(lv.Cycles[i].Agents) - 1; j >= 0; j-- {
+			a := lv.Cycles[i].Agents[j]
+			if a.Summary != "" {
+				return a.Summary
+			}
+		}
+	}
+	return ""
+}
+
 // moveUp delegates to the active view based on depth.
 // When the diff file list is active, navigation targets it instead of the main list.
 func (m *AppModel) moveUp() {
@@ -2157,6 +2274,16 @@ func (m *AppModel) updateNebulaDetail() {
 		}
 	}
 
+	// Append file scope section to the phase header if available.
+	if files, ok := m.PhaseFiles[m.FocusedPhase]; ok && len(files) > 0 {
+		scopeSection := FileScopeSection(files, m.contentWidth()-4)
+		if phaseHeader != "" {
+			phaseHeader = phaseHeader + "\n" + scopeSection
+		} else {
+			phaseHeader = scopeSection
+		}
+	}
+
 	switch m.Depth {
 	case DepthPhaseLoop:
 		// For completed/failed phases, show a structured completion summary.
@@ -2242,6 +2369,116 @@ func (m *AppModel) addMessage(format string, args ...any) {
 		msg = fmt.Sprintf(format, args...)
 	}
 	m.Messages = append(m.Messages, msg)
+}
+
+// openEmbeddedPhaseChat creates an embedded ChatModel seeded with phase context.
+// The chat takes over the full screen until the user presses Esc.
+func (m *AppModel) openEmbeddedPhaseChat(msg MsgOpenPhaseChat) {
+	pc := chat.PhaseContext{
+		PhaseID:          msg.PhaseID,
+		PhaseSpec:        msg.PhaseSpec,
+		Cycle:            msg.Cycle,
+		MaxCycles:        msg.MaxCycles,
+		LastSummary:      msg.LastSummary,
+		DiffStat:         msg.DiffStat,
+		ReviewerFindings: msg.ReviewerFindings,
+		FileClaims:       msg.FileClaims,
+	}
+
+	// Create a store for persistence. If it fails, proceed without persistence.
+	chatDir, err := chat.DefaultDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "chat: failed to determine chat directory: %v\n", err)
+		return
+	}
+	store, err := chat.NewFileStore(chatDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "chat: failed to initialize chat store: %v\n", err)
+		return
+	}
+
+	// Create the chat model without a provider — the user can type messages
+	// but inference requires a provider to be wired. For now, use a nil-safe
+	// model that shows the context.
+	cm := NewChatModel(store, nil, "")
+	cm.StartPhaseChat(pc)
+	cm.Width = m.Width
+	cm.Height = m.Height
+	cm.recalcLayout()
+	m.PhaseChat = &cm
+}
+
+// updatePhaseChat delegates message handling to the embedded phase chat.
+// It intercepts Esc to close the chat and return to the cockpit.
+func (m AppModel) updatePhaseChat(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		// Esc closes the embedded chat and returns to the board.
+		if keyMsg.Type == tea.KeyEsc && m.PhaseChat.InputMode == ChatModeNormal {
+			// Save conversation before closing.
+			if m.PhaseChat.ActiveConv != nil && m.PhaseChat.Store != nil {
+				if err := m.PhaseChat.Store.Save(m.PhaseChat.ActiveConv); err != nil {
+					fmt.Fprintf(os.Stderr, "chat: failed to save conversation: %v\n", err)
+				}
+			}
+			m.PhaseChat = nil
+			return m, nil
+		}
+	}
+
+	// Forward window size to the embedded chat.
+	if wsMsg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.Width = wsMsg.Width
+		m.Height = wsMsg.Height
+	}
+
+	// Handle /refresh command: intercept before the chat model processes it.
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
+		if m.PhaseChat.InputMode == ChatModeCompose {
+			input := m.PhaseChat.ChatView.InputValue()
+			if input == "/refresh" && m.PhaseChat.PhaseContext != nil {
+				m.PhaseChat.ChatView.ClearInput()
+				// Re-gather context from the current phase state.
+				pc := m.gatherPhaseContext(m.PhaseChat.PhaseContext.PhaseID)
+				m.PhaseChat.RefreshPhaseContext(pc)
+				return m, nil
+			}
+		}
+	}
+
+	// Delegate to the embedded ChatModel.
+	model, cmd := m.PhaseChat.Update(msg)
+	if cm, ok := model.(ChatModel); ok {
+		m.PhaseChat = &cm
+	}
+	return m, cmd
+}
+
+// gatherPhaseContext assembles the latest execution state for a phase.
+func (m *AppModel) gatherPhaseContext(phaseID string) chat.PhaseContext {
+	pc := chat.PhaseContext{PhaseID: phaseID}
+
+	phase := m.findPhase(phaseID)
+	if phase == nil {
+		return pc
+	}
+
+	pc.PhaseSpec = phase.PlanBody
+	pc.Cycle = phase.Cycles
+	pc.MaxCycles = phase.MaxCycles
+
+	if lv, ok := m.PhaseLoops[phaseID]; ok {
+		pc.LastSummary = lastAgentSummary(lv)
+		pc.ReviewerFindings = lastReviewerSummary(lv)
+		files := aggregateFiles(lv)
+		if len(files) > 0 {
+			pc.DiffStat = FormatFileSummary(files)
+			for _, f := range files {
+				pc.FileClaims = append(pc.FileClaims, f.Path)
+			}
+		}
+	}
+
+	return pc
 }
 
 // detailHeight computes available height for the detail panel.
@@ -2341,6 +2578,11 @@ func (m AppModel) View() string {
 	// Terminal too small — show a centered message instead of broken layout.
 	if m.Width < MinWidth || m.Height < MinHeight {
 		return m.renderTooSmall()
+	}
+
+	// Embedded phase chat — full-screen takeover.
+	if m.PhaseChat != nil {
+		return m.PhaseChat.View()
 	}
 
 	// Splash screen — show binary-star animation until it finishes or is skipped.
@@ -2575,6 +2817,9 @@ func (m AppModel) renderMainView() string {
 				return m.Graph.View()
 			case TabScratchpad:
 				return m.ScratchpadView.View()
+			case TabImpact:
+				m.ImpactView.SetSize(w, m.detailHeight())
+				return m.ImpactView.View()
 			default:
 				m.NebulaView.Width = w
 				return m.NebulaView.View()

@@ -235,48 +235,23 @@ func (iv ImpactView) renderContent() string {
 	for gi, group := range iv.groups {
 		selected := gi == iv.cursor
 
-		// Phase header.
-		headerStyle := lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
-		if selected {
-			headerStyle = headerStyle.Foreground(colorBlueshift)
-		}
-		sb.WriteString(headerStyle.Render(fmt.Sprintf("  %s %s", selectionIndicator, group.PhaseID)))
-		if !selected {
-			sb.WriteString(lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Render(
-				fmt.Sprintf("  %s", group.PhaseID)))
-			// Rewrite: clear and redo properly.
-		}
-		// Clear the double-write above. Let me fix.
-		// Actually the logic above is wrong. Let me rebuild this block.
-		sb.Reset()
-		break // break to fix
-	}
-
-	// Rewrite properly.
-	var sb2 strings.Builder
-	sb2.WriteString(summaryStyle.Render(summaryText))
-	sb2.WriteString("\n\n")
-
-	for gi, group := range iv.groups {
-		selected := gi == iv.cursor
-
 		// Phase header with selection indicator.
-		sb2.WriteString(renderPhaseGroupHeader(group.PhaseID, selected))
-		sb2.WriteString("\n")
+		sb.WriteString(renderPhaseGroupHeader(group.PhaseID, selected))
+		sb.WriteString("\n")
 
 		// File entries.
 		for _, fi := range group.Files {
 			_, isOverlap := overlaps[fi.Path]
-			sb2.WriteString(renderFileImpactLine(fi, isOverlap, iv.width-6))
-			sb2.WriteString("\n")
+			sb.WriteString(renderFileImpactLine(fi, isOverlap, iv.width-6))
+			sb.WriteString("\n")
 		}
 
 		if gi < len(iv.groups)-1 {
-			sb2.WriteString("\n")
+			sb.WriteString("\n")
 		}
 	}
 
-	return sb2.String()
+	return sb.String()
 }
 
 // renderPhaseGroupHeader renders the header for a phase group.

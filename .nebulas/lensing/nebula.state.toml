@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'lensing'
-total_cost_usd = 18.59086275
+total_cost_usd = 25.672801249999996
 
 [phases]
 [phases.activity-stream]
@@ -17,9 +17,15 @@ summary = 'Duplicate type declarations removed from nebulaview.go; phase_entry.g
 
 [phases.board-richness]
 bead_id = 'quasar-4yz'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-06T22:50:44.655345387-05:00
-updated_at = 2026-03-06T22:50:44.901577088-05:00
+updated_at = 2026-03-06T23:03:12.791478684-05:00
+
+[phases.board-richness.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Enriched board phase cards with progress indicators, health dots, cost badges, activity subtitles, and attention markers — all well-tested and following existing patterns, with one minor known limitation in hail state tracking.'
 
 [phases.contextual-chat]
 bead_id = 'quasar-c69'

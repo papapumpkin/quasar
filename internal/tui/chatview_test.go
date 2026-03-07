@@ -780,3 +780,42 @@ func TestRenderMarkdownWrappingBeforeStyling(t *testing.T) {
 		t.Fatal("expected line break from wrapping")
 	}
 }
+
+func TestChatViewPhaseBadge(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		phaseBadge string
+		wantIn     string
+		wantAbsent string
+	}{
+		{
+			name:       "phase badge shown when set",
+			phaseBadge: "fix-bug-42",
+			wantIn:     "phase:fix-bug-42",
+		},
+		{
+			name:       "no phase badge when empty",
+			phaseBadge: "",
+			wantAbsent: "phase:",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cv := NewChatView()
+			cv.SetSize(120, 24)
+			cv.PhaseBadge = tt.phaseBadge
+
+			view := cv.View()
+			if tt.wantIn != "" && !strings.Contains(view, tt.wantIn) {
+				t.Errorf("View() should contain %q, got:\n%s", tt.wantIn, view)
+			}
+			if tt.wantAbsent != "" && strings.Contains(view, tt.wantAbsent) {
+				t.Errorf("View() should not contain %q, got:\n%s", tt.wantAbsent, view)
+			}
+		})
+	}
+}

@@ -440,3 +440,24 @@ type MsgDialogAgentMsg struct {
 type MsgDialogClosed struct {
 	SessionID string
 }
+
+// MsgOpenPhaseChat is sent when the user presses the contextual chat
+// keybinding on a phase in the board view. It carries the phase context
+// needed to seed a context-aware chat conversation.
+type MsgOpenPhaseChat struct {
+	PhaseID          string
+	PhaseSpec        string
+	Cycle            int
+	MaxCycles        int
+	LastSummary      string
+	DiffStat         string
+	ReviewerFindings string
+	FileClaims       []string
+}
+
+// MsgRefreshPhaseContext is sent when the user types /refresh in a
+// context-aware chat. The TUI re-fetches the latest execution state
+// for the linked phase and appends it as a new system message.
+type MsgRefreshPhaseContext struct {
+	PhaseID string
+}

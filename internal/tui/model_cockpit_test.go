@@ -156,8 +156,8 @@ func TestTabNavigation(t *testing.T) {
 		result, _ := m.handleKey(shiftTabMsg)
 		updated := result.(AppModel)
 
-		if updated.ActiveTab != TabScratchpad {
-			t.Errorf("expected ActiveTab = TabScratchpad, got %d", updated.ActiveTab)
+		if updated.ActiveTab != TabImpact {
+			t.Errorf("expected ActiveTab = TabImpact, got %d", updated.ActiveTab)
 		}
 	})
 
