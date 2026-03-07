@@ -88,8 +88,8 @@ func TestImpactViewOverlaps(t *testing.T) {
 	if !strings.Contains(got, "!!") {
 		t.Error("expected overlap warning '!!' in output")
 	}
-	if !strings.Contains(got, "1 overlaps") {
-		t.Error("expected '1 overlaps' in summary")
+	if !strings.Contains(got, "1 overlap") {
+		t.Error("expected '1 overlap' in summary")
 	}
 }
 

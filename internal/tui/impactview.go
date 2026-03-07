@@ -225,7 +225,11 @@ func (iv ImpactView) renderContent() string {
 	summaryText := fmt.Sprintf("  %d files across %d phases", iv.TotalFiles(), len(iv.groups))
 	if overlapCount > 0 {
 		warnStyle := lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
-		summaryText += "  " + warnStyle.Render(fmt.Sprintf("%d overlaps", overlapCount))
+		noun := "overlaps"
+		if overlapCount == 1 {
+			noun = "overlap"
+		}
+		summaryText += "  " + warnStyle.Render(fmt.Sprintf("%d %s", overlapCount, noun))
 	}
 
 	var sb strings.Builder
@@ -358,7 +362,18 @@ func FileScopeSection(files []FileStatEntry, width int) string {
 		glyphStyle := changeGlyphStyle(f.Change)
 		pathStyle := lipgloss.NewStyle().Foreground(colorMutedLight)
 
-		line := "  " + glyphStyle.Render(glyph) + " " + pathStyle.Render(f.Path)
+		// Truncate long paths to fit the available width.
+		// Reserve: 2 (indent) + 1 (glyph) + 1 (space) + ~12 (stat) = ~16 overhead.
+		path := f.Path
+		availPath := width - 16
+		if availPath < 10 {
+			availPath = 10
+		}
+		if len(path) > availPath {
+			path = TruncateWithEllipsis(path, availPath)
+		}
+
+		line := "  " + glyphStyle.Render(glyph) + " " + pathStyle.Render(path)
 		stat := formatFileStat(f.Additions, f.Deletions)
 		if stat != "" {
 			line += "  " + stat
