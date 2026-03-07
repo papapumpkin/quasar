@@ -54,20 +54,20 @@ const (
 
 // PhaseEntry represents one phase in the nebula view.
 type PhaseEntry struct {
-	ID          string
-	Title       string
-	Status      PhaseStatus
-	Wave        int
-	CostUSD     float64
-	Cycles      int
-	MaxCycles   int
-	MaxBudgetUSD float64  // per-phase budget cap (0 = unlimited)
-	BlockedBy   string
-	DependsOn   []string // original dependency IDs from the phase spec
-	StartedAt   time.Time
-	CompletedAt time.Time // set when phase reaches a terminal state
-	PlanBody    string    // markdown content from the phase file
-	Refactored  bool      // true when a mid-run refactor was applied this cycle
+	ID           string
+	Title        string
+	Status       PhaseStatus
+	Wave         int
+	CostUSD      float64
+	Cycles       int
+	MaxCycles    int
+	MaxBudgetUSD float64 // per-phase budget cap (0 = unlimited)
+	BlockedBy    string
+	DependsOn    []string // original dependency IDs from the phase spec
+	StartedAt    time.Time
+	CompletedAt  time.Time // set when phase reaches a terminal state
+	PlanBody     string    // markdown content from the phase file
+	Refactored   bool      // true when a mid-run refactor was applied this cycle
 
 	// Board card enrichment fields.
 	LastActivity      string // most recent activity string from the worker (e.g. "coding...")
@@ -315,16 +315,6 @@ func (nv *NebulaView) SetPhaseMaxBudget(phaseID string, budget float64) {
 	for i := range nv.Phases {
 		if nv.Phases[i].ID == phaseID {
 			nv.Phases[i].MaxBudgetUSD = budget
-			return
-		}
-	}
-}
-
-// SetPhaseCompletionNote sets the completion note displayed on board cards.
-func (nv *NebulaView) SetPhaseCompletionNote(phaseID string, note string) {
-	for i := range nv.Phases {
-		if nv.Phases[i].ID == phaseID {
-			nv.Phases[i].CompletionNote = note
 			return
 		}
 	}

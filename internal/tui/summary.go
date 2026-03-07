@@ -109,6 +109,42 @@ func extractLastLines(lines []string, n int) string {
 	return strings.Join(nonEmpty[start:], "\n")
 }
 
+// SetSatisfaction sets the reviewer satisfaction level on the last reviewer in
+// the current cycle.
+func (lv *LoopView) SetSatisfaction(s Satisfaction) {
+	if len(lv.Cycles) == 0 {
+		return
+	}
+	c := &lv.Cycles[len(lv.Cycles)-1]
+	for i := len(c.Agents) - 1; i >= 0; i-- {
+		if c.Agents[i].Role == "reviewer" {
+			c.Agents[i].Satisfaction = s
+			return
+		}
+	}
+}
+
+// renderAgentSummaryLines writes indented summary lines below a done agent row
+// in the loop view. Uses tree continuation characters matching the agent's
+// position (last vs non-last) in the cycle.
+func renderAgentSummaryLines(b *strings.Builder, a AgentEntry, isLast bool, width int) {
+	if !a.Done || a.Summary == "" {
+		return
+	}
+	summaryLines := strings.SplitN(a.Summary, "\n", maxSummaryLines+1)
+	if len(summaryLines) > maxSummaryLines {
+		summaryLines = summaryLines[:maxSummaryLines]
+	}
+	continuation := "│   "
+	if isLast {
+		continuation = "    "
+	}
+	for _, sl := range summaryLines {
+		summaryText := styleDetailDim.Render(TruncateWithEllipsis(sl, width-10))
+		b.WriteString("  " + styleTreeConnector.Render(continuation) + summaryText + "\n")
+	}
+}
+
 // SatisfactionFromReview derives a Satisfaction level from review outcome data.
 func SatisfactionFromReview(approved bool, issueCount int) Satisfaction {
 	if approved {
@@ -131,6 +167,16 @@ func SatisfactionBadge(s Satisfaction) string {
 		return styleHighlightCritical.Render("✗ critical")
 	default:
 		return ""
+	}
+}
+
+// SetPhaseCompletionNote sets the completion note displayed on board cards.
+func (nv *NebulaView) SetPhaseCompletionNote(phaseID string, note string) {
+	for i := range nv.Phases {
+		if nv.Phases[i].ID == phaseID {
+			nv.Phases[i].CompletionNote = note
+			return
+		}
 	}
 }
 

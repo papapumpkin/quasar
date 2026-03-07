@@ -220,3 +220,268 @@ func TestParseGitDiffPath(t *testing.T) {
 		t.Errorf("expected internal/foo.go, got %s", path)
 	}
 }
+
+func TestParseHunkContext(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		line string
+		want string
+	}{
+		{
+			name: "function context",
+			line: "@@ -10,7 +10,12 @@ func Login(w http.ResponseWriter) {",
+			want: "func Login(w http.ResponseWriter) {",
+		},
+		{
+			name: "method context",
+			line: "@@ -5,3 +5,8 @@ func (l *Loop) Run(ctx context.Context) error {",
+			want: "func (l *Loop) Run(ctx context.Context) error {",
+		},
+		{
+			name: "no context",
+			line: "@@ -1,4 +1,6 @@",
+			want: "",
+		},
+		{
+			name: "empty context after @@",
+			line: "@@ -1,4 +1,6 @@ ",
+			want: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := parseHunkContext(tt.line)
+			if got != tt.want {
+				t.Errorf("parseHunkContext(%q) = %q, want %q", tt.line, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseUnifiedDiff_HunkHeader(t *testing.T) {
+	t.Parallel()
+	files := ParseUnifiedDiff(sampleDiff)
+	if len(files) == 0 || len(files[0].Hunks) == 0 {
+		t.Fatal("expected parsed hunks")
+	}
+	hunk := files[0].Hunks[0]
+	if hunk.Header != "func Login(w http.ResponseWriter) {" {
+		t.Errorf("expected hunk header 'func Login(w http.ResponseWriter) {', got %q", hunk.Header)
+	}
+}
+
+func TestParseUnifiedDiff_ChangeType(t *testing.T) {
+	t.Parallel()
+	files := ParseUnifiedDiff(sampleDiff)
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files, got %d", len(files))
+	}
+	// handler.go is modified (no special header).
+	if files[0].Change != ChangeModified {
+		t.Errorf("expected handler.go to be ChangeModified, got %d", files[0].Change)
+	}
+	// auth.go has "new file mode".
+	if files[1].Change != ChangeAdded {
+		t.Errorf("expected auth.go to be ChangeAdded, got %d", files[1].Change)
+	}
+}
+
+func TestParseUnifiedDiff_DeletedFile(t *testing.T) {
+	t.Parallel()
+	raw := `diff --git a/old.go b/old.go
+deleted file mode 100644
+--- a/old.go
++++ /dev/null
+@@ -1,3 +0,0 @@
+-package main
+-
+-func old() {}
+`
+	files := ParseUnifiedDiff(raw)
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(files))
+	}
+	if files[0].Change != ChangeDeleted {
+		t.Errorf("expected ChangeDeleted, got %d", files[0].Change)
+	}
+}
+
+func TestParseUnifiedDiff_RenamedFile(t *testing.T) {
+	t.Parallel()
+	raw := `diff --git a/old.go b/new.go
+similarity index 95%
+rename from old.go
+rename to new.go
+--- a/old.go
++++ b/new.go
+@@ -1,3 +1,3 @@
+ package main
+-func old() {}
++func renamed() {}
+`
+	files := ParseUnifiedDiff(raw)
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(files))
+	}
+	if files[0].Change != ChangeRenamed {
+		t.Errorf("expected ChangeRenamed, got %d", files[0].Change)
+	}
+}
+
+func TestChangeTypeGlyph(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		ct   ChangeType
+		want string
+	}{
+		{ChangeModified, "M"},
+		{ChangeAdded, "A"},
+		{ChangeDeleted, "D"},
+		{ChangeRenamed, "R"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			t.Parallel()
+			if got := ChangeTypeGlyph(tt.ct); got != tt.want {
+				t.Errorf("ChangeTypeGlyph(%d) = %q, want %q", tt.ct, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRenderStatBar(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		adds     int
+		dels     int
+		width    int
+		wantPlus bool
+		wantDash bool
+	}{
+		{"adds only", 5, 0, 10, true, false},
+		{"dels only", 0, 3, 10, false, true},
+		{"mixed", 5, 3, 8, true, true},
+		{"zero total", 0, 0, 10, false, false},
+		{"zero width", 5, 3, 0, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := RenderStatBar(tt.adds, tt.dels, tt.width)
+			if tt.wantPlus && !strings.Contains(got, "+") {
+				t.Error("expected '+' in stat bar")
+			}
+			if tt.wantDash && !strings.Contains(got, "-") {
+				t.Error("expected '-' in stat bar")
+			}
+			if !tt.wantPlus && !tt.wantDash && got != "" {
+				t.Errorf("expected empty bar for zero counts, got %q", got)
+			}
+		})
+	}
+}
+
+func TestRenderFileDiffWithOpts_Collapsed(t *testing.T) {
+	t.Parallel()
+	files := ParseUnifiedDiff(sampleDiff)
+	if len(files) == 0 {
+		t.Fatal("expected parsed files")
+	}
+	opts := DiffRenderOpts{
+		SideBySide:     false,
+		CollapsedHunks: map[int]bool{0: true},
+	}
+	result := renderFileDiffWithOpts(files[0], 120, opts)
+	// Collapsed hunk should show summary with ▸.
+	if !strings.Contains(result, "▸") {
+		t.Error("expected collapse indicator ▸ in output")
+	}
+}
+
+func TestRenderFileDiffWithOpts_Unified(t *testing.T) {
+	t.Parallel()
+	files := ParseUnifiedDiff(sampleDiff)
+	if len(files) == 0 {
+		t.Fatal("expected parsed files")
+	}
+	opts := DiffRenderOpts{SideBySide: false}
+	result := renderFileDiffWithOpts(files[0], 120, opts)
+	// Unified mode should not contain the side-by-side separator.
+	if strings.Contains(result, " │ ") {
+		t.Error("unified mode should not contain side-by-side separator")
+	}
+}
+
+func TestRenderFileDiffWithOpts_SideBySide(t *testing.T) {
+	t.Parallel()
+	files := ParseUnifiedDiff(sampleDiff)
+	if len(files) == 0 {
+		t.Fatal("expected parsed files")
+	}
+	opts := DiffRenderOpts{SideBySide: true}
+	result := renderFileDiffWithOpts(files[0], 120, opts)
+	if !strings.Contains(result, "handler.go") {
+		t.Error("expected file path in output")
+	}
+}
+
+func TestRenderSingleFileDiffWithOpts(t *testing.T) {
+	t.Parallel()
+	opts := DiffRenderOpts{SideBySide: false}
+	result := RenderSingleFileDiffWithOpts(sampleDiff, "handler.go", 120, opts)
+	if !strings.Contains(result, "handler.go") {
+		t.Error("expected handler.go in rendered output")
+	}
+}
+
+func TestRenderSingleFileDiffWithOpts_NotFound(t *testing.T) {
+	t.Parallel()
+	opts := DiffRenderOpts{}
+	result := RenderSingleFileDiffWithOpts(sampleDiff, "nonexistent.go", 120, opts)
+	if !strings.Contains(result, "no diff for") {
+		t.Error("expected 'no diff for' message")
+	}
+}
+
+func TestHunkCount(t *testing.T) {
+	t.Parallel()
+	count := HunkCount(sampleDiff, "handler.go")
+	if count != 1 {
+		t.Errorf("expected 1 hunk for handler.go, got %d", count)
+	}
+	count = HunkCount(sampleDiff, "nonexistent.go")
+	if count != 0 {
+		t.Errorf("expected 0 hunks for nonexistent file, got %d", count)
+	}
+}
+
+func TestComputeDiffStat_ChangeType(t *testing.T) {
+	t.Parallel()
+	files := ParseUnifiedDiff(sampleDiff)
+	stat := ComputeDiffStat(files)
+	if stat.FileStats[0].Change != ChangeModified {
+		t.Errorf("expected handler.go stat Change=ChangeModified, got %d", stat.FileStats[0].Change)
+	}
+	if stat.FileStats[1].Change != ChangeAdded {
+		t.Errorf("expected auth.go stat Change=ChangeAdded, got %d", stat.FileStats[1].Change)
+	}
+}
+
+func TestRenderFileDiffWithOpts_HunkContext(t *testing.T) {
+	t.Parallel()
+	files := ParseUnifiedDiff(sampleDiff)
+	if len(files) == 0 {
+		t.Fatal("expected parsed files")
+	}
+	// Both unified and side-by-side should show hunk context.
+	for _, sbs := range []bool{true, false} {
+		opts := DiffRenderOpts{SideBySide: sbs}
+		result := renderFileDiffWithOpts(files[0], 120, opts)
+		if !strings.Contains(result, "func Login") {
+			t.Errorf("SideBySide=%v: expected hunk context 'func Login' in output", sbs)
+		}
+	}
+}

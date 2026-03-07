@@ -219,21 +219,6 @@ func (lv *LoopView) SetAgentDiffFiles(role string, cycle int, files []FileStatEn
 	}
 }
 
-// SetSatisfaction sets the reviewer satisfaction level on the last reviewer in
-// the current cycle.
-func (lv *LoopView) SetSatisfaction(s Satisfaction) {
-	if len(lv.Cycles) == 0 {
-		return
-	}
-	c := &lv.Cycles[len(lv.Cycles)-1]
-	for i := len(c.Agents) - 1; i >= 0; i-- {
-		if c.Agents[i].Role == "reviewer" {
-			c.Agents[i].Satisfaction = s
-			return
-		}
-	}
-}
-
 // SetIssueCount sets the issue count on the last reviewer in the current cycle.
 func (lv *LoopView) SetIssueCount(count int) {
 	if len(lv.Cycles) == 0 {
@@ -368,20 +353,7 @@ func (lv LoopView) View() string {
 			b.WriteString("\n")
 
 			// Show summary snippet below done agents (2-3 lines, indented).
-			if a.Done && a.Summary != "" {
-				summaryLines := strings.SplitN(a.Summary, "\n", maxSummaryLines+1)
-				if len(summaryLines) > maxSummaryLines {
-					summaryLines = summaryLines[:maxSummaryLines]
-				}
-				continuation := "│   "
-				if isLast {
-					continuation = "    "
-				}
-				for _, sl := range summaryLines {
-					summaryText := styleDetailDim.Render(TruncateWithEllipsis(sl, lv.Width-10))
-					b.WriteString("  " + styleTreeConnector.Render(continuation) + summaryText + "\n")
-				}
-			}
+			renderAgentSummaryLines(&b, a, isLast, lv.Width)
 			idx++
 		}
 	}
