@@ -3,6 +3,7 @@ package tui
 import (
 	"time"
 
+	"github.com/papapumpkin/quasar/internal/chat"
 	"github.com/papapumpkin/quasar/internal/dialog"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/nebula"
@@ -442,17 +443,10 @@ type MsgDialogClosed struct {
 }
 
 // MsgOpenPhaseChat is sent when the user presses the contextual chat
-// keybinding on a phase in the board view. It carries the phase context
+// keybinding on a phase in the board view. It embeds the phase context
 // needed to seed a context-aware chat conversation.
 type MsgOpenPhaseChat struct {
-	PhaseID          string
-	PhaseSpec        string
-	Cycle            int
-	MaxCycles        int
-	LastSummary      string
-	DiffStat         string
-	ReviewerFindings string
-	FileClaims       []string
+	chat.PhaseContext
 }
 
 // MsgRefreshPhaseContext is sent when the user types /refresh in a

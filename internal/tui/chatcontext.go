@@ -2,7 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/papapumpkin/quasar/internal/chat"
 )
@@ -51,6 +54,35 @@ func (m *ChatModel) StartPhaseChat(pc chat.PhaseContext) {
 	m.InputMode = ChatModeCompose
 	m.ChatView.Input.Focus()
 	m.recalcLayout()
+}
+
+// handleConvLoaded processes a loaded conversation. When the conversation has
+// a linked PhaseID, the PhaseContext is restored so /refresh works on resumed
+// conversations.
+func (m ChatModel) handleConvLoaded(msg MsgConvLoaded) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		fmt.Fprintf(os.Stderr, "chat: failed to load conversation: %v\n", msg.Err)
+		return m, nil
+	}
+
+	m.ActiveConv = msg.Conversation
+	m.ChatView.Messages = msg.Conversation.Messages
+	m.ChatView.Title = msg.Conversation.AutoTitle()
+	m.ChatView.ModelTag = msg.Conversation.Model
+	m.ChatView.PhaseBadge = msg.Conversation.PhaseID
+	if msg.Conversation.PhaseID != "" {
+		m.PhaseContext = &chat.PhaseContext{PhaseID: msg.Conversation.PhaseID}
+	} else {
+		m.PhaseContext = nil
+	}
+	m.ChatView.SetLoading(false)
+	m.Focus = FocusChatArea
+	m.InputMode = ChatModeCompose
+	m.ChatView.Input.Focus()
+	m.recalcLayout()
+	m.ChatView.ScrollToBottom()
+
+	return m, nil
 }
 
 // RefreshPhaseContext re-fetches the latest phase execution state and appends

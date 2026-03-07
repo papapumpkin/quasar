@@ -2066,14 +2066,16 @@ func (m *AppModel) openPhaseChat() (tea.Model, tea.Cmd) {
 
 	return m, func() tea.Msg {
 		return MsgOpenPhaseChat{
-			PhaseID:          phase.ID,
-			PhaseSpec:        phase.PlanBody,
-			Cycle:            cycle,
-			MaxCycles:        maxCycles,
-			LastSummary:      lastSummary,
-			DiffStat:         diffStat,
-			ReviewerFindings: reviewerFindings,
-			FileClaims:       fileClaims,
+			PhaseContext: chat.PhaseContext{
+				PhaseID:          phase.ID,
+				PhaseSpec:        phase.PlanBody,
+				Cycle:            cycle,
+				MaxCycles:        maxCycles,
+				LastSummary:      lastSummary,
+				DiffStat:         diffStat,
+				ReviewerFindings: reviewerFindings,
+				FileClaims:       fileClaims,
+			},
 		}
 	}
 }
@@ -2374,17 +2376,6 @@ func (m *AppModel) addMessage(format string, args ...any) {
 // openEmbeddedPhaseChat creates an embedded ChatModel seeded with phase context.
 // The chat takes over the full screen until the user presses Esc.
 func (m *AppModel) openEmbeddedPhaseChat(msg MsgOpenPhaseChat) {
-	pc := chat.PhaseContext{
-		PhaseID:          msg.PhaseID,
-		PhaseSpec:        msg.PhaseSpec,
-		Cycle:            msg.Cycle,
-		MaxCycles:        msg.MaxCycles,
-		LastSummary:      msg.LastSummary,
-		DiffStat:         msg.DiffStat,
-		ReviewerFindings: msg.ReviewerFindings,
-		FileClaims:       msg.FileClaims,
-	}
-
 	// Create a store for persistence. If it fails, proceed without persistence.
 	chatDir, err := chat.DefaultDir()
 	if err != nil {
@@ -2401,7 +2392,7 @@ func (m *AppModel) openEmbeddedPhaseChat(msg MsgOpenPhaseChat) {
 	// but inference requires a provider to be wired. For now, use a nil-safe
 	// model that shows the context.
 	cm := NewChatModel(store, nil, "")
-	cm.StartPhaseChat(pc)
+	cm.StartPhaseChat(msg.PhaseContext)
 	cm.Width = m.Width
 	cm.Height = m.Height
 	cm.recalcLayout()

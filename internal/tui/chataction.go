@@ -70,6 +70,20 @@ func (m ChatModel) sendMessage() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Guard against nil provider — embedded phase chats may not have one.
+	if m.Provider == nil {
+		errMsg := chat.Message{
+			Role:      chat.RoleSystem,
+			Content:   "No AI provider configured. Chat is in context-only mode.",
+			Timestamp: time.Now(),
+		}
+		if m.ActiveConv != nil {
+			m.ActiveConv.Messages = append(m.ActiveConv.Messages, errMsg)
+		}
+		m.ChatView.AddMessage(errMsg)
+		return m, nil
+	}
+
 	// Create conversation if needed.
 	if m.ActiveConv == nil {
 		conv := &chat.Conversation{
@@ -171,28 +185,6 @@ func (m ChatModel) handleConvListUpdated(msg MsgConvListUpdated) (tea.Model, tea
 	if m.Sidebar.IsSearching() {
 		m.Sidebar.updateFilter()
 	}
-	return m, nil
-}
-
-// handleConvLoaded processes a loaded conversation.
-func (m ChatModel) handleConvLoaded(msg MsgConvLoaded) (tea.Model, tea.Cmd) {
-	if msg.Err != nil {
-		fmt.Fprintf(os.Stderr, "chat: failed to load conversation: %v\n", msg.Err)
-		return m, nil
-	}
-
-	m.ActiveConv = msg.Conversation
-	m.ChatView.Messages = msg.Conversation.Messages
-	m.ChatView.Title = msg.Conversation.AutoTitle()
-	m.ChatView.ModelTag = msg.Conversation.Model
-	m.ChatView.PhaseBadge = msg.Conversation.PhaseID
-	m.ChatView.SetLoading(false)
-	m.Focus = FocusChatArea
-	m.InputMode = ChatModeCompose
-	m.ChatView.Input.Focus()
-	m.recalcLayout()
-	m.ChatView.ScrollToBottom()
-
 	return m, nil
 }
 

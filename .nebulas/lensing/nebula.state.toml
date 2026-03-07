@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'lensing'
-total_cost_usd = 25.672801249999996
+total_cost_usd = 32.2054615
 
 [phases]
 [phases.activity-stream]
@@ -47,9 +47,15 @@ summary = 'Solid diff rendering upgrade adding stat bars, change-type glyphs, hu
 
 [phases.scope-impact]
 bead_id = 'quasar-n10'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-06T22:50:44.723808423-05:00
-updated_at = 2026-03-06T23:01:27.613597351-05:00
+updated_at = 2026-03-06T23:13:17.480143303-05:00
+
+[phases.scope-impact.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'File impact view with cross-phase overlap detection is well-implemented, all prior findings resolved, clean architecture and thorough tests.'
 
 [phases.work-summary]
 bead_id = 'quasar-1q9'
