@@ -79,12 +79,18 @@ const titleBarHeight = 1
 // (separator + input + hint line).
 const inputAreaHeight = 3
 
+// styleChatPhaseBadge styles the phase ID badge in the title bar.
+var styleChatPhaseBadge = lipgloss.NewStyle().
+	Foreground(colorBlueshift).
+	Bold(true)
+
 // ChatView renders a scrollable conversation thread with a text input area.
 // It displays messages with role-based styling, basic markdown formatting,
 // and a loading spinner during AI inference.
 type ChatView struct {
-	Title    string // conversation title
-	ModelTag string // active model name shown in title bar
+	Title      string // conversation title
+	ModelTag   string // active model name shown in title bar
+	PhaseBadge string // linked phase ID shown in title bar (empty = no phase)
 
 	// ModelIndex is the 0-based index of the current model in the carousel.
 	ModelIndex int
@@ -305,7 +311,7 @@ func (cv ChatView) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
-// renderTitleBar renders the conversation title and model name with position.
+// renderTitleBar renders the conversation title, phase badge, and model name with position.
 func (cv ChatView) renderTitleBar() string {
 	title := cv.Title
 	if title == "" {
@@ -314,6 +320,10 @@ func (cv ChatView) renderTitleBar() string {
 
 	var parts []string
 	parts = append(parts, styleChatTitle.Render(title))
+
+	if cv.PhaseBadge != "" {
+		parts = append(parts, styleChatPhaseBadge.Render(fmt.Sprintf(" [phase:%s]", cv.PhaseBadge)))
+	}
 
 	if cv.ModelTag != "" {
 		modelText := fmt.Sprintf(" [%s]", cv.ModelTag)
