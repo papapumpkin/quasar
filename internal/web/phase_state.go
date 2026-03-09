@@ -28,7 +28,9 @@ type AgentDetail struct {
 	CostUSD    float64
 	DurationMs int64
 	IssueCount int
-	Output     string // truncated agent output
+	Output     string   // truncated agent output
+	Diff       string   // raw unified diff output
+	DiffFiles  []string // list of changed file paths
 	Done       bool
 }
 

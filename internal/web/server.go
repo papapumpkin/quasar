@@ -86,6 +86,7 @@ var pageTemplateFiles = []string{
 	"templates/dag.html",
 	"templates/phase_detail.html",
 	"templates/gate_list.html",
+	"templates/diff.html",
 }
 
 // NewServer creates a new web dashboard Server with the given configuration.

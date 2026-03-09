@@ -1,0 +1,42 @@
+{{template "layout" .}}
+
+{{define "title"}}Diff — {{.PhaseID}} Cycle {{.Cycle}} — Quasar Dashboard{{end}}
+
+{{define "content"}}
+<div class="phase-detail">
+    <a href="/phase/{{.PhaseID}}" class="back-link">&larr; {{.PhaseID}}</a>
+
+    <div class="phase-header">
+        <h1>{{.PhaseID}} — Cycle {{.Cycle}} Diff</h1>
+        {{if .NebulaName}}<h2>{{.NebulaName}}</h2>{{end}}
+    </div>
+
+    <div class="diff-viewer">
+        <div class="diff-stat">
+            <span>{{.Stat.FilesChanged}} file(s) changed</span>
+            <span class="diff-stat-add">+{{.Stat.Insertions}}</span>
+            <span class="diff-stat-del">-{{.Stat.Deletions}}</span>
+        </div>
+
+        {{range .Files}}
+        <details class="diff-file" {{if not .Collapsed}}open{{end}}>
+            <summary class="diff-file-header">
+                {{.Path}}
+                <span class="diff-file-stat">+{{.Additions}} -{{.Deletions}}</span>
+            </summary>
+            {{range .Hunks}}
+            <table class="diff-hunk">
+                {{range .Lines}}
+                <tr class="diff-line diff-line--{{.Type}}">
+                    <td class="line-num old-num">{{.OldNum}}</td>
+                    <td class="line-num new-num">{{.NewNum}}</td>
+                    <td class="line-content"><code>{{.Content}}</code></td>
+                </tr>
+                {{end}}
+            </table>
+            {{end}}
+        </details>
+        {{end}}
+    </div>
+</div>
+{{end}}
