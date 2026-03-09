@@ -484,7 +484,7 @@ func runApplyWithWeb(
 
 	// Create and start web server.
 	srv, err := web.NewServer(web.ServerConfig{
-		Bus:       eventBus,
+		Source:    web.NewBusAdapter(eventBus),
 		NebulaDir: ecfg.NebulaDir,
 		Port:      port,
 	})

@@ -1,13 +1,19 @@
 version = 1
 nebula_name = 'meridian'
-total_cost_usd = 5.9227535499999995
+total_cost_usd = 13.391312300000003
 
 [phases]
 [phases.cli-integration]
 bead_id = 'quasar-fjcs'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-05T22:38:44.426671-05:00
-updated_at = 2026-03-08T21:57:05.766441-04:00
+updated_at = 2026-03-08T22:13:18.207478-04:00
+
+[phases.cli-integration.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'CLI integration for `--web` flag on `nebula apply` and `cockpit` commands is clean, well-tested, and all prior findings are resolved.'
 
 [phases.dag-visualization]
 bead_id = 'quasar-0x6i'

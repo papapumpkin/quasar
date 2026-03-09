@@ -1,6 +1,3 @@
-// Package web provides an HTTP server that serves a live dashboard for
-// nebula execution. It bridges bus events to the browser via SSE and
-// renders phase status, cost, and cycle information.
 package web
 
 import (
@@ -14,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/papapumpkin/quasar/internal/bus"
 	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
@@ -26,9 +22,9 @@ var staticFS embed.FS
 
 // ServerConfig holds the configuration for a web dashboard Server.
 type ServerConfig struct {
-	// Bus is the event bus to subscribe to for SSE streaming. May be nil
-	// in read-only mode.
-	Bus bus.Bus
+	// Source provides SSE events to broadcast. May be nil in read-only or
+	// static-dashboard mode.
+	Source EventSource
 
 	// NebulaDir is the path to the nebula directory being viewed.
 	NebulaDir string
@@ -57,7 +53,7 @@ type Server struct {
 	mu        sync.RWMutex
 
 	// SSE connection tracking for graceful drain.
-	sseClients   map[chan bus.Event]struct{}
+	sseClients   map[chan Event]struct{}
 	sseMu        sync.Mutex
 	sseCloseOnce sync.Once
 }
@@ -75,7 +71,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		cfg:        cfg,
 		mux:        http.NewServeMux(),
 		templates:  tmpl,
-		sseClients: make(map[chan bus.Event]struct{}),
+		sseClients: make(map[chan Event]struct{}),
 	}
 	s.registerRoutes()
 	return s, nil
@@ -151,86 +147,4 @@ func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, "ok")
-}
-
-// handleSSE streams bus events to the client as Server-Sent Events.
-func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	// Flush headers immediately so the client sees the 200 response
-	// and Content-Type before any events arrive.
-	flusher.Flush()
-
-	// Create a per-client event channel.
-	ch := make(chan bus.Event, 64)
-	s.addSSEClient(ch)
-	defer s.removeSSEClient(ch)
-
-	// Subscribe to bus if available.
-	var sub bus.Subscription
-	if s.cfg.Bus != nil {
-		sub = s.cfg.Bus.Subscribe("web-sse", 128)
-		defer sub.Unsubscribe()
-
-		// Forward bus events to the client channel. The channel is
-		// closed by drainSSE during shutdown — do not close here to
-		// avoid double-close panics.
-		go func() {
-			for ev := range sub.Events() {
-				select {
-				case ch <- ev:
-				default:
-					// Drop event if client is slow.
-				}
-			}
-		}()
-	}
-
-	// Stream events to the client.
-	for {
-		select {
-		case ev, ok := <-ch:
-			if !ok {
-				return
-			}
-			fmt.Fprintf(w, "data: [%s] %s %s\n\n", ev.Kind, ev.PhaseID, ev.Message)
-			flusher.Flush()
-		case <-r.Context().Done():
-			return
-		}
-	}
-}
-
-// addSSEClient registers a client channel for SSE drain tracking.
-func (s *Server) addSSEClient(ch chan bus.Event) {
-	s.sseMu.Lock()
-	defer s.sseMu.Unlock()
-	s.sseClients[ch] = struct{}{}
-}
-
-// removeSSEClient unregisters a client channel.
-func (s *Server) removeSSEClient(ch chan bus.Event) {
-	s.sseMu.Lock()
-	defer s.sseMu.Unlock()
-	delete(s.sseClients, ch)
-}
-
-// drainSSE closes all active SSE client channels to unblock handlers
-// during graceful shutdown.
-func (s *Server) drainSSE() {
-	s.sseCloseOnce.Do(func() {
-		s.sseMu.Lock()
-		defer s.sseMu.Unlock()
-		for ch := range s.sseClients {
-			close(ch)
-			delete(s.sseClients, ch)
-		}
-	})
 }
