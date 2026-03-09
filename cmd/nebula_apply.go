@@ -340,22 +340,23 @@ func executeTUIRun(
 	return appModel, nil
 }
 
-// runApplyWithStderr runs the nebula execution with the stderr display path.
-func runApplyWithStderr(
+// buildStderrWorkerOpts constructs the loop, dashboard, and worker options
+// for the stderr-based display paths (plain stderr and web). The optional
+// eventBus is wired in when non-nil (used by the web path).
+func buildStderrWorkerOpts(
 	ctx context.Context,
-	cancel context.CancelFunc,
 	engine *nebula.Engine,
 	invoker *claude.Invoker,
 	client beads.Client,
 	ecfg nebula.EngineConfig,
 	printer *ui.Printer,
 	projectCtx string,
-) error {
+	eventBus *bus.MemoryBus,
+) []nebula.Option {
 	n := engine.GetNebula()
 	state := engine.GetState()
 	workDir := engine.WorkDir()
 
-	// Build stderr-specific worker options.
 	git := loop.NewCycleCommitterWithBranch(ctx, workDir, engine.BranchName())
 	taskLoop := &loop.Loop{
 		Invoker:           invoker,
@@ -384,14 +385,22 @@ func runApplyWithStderr(
 		dashboard.AppendOnly = true
 	}
 
-	wgOpts := []nebula.Option{
+	opts := []nebula.Option{
 		nebula.WithRunner(&loopAdapter{loop: taskLoop}),
 		nebula.WithDashboard(dashboard),
 		nebula.WithOnProgress(dashboard.ProgressCallback()),
 	}
-	wgOpts = append(wgOpts, resumeOptions(ecfg.Resume, workDir)...)
+	if eventBus != nil {
+		opts = append(opts, nebula.WithBus(eventBus))
+	}
+	opts = append(opts, resumeOptions(ecfg.Resume, workDir)...)
+	return opts
+}
 
-	// Signal handler for graceful shutdown.
+// installSignalHandler installs a SIGINT/SIGTERM handler that cancels the
+// context and prints a shutdown message. Returns a cleanup function that
+// stops signal delivery (call in defer).
+func installSignalHandler(cancel context.CancelFunc, printer *ui.Printer) func() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -399,18 +408,26 @@ func runApplyWithStderr(
 		printer.Info("\nshutting down...")
 		cancel()
 	}()
+	return func() { signal.Stop(sigCh) }
+}
 
-	printer.Info(fmt.Sprintf("starting workers (max %d)...", ecfg.MaxWorkers))
-	results, err := engine.Execute(ctx, wgOpts...)
-	printer.NebulaProgressBarDone()
-
-	if errors.Is(err, nebula.ErrManualStop) {
+// handleExecutionResult processes the results of a nebula execution:
+// displays worker results, cleans up checkpoints, and runs the
+// post-completion git workflow. Returns the execution error if fatal.
+func handleExecutionResult(
+	results []nebula.WorkerResult,
+	runErr error,
+	engine *nebula.Engine,
+	ecfg nebula.EngineConfig,
+	printer *ui.Printer,
+) error {
+	if errors.Is(runErr, nebula.ErrManualStop) {
 		printer.NebulaWorkerResults(results)
 		return nil
 	}
-	if err != nil {
-		printer.Error(err.Error())
-		return err
+	if runErr != nil {
+		printer.Error(runErr.Error())
+		return runErr
 	}
 
 	printer.NebulaWorkerResults(results)
@@ -422,6 +439,29 @@ func runApplyWithStderr(
 	}
 
 	return nil
+}
+
+// runApplyWithStderr runs the nebula execution with the stderr display path.
+func runApplyWithStderr(
+	ctx context.Context,
+	cancel context.CancelFunc,
+	engine *nebula.Engine,
+	invoker *claude.Invoker,
+	client beads.Client,
+	ecfg nebula.EngineConfig,
+	printer *ui.Printer,
+	projectCtx string,
+) error {
+	wgOpts := buildStderrWorkerOpts(ctx, engine, invoker, client, ecfg, printer, projectCtx, nil)
+
+	stopSignal := installSignalHandler(cancel, printer)
+	defer stopSignal()
+
+	printer.Info(fmt.Sprintf("starting workers (max %d)...", ecfg.MaxWorkers))
+	results, err := engine.Execute(ctx, wgOpts...)
+	printer.NebulaProgressBarDone()
+
+	return handleExecutionResult(results, err, engine, ecfg, printer)
 }
 
 // runApplyWithWeb runs the nebula execution with a web dashboard instead of
@@ -463,57 +503,12 @@ func runApplyWithWeb(
 	openBrowser(fmt.Sprintf("http://%s", addr))
 
 	// Wire nebula data into the web dashboard for rendering.
-	n := engine.GetNebula()
-	state := engine.GetState()
-	srv.SetNebula(n, state)
+	srv.SetNebula(engine.GetNebula(), engine.GetState())
 
-	// Build stderr-path worker options with bus.
-	workDir := engine.WorkDir()
+	wgOpts := buildStderrWorkerOpts(ctx, engine, invoker, client, ecfg, printer, projectCtx, eventBus)
 
-	git := loop.NewCycleCommitterWithBranch(ctx, workDir, engine.BranchName())
-	taskLoop := &loop.Loop{
-		Invoker:           invoker,
-		UI:                printer,
-		Git:               git,
-		Hooks:             []loop.Hook{&loop.BeadHook{Beads: client, UI: printer}},
-		Linter:            loop.NewLinter(ecfg.LintCommands, workDir),
-		MaxCycles:         ecfg.MaxReviewCycles,
-		MaxBudgetUSD:      ecfg.MaxBudgetUSD,
-		Model:             ecfg.Model,
-		CoderPrompt:       ecfg.CoderPrompt,
-		ReviewPrompt:      ecfg.ReviewerPrompt,
-		WorkDir:           workDir,
-		ProjectContext:    projectCtx,
-		MaxContextTokens:  ecfg.MaxContextTokens,
-		CacheOptimization: ecfg.CacheOptimization,
-		CacheVerbose:      ecfg.CacheVerbose,
-		CheckpointDir:     ecfg.NebulaDir,
-		FixEffort:         ecfg.FixEffort,
-		FallbackModel:     ecfg.FallbackModel,
-	}
-
-	isTTY := isStderrTTY()
-	dashboard := nebula.NewDashboard(os.Stderr, n, state, ecfg.MaxBudgetUSD, isTTY)
-	if n.Manifest.Execution.Gate == nebula.GateModeWatch {
-		dashboard.AppendOnly = true
-	}
-
-	wgOpts := []nebula.Option{
-		nebula.WithRunner(&loopAdapter{loop: taskLoop}),
-		nebula.WithDashboard(dashboard),
-		nebula.WithOnProgress(dashboard.ProgressCallback()),
-		nebula.WithBus(eventBus),
-	}
-	wgOpts = append(wgOpts, resumeOptions(ecfg.Resume, workDir)...)
-
-	// Signal handler for graceful shutdown.
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		printer.Info("\nshutting down...")
-		cancel()
-	}()
+	stopSignal := installSignalHandler(cancel, printer)
+	defer stopSignal()
 
 	printer.Info(fmt.Sprintf("starting workers (max %d)...", ecfg.MaxWorkers))
 	results, runErr := engine.Execute(ctx, wgOpts...)
@@ -523,24 +518,7 @@ func runApplyWithWeb(
 	time.AfterFunc(2*time.Second, srvCancel)
 	srv.Wait()
 
-	if errors.Is(runErr, nebula.ErrManualStop) {
-		printer.NebulaWorkerResults(results)
-		return nil
-	}
-	if runErr != nil {
-		printer.Error(runErr.Error())
-		return runErr
-	}
-
-	printer.NebulaWorkerResults(results)
-	cleanupCheckpoints(ecfg.NebulaDir)
-
-	// Post-completion git workflow.
-	if gitResult := engine.PostComplete(context.Background()); gitResult != nil {
-		printGitResult(printer, gitResult)
-	}
-
-	return nil
+	return handleExecutionResult(results, runErr, engine, ecfg, printer)
 }
 
 // buildTUIWorkerOpts constructs the worker options for the TUI display path.

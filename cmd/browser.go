@@ -23,5 +23,8 @@ func openBrowser(url string) {
 	}
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "[web] could not open browser: %v\n", err)
+		return
 	}
+	// Reap the child process in the background to avoid zombies.
+	go cmd.Wait() //nolint:errcheck
 }
