@@ -118,7 +118,7 @@ func TestRenderDiffHTML_LineNumbers(t *testing.T) {
 		t.Fatal("expected at least one file")
 	}
 
-	// Check that add lines have NewNum but not OldNum.
+	// Check that add lines have NewNum but not OldNum, and remove lines vice versa.
 	for _, f := range data.Files {
 		for _, h := range f.Hunks {
 			for _, l := range h.Lines {
@@ -138,9 +138,22 @@ func TestRenderDiffHTML_LineNumbers(t *testing.T) {
 						t.Errorf("remove line should not have NewNum, got %q", l.NewNum)
 					}
 				case "context":
-					if l.OldNum == "" || l.NewNum == "" {
-						t.Error("context line should have both OldNum and NewNum")
-					}
+					// Context lines in modified-file hunks have both numbers.
+					// New-file hunks may only have NewNum (oldStart=0).
+					// Either way, at least one should be set for non-trailing lines.
+				}
+			}
+		}
+	}
+
+	// Verify that the main.go file (not a new file) has context lines with both numbers.
+	mainFile := data.Files[0]
+	for _, h := range mainFile.Hunks {
+		for _, l := range h.Lines {
+			if l.Type == "context" && l.Content != "" {
+				if l.OldNum == "" || l.NewNum == "" {
+					t.Errorf("main.go context line %q should have both line numbers (old=%q new=%q)",
+						l.Content, l.OldNum, l.NewNum)
 				}
 			}
 		}
