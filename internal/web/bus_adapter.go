@@ -139,6 +139,12 @@ func buildEventPayload(ev bus.Event) eventPayload {
 		p.Count = ev.Count
 	}
 
+	// For agent output events, the output text lives in ev.Message.
+	// Map it to the Output field so the PhaseAccumulator can find it.
+	if ev.Kind == bus.KindPhaseAgentOutput || ev.Kind == bus.KindAgentOutput {
+		p.Output = ev.Message
+	}
+
 	// Attach progress payload for nebula progress events.
 	if ev.Progress != nil {
 		p.Completed = ev.Progress.Completed

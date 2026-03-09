@@ -3,6 +3,8 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
 	"sync"
 	"time"
 )
@@ -78,10 +80,13 @@ func (a *PhaseAccumulator) handle(ev Event) {
 }
 
 // parseData unmarshals the JSON data from a web event into the shared
-// eventPayload structure defined in bus_adapter.go.
+// eventPayload structure defined in bus_adapter.go. Logs to stderr on
+// parse failure and returns a zero-valued payload.
 func parseData(ev Event) eventPayload {
 	var d eventPayload
-	_ = json.Unmarshal([]byte(ev.Data), &d)
+	if err := json.Unmarshal([]byte(ev.Data), &d); err != nil {
+		fmt.Fprintf(os.Stderr, "[web] parseData: failed to unmarshal %s event: %v\n", ev.Type, err)
+	}
 	return d
 }
 
