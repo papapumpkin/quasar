@@ -124,6 +124,8 @@
 {"issue_id":"quasar-1sd6","label":"quasar"}
 {"issue_id":"quasar-1sd6","label":"tui"}
 {"issue_id":"quasar-1sd6","label":"ux"}
+{"issue_id":"quasar-1uy9","label":"quasar"}
+{"issue_id":"quasar-1uy9","label":"web"}
 {"issue_id":"quasar-1vw2","label":"cache"}
 {"issue_id":"quasar-1vw2","label":"cost-optimization"}
 {"issue_id":"quasar-1vw2","label":"quasar"}
@@ -355,6 +357,8 @@
 {"issue_id":"quasar-5r9x.5","label":"review-finding"}
 {"issue_id":"quasar-5r9x.6","label":"quasar"}
 {"issue_id":"quasar-5r9x.6","label":"review-finding"}
+{"issue_id":"quasar-5v39","label":"quasar"}
+{"issue_id":"quasar-5v39","label":"web"}
 {"issue_id":"quasar-5yf1","label":"cockpit"}
 {"issue_id":"quasar-5yf1","label":"fabric"}
 {"issue_id":"quasar-5yf1","label":"plan"}
@@ -567,6 +571,8 @@
 {"issue_id":"quasar-afxw","label":"quasar"}
 {"issue_id":"quasar-afxw","label":"tui"}
 {"issue_id":"quasar-afxw","label":"ux"}
+{"issue_id":"quasar-ahh6","label":"quasar"}
+{"issue_id":"quasar-ahh6","label":"web"}
 {"issue_id":"quasar-ajf","label":"concurrency"}
 {"issue_id":"quasar-ajf","label":"contracts"}
 {"issue_id":"quasar-ajf","label":"nebula"}
@@ -805,6 +811,8 @@
 {"issue_id":"quasar-epv","label":"visual"}
 {"issue_id":"quasar-eu88","label":"quasar"}
 {"issue_id":"quasar-eu88","label":"web"}
+{"issue_id":"quasar-extx","label":"quasar"}
+{"issue_id":"quasar-extx","label":"web"}
 {"issue_id":"quasar-f4rr","label":"quasar"}
 {"issue_id":"quasar-f4rr","label":"web"}
 {"issue_id":"quasar-f6e2","label":"quasar"}
@@ -853,11 +861,15 @@
 {"issue_id":"quasar-hf58","label":"architecture"}
 {"issue_id":"quasar-hf58","label":"cleanup"}
 {"issue_id":"quasar-hf58","label":"quasar"}
+{"issue_id":"quasar-hh58","label":"quasar"}
+{"issue_id":"quasar-hh58","label":"web"}
 {"issue_id":"quasar-hjzg","label":"quasar"}
 {"issue_id":"quasar-hjzg","label":"web"}
 {"issue_id":"quasar-hm5f","label":"context"}
 {"issue_id":"quasar-hm5f","label":"cost-optimization"}
 {"issue_id":"quasar-hm5f","label":"quasar"}
+{"issue_id":"quasar-i7ei","label":"quasar"}
+{"issue_id":"quasar-i7ei","label":"web"}
 {"issue_id":"quasar-i8s","label":"fabric"}
 {"issue_id":"quasar-i8s","label":"quasar"}
 {"issue_id":"quasar-ibk","label":"fabric"}
@@ -901,6 +913,8 @@
 {"issue_id":"quasar-iyyo.4","label":"quasar"}
 {"issue_id":"quasar-iyyo.4","label":"review-finding"}
 {"issue_id":"quasar-j5aw","label":"quasar"}
+{"issue_id":"quasar-jebs","label":"quasar"}
+{"issue_id":"quasar-jebs","label":"web"}
 {"issue_id":"quasar-jef","label":"quasar"}
 {"issue_id":"quasar-jef","label":"tui"}
 {"issue_id":"quasar-jg9o","label":"quasar"}
@@ -1136,6 +1150,8 @@
 {"issue_id":"quasar-ps9g","label":"adaptive-routing"}
 {"issue_id":"quasar-ps9g","label":"cost-optimization"}
 {"issue_id":"quasar-ps9g","label":"quasar"}
+{"issue_id":"quasar-psgq","label":"quasar"}
+{"issue_id":"quasar-psgq","label":"web"}
 {"issue_id":"quasar-pun","label":"quasar"}
 {"issue_id":"quasar-pun","label":"tui"}
 {"issue_id":"quasar-pun","label":"visual"}
