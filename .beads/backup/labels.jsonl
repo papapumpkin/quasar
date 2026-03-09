@@ -833,6 +833,15 @@
 {"issue_id":"quasar-eu88","label":"web"}
 {"issue_id":"quasar-extx","label":"quasar"}
 {"issue_id":"quasar-extx","label":"web"}
+{"issue_id":"quasar-extx.1","label":"quasar"}
+{"issue_id":"quasar-extx.1","label":"review-finding"}
+{"issue_id":"quasar-extx.1","label":"web"}
+{"issue_id":"quasar-extx.2","label":"quasar"}
+{"issue_id":"quasar-extx.2","label":"review-finding"}
+{"issue_id":"quasar-extx.2","label":"web"}
+{"issue_id":"quasar-extx.3","label":"quasar"}
+{"issue_id":"quasar-extx.3","label":"review-finding"}
+{"issue_id":"quasar-extx.3","label":"web"}
 {"issue_id":"quasar-f4rr","label":"quasar"}
 {"issue_id":"quasar-f4rr","label":"web"}
 {"issue_id":"quasar-f6e2","label":"quasar"}
