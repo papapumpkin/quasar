@@ -3,19 +3,14 @@
 {{define "title"}}{{.NebulaName}} - Quasar Dashboard{{end}}
 
 {{define "content"}}
-<div id="status-bar" class="status-bar" hx-swap-oob="true">
-    <span class="nebula-name">{{.NebulaName}}</span>
-    <div class="progress-bar">
-        <div class="progress-fill" style="width: {{.ProgressPct}}%"></div>
-    </div>
-    <span class="progress-text">{{.Completed}}/{{.Total}}</span>
-    <span class="cost">${{printf "%.4f" .TotalCost}}</span>
-    {{if gt .BudgetUSD 0.0}}<span class="budget">/ ${{printf "%.2f" .BudgetUSD}}</span>{{end}}
-    <span class="elapsed">{{.ElapsedSec}}s</span>
+<!-- Status bar: updated in real time via progress-update SSE events -->
+<div sse-swap="progress-update" hx-swap="innerHTML" id="status-container">
+    {{template "status-bar" .}}
 </div>
 
 {{if .Phases}}
-<table class="phase-table">
+<!-- Phase table: rows update via phase-update SSE events (hx-swap-oob on each row) -->
+<table class="phase-table" sse-swap="phase-update" hx-swap="none">
     <thead>
         <tr>
             <th class="col-status"></th>
@@ -35,17 +30,7 @@
         </tr>
         {{end}}
         {{$lastWave = .Wave}}
-        <tr id="phase-{{.ID}}" hx-swap-oob="true">
-            <td class="col-status phase-status--{{.Status}}">{{.StatusIcon}}</td>
-            <td class="col-id"><a href="/phase/{{.ID}}">{{.ID}}</a></td>
-            <td class="col-title">
-                {{.Title}}
-                {{if .BlockedBy}}<span class="blocked-by">blocked: {{index .BlockedBy 0}}{{if gt (len .BlockedBy) 1}} +{{len .BlockedBy}}{{end}}</span>{{end}}
-            </td>
-            <td class="col-cost">${{.CostUSD}}</td>
-            <td class="col-cycles">{{.Cycles}}</td>
-            <td class="col-wave">{{if gt .Wave 0}}{{.Wave}}{{end}}</td>
-        </tr>
+        {{template "phase-row" .}}
         {{end}}
     </tbody>
 </table>
@@ -55,4 +40,11 @@
     <p>Waiting for nebula execution to begin...</p>
 </div>
 {{end}}
+
+<!-- Completion overlay: populated when nebula-done SSE event arrives -->
+<div sse-swap="nebula-done" hx-swap="innerHTML" id="completion-overlay"></div>
+
+<div id="gate-container" sse-swap="gate-prompt" hx-swap="beforeend">
+    <!-- Gate forms appear here via SSE -->
+</div>
 {{end}}

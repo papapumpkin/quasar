@@ -1,0 +1,81 @@
+{{template "layout" .}}
+
+{{define "title"}}{{.Phase.ID}} - Quasar Dashboard{{end}}
+
+{{define "content"}}
+<div class="phase-detail">
+    <a href="/" class="back-link">&larr; Dashboard</a>
+
+    <div class="phase-header">
+        <h1>{{.Phase.ID}}</h1>
+        <h2>{{.Phase.Title}}</h2>
+        <div class="phase-meta">
+            <span class="status-badge status-badge--{{.Phase.Status}}">{{.Phase.Status}}</span>
+            <span class="cost">${{printf "%.4f" .Phase.TotalCost}}</span>
+            <span class="cycle-count">{{len .Phase.Cycles}} cycle(s)</span>
+        </div>
+        {{if .Phase.BlockedBy}}
+        <div class="blocked-list">
+            <span class="blocked-label">Blocked by:</span>
+            {{range .Phase.BlockedBy}}
+            <a href="/phase/{{.}}" class="blocked-dep">{{.}}</a>
+            {{end}}
+        </div>
+        {{end}}
+    </div>
+
+    {{if .Phase.Cycles}}
+    <div class="cycle-timeline" id="cycle-timeline"
+         hx-ext="sse" sse-connect="/events?phase={{.Phase.ID}}"
+         sse-swap="cycle-update" hx-swap="beforeend">
+        {{range .Phase.Cycles}}
+        <div class="cycle" id="cycle-{{.Number}}">
+            <div class="cycle-header">
+                <span class="cycle-number">Cycle {{.Number}}</span>
+            </div>
+            {{range .Agents}}
+            <div class="agent-entry agent-entry--{{.Role}}">
+                <div class="agent-header">
+                    <span class="agent-role">{{.Role}}</span>
+                    {{if .Done}}
+                    <span class="agent-cost">${{printf "%.4f" .CostUSD}}</span>
+                    <span class="agent-duration">{{.DurationMs}}ms</span>
+                    {{else}}
+                    <span class="agent-working">working&hellip;</span>
+                    {{end}}
+                    {{if gt .IssueCount 0}}
+                    <span class="agent-issues">{{.IssueCount}} issue(s)</span>
+                    {{end}}
+                </div>
+                {{if .Output}}
+                <pre class="agent-output">{{.Output}}</pre>
+                {{end}}
+            </div>
+            {{end}}
+            {{if .Summary}}
+            <div class="cycle-summary">
+                <span class="satisfaction satisfaction--{{.Summary.Satisfaction}}">
+                    {{.Summary.Satisfaction}}
+                </span>
+                {{if .Summary.Risk}}
+                <span class="risk risk--{{.Summary.Risk}}">risk: {{.Summary.Risk}}</span>
+                {{end}}
+                {{if gt .Summary.IssueCount 0}}
+                <span class="summary-issues">{{.Summary.IssueCount}} issue(s)</span>
+                {{end}}
+                {{if .Summary.Summary}}
+                <p class="summary-text">{{.Summary.Summary}}</p>
+                {{end}}
+            </div>
+            {{end}}
+        </div>
+        {{end}}
+    </div>
+    {{else}}
+    <div class="empty-state">
+        <h2>No cycles yet</h2>
+        <p>Waiting for phase execution to begin&hellip;</p>
+    </div>
+    {{end}}
+</div>
+{{end}}

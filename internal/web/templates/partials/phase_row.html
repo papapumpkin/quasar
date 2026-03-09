@@ -1,0 +1,13 @@
+{{define "phase-row"}}
+<tr id="phase-{{.ID}}" hx-swap-oob="true">
+    <td class="col-status phase-status--{{.Status}}">{{.StatusIcon}}</td>
+    <td class="col-id"><a href="/phase/{{.ID}}">{{.ID}}</a></td>
+    <td class="col-title">
+        {{.Title}}
+        {{if .BlockedBy}}<span class="blocked-by">blocked: {{index .BlockedBy 0}}{{if gt (len .BlockedBy) 1}} +{{len .BlockedBy}}{{end}}</span>{{end}}
+    </td>
+    <td class="col-cost">${{.CostUSD}}</td>
+    <td class="col-cycles">{{.Cycles}}</td>
+    <td class="col-wave">{{if gt .Wave 0}}{{.Wave}}{{end}}</td>
+</tr>
+{{end}}

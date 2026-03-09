@@ -11,6 +11,11 @@ type Event struct {
 
 	// Data is the JSON-encoded payload for this event.
 	Data string
+
+	// PhaseID is the originating phase for filtering. Not sent over the SSE
+	// wire — used internally by the SSE handler's ?phase= filter and by the
+	// PhaseAccumulator for routing.
+	PhaseID string
 }
 
 // EventSource provides a stream of typed events for SSE broadcasting.

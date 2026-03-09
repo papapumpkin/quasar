@@ -1,0 +1,29 @@
+{{define "gate_list.html"}}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gate Prompts - Quasar Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/htmx.min.js"></script>
+    <script src="/static/htmx-sse.js"></script>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">&larr; Dashboard</a>
+        <h1>Pending Gate Prompts</h1>
+        {{if .}}
+        <div class="gate-list">
+            {{range .}}
+            {{template "gate-form" .}}
+            {{end}}
+        </div>
+        {{else}}
+        <div class="empty-state">
+            <h2>No pending gates</h2>
+            <p>All phases are proceeding without gate prompts.</p>
+        </div>
+        {{end}}
+    </div>
+</body>
+</html>{{end}}

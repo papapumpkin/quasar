@@ -14,7 +14,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/nebula"
 )
 
-//go:embed templates/*.html
+//go:embed templates/*.html templates/partials/*.html
 var templateFS embed.FS
 
 //go:embed static/*
@@ -52,29 +52,110 @@ type Server struct {
 	startTime time.Time
 	mu        sync.RWMutex
 
+	// Per-phase event accumulator for detail page rendering.
+	accumulator *PhaseAccumulator
+
+	// Gate prompting for web-based gate decisions.
+	gater *WebGater
+
 	// SSE connection tracking for graceful drain.
 	sseClients   map[chan Event]struct{}
 	sseMu        sync.Mutex
 	sseCloseOnce sync.Once
 }
 
+// templateFuncMap provides custom functions available in all templates.
+var templateFuncMap = template.FuncMap{
+	"add": func(a, b int) int { return a + b },
+	"truncate": func(s string, max int) string {
+		if len(s) <= max {
+			return s
+		}
+		return s[:max-1] + "\u2026"
+	},
+}
+
+// pageTemplates lists the page template files that each get their own copy
+// of the layout to avoid conflicting block definitions.
+var pageTemplates = []string{
+	"templates/dashboard.html",
+	"templates/dag.html",
+	"templates/phase_detail.html",
+	"templates/gate_list.html",
+	"templates/gate_form.html",
+}
+
 // NewServer creates a new web dashboard Server with the given configuration.
 // It registers HTTP routes and parses embedded templates but does not start
 // listening.
 func NewServer(cfg ServerConfig) (*Server, error) {
-	tmpl, err := template.ParseFS(templateFS, "templates/*.html")
+	tmpl, err := parsePageTemplates()
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
 
 	s := &Server{
-		cfg:        cfg,
-		mux:        http.NewServeMux(),
-		templates:  tmpl,
-		sseClients: make(map[chan Event]struct{}),
+		cfg:         cfg,
+		mux:         http.NewServeMux(),
+		templates:   tmpl,
+		sseClients:  make(map[chan Event]struct{}),
+		accumulator: NewPhaseAccumulator(),
 	}
+	s.gater = NewWebGater(s)
 	s.registerRoutes()
 	return s, nil
+}
+
+// parsePageTemplates builds a composite template set where each page gets its
+// own copy of the shared layout. This prevents conflicting block definitions
+// (e.g. "title", "content") from overriding each other across pages.
+func parsePageTemplates() (*template.Template, error) {
+	// Parse shared layout and partials first.
+	layout, err := template.New("layout").Funcs(templateFuncMap).ParseFS(
+		templateFS, "templates/layout.html",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("parse layout: %w", err)
+	}
+
+	// Also parse partials into layout if they exist.
+	partials, _ := templateFS.ReadDir("templates/partials")
+	if len(partials) > 0 {
+		layout, err = layout.ParseFS(templateFS, "templates/partials/*.html")
+		if err != nil {
+			return nil, fmt.Errorf("parse partials: %w", err)
+		}
+	}
+
+	// Build the root template that collects all page templates.
+	root := template.New("").Funcs(templateFuncMap)
+
+	for _, page := range pageTemplates {
+		// Clone the layout so each page gets independent block definitions.
+		pageLayout, err := layout.Clone()
+		if err != nil {
+			return nil, fmt.Errorf("clone layout for %s: %w", page, err)
+		}
+		pageTmpl, err := pageLayout.ParseFS(templateFS, page)
+		if err != nil {
+			return nil, fmt.Errorf("parse %s: %w", page, err)
+		}
+
+		// Extract the page-specific template (named by filename) and add
+		// it to the root set so handlers can ExecuteTemplate by name.
+		for _, t := range pageTmpl.Templates() {
+			if t.Name() == "" || t.Name() == "layout" {
+				continue
+			}
+			// Add to root with a unique association.
+			_, err = root.AddParseTree(t.Name(), t.Tree)
+			if err != nil {
+				return nil, fmt.Errorf("register %s: %w", t.Name(), err)
+			}
+		}
+	}
+
+	return root, nil
 }
 
 // SetNebula updates the nebula and state used for dashboard rendering.
@@ -100,6 +181,15 @@ func (s *Server) Start(ctx context.Context) (string, error) {
 	s.addr = ln.Addr().String()
 
 	s.httpServer = &http.Server{Handler: s.mux}
+
+	// Start the phase accumulator if an event source is available.
+	if s.cfg.Source != nil {
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.accumulator.Start(ctx, s.cfg.Source)
+		}()
+	}
 
 	s.wg.Add(1)
 	go func() {
@@ -134,11 +224,20 @@ func (s *Server) Addr() string {
 	return s.addr
 }
 
+// Gater returns the server's WebGater for use as a nebula.GatePrompter.
+func (s *Server) Gater() *WebGater {
+	return s.gater
+}
+
 // registerRoutes sets up the HTTP route handlers.
 func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/", s.handleDashboard)
 	s.mux.HandleFunc("/healthz", s.handleHealthz)
 	s.mux.HandleFunc("/events", s.handleSSE)
+	s.mux.HandleFunc("/phase/{id}", s.handlePhaseDetail)
+	s.mux.HandleFunc("GET /dag", s.handleDAG)
+	s.mux.HandleFunc("GET /gates", s.handleGateList)
+	s.mux.HandleFunc("POST /gate/{id}", s.handleGateResolve)
 	s.mux.Handle("/static/", http.FileServerFS(staticFS))
 }
 

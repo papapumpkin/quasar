@@ -1,0 +1,11 @@
+{{define "status-bar"}}
+<div id="status-bar" hx-swap-oob="true" class="status-bar">
+    <span class="nebula-name">{{.NebulaName}}</span>
+    <div class="progress-bar">
+        <div class="progress-fill" style="width: {{.ProgressPct}}%"></div>
+    </div>
+    <span class="progress-text">{{.Completed}}/{{.Total}}</span>
+    <span class="cost mono">${{printf "%.4f" .TotalCost}}</span>
+    {{if gt .BudgetUSD 0.0}}<span class="budget">/ ${{printf "%.2f" .BudgetUSD}}</span>{{end}}
+</div>
+{{end}}

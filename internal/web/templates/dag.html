@@ -1,0 +1,49 @@
+{{template "layout" .}}
+
+{{define "title"}}DAG - {{.NebulaName}} - Quasar{{end}}
+
+{{define "content"}}
+<div class="dag-header">
+    <h1 class="dag-title">{{.NebulaName}} — Dependency Graph</h1>
+    <a href="/" class="dag-back">&larr; Dashboard</a>
+</div>
+
+{{if .Layout.Nodes}}
+<div class="dag-container" hx-ext="sse" sse-connect="/events" sse-swap="dag-update" hx-swap="none">
+    <svg viewBox="0 0 {{.Layout.Width}} {{.Layout.Height}}"
+         class="dag-svg" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <marker id="arrowhead" markerWidth="10" markerHeight="7"
+                    refX="10" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#8b949e"/>
+            </marker>
+        </defs>
+
+        {{range .Layout.Edges}}
+        <line x1="{{.FromX}}" y1="{{.FromY}}"
+              x2="{{.ToX}}" y2="{{.ToY}}"
+              class="dag-edge {{.CSSClass}}"
+              marker-end="url(#arrowhead)"/>
+        {{end}}
+
+        {{range .Layout.Nodes}}
+        <a href="{{.Link}}">
+            <rect x="{{.X}}" y="{{.Y}}"
+                  width="180" height="50" rx="8"
+                  class="dag-node {{.CSSClass}}"
+                  id="dag-node-{{.ID}}"/>
+            <text x="{{add .X 90}}" y="{{add .Y 20}}"
+                  text-anchor="middle" class="dag-node-id">{{.ID}}</text>
+            <text x="{{add .X 90}}" y="{{add .Y 38}}"
+                  text-anchor="middle" class="dag-node-title">{{truncate .Title 20}}</text>
+        </a>
+        {{end}}
+    </svg>
+</div>
+{{else}}
+<div class="empty-state">
+    <h2>No phases loaded</h2>
+    <p>Waiting for nebula execution to begin...</p>
+</div>
+{{end}}
+{{end}}
