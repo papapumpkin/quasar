@@ -165,7 +165,7 @@ func TestPhaseAccumulator_MultipleCycles(t *testing.T) {
 	acc.handle(makeEvent("phase.agent.start", "p1", eventPayload{Phase: "p1", Role: "coder"}))
 	acc.handle(makeEvent("phase.agent.done", "p1", eventPayload{Phase: "p1", Role: "coder", CostUSD: 0.01}))
 	acc.handle(makeEvent("phase.cycle.summary", "p1", eventPayload{
-		Phase: "p1",
+		Phase:   "p1",
 		Summary: &summaryPayload{Cycle: 1, Approved: false, IssueCount: 2},
 	}))
 
@@ -174,7 +174,7 @@ func TestPhaseAccumulator_MultipleCycles(t *testing.T) {
 	acc.handle(makeEvent("phase.agent.start", "p1", eventPayload{Phase: "p1", Role: "coder"}))
 	acc.handle(makeEvent("phase.agent.done", "p1", eventPayload{Phase: "p1", Role: "coder", CostUSD: 0.02}))
 	acc.handle(makeEvent("phase.cycle.summary", "p1", eventPayload{
-		Phase: "p1",
+		Phase:   "p1",
 		Summary: &summaryPayload{Cycle: 2, Approved: true},
 	}))
 
