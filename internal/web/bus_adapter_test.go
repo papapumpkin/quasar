@@ -117,6 +117,66 @@ func TestBusAdapter_MultipleSubscribers(t *testing.T) {
 	}
 }
 
+// TestBusEventToAccumulator_AgentOutput verifies that agent output in a
+// bus.Event.Message flows through busEventToWebEvent into the accumulator's
+// Output field. This is an integration-style test catching serialization
+// mismatches between the bus adapter and the accumulator.
+func TestBusEventToAccumulator_AgentOutput(t *testing.T) {
+	t.Parallel()
+
+	acc := NewPhaseAccumulator()
+
+	// Simulate the sequence: task started → cycle start → agent start → agent output.
+	started := bus.NewPhase(bus.KindPhaseTaskStarted, "p1")
+	started.Title = "Output Integration"
+	acc.handle(busEventToWebEvent(started))
+
+	cycleStart := bus.NewPhase(bus.KindPhaseCycleStart, "p1")
+	cycleStart.Cycle = 1
+	acc.handle(busEventToWebEvent(cycleStart))
+
+	agentStart := bus.NewPhase(bus.KindPhaseAgentStart, "p1")
+	agentStart.Role = "coder"
+	acc.handle(busEventToWebEvent(agentStart))
+
+	// In real bus events, agent output is carried in ev.Message.
+	agentOutput := bus.NewPhase(bus.KindPhaseAgentOutput, "p1")
+	agentOutput.Role = "coder"
+	agentOutput.Cycle = 1
+	agentOutput.Message = "implemented the feature"
+	acc.handle(busEventToWebEvent(agentOutput))
+
+	pd := acc.Get("p1")
+	if pd == nil {
+		t.Fatal("expected PhaseDetail for p1")
+	}
+	if len(pd.Cycles) == 0 || len(pd.Cycles[0].Agents) == 0 {
+		t.Fatal("expected cycle with agent")
+	}
+	agent := pd.Cycles[0].Agents[0]
+	if agent.Output != "implemented the feature" {
+		t.Errorf("agent output = %q, want %q", agent.Output, "implemented the feature")
+	}
+}
+
+// TestBusEventToWebEvent_PhaseID verifies that PhaseID is populated on the
+// web event for internal routing.
+func TestBusEventToWebEvent_PhaseID(t *testing.T) {
+	t.Parallel()
+
+	ev := bus.NewPhase(bus.KindPhaseAgentDone, "my-phase")
+	ev.Role = "coder"
+	ev.CostUSD = 0.05
+	webEv := busEventToWebEvent(ev)
+
+	if webEv.PhaseID != "my-phase" {
+		t.Errorf("PhaseID = %q, want %q", webEv.PhaseID, "my-phase")
+	}
+	if webEv.Type != string(bus.KindPhaseAgentDone) {
+		t.Errorf("Type = %q, want %q", webEv.Type, string(bus.KindPhaseAgentDone))
+	}
+}
+
 func TestJsonString(t *testing.T) {
 	t.Parallel()
 
