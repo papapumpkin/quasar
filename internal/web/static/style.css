@@ -762,3 +762,124 @@ a:hover {
     color: var(--color-success);
     font-size: 13px;
 }
+
+/* Diff Viewer */
+.diff-viewer {
+    margin-top: 16px;
+}
+
+.diff-stat {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--color-surface);
+    border-radius: 8px;
+    padding: 12px 20px;
+    margin-bottom: 16px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--color-muted-light);
+}
+
+.diff-stat-add {
+    color: var(--color-success);
+    font-weight: 700;
+}
+
+.diff-stat-del {
+    color: var(--color-danger);
+    font-weight: 700;
+}
+
+.diff-file {
+    margin-bottom: 12px;
+    border: 1px solid var(--color-muted);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.diff-file-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--color-surface);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-white);
+    cursor: pointer;
+    user-select: none;
+}
+
+.diff-file-header:hover {
+    background: var(--color-surface-bright);
+}
+
+.diff-file-stat {
+    font-weight: 400;
+    font-size: 12px;
+    color: var(--color-muted-light);
+}
+
+.diff-hunk {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.diff-hunk + .diff-hunk {
+    border-top: 1px solid var(--color-muted);
+}
+
+.diff-line td {
+    padding: 0 8px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.line-num {
+    width: 48px;
+    min-width: 48px;
+    text-align: right;
+    color: var(--color-muted);
+    user-select: none;
+    vertical-align: top;
+    padding-right: 8px;
+    border-right: 1px solid rgba(72, 79, 88, 0.3);
+}
+
+.line-content {
+    padding-left: 12px;
+}
+
+.line-content code {
+    font-family: inherit;
+}
+
+.diff-line--add {
+    background: rgba(0, 230, 118, 0.08);
+}
+
+.diff-line--add .line-content code {
+    color: var(--color-success);
+}
+
+.diff-line--remove {
+    background: rgba(255, 123, 114, 0.08);
+}
+
+.diff-line--remove .line-content code {
+    color: var(--color-danger);
+}
+
+.diff-line--context .line-content code {
+    color: var(--color-muted-light);
+}
+
+.diff-link {
+    font-size: 12px;
+    margin-left: 8px;
+}

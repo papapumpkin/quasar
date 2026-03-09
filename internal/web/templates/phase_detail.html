@@ -28,7 +28,9 @@
     <div class="cycle-timeline" id="cycle-timeline"
          hx-ext="sse" sse-connect="/events?phase={{.Phase.ID}}"
          sse-swap="cycle-update" hx-swap="beforeend">
+        {{$phaseID := .Phase.ID}}
         {{range .Phase.Cycles}}
+        {{$cycleNum := .Number}}
         <div class="cycle" id="cycle-{{.Number}}">
             <div class="cycle-header">
                 <span class="cycle-number">Cycle {{.Number}}</span>
@@ -45,6 +47,9 @@
                     {{end}}
                     {{if gt .IssueCount 0}}
                     <span class="agent-issues">{{.IssueCount}} issue(s)</span>
+                    {{end}}
+                    {{if .Diff}}
+                    <a href="/phase/{{$phaseID}}/diff/{{$cycleNum}}" class="diff-link">View Diff</a>
                     {{end}}
                 </div>
                 {{if .Output}}
