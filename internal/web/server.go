@@ -86,7 +86,6 @@ var pageTemplateFiles = []string{
 	"templates/dag.html",
 	"templates/phase_detail.html",
 	"templates/gate_list.html",
-	"templates/gate_form.html",
 }
 
 // NewServer creates a new web dashboard Server with the given configuration.
@@ -133,26 +132,12 @@ func parsePageTemplates() (map[string]*template.Template, error) {
 		}
 	}
 
-	// companions maps a page to additional template files that should be
-	// parsed into its set (e.g. gate_list includes gate_form inline).
-	companions := map[string][]string{
-		"templates/gate_list.html": {"templates/gate_form.html"},
-	}
-
 	tmpls := make(map[string]*template.Template, len(pageTemplateFiles))
 	for _, page := range pageTemplateFiles {
 		// Clone the layout so each page gets independent block definitions.
 		pageTmpl, err := layout.Clone()
 		if err != nil {
 			return nil, fmt.Errorf("clone layout for %s: %w", page, err)
-		}
-
-		// Parse companion templates first so the page can reference them.
-		for _, comp := range companions[page] {
-			pageTmpl, err = pageTmpl.ParseFS(templateFS, comp)
-			if err != nil {
-				return nil, fmt.Errorf("parse companion %s for %s: %w", comp, page, err)
-			}
 		}
 
 		pageTmpl, err = pageTmpl.ParseFS(templateFS, page)

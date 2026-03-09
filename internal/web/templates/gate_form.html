@@ -1,35 +1,4 @@
-{{define "gate-form"}}
-<div id="gate-{{.PhaseID}}" class="gate-form">
-    <div class="gate-header">
-        <h3>Gate: {{.PhaseID}}</h3>
-        <span class="gate-title">{{.PhaseTitle}}</span>
-    </div>
-    <div class="gate-review">
-        <div class="gate-meta">
-            {{if .Satisfaction}}<span class="satisfaction satisfaction--{{.Satisfaction}}">{{.Satisfaction}}</span>{{end}}
-            {{if .Risk}}<span class="risk risk--{{.Risk}}">risk: {{.Risk}}</span>{{end}}
-            <span class="cost">${{printf "%.4f" .CostUSD}}</span>
-            <span class="cycles">{{.ReviewCycles}} cycle(s)</span>
-        </div>
-        {{if .Summary}}<p class="gate-summary">{{.Summary}}</p>{{end}}
-        {{if .FilesChanged}}
-        <details class="gate-files">
-            <summary>{{len .FilesChanged}} file(s) changed</summary>
-            <ul>
-                {{range .FilesChanged}}
-                <li>{{.}}</li>
-                {{end}}
-            </ul>
-        </details>
-        {{end}}
-    </div>
-    <div class="gate-actions">
-        {{range .Options}}
-        <form hx-post="/gate/{{$.PhaseID}}" hx-target="#gate-{{$.PhaseID}}" hx-swap="outerHTML">
-            <input type="hidden" name="action" value="{{.Action}}">
-            <button type="submit" class="gate-btn gate-btn--{{.Action}}">{{.Label}}</button>
-        </form>
-        {{end}}
-    </div>
-</div>
-{{end}}
+{{/* Gate form partial has moved to partials/gate_form.html. */}}
+{{/* This file is intentionally empty — it exists only because the embed */}}
+{{/* directive matches templates/*.html. The actual gate-form template is */}}
+{{/* defined in partials/gate_form.html and available to all page clones. */}}
