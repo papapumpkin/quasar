@@ -234,6 +234,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /dag", s.handleDAG)
 	s.mux.HandleFunc("GET /gates", s.handleGateList)
 	s.mux.HandleFunc("POST /gate/{id}", s.handleGateResolve)
+	s.mux.HandleFunc("GET /phase/{id}/diff/{cycle}", s.handleDiff)
 	s.mux.Handle("/static/", http.FileServerFS(staticFS))
 }
 
