@@ -116,7 +116,7 @@ func (s *Server) broadcast(ev Event) {
 // connected SSE clients as a "gate-prompt" event.
 func (s *Server) broadcastGatePrompt(req *GateRequest) {
 	var buf strings.Builder
-	if err := s.pageTmpls["gate_form.html"].ExecuteTemplate(&buf, "gate-form", req); err != nil {
+	if err := s.pageTmpls["gate_list.html"].ExecuteTemplate(&buf, "gate-form", req); err != nil {
 		fmt.Fprintf(&buf, `<div class="gate-error">failed to render gate form: %s</div>`, err.Error())
 	}
 	s.broadcast(Event{
