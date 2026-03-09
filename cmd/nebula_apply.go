@@ -326,8 +326,8 @@ func executeTUIRun(
 
 	finalModel, tuiErr := tuiProgram.Run()
 	cancel()
+	eventBus.Close() // must close before Stop — Unsubscribe doesn't close the channel
 	busSub.Stop()
-	eventBus.Close()
 
 	if tuiErr != nil {
 		return tui.AppModel{}, fmt.Errorf("TUI error: %w", tuiErr)
