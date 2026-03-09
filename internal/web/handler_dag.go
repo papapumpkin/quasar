@@ -30,8 +30,9 @@ func (s *Server) handleDAG(w http.ResponseWriter, _ *http.Request) {
 		Layout:     layout,
 	}
 
+	tmpl := s.pageTmpls["dag.html"]
 	var buf bytes.Buffer
-	if err := s.templates.ExecuteTemplate(&buf, "dag.html", data); err != nil {
+	if err := tmpl.ExecuteTemplate(&buf, "dag.html", data); err != nil {
 		http.Error(w, "template error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

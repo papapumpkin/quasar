@@ -46,7 +46,7 @@ func TestHandleDAG_BasicSVG(t *testing.T) {
 	}
 
 	// Verify correct number of node rects (3 phases = 3 rects).
-	rectCount := strings.Count(body, "class=\"dag-node")
+	rectCount := strings.Count(body, "class=\"dag-node node--")
 	if rectCount != 3 {
 		t.Errorf("expected 3 dag-node rects, got %d", rectCount)
 	}
@@ -144,7 +144,7 @@ func TestHandleDAG_Diamond(t *testing.T) {
 	body := rr.Body.String()
 
 	// 4 nodes, 4 edges.
-	rectCount := strings.Count(body, "class=\"dag-node")
+	rectCount := strings.Count(body, "class=\"dag-node node--")
 	if rectCount != 4 {
 		t.Errorf("expected 4 dag-node rects, got %d", rectCount)
 	}

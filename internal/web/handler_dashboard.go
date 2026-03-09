@@ -84,7 +84,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	// Render to a buffer first so that template errors produce a clean 500
 	// response instead of garbled partial HTML with headers already sent.
 	var buf bytes.Buffer
-	if err := s.templates.ExecuteTemplate(&buf, "dashboard.html", data); err != nil {
+	if err := s.pageTmpls["dashboard.html"].ExecuteTemplate(&buf, "dashboard.html", data); err != nil {
 		http.Error(w, "template error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

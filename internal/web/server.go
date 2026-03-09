@@ -58,6 +58,10 @@ type Server struct {
 	// Gate prompting for web-based gate decisions.
 	gater *WebGater
 
+	// Per-page template sets, each with its own copy of the layout to avoid
+	// conflicting block definitions across pages.
+	pageTmpls map[string]*template.Template
+
 	// SSE connection tracking for graceful drain.
 	sseClients   map[chan Event]struct{}
 	sseMu        sync.Mutex
@@ -75,9 +79,9 @@ var templateFuncMap = template.FuncMap{
 	},
 }
 
-// pageTemplates lists the page template files that each get their own copy
-// of the layout to avoid conflicting block definitions.
-var pageTemplates = []string{
+// pageTemplateFiles lists the page template files that each get their own
+// clone of the layout to avoid conflicting block definitions.
+var pageTemplateFiles = []string{
 	"templates/dashboard.html",
 	"templates/dag.html",
 	"templates/phase_detail.html",
@@ -89,7 +93,7 @@ var pageTemplates = []string{
 // It registers HTTP routes and parses embedded templates but does not start
 // listening.
 func NewServer(cfg ServerConfig) (*Server, error) {
-	tmpl, err := parsePageTemplates()
+	pageTmpls, err := parsePageTemplates()
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
@@ -97,7 +101,8 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	s := &Server{
 		cfg:         cfg,
 		mux:         http.NewServeMux(),
-		templates:   tmpl,
+		templates:   pageTmpls["dashboard.html"],
+		pageTmpls:   pageTmpls,
 		sseClients:  make(map[chan Event]struct{}),
 		accumulator: NewPhaseAccumulator(),
 	}
@@ -106,11 +111,12 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	return s, nil
 }
 
-// parsePageTemplates builds a composite template set where each page gets its
-// own copy of the shared layout. This prevents conflicting block definitions
+// parsePageTemplates builds a per-page template map where each page gets its
+// own clone of the shared layout. This prevents conflicting block definitions
 // (e.g. "title", "content") from overriding each other across pages.
-func parsePageTemplates() (*template.Template, error) {
-	// Parse shared layout and partials first.
+// The map key is the template filename (e.g. "dashboard.html").
+func parsePageTemplates() (map[string]*template.Template, error) {
+	// Parse shared layout and partials first as the base template.
 	layout, err := template.New("layout").Funcs(templateFuncMap).ParseFS(
 		templateFS, "templates/layout.html",
 	)
@@ -127,35 +133,39 @@ func parsePageTemplates() (*template.Template, error) {
 		}
 	}
 
-	// Build the root template that collects all page templates.
-	root := template.New("").Funcs(templateFuncMap)
+	// companions maps a page to additional template files that should be
+	// parsed into its set (e.g. gate_list includes gate_form inline).
+	companions := map[string][]string{
+		"templates/gate_list.html": {"templates/gate_form.html"},
+	}
 
-	for _, page := range pageTemplates {
+	tmpls := make(map[string]*template.Template, len(pageTemplateFiles))
+	for _, page := range pageTemplateFiles {
 		// Clone the layout so each page gets independent block definitions.
-		pageLayout, err := layout.Clone()
+		pageTmpl, err := layout.Clone()
 		if err != nil {
 			return nil, fmt.Errorf("clone layout for %s: %w", page, err)
 		}
-		pageTmpl, err := pageLayout.ParseFS(templateFS, page)
+
+		// Parse companion templates first so the page can reference them.
+		for _, comp := range companions[page] {
+			pageTmpl, err = pageTmpl.ParseFS(templateFS, comp)
+			if err != nil {
+				return nil, fmt.Errorf("parse companion %s for %s: %w", comp, page, err)
+			}
+		}
+
+		pageTmpl, err = pageTmpl.ParseFS(templateFS, page)
 		if err != nil {
 			return nil, fmt.Errorf("parse %s: %w", page, err)
 		}
 
-		// Extract the page-specific template (named by filename) and add
-		// it to the root set so handlers can ExecuteTemplate by name.
-		for _, t := range pageTmpl.Templates() {
-			if t.Name() == "" || t.Name() == "layout" {
-				continue
-			}
-			// Add to root with a unique association.
-			_, err = root.AddParseTree(t.Name(), t.Tree)
-			if err != nil {
-				return nil, fmt.Errorf("register %s: %w", t.Name(), err)
-			}
-		}
+		// Extract filename for the map key.
+		name := page[len("templates/"):]
+		tmpls[name] = pageTmpl
 	}
 
-	return root, nil
+	return tmpls, nil
 }
 
 // SetNebula updates the nebula and state used for dashboard rendering.

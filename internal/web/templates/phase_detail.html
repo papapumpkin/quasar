@@ -4,7 +4,7 @@
 
 {{define "content"}}
 <div class="phase-detail">
-    <a href="/" class="back-link">&larr; Dashboard</a>
+    <a href="/" class="back-link">&larr; {{if .NebulaName}}{{.NebulaName}}{{else}}Dashboard{{end}}</a>
 
     <div class="phase-header">
         <h1>{{.Phase.ID}}</h1>

@@ -17,7 +17,7 @@ func (s *Server) handleGateList(w http.ResponseWriter, _ *http.Request) {
 	pending := s.gater.Pending()
 
 	var buf bytes.Buffer
-	if err := s.templates.ExecuteTemplate(&buf, "gate_list.html", pending); err != nil {
+	if err := s.pageTmpls["gate_list.html"].ExecuteTemplate(&buf, "gate_list.html", pending); err != nil {
 		http.Error(w, "template error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

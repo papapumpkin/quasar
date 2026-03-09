@@ -200,7 +200,7 @@ func (b *SSEBridge) renderStatusBar(p progressEventPayload) (string, error) {
 // renderTemplate executes a named template into a string.
 func (b *SSEBridge) renderTemplate(name string, data any) (string, error) {
 	var buf bytes.Buffer
-	if err := b.server.templates.ExecuteTemplate(&buf, name, data); err != nil {
+	if err := b.server.pageTmpls["dashboard.html"].ExecuteTemplate(&buf, name, data); err != nil {
 		return "", fmt.Errorf("render %s: %w", name, err)
 	}
 	return strings.TrimSpace(buf.String()), nil

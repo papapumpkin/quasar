@@ -53,7 +53,7 @@ func (s *Server) handlePhaseDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var buf bytes.Buffer
-	if err := s.templates.ExecuteTemplate(&buf, "phase_detail.html", data); err != nil {
+	if err := s.pageTmpls["phase_detail.html"].ExecuteTemplate(&buf, "phase_detail.html", data); err != nil {
 		http.Error(w, "template error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
