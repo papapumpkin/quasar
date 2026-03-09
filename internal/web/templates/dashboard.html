@@ -1,0 +1,58 @@
+{{template "layout" .}}
+
+{{define "title"}}{{.NebulaName}} - Quasar Dashboard{{end}}
+
+{{define "content"}}
+<div id="status-bar" class="status-bar" hx-swap-oob="true">
+    <span class="nebula-name">{{.NebulaName}}</span>
+    <div class="progress-bar">
+        <div class="progress-fill" style="width: {{.ProgressPct}}%"></div>
+    </div>
+    <span class="progress-text">{{.Completed}}/{{.Total}}</span>
+    <span class="cost">${{printf "%.4f" .TotalCost}}</span>
+    {{if gt .BudgetUSD 0.0}}<span class="budget">/ ${{printf "%.2f" .BudgetUSD}}</span>{{end}}
+    <span class="elapsed">{{.ElapsedSec}}s</span>
+</div>
+
+{{if .Phases}}
+<table class="phase-table">
+    <thead>
+        <tr>
+            <th class="col-status"></th>
+            <th>ID</th>
+            <th>Title</th>
+            <th>Cost</th>
+            <th>Cycles</th>
+            <th>Wave</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{$lastWave := -1}}
+        {{range .Phases}}
+        {{if and (gt .Wave 0) (ne .Wave $lastWave)}}
+        <tr class="wave-separator">
+            <td colspan="6">── Wave {{.Wave}} ──</td>
+        </tr>
+        {{end}}
+        {{$lastWave = .Wave}}
+        <tr id="phase-{{.ID}}" hx-swap-oob="true">
+            <td class="col-status phase-status--{{.Status}}">{{.StatusIcon}}</td>
+            <td class="col-id"><a href="/phase/{{.ID}}">{{.ID}}</a></td>
+            <td class="col-title">
+                {{.Title}}
+                {{if .BlockedBy}}<span class="blocked-by">blocked: {{index .BlockedBy 0}}{{if gt (len .BlockedBy) 1}} +{{len .BlockedBy}}{{end}}</span>{{end}}
+            </td>
+            <td class="col-cost">${{.CostUSD}}</td>
+            <td class="col-cycles">{{.Cycles}}</td>
+            <td class="col-wave">{{if gt .Wave 0}}{{.Wave}}{{end}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{else}}
+<div class="empty-state">
+    <h2>No phases loaded</h2>
+    <p>Waiting for nebula execution to begin...</p>
+</div>
+{{end}}
+{{end}}

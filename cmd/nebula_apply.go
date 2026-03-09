@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/snapshot"
 	"github.com/papapumpkin/quasar/internal/tui"
 	"github.com/papapumpkin/quasar/internal/ui"
+	"github.com/papapumpkin/quasar/internal/web"
 )
 
 // addNebulaApplyFlags registers flags specific to the apply subcommand.
@@ -34,6 +36,8 @@ func addNebulaApplyFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("no-splash", false, "skip the startup splash animation")
 	cmd.Flags().Int("max-context-tokens", 0, "token budget for injected context (0 = use default 10000)")
 	cmd.Flags().Bool("resume", false, "resume from checkpoints if available (with --auto)")
+	cmd.Flags().Bool("web", false, "launch web dashboard alongside execution")
+	cmd.Flags().Int("web-port", 0, "port for web dashboard (0 = auto-assign)")
 }
 
 // runNebulaApply is the thin CLI adapter for "quasar nebula apply". It
@@ -105,6 +109,12 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	defer fc.Close()
 	engine.SetFabric(fc)
 
+	useWeb, _ := cmd.Flags().GetBool("web")
+	webPort, _ := cmd.Flags().GetInt("web-port")
+
+	if useWeb {
+		return runApplyWithWeb(ctx, cancel, engine, invoker, client, ecfg, printer, projectCtx, webPort)
+	}
 	if ecfg.UseTUI {
 		return runApplyWithTUI(ctx, cancel, engine, invoker, client, ecfg, printer, projectCtx, fc)
 	}
@@ -401,6 +411,125 @@ func runApplyWithStderr(
 	if err != nil {
 		printer.Error(err.Error())
 		return err
+	}
+
+	printer.NebulaWorkerResults(results)
+	cleanupCheckpoints(ecfg.NebulaDir)
+
+	// Post-completion git workflow.
+	if gitResult := engine.PostComplete(context.Background()); gitResult != nil {
+		printGitResult(printer, gitResult)
+	}
+
+	return nil
+}
+
+// runApplyWithWeb runs the nebula execution with a web dashboard instead of
+// the TUI or stderr display. It starts an HTTP server with SSE event
+// streaming, runs the engine, then shuts down gracefully.
+func runApplyWithWeb(
+	ctx context.Context,
+	cancel context.CancelFunc,
+	engine *nebula.Engine,
+	invoker *claude.Invoker,
+	client beads.Client,
+	ecfg nebula.EngineConfig,
+	printer *ui.Printer,
+	projectCtx string,
+	port int,
+) error {
+	// Create event bus for the web server.
+	eventBus := bus.NewMemoryBus()
+	defer eventBus.Close()
+
+	// Create and start web server.
+	srv, err := web.NewServer(web.ServerConfig{
+		Bus:       eventBus,
+		NebulaDir: ecfg.NebulaDir,
+		Port:      port,
+	})
+	if err != nil {
+		return fmt.Errorf("create web server: %w", err)
+	}
+
+	srvCtx, srvCancel := context.WithCancel(ctx)
+	defer srvCancel()
+
+	addr, err := srv.Start(srvCtx)
+	if err != nil {
+		return fmt.Errorf("start web server: %w", err)
+	}
+	printer.Info(fmt.Sprintf("[web] dashboard at http://%s", addr))
+	openBrowser(fmt.Sprintf("http://%s", addr))
+
+	// Wire nebula data into the web dashboard for rendering.
+	n := engine.GetNebula()
+	state := engine.GetState()
+	srv.SetNebula(n, state)
+
+	// Build stderr-path worker options with bus.
+	workDir := engine.WorkDir()
+
+	git := loop.NewCycleCommitterWithBranch(ctx, workDir, engine.BranchName())
+	taskLoop := &loop.Loop{
+		Invoker:           invoker,
+		UI:                printer,
+		Git:               git,
+		Hooks:             []loop.Hook{&loop.BeadHook{Beads: client, UI: printer}},
+		Linter:            loop.NewLinter(ecfg.LintCommands, workDir),
+		MaxCycles:         ecfg.MaxReviewCycles,
+		MaxBudgetUSD:      ecfg.MaxBudgetUSD,
+		Model:             ecfg.Model,
+		CoderPrompt:       ecfg.CoderPrompt,
+		ReviewPrompt:      ecfg.ReviewerPrompt,
+		WorkDir:           workDir,
+		ProjectContext:    projectCtx,
+		MaxContextTokens:  ecfg.MaxContextTokens,
+		CacheOptimization: ecfg.CacheOptimization,
+		CacheVerbose:      ecfg.CacheVerbose,
+		CheckpointDir:     ecfg.NebulaDir,
+		FixEffort:         ecfg.FixEffort,
+		FallbackModel:     ecfg.FallbackModel,
+	}
+
+	isTTY := isStderrTTY()
+	dashboard := nebula.NewDashboard(os.Stderr, n, state, ecfg.MaxBudgetUSD, isTTY)
+	if n.Manifest.Execution.Gate == nebula.GateModeWatch {
+		dashboard.AppendOnly = true
+	}
+
+	wgOpts := []nebula.Option{
+		nebula.WithRunner(&loopAdapter{loop: taskLoop}),
+		nebula.WithDashboard(dashboard),
+		nebula.WithOnProgress(dashboard.ProgressCallback()),
+		nebula.WithBus(eventBus),
+	}
+	wgOpts = append(wgOpts, resumeOptions(ecfg.Resume, workDir)...)
+
+	// Signal handler for graceful shutdown.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		printer.Info("\nshutting down...")
+		cancel()
+	}()
+
+	printer.Info(fmt.Sprintf("starting workers (max %d)...", ecfg.MaxWorkers))
+	results, runErr := engine.Execute(ctx, wgOpts...)
+	printer.NebulaProgressBarDone()
+
+	// Keep server alive briefly for final SSE delivery, then shut down.
+	time.AfterFunc(2*time.Second, srvCancel)
+	srv.Wait()
+
+	if errors.Is(runErr, nebula.ErrManualStop) {
+		printer.NebulaWorkerResults(results)
+		return nil
+	}
+	if runErr != nil {
+		printer.Error(runErr.Error())
+		return runErr
 	}
 
 	printer.NebulaWorkerResults(results)

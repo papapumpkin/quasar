@@ -13,7 +13,7 @@ The HTTP skeleton serves routes but has no actual page content. The TUI's `Nebul
 
 ## Solution
 
-Create a dashboard template at `internal/web/templates/dashboard.html` rendered by Go's `html/template`. The handler reads the current `nebula.Nebula` and `nebula.State` from the `Server` struct (guarded by `sync.RWMutex`) and maps them into a view model for the template.
+Create a dashboard template at `internal/web/templates/dashboard.html` rendered by Go's `html/template`. The handler reads the current `nebula.Nebula` and `nebula.State` from the web server struct (guarded by `sync.RWMutex`) and maps them into a view model for the template.
 
 ### View model
 
@@ -48,19 +48,7 @@ type PhaseRow struct {
 
 ### Handler
 
-```go
-func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
-    s.mu.RLock()
-    n := s.nebula
-    st := s.state
-    s.mu.RUnlock()
-
-    data := buildDashboardData(n, st)
-    if err := s.templates.ExecuteTemplate(w, "dashboard.html", data); err != nil {
-        http.Error(w, "template error", http.StatusInternalServerError)
-    }
-}
-```
+The `handleDashboard` method on the web server reads `nebula` and `state` under `RLock`, passes them to `buildDashboardData`, then executes the `dashboard.html` template. On template error it returns 500.
 
 ### Template structure
 

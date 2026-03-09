@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -15,6 +16,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/nebula"
 	"github.com/papapumpkin/quasar/internal/tui"
 	"github.com/papapumpkin/quasar/internal/ui"
+	"github.com/papapumpkin/quasar/internal/web"
 )
 
 // cockpitCmd launches the TUI home screen for browsing and running nebulas.
@@ -33,10 +35,13 @@ func init() {
 	cockpitCmd.Flags().String("dir", "", "directory to scan for .nebulas/ (default: cwd)")
 	cockpitCmd.Flags().Bool("no-splash", false, "skip the startup splash animation")
 	cockpitCmd.Flags().Int("max-workers", 1, "maximum concurrent workers")
+	cockpitCmd.Flags().Bool("web", false, "open web dashboard instead of TUI")
+	cockpitCmd.Flags().Int("web-port", 0, "port for web dashboard (0 = auto-assign)")
 	rootCmd.AddCommand(cockpitCmd)
 }
 
 // runTUI discovers nebulas in .nebulas/ and launches the home-to-execution loop.
+// When --web is set, it launches the web dashboard instead of the BubbleTea TUI.
 func runTUI(cmd *cobra.Command, _ []string) error {
 	printer := ui.New()
 
@@ -55,6 +60,12 @@ func runTUI(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("no .nebulas/ directory found in %s", baseDir)
 	} else if err != nil {
 		return fmt.Errorf("failed to access %s: %w", nebulaeDir, err)
+	}
+
+	// Branch: web dashboard mode.
+	useWeb, _ := cmd.Flags().GetBool("web")
+	if useWeb {
+		return runCockpitWeb(cmd, baseDir, printer)
 	}
 
 	if !isStderrTTY() {
@@ -201,4 +212,34 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 		res.Err = appModel.DoneErr
 	}
 	return res
+}
+
+// runCockpitWeb launches the web dashboard for browsing nebula state
+// without execution. It blocks until the user sends SIGINT.
+func runCockpitWeb(cmd *cobra.Command, baseDir string, printer *ui.Printer) error {
+	port, _ := cmd.Flags().GetInt("web-port")
+
+	srv, err := web.NewServer(web.ServerConfig{
+		NebulaDir: filepath.Join(baseDir, ".nebulas"),
+		Port:      port,
+		ReadOnly:  true,
+	})
+	if err != nil {
+		return fmt.Errorf("create web server: %w", err)
+	}
+
+	ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
+	defer cancel()
+
+	addr, err := srv.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("start web server: %w", err)
+	}
+	printer.Info(fmt.Sprintf("[cockpit] web dashboard at http://%s", addr))
+	openBrowser(fmt.Sprintf("http://%s", addr))
+
+	// Block until interrupt.
+	<-ctx.Done()
+	srv.Wait()
+	return nil
 }
