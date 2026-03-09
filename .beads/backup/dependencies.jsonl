@@ -76,6 +76,10 @@
 {"created_at":"2026-02-18T09:17:19Z","created_by":"Aaron","depends_on_id":"quasar-699","issue_id":"quasar-699.1","type":"parent-child"}
 {"created_at":"2026-02-18T09:17:20Z","created_by":"Aaron","depends_on_id":"quasar-699","issue_id":"quasar-699.2","type":"parent-child"}
 {"created_at":"2026-02-23T09:24:44Z","created_by":"Aaron","depends_on_id":"quasar-69w","issue_id":"quasar-69w.2","type":"parent-child"}
+{"created_at":"2026-03-08T22:08:15Z","created_by":"Aaron","depends_on_id":"quasar-6xc5","issue_id":"quasar-6xc5.1","type":"parent-child"}
+{"created_at":"2026-03-08T22:08:15Z","created_by":"Aaron","depends_on_id":"quasar-6xc5","issue_id":"quasar-6xc5.2","type":"parent-child"}
+{"created_at":"2026-03-08T22:08:15Z","created_by":"Aaron","depends_on_id":"quasar-6xc5","issue_id":"quasar-6xc5.3","type":"parent-child"}
+{"created_at":"2026-03-08T22:08:15Z","created_by":"Aaron","depends_on_id":"quasar-6xc5","issue_id":"quasar-6xc5.4","type":"parent-child"}
 {"created_at":"2026-02-22T22:53:07Z","created_by":"Aaron","depends_on_id":"quasar-70z","issue_id":"quasar-70z.1","type":"parent-child"}
 {"created_at":"2026-02-22T22:57:22Z","created_by":"Aaron","depends_on_id":"quasar-70z","issue_id":"quasar-70z.2","type":"parent-child"}
 {"created_at":"2026-02-22T23:01:10Z","created_by":"Aaron","depends_on_id":"quasar-70z","issue_id":"quasar-70z.3","type":"parent-child"}
@@ -150,6 +154,9 @@
 {"created_at":"2026-02-23T12:10:20Z","created_by":"Aaron","depends_on_id":"quasar-ee7","issue_id":"quasar-ee7.3","type":"parent-child"}
 {"created_at":"2026-02-24T21:23:22Z","created_by":"Aaron","depends_on_id":"quasar-el6k","issue_id":"quasar-el6k.1","type":"parent-child"}
 {"created_at":"2026-02-24T21:23:22Z","created_by":"Aaron","depends_on_id":"quasar-el6k","issue_id":"quasar-el6k.2","type":"parent-child"}
+{"created_at":"2026-03-08T22:11:05Z","created_by":"Aaron","depends_on_id":"quasar-fjcs","issue_id":"quasar-fjcs.1","type":"parent-child"}
+{"created_at":"2026-03-08T22:11:05Z","created_by":"Aaron","depends_on_id":"quasar-fjcs","issue_id":"quasar-fjcs.2","type":"parent-child"}
+{"created_at":"2026-03-08T22:11:05Z","created_by":"Aaron","depends_on_id":"quasar-fjcs","issue_id":"quasar-fjcs.3","type":"parent-child"}
 {"created_at":"2026-03-02T15:02:51Z","created_by":"Aaron","depends_on_id":"quasar-gnah","issue_id":"quasar-gnah.1","type":"parent-child"}
 {"created_at":"2026-03-02T15:02:52Z","created_by":"Aaron","depends_on_id":"quasar-gnah","issue_id":"quasar-gnah.2","type":"parent-child"}
 {"created_at":"2026-03-02T15:02:53Z","created_by":"Aaron","depends_on_id":"quasar-gnah","issue_id":"quasar-gnah.3","type":"parent-child"}
