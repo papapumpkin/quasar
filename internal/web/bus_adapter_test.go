@@ -117,7 +117,7 @@ func TestBusAdapter_MultipleSubscribers(t *testing.T) {
 	}
 }
 
-func TestEscapeJSON(t *testing.T) {
+func TestJsonString(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -125,22 +125,23 @@ func TestEscapeJSON(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"empty", "", ""},
-		{"plain", "hello", "hello"},
-		{"quotes", `say "hi"`, `say \"hi\"`},
-		{"backslash", `path\to`, `path\\to`},
-		{"newline", "line1\nline2", `line1\nline2`},
-		{"tab", "col1\tcol2", `col1\tcol2`},
-		{"carriage return", "a\rb", `a\rb`},
-		{"mixed", "\"hello\"\n\\world", `\"hello\"\n\\world`},
+		{"empty", "", `""`},
+		{"plain", "hello", `"hello"`},
+		{"quotes", `say "hi"`, `"say \"hi\""`},
+		{"backslash", `path\to`, `"path\\to"`},
+		{"newline", "line1\nline2", `"line1\nline2"`},
+		{"tab", "col1\tcol2", `"col1\tcol2"`},
+		{"carriage return", "a\rb", `"a\rb"`},
+		{"null byte", "a\x00b", `"a\u0000b"`},
+		{"formfeed", "a\fb", "\"a\\fb\""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := escapeJSON(tt.in)
+			got := jsonString(tt.in)
 			if got != tt.want {
-				t.Errorf("escapeJSON(%q) = %q, want %q", tt.in, got, tt.want)
+				t.Errorf("jsonString(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
 	}

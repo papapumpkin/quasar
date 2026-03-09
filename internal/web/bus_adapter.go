@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/papapumpkin/quasar/internal/bus"
@@ -30,10 +31,8 @@ func (a *BusAdapter) Subscribe(ctx context.Context) (<-chan Event, func()) {
 	sub := a.bus.Subscribe("web-sse", 128)
 	ch := make(chan Event, 64)
 
-	done := make(chan struct{})
 	go func() {
 		defer close(ch)
-		defer close(done)
 		for {
 			select {
 			case ev, ok := <-sub.Events():
@@ -59,33 +58,19 @@ func (a *BusAdapter) Subscribe(ctx context.Context) (<-chan Event, func()) {
 }
 
 // busEventToWebEvent converts a bus.Event to a web.Event for SSE streaming.
-// The event Type is the bus Kind string; the Data is a human-readable
-// summary. Downstream phases will add JSON serialisation.
+// The event Type is the bus Kind string; the Data is a JSON object with
+// phase and message fields.
 func busEventToWebEvent(ev bus.Event) Event {
 	return Event{
 		Type: string(ev.Kind),
-		Data: fmt.Sprintf(`{"phase":"%s","message":"%s"}`, ev.PhaseID, escapeJSON(ev.Message)),
+		Data: fmt.Sprintf(`{"phase":%s,"message":%s}`, jsonString(ev.PhaseID), jsonString(ev.Message)),
 	}
 }
 
-// escapeJSON performs minimal JSON string escaping for embedded values.
-func escapeJSON(s string) string {
-	var out []byte
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '"':
-			out = append(out, '\\', '"')
-		case '\\':
-			out = append(out, '\\', '\\')
-		case '\n':
-			out = append(out, '\\', 'n')
-		case '\r':
-			out = append(out, '\\', 'r')
-		case '\t':
-			out = append(out, '\\', 't')
-		default:
-			out = append(out, s[i])
-		}
-	}
-	return string(out)
+// jsonString returns s as a JSON-encoded string literal (with surrounding
+// quotes). Uses encoding/json.Marshal so all control characters are escaped
+// correctly per the JSON spec.
+func jsonString(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
 }

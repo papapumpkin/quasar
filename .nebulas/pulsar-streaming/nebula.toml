@@ -1,0 +1,39 @@
+[nebula]
+name = "pulsar-streaming"
+description = "Make agent invocations observable in real-time by streaming stderr through goroutines and publishing to the event bus, then digest activity into human-readable summaries via Haiku"
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["quasar", "pulsar"]
+assignee = ""
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 50.0
+model = ""
+gate = ""
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Stream stderr from claude CLI subprocesses in real-time via goroutine + pipe instead of buffering",
+    "Publish agent output as bus events during invocation, not just after completion",
+    "Digest per-phase activity into one-line human-readable summaries using Haiku",
+]
+constraints = [
+    "Backward compatible — existing Invoke() signature and return type unchanged",
+    "If no observer is wired, behavior is identical to current buffered approach",
+    "All existing tests must pass after every phase",
+    "go build, go vet ./... must pass after every phase",
+    "No external dependencies — stdlib only (io.Pipe, bufio.Scanner, channels)",
+    "Context cancellation must still kill the subprocess cleanly",
+    "The digester must not block or slow down phase execution",
+    "Haiku calls are fire-and-forget — if they fail, the phase continues unaffected",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []
