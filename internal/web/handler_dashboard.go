@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"time"
@@ -80,10 +81,15 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	data := buildDashboardData(neb, state, startTime)
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.templates.ExecuteTemplate(w, "dashboard.html", data); err != nil {
+	// Render to a buffer first so that template errors produce a clean 500
+	// response instead of garbled partial HTML with headers already sent.
+	var buf bytes.Buffer
+	if err := s.templates.ExecuteTemplate(&buf, "dashboard.html", data); err != nil {
 		http.Error(w, "template error: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	buf.WriteTo(w)
 }
 
 // buildDashboardData transforms nebula and state into a template-ready view model.

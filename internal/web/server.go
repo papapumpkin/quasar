@@ -164,6 +164,9 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	// Flush headers immediately so the client sees the 200 response
+	// and Content-Type before any events arrive.
+	flusher.Flush()
 
 	// Create a per-client event channel.
 	ch := make(chan bus.Event, 64)
@@ -176,7 +179,9 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		sub = s.cfg.Bus.Subscribe("web-sse", 128)
 		defer sub.Unsubscribe()
 
-		// Forward bus events to the client channel.
+		// Forward bus events to the client channel. The channel is
+		// closed by drainSSE during shutdown — do not close here to
+		// avoid double-close panics.
 		go func() {
 			for ev := range sub.Events() {
 				select {
@@ -185,7 +190,6 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 					// Drop event if client is slow.
 				}
 			}
-			close(ch)
 		}()
 	}
 

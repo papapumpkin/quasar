@@ -31,6 +31,8 @@ func TestCockpitCmd_Flags(t *testing.T) {
 		{"dir", "dir"},
 		{"no-splash", "no-splash"},
 		{"max-workers", "max-workers"},
+		{"web", "web"},
+		{"web-port", "web-port"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

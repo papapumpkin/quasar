@@ -22,6 +22,11 @@ var allowedGlobals = map[string][]string{
 		// TODO: consider moving to a struct with embedded mutex.
 		"renderCache",
 	},
+	// web: embed.FS vars populated by //go:embed at compile time — immutable at runtime.
+	"web": {
+		"templateFS",
+		"staticFS",
+	},
 }
 
 // allowedGlobalPrefixes lists name prefixes for which all vars in the given

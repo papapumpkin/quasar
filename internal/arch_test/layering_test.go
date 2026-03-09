@@ -32,7 +32,8 @@ var layers = map[string]int{
 	"checkpoint": 4,
 	"nebula":     4,
 
-	"ui": 5,
+	"ui":  5,
+	"web": 5,
 
 	"tui": 6,
 }
