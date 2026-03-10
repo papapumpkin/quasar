@@ -2224,7 +2224,7 @@ func (m *AppModel) updateDetailFromSelection() {
 			)
 			return
 		}
-		body := FormatAgentOutput(agent.Output)
+		body := FormatAgentOutput(agent.Output, m.Detail.viewport.Width)
 		m.Detail.SetContentWithHeader(agent.Role+" output", header, body)
 
 	case ModeNebula:
@@ -2346,7 +2346,7 @@ func (m *AppModel) updateNebulaDetail() {
 			m.Detail.SetContentWithHeader(title, header, "(output will appear when agent completes)")
 			return
 		}
-		body := FormatAgentOutput(agent.Output)
+		body := FormatAgentOutput(agent.Output, m.Detail.viewport.Width)
 		m.Detail.SetContentWithHeader(title, header, body)
 
 	default:

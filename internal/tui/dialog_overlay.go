@@ -237,9 +237,10 @@ func (d *DialogOverlay) View(width, height int) string {
 	}
 	b.WriteString("\n")
 
-	// Context panel — scrollable detailed info.
+	// Context panel — scrollable, markdown-rendered detailed info.
 	if req.Context != "" {
-		contextLines := strings.Split(req.Context, "\n")
+		rendered := RenderMarkdown(req.Context, contentWidth)
+		contextLines := strings.Split(rendered, "\n")
 		maxContextLines := (height / 3)
 		if maxContextLines < 5 {
 			maxContextLines = 5

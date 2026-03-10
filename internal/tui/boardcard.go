@@ -40,7 +40,19 @@ func (bv BoardView) renderBoardEntry(p PhaseEntry, selected bool, colWidth int) 
 		sb.WriteString(fmt.Sprintf("  %s %s%s", icon, title, attention))
 	}
 
-	// Line 2: health dot + progress indicator + cost badge (for active/completed phases).
+	// Two-line entries: show phase ID on a second line when column is wide enough
+	// and the phase has both a title and an ID that differ.
+	if colWidth >= 35 && p.Title != "" && p.ID != "" {
+		idWidth := colWidth - 4
+		if idWidth < 4 {
+			idWidth = 4
+		}
+		truncID := TruncateWithEllipsis(p.ID, idWidth)
+		sb.WriteString("\n    ")
+		sb.WriteString(lipgloss.NewStyle().Foreground(colorMuted).Render(truncID))
+	}
+
+	// Next line: health dot + progress indicator + cost badge (for active/completed phases).
 	if p.Status == PhaseWorking || p.Status == PhaseDone || p.Status == PhaseFailed || p.Status == PhaseGate {
 		sb.WriteString("\n")
 		sb.WriteString(bv.renderCardMetaLine(p, colWidth))

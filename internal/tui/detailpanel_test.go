@@ -272,7 +272,7 @@ func TestFormatAgentOutput(t *testing.T) {
 	t.Parallel()
 	// FormatAgentOutput combines truncation and highlighting.
 	input := "APPROVED\nISSUE: missing tests\nnormal"
-	result := FormatAgentOutput(input)
+	result := FormatAgentOutput(input, 80)
 	if !strings.Contains(result, "APPROVED") {
 		t.Error("should contain APPROVED")
 	}

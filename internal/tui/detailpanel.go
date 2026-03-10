@@ -325,8 +325,12 @@ func TruncateOutput(text string, maxLines int) string {
 	return truncated + indicator
 }
 
-// FormatAgentOutput applies truncation and highlighting to agent output.
-func FormatAgentOutput(output string) string {
+// FormatAgentOutput applies truncation, markdown rendering, and keyword
+// highlighting to agent output. Markdown is rendered first (headings, code
+// blocks, lists get ANSI styling), then keyword highlights are layered on
+// top for APPROVED/ISSUE/SEVERITY lines.
+func FormatAgentOutput(output string, width int) string {
 	truncated := TruncateOutput(output, maxOutputLines)
-	return HighlightOutput(truncated)
+	rendered := RenderMarkdown(truncated, width)
+	return HighlightOutput(rendered)
 }
