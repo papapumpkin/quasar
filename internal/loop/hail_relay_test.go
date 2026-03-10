@@ -396,6 +396,88 @@ func TestFormatHailRelay_AutoResolved(t *testing.T) {
 	})
 }
 
+func TestFormatHailRelay_Guidance(t *testing.T) {
+	t.Parallel()
+
+	t.Run("guidance hail uses HUMAN GUIDANCE format", func(t *testing.T) {
+		t.Parallel()
+		hails := []Hail{{
+			Kind:       HailGuidance,
+			Summary:    "developer guidance",
+			Cycle:      2,
+			Resolution: "Focus on the diffview.go file first, the tests are failing there.",
+		}}
+		got := formatHailRelay(hails)
+
+		if !strings.Contains(got, "[HUMAN GUIDANCE]") {
+			t.Error("expected [HUMAN GUIDANCE] header for guidance hail")
+		}
+		if !strings.Contains(got, "Focus on the diffview.go file") {
+			t.Error("expected guidance text in relay block")
+		}
+		if !strings.Contains(got, "incorporate this into your current work") {
+			t.Error("expected incorporation instruction")
+		}
+		// Guidance hails should NOT use the standard "was answered:" format.
+		if strings.Contains(got, "was answered:") {
+			t.Error("guidance hail should not use 'was answered:' format")
+		}
+	})
+
+	t.Run("mixed guidance and standard hails", func(t *testing.T) {
+		t.Parallel()
+		hails := []Hail{
+			{Kind: HailBlocker, Summary: "missing dep", Cycle: 1, Resolution: "Add it to go.mod"},
+			{Kind: HailGuidance, Summary: "developer guidance", Cycle: 2, Resolution: "Use the unified diff format"},
+		}
+		got := formatHailRelay(hails)
+
+		// Standard hail uses "was answered:" format.
+		if !strings.Contains(got, "was answered:") {
+			t.Error("standard hail should use 'was answered:' format")
+		}
+		// Guidance hail uses [HUMAN GUIDANCE] format.
+		if !strings.Contains(got, "[HUMAN GUIDANCE]") {
+			t.Error("guidance hail should use [HUMAN GUIDANCE] format")
+		}
+		if !strings.Contains(got, "Use the unified diff format") {
+			t.Error("expected guidance text")
+		}
+	})
+}
+
+func TestHailGuidanceKind(t *testing.T) {
+	t.Parallel()
+
+	t.Run("HailGuidance is a valid kind", func(t *testing.T) {
+		t.Parallel()
+		if err := ValidateHailKind(HailGuidance); err != nil {
+			t.Errorf("ValidateHailKind(HailGuidance) = %v, want nil", err)
+		}
+	})
+
+	t.Run("guidance hail can be posted", func(t *testing.T) {
+		t.Parallel()
+		q := NewMemoryHailQueue()
+		err := q.Post(Hail{
+			ID:      "guidance-1",
+			Kind:    HailGuidance,
+			Summary: "developer guidance",
+		})
+		if err != nil {
+			t.Fatalf("Post(guidance hail) = %v, want nil", err)
+		}
+
+		all := q.All()
+		if len(all) != 1 {
+			t.Fatalf("All() = %d items, want 1", len(all))
+		}
+		if all[0].Kind != HailGuidance {
+			t.Errorf("Kind = %q, want %q", all[0].Kind, HailGuidance)
+		}
+	})
+}
+
 func TestPendingHailRelay_SweepsExpired(t *testing.T) {
 	t.Parallel()
 

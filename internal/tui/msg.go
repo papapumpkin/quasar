@@ -461,6 +461,15 @@ type MsgGumDialogResult struct {
 	Err       error
 }
 
+// MsgGuidanceSent is sent after a gum-backed guidance subprocess completes.
+// The TUI resumes and posts the guidance as a hail for relay to the agent.
+type MsgGuidanceSent struct {
+	PhaseID  string // phase that guidance targets
+	Response string // guidance text from the developer
+	Quick    bool   // true if sent via quick guidance (single-line)
+	Err      error  // non-nil if gum subprocess failed
+}
+
 // MsgOpenPhaseChat is sent when the user presses the contextual chat
 // keybinding on a phase in the board view. It embeds the phase context
 // needed to seed a context-aware chat conversation.

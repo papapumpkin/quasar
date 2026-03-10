@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/chat"
 	"github.com/papapumpkin/quasar/internal/dialog"
 	"github.com/papapumpkin/quasar/internal/fabric"
+	"github.com/papapumpkin/quasar/internal/gum"
 	"github.com/papapumpkin/quasar/internal/nebula"
 	"github.com/papapumpkin/quasar/internal/tycho"
 	"github.com/papapumpkin/quasar/internal/ui"
@@ -793,6 +795,26 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Toasts = append(m.Toasts, toast)
 		cmds = append(cmds, cmd)
 
+	case MsgGuidanceSent:
+		// Gum guidance subprocess completed — post guidance as a hail
+		// for relay to the agent in the next cycle.
+		var toastMsg string
+		if msg.Err != nil {
+			toastMsg = fmt.Sprintf("guidance error: %s", msg.Err)
+		} else if msg.Response != "" {
+			m.postGuidanceHail(msg.PhaseID, msg.Response)
+			kind := "guidance"
+			if msg.Quick {
+				kind = "quick guidance"
+			}
+			toastMsg = fmt.Sprintf("%s sent to %s", kind, msg.PhaseID)
+		} else {
+			toastMsg = "guidance cancelled"
+		}
+		toast, cmd := NewToast(toastMsg, msg.Err != nil)
+		m.Toasts = append(m.Toasts, toast)
+		cmds = append(cmds, cmd)
+
 	case MsgOpenPhaseChat:
 		m.openEmbeddedPhaseChat(msg)
 
@@ -1247,10 +1269,28 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Board tab: contextual chat keybinding.
+	// Board tab: contextual chat and guidance keybindings.
 	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.ActiveTab == TabBoard {
 		if key.Matches(msg, m.Keys.ChatPhase) {
+			if m.GumAvailable && m.isSelectedPhaseRunning() {
+				return m.openGumGuidance(false)
+			}
 			return m.openPhaseChat()
+		}
+		if key.Matches(msg, m.Keys.Guidance) {
+			if m.GumAvailable && m.isSelectedPhaseRunning() {
+				return m.openGumGuidance(true)
+			}
+		}
+	}
+
+	// Sidebar tree view: guidance keybindings on running phases.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.sidebarWidth() > 0 && m.PaneFocus == PaneFocusSidebar {
+		if key.Matches(msg, m.Keys.ChatPhase) && m.GumAvailable && m.isSelectedPhaseRunning() {
+			return m.openGumGuidance(false)
+		}
+		if key.Matches(msg, m.Keys.Guidance) && m.GumAvailable && m.isSelectedPhaseRunning() {
+			return m.openGumGuidance(true)
 		}
 	}
 
@@ -2252,6 +2292,121 @@ func (m *AppModel) openPhaseChat() (tea.Model, tea.Cmd) {
 			},
 		}
 	}
+}
+
+// isSelectedPhaseRunning reports whether the currently selected phase in the
+// board or sidebar is actively running (PhaseWorking status).
+func (m *AppModel) isSelectedPhaseRunning() bool {
+	phase := m.selectedPhase()
+	return phase != nil && phase.Status == PhaseWorking
+}
+
+// selectedPhase returns the PhaseEntry currently selected in the board view
+// or the sidebar tree, depending on which is active.
+func (m *AppModel) selectedPhase() *PhaseEntry {
+	if m.BoardActive {
+		return m.Board.SelectedPhase()
+	}
+	// Sidebar or table view selection.
+	if m.PaneFocus == PaneFocusSidebar && m.Sidebar.Tree != nil {
+		// Map sidebar cursor to phase entry.
+		idx := m.NebulaView.Cursor
+		if idx >= 0 && idx < len(m.NebulaView.Phases) {
+			return &m.NebulaView.Phases[idx]
+		}
+	}
+	return m.NebulaView.SelectedPhase()
+}
+
+// openGumGuidance suspends the TUI and opens a gum-based guidance prompt
+// for the selected running phase. If quick is true, uses gum input for a
+// single-line instruction; otherwise uses gum write for multi-line guidance.
+func (m AppModel) openGumGuidance(quick bool) (tea.Model, tea.Cmd) {
+	phase := m.selectedPhase()
+	if phase == nil {
+		return m, nil
+	}
+
+	ctx := m.buildGumPhaseContext(phase)
+	phaseID := phase.ID
+
+	var cmd *exec.Cmd
+	if quick {
+		cmd = gum.GumGuidanceInputCmd(m.GumBinPath, ctx)
+	} else {
+		cmd = gum.GumGuidanceWriteCmd(m.GumBinPath, ctx)
+	}
+
+	// Store temp file path for response capture (same pattern as hail).
+	tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("quasar-gum-guidance-%s", phaseID))
+	cmd.Env = append(os.Environ(), fmt.Sprintf("GUM_RESPONSE_FILE=%s", tmpFile))
+
+	// Wrap the command's script to tee output to the temp file.
+	origArgs := cmd.Args
+	if len(origArgs) >= 3 {
+		script := origArgs[2]
+		// Replace trailing newline of the last gum command with a tee pipe.
+		script = strings.TrimRight(script, "\n") + fmt.Sprintf(" | tee '%s'\n", tmpFile)
+		cmd.Args = []string{"sh", "-c", script}
+	}
+
+	isQuick := quick
+	return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
+		response := readGumResponseFile(cmd)
+		return MsgGuidanceSent{
+			PhaseID:  phaseID,
+			Response: response,
+			Quick:    isQuick,
+			Err:      err,
+		}
+	})
+}
+
+// buildGumPhaseContext assembles gum.PhaseContext from the selected phase's
+// execution state for display in the guidance prompt.
+func (m *AppModel) buildGumPhaseContext(phase *PhaseEntry) gum.PhaseContext {
+	ctx := gum.PhaseContext{
+		PhaseID:    phase.ID,
+		PhaseTitle: phase.Title,
+		Cycle:      phase.Cycles,
+		MaxCycles:  phase.MaxCycles,
+	}
+
+	// Enrich with worker card data if available.
+	if wc := m.WorkerCards[phase.ID]; wc != nil {
+		ctx.ActiveAgent = wc.AgentRole
+		if wc.Stream.Len() > 0 {
+			ctx.RecentActivity = wc.Stream.Latest().Text
+		}
+		ctx.FileClaims = wc.Claims
+	}
+
+	// Enrich with reviewer feedback from loop view.
+	if lv, ok := m.PhaseLoops[phase.ID]; ok {
+		ctx.LastFeedback = lastReviewerSummary(lv)
+	}
+
+	return ctx
+}
+
+// postGuidanceHail posts a guidance hail to the hail queue for the given
+// phase. The hail is pre-resolved with the guidance text so it will be
+// picked up by the relay in the next cycle.
+func (m *AppModel) postGuidanceHail(phaseID, guidance string) {
+	hailInfo := ui.HailInfo{
+		ID:         fmt.Sprintf("guidance-%s-%d", phaseID, time.Now().UnixMilli()),
+		Kind:       "guidance",
+		Summary:    "developer guidance",
+		Detail:     guidance,
+		SourceRole: "human",
+	}
+	m.PendingHails = append(m.PendingHails, hailInfo)
+	m.syncHailBadge()
+
+	// Also post a toast-style resolved hail so MsgHailResolved propagates.
+	toast, cmd := NewToast(fmt.Sprintf("guidance queued for %s", phaseID), false)
+	_ = cmd
+	m.Toasts = append(m.Toasts, toast)
 }
 
 // lastAgentSummary returns the summary from the most recent agent (coder or reviewer).

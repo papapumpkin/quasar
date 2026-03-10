@@ -88,8 +88,10 @@ func (tv TreeView) View() string {
 
 // renderTreeRow renders a single node row with tree-drawing characters.
 func (tv TreeView) renderTreeRow(node *TreeNode, selected bool, maxWidth int) string {
-	// Build indent prefix with tree connectors.
-	indent := tv.buildIndent(node)
+	// Build indent as two parts: a plain-text margin prefix and styled
+	// tree connector suffix. This avoids slicing into ANSI escape codes
+	// when replacing the margin with the selection indicator.
+	indentMargin, indentConnector := tv.buildIndentParts(node)
 
 	// Status icon.
 	iconStr := ""
@@ -111,7 +113,7 @@ func (tv TreeView) renderTreeRow(node *TreeNode, selected bool, maxWidth int) st
 	label := node.Label
 
 	// Calculate space used by non-label elements.
-	// indent + icon + expand + label + spacing + metrics
+	indent := indentMargin + indentConnector
 	indentWidth := lipgloss.Width(indent)
 	iconWidth := lipgloss.Width(iconStr)
 	expandWidth := lipgloss.Width(expandIndicator)
@@ -133,10 +135,11 @@ func (tv TreeView) renderTreeRow(node *TreeNode, selected bool, maxWidth int) st
 	var row string
 	if selected {
 		indicator := styleSelectionIndicator.Render(selectionIndicator)
-		// Replace first chars of indent with indicator.
 		styledLabel := styleRowSelected.Render(label)
 		styledExpand := lipgloss.NewStyle().Foreground(colorPrimary).Render(expandIndicator)
-		row = indicator + indent[lipgloss.Width(indicator):] + iconStr + styledExpand + styledLabel
+		// Replace the plain-text margin with the selection indicator,
+		// keeping the ANSI-styled connector suffix intact.
+		row = indicator + indentConnector + iconStr + styledExpand + styledLabel
 	} else {
 		styledLabel := tv.styleLabelForNode(node, label)
 		styledExpand := lipgloss.NewStyle().Foreground(colorMuted).Render(expandIndicator)
@@ -166,14 +169,17 @@ func (tv TreeView) renderTreeRow(node *TreeNode, selected bool, maxWidth int) st
 	return row
 }
 
-// buildIndent builds the tree indent prefix for a node based on its depth.
-func (tv TreeView) buildIndent(node *TreeNode) string {
+// buildIndentParts returns the tree indent as two separate strings:
+// a plain-text margin (always "  ") and a styled connector suffix
+// containing ANSI-escaped tree-drawing characters. This separation
+// allows the selection indicator to replace the margin without
+// slicing into ANSI escape codes.
+func (tv TreeView) buildIndentParts(node *TreeNode) (margin, connector string) {
+	margin = "  " // base margin, always plain ASCII
 	if node.Depth == 0 {
-		return "  " // root has standard indent
+		return margin, ""
 	}
-	// Build depth-based indent.
 	var b strings.Builder
-	b.WriteString("  ") // base margin
 	for i := 1; i < node.Depth; i++ {
 		b.WriteString(styleTreeConnector.Render(tvConnectorPipe))
 	}
@@ -183,7 +189,7 @@ func (tv TreeView) buildIndent(node *TreeNode) string {
 	} else {
 		b.WriteString(styleTreeConnector.Render(tvConnectorMid))
 	}
-	return b.String()
+	return margin, b.String()
 }
 
 // isLastChild checks if a node is the last child of its parent.

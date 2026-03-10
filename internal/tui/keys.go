@@ -41,6 +41,9 @@ type KeyMap struct {
 	// ChatPhase — opens a contextual chat for the selected phase.
 	ChatPhase key.Binding
 
+	// Guidance — sends quick one-line guidance to the selected phase's agent.
+	Guidance key.Binding
+
 	// Tree view shortcuts (Below-inspired).
 	TreeSortCost     key.Binding // C — sort phases by cost
 	TreeSortDuration key.Binding // D — sort by duration
@@ -148,6 +151,10 @@ func DefaultKeyMap() KeyMap {
 		ChatPhase: key.NewBinding(
 			key.WithKeys("c"),
 			key.WithHelp("c", "chat about phase"),
+		),
+		Guidance: key.NewBinding(
+			key.WithKeys("g"),
+			key.WithHelp("g", "quick guidance"),
 		),
 		TreeSortCost: key.NewBinding(
 			key.WithKeys("C"),
