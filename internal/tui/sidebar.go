@@ -157,7 +157,7 @@ func (s *Sidebar) Zoom() {
 	}
 }
 
-// SortPhases sorts tree phases by the given mode.
+// SortTree sorts tree phases by the given mode.
 // No-op when the tree view is not active.
 func (s *Sidebar) SortTree(mode TreeSortMode) {
 	if s.Tree != nil {

@@ -58,7 +58,7 @@ type TreeNode struct {
 	Depth    int // indentation level (0 = root)
 
 	// Source data for detail-panel sync and sorting.
-	PhaseEntry *PhaseEntry  // non-nil for phase nodes
+	PhaseEntry *PhaseEntry // non-nil for phase nodes
 	CycleEntry *CycleEntry // non-nil for cycle nodes
 	AgentEntry *AgentEntry // non-nil for agent nodes
 }
@@ -66,13 +66,13 @@ type TreeNode struct {
 // TreeView renders an expandable hierarchical tree of phases, cycles, and agents
 // in the sidebar, inspired by Below's cgroup view.
 type TreeView struct {
-	Root       *TreeNode    // nebula root node
-	FlatNodes  []*TreeNode  // flattened visible nodes for cursor navigation
-	Cursor     int          // index into FlatNodes
-	Offset     int          // scroll offset
-	Width      int          // available rendering width
-	Height     int          // available rendering height
-	Focus      bool         // whether this view has keyboard focus
+	Root       *TreeNode   // nebula root node
+	FlatNodes  []*TreeNode // flattened visible nodes for cursor navigation
+	Cursor     int         // index into FlatNodes
+	Offset     int         // scroll offset
+	Width      int         // available rendering width
+	Height     int         // available rendering height
+	Focus      bool        // whether this view has keyboard focus
 	SortMode   TreeSortMode
 	MetricMode TreeMetricMode
 }
