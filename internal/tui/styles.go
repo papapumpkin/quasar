@@ -292,7 +292,7 @@ var (
 
 	// styleDiffStatAdd styles the "+" portion of file stats.
 	styleDiffStatAdd = lipgloss.NewStyle().
-				Foreground(colorSuccess)
+				Foreground(colorBlueshift)
 
 	// styleDiffStatDel styles the "-" portion of file stats.
 	styleDiffStatDel = lipgloss.NewStyle().

@@ -120,7 +120,8 @@ func BuildSideBySidePairs(hunk DiffHunk) []SideBySidePair {
 	return pairs
 }
 
-// RenderDiffView renders a complete side-by-side diff view as a string.
+// RenderDiffView renders a complete unified diff view as a string.
+// Removed lines appear in red, added lines in blue (Claude Code convention).
 // width is the available terminal width.
 func RenderDiffView(raw string, width int) string {
 	files := ParseUnifiedDiff(raw)
@@ -227,9 +228,10 @@ func RenderStatBar(adds, dels, barWidth int) string {
 		styleDiffStatDel.Render(strings.Repeat("-", delCols))
 }
 
-// renderFileDiff renders a single file's diff in side-by-side format.
+// renderFileDiff renders a single file's diff in unified format.
+// Removed lines are red with "-" prefix, added lines are blue with "+" prefix.
 func renderFileDiff(f FileDiff, width int) string {
-	return renderFileDiffWithOpts(f, width, DiffRenderOpts{SideBySide: true})
+	return renderFileDiffWithOpts(f, width, DiffRenderOpts{SideBySide: false})
 }
 
 // renderFileDiffWithOpts renders a single file's diff with configurable options.
