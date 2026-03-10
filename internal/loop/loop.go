@@ -50,6 +50,8 @@ type Loop struct {
 	CheckpointDir     string           // Directory for checkpoint files. Empty disables checkpointing.
 	FixEffort         string           // Effort level for lint/filter fix invocations (e.g. "low"). Empty = Claude's default.
 	FallbackModel     string           // Automatic fallback model passed to all agents.
+	GuidanceDir       string           // Directory to scan for GUIDANCE-<phaseID> files. Empty disables guidance file consumption.
+	PhaseID           string           // Phase ID for guidance file consumption (empty in loop mode).
 	// NewCheckpointHook, when non-nil, is called by RunTask and RunExistingTask
 	// to create a checkpoint hook that is prepended to Hooks. The function
 	// receives a state accessor (returning the current *CycleState) and must

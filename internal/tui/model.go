@@ -2397,15 +2397,27 @@ func (m *AppModel) buildGumPhaseContext(phase *PhaseEntry) gum.PhaseContext {
 	return ctx
 }
 
-// postGuidanceHail posts a guidance hail via the GuidanceCh channel
-// for the loop to pick up and relay to the agent in the next cycle.
-// If no GuidanceCh is configured, the guidance is silently dropped.
+// postGuidanceHail writes a guidance file to the nebula directory for the
+// loop to pick up and relay to the agent in the next cycle. The file is
+// named GUIDANCE-<phaseID> and contains the guidance text. This follows
+// the same intervention-file pattern as PAUSE/STOP/RETRY.
+//
+// If GuidanceCh is configured, guidance is also sent via the channel for
+// programmatic consumption (e.g., tests or single-task loop mode).
 func (m *AppModel) postGuidanceHail(phaseID, guidance string) {
+	// Write the guidance intervention file.
+	if m.NebulaDir != "" {
+		guidancePath := filepath.Join(m.NebulaDir, fmt.Sprintf("GUIDANCE-%s", phaseID))
+		if err := os.WriteFile(guidancePath, []byte(guidance), 0644); err != nil {
+			m.addMessage("failed to write guidance file: %s", err)
+		}
+	}
+
+	// Also send via channel if configured (for loop mode or programmatic use).
 	if m.GuidanceCh != nil {
 		select {
 		case m.GuidanceCh <- GuidanceEntry{PhaseID: phaseID, Guidance: guidance}:
 		default:
-			// Channel full — drop gracefully.
 		}
 	}
 }

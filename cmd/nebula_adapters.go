@@ -136,6 +136,7 @@ type tuiLoopAdapter struct {
 	checkpointDir    string        // Directory for checkpoint files. Empty disables checkpointing.
 	fixEffort        string        // Effort level for lint/filter fix invocations.
 	fallbackModel    string        // Automatic fallback model when primary is overloaded.
+	nebulaDir        string        // Nebula directory for guidance file consumption.
 }
 
 // newPhaseUI returns a ui.UI implementation for the given phase. When the bus
@@ -176,6 +177,8 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 		CheckpointDir:     a.checkpointDir,
 		FixEffort:         a.fixEffort,
 		FallbackModel:     a.fallbackModel,
+		GuidanceDir:       a.nebulaDir,
+		PhaseID:           phaseID,
 	}
 
 	// Apply per-phase execution overrides.
@@ -276,6 +279,8 @@ func (a *tuiLoopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData a
 		CheckpointDir:     a.checkpointDir,
 		FixEffort:         a.fixEffort,
 		FallbackModel:     a.fallbackModel,
+		GuidanceDir:       a.nebulaDir,
+		PhaseID:           phaseID,
 	}
 
 	// Apply per-phase execution overrides.
