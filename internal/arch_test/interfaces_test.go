@@ -84,6 +84,12 @@ var allowedColocations = map[string]map[string]bool{
 	"ui": {
 		"UI": true,
 	},
+	// Web defines EventSource alongside BusAdapter, the canonical event bus
+	// adapter. Consumers (server, phase_accumulator, sse) import the interface
+	// type for abstraction; BusAdapter is the sole in-process implementation.
+	"web": {
+		"EventSource": true,
+	},
 }
 
 // structMethodsInPkg collects all method names for each receiver type across

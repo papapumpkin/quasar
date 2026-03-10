@@ -3,7 +3,7 @@ package web
 import (
 	"fmt"
 
-	"github.com/papapumpkin/quasar/internal/tui"
+	"github.com/papapumpkin/quasar/internal/diff"
 )
 
 // collapseThreshold is the number of changed lines above which a file
@@ -51,8 +51,8 @@ type DiffLineView struct {
 // RenderDiffHTML parses a unified diff string and returns structured
 // data ready for template rendering.
 func RenderDiffHTML(raw string) DiffViewData {
-	files := tui.ParseUnifiedDiff(raw)
-	stat := tui.ComputeDiffStat(files)
+	files := diff.ParseUnifiedDiff(raw)
+	stat := diff.ComputeDiffStat(files)
 
 	data := DiffViewData{
 		Stat: DiffStatView{
@@ -91,16 +91,16 @@ func RenderDiffHTML(raw string) DiffViewData {
 	return data
 }
 
-// diffLineToView converts a tui.DiffLine into a DiffLineView for templates.
-func diffLineToView(l tui.DiffLine) DiffLineView {
+// diffLineToView converts a diff.DiffLine into a DiffLineView for templates.
+func diffLineToView(l diff.DiffLine) DiffLineView {
 	v := DiffLineView{
 		Content: l.Content,
 	}
 
 	switch l.Type {
-	case tui.DiffLineAdd:
+	case diff.DiffLineAdd:
 		v.Type = "add"
-	case tui.DiffLineRemove:
+	case diff.DiffLineRemove:
 		v.Type = "remove"
 	default:
 		v.Type = "context"

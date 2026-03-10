@@ -17,6 +17,7 @@ var layers = map[string]int{
 	"config":    0,
 	"dag":       0,
 	"dialog":    0,
+	"diff":      0,
 	"filter":    0,
 	"snapshot":  0,
 	"telemetry": 0,

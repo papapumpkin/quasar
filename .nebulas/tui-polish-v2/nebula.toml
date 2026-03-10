@@ -1,6 +1,6 @@
 [nebula]
 name = "tui-polish-v2"
-description = "TUI quality-of-life improvements: glamour markdown rendering, unified diff layout, board phase name truncation, live token count, richer worker cards, and fix +0 -0 line count bug"
+description = "Major TUI overhaul: Posting-inspired split-pane layout with bordered panels, Below-inspired hierarchical drill-down, gum-powered hail/chat, glamour markdown, unified diffs, and bug fixes"
 
 [defaults]
 type = "bug"
@@ -11,7 +11,7 @@ assignee = ""
 [execution]
 max_workers = 2
 max_review_cycles = 5
-max_budget_usd = 60.0
+max_budget_usd = 120.0
 model = ""
 gate = ""
 
@@ -25,9 +25,15 @@ goals = [
     "Fix the +0 -0 line count bug in phase summaries",
     "Make worker cards show richer activity information",
     "Ensure live token count updates during execution",
+    "Replace hail and dialog overlays with gum-based interactive prompts for a better human intervention UX",
+    "Posting-inspired split-pane layout: sidebar + main + detail as bordered panels",
+    "Below-inspired hierarchical drill-down: expandable tree view with metrics at every level",
+    "Rich color theme with bordered panels, focus indicators, and polished tab styling",
+    "Gum-powered agent chat for in-flight developer intervention on running phases",
 ]
 constraints = [
-    "glamour is the only new dependency (charmbracelet/glamour) — it's part of the Charm ecosystem already used",
+    "glamour (charmbracelet/glamour) and gum (charmbracelet/gum CLI binary) are the only new external additions",
+    "gum is a runtime dependency (CLI binary in PATH), not a Go module dependency — graceful fallback when absent",
     "All existing tests must pass after every phase",
     "go build, go vet ./... must pass after every phase",
     "No behavior change to headless/stderr mode — only TUI rendering changes",
