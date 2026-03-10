@@ -60,8 +60,8 @@ func (b *UIBridge) AgentStart(role string) {
 
 // AgentDone sends MsgAgentDone. For coder agents, it also captures the git
 // diff of the most recent commit and sends MsgAgentDiff.
-func (b *UIBridge) AgentDone(role string, costUSD float64, durationMs int64) {
-	b.program.Send(MsgAgentDone{Role: role, CostUSD: costUSD, DurationMs: durationMs})
+func (b *UIBridge) AgentDone(role string, costUSD float64, durationMs int64, tokens int) {
+	b.program.Send(MsgAgentDone{Role: role, CostUSD: costUSD, DurationMs: durationMs, Tokens: tokens})
 	if role == "coder" {
 		if dr := captureGitDiff(b.workDir, "", ""); dr.Diff != "" {
 			b.program.Send(MsgAgentDiff{
@@ -336,8 +336,8 @@ func (b *PhaseUIBridge) AgentStart(role string) {
 
 // AgentDone sends MsgPhaseAgentDone. For coder agents, it also captures the
 // git diff of the most recent commit and sends MsgPhaseAgentDiff.
-func (b *PhaseUIBridge) AgentDone(role string, costUSD float64, durationMs int64) {
-	b.program.Send(MsgPhaseAgentDone{PhaseID: b.phaseID, Role: role, CostUSD: costUSD, DurationMs: durationMs})
+func (b *PhaseUIBridge) AgentDone(role string, costUSD float64, durationMs int64, tokens int) {
+	b.program.Send(MsgPhaseAgentDone{PhaseID: b.phaseID, Role: role, CostUSD: costUSD, DurationMs: durationMs, Tokens: tokens})
 	b.ScratchpadNote(b.phaseID, fmt.Sprintf("%s done ($%.2f)", role, costUSD))
 	if role == "coder" {
 		if dr := captureGitDiff(b.workDir, "", ""); dr.Diff != "" {

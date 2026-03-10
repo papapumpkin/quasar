@@ -96,6 +96,10 @@ type AppModel struct {
 	BoardActive  bool      // true = columnar board, false = table view
 	boardSizedAt bool      // true after the first WindowSizeMsg sets the default
 
+	// Split-pane sidebar state — persistent phase list on the left.
+	Sidebar   Sidebar   // phase list sidebar component
+	PaneFocus PaneFocus // which pane (sidebar vs main) has keyboard focus
+
 	// Worker card state — live detail cards for active quasars.
 	WorkerCards   map[string]*WorkerCard // phaseID → live worker card
 	nextQuasarNum int                    // counter for assigning quasar IDs (q-1, q-2, ...)
@@ -160,6 +164,8 @@ func NewAppModel(mode Mode) AppModel {
 		NebulaView:  NewNebulaView(),
 		Board:       NewBoardView(),
 		BoardActive: false, // set to true on first WindowSizeMsg if terminal is wide enough
+		Sidebar:     NewSidebar(),
+		PaneFocus:   PaneFocusMain, // start with main area focused
 		Keys:        DefaultKeyMap(),
 		StartTime:   time.Now(),
 		PhaseLoops:  make(map[string]*LoopView),
@@ -246,7 +252,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Banner.Width = msg.Width
 		m.Banner.Height = msg.Height
 		m.StatusBar.Width = msg.Width
-		contentWidth := msg.Width
+
+		// Sidebar sizing — updates dimensions for split-pane layout.
+		sidebarW := m.sidebarWidth()
+		if sidebarW > 0 {
+			m.Sidebar.Width = sidebarW
+			m.Sidebar.Height = m.sidebarHeight()
+			m.Sidebar.Focus = m.PaneFocus == PaneFocusSidebar
+		}
+
+		contentWidth := m.contentWidth()
 		detailHeight := m.detailHeight()
 		if m.Mode == ModeHome {
 			detailHeight = m.homeDetailHeight()
@@ -823,6 +838,15 @@ func clampCursors(m *AppModel) {
 		m.NebulaView.Cursor = 0
 	}
 
+	// Clamp sidebar cursor.
+	if max := len(m.Sidebar.Phases) - 1; max >= 0 {
+		if m.Sidebar.Cursor > max {
+			m.Sidebar.Cursor = max
+		}
+	} else {
+		m.Sidebar.Cursor = 0
+	}
+
 	// Clamp LoopView cursor.
 	if max := m.LoopView.TotalEntries() - 1; max >= 0 {
 		if m.LoopView.Cursor > max {
@@ -1039,6 +1063,35 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.showFileDiff()
 	}
 
+	// Sidebar focus toggle — when the sidebar is visible, left/right and Tab
+	// toggle focus between the sidebar and the main content area.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.sidebarWidth() > 0 {
+		switch msg.String() {
+		case "left", "h":
+			if m.PaneFocus == PaneFocusMain {
+				// If in board column mode, try moving left in the board first.
+				if m.BoardActive && m.ActiveTab == TabBoard {
+					m.Board.MoveLeft()
+					return m, nil
+				}
+				m.PaneFocus = PaneFocusSidebar
+				m.Sidebar.Focus = true
+				return m, nil
+			}
+		case "right", "l":
+			if m.PaneFocus == PaneFocusSidebar {
+				m.PaneFocus = PaneFocusMain
+				m.Sidebar.Focus = false
+				return m, nil
+			}
+			// If already in main and board is active, move right in board.
+			if m.BoardActive && m.ActiveTab == TabBoard {
+				m.Board.MoveRight()
+				return m, nil
+			}
+		}
+	}
+
 	// Tab navigation and board toggle — only active in nebula mode at DepthPhases.
 	if m.Mode == ModeNebula && m.Depth == DepthPhases {
 		switch msg.String() {
@@ -1052,6 +1105,12 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "tab":
+			// When sidebar is visible and focused, Tab moves focus to main.
+			if m.sidebarWidth() > 0 && m.PaneFocus == PaneFocusSidebar {
+				m.PaneFocus = PaneFocusMain
+				m.Sidebar.Focus = false
+				return m, nil
+			}
 			m.ActiveTab = m.ActiveTab.Next()
 			return m, nil
 		case "shift+tab":
@@ -1064,7 +1123,7 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "left", "h":
-			// Left/right navigation for board columns.
+			// Left/right navigation for board columns (fallback when sidebar not visible).
 			if m.BoardActive && m.ActiveTab == TabBoard {
 				m.Board.MoveLeft()
 				return m, nil
@@ -1706,9 +1765,13 @@ func (m *AppModel) drillDown() {
 			m.DiffFileOpen = false
 			m.ShowBeads = false
 			// Drill into the selected phase's loop view.
-			// Use the active tab's cursor to determine which phase.
+			// Use the sidebar cursor when it has focus, otherwise the active tab.
 			var phaseID string
-			if m.ActiveTab == TabGraph {
+			if m.sidebarWidth() > 0 && m.PaneFocus == PaneFocusSidebar {
+				if p := m.Sidebar.SelectedPhase(); p != nil {
+					phaseID = p.ID
+				}
+			} else if m.ActiveTab == TabGraph {
 				phaseID = m.Graph.SelectedPhaseID()
 			} else if m.BoardActive && m.ActiveTab == TabBoard {
 				m.Board.Phases = m.NebulaView.Phases
@@ -2111,6 +2174,13 @@ func (m *AppModel) moveUp() {
 	case ModeLoop:
 		m.LoopView.MoveUp()
 	case ModeNebula:
+		// When sidebar is visible and focused, navigate the sidebar.
+		if m.Depth == DepthPhases && m.sidebarWidth() > 0 && m.PaneFocus == PaneFocusSidebar {
+			m.Sidebar.MoveUp()
+			m.syncSidebarSelection()
+			m.updateDetailFromSelection()
+			return
+		}
 		if m.Depth == DepthPhases {
 			if m.ActiveTab == TabEntanglements {
 				m.EntanglementView.MoveUp()
@@ -2152,6 +2222,13 @@ func (m *AppModel) moveDown() {
 	case ModeLoop:
 		m.LoopView.MoveDown()
 	case ModeNebula:
+		// When sidebar is visible and focused, navigate the sidebar.
+		if m.Depth == DepthPhases && m.sidebarWidth() > 0 && m.PaneFocus == PaneFocusSidebar {
+			m.Sidebar.MoveDown()
+			m.syncSidebarSelection()
+			m.updateDetailFromSelection()
+			return
+		}
 		if m.Depth == DepthPhases {
 			if m.ActiveTab == TabEntanglements {
 				m.EntanglementView.MoveDown()
@@ -2169,6 +2246,19 @@ func (m *AppModel) moveDown() {
 		}
 	}
 	m.updateDetailFromSelection()
+}
+
+// syncSidebarSelection synchronizes the sidebar selection with the main views.
+// When the user navigates in the sidebar, the board/nebula view cursor follows.
+func (m *AppModel) syncSidebarSelection() {
+	if m.Sidebar.Cursor < 0 || m.Sidebar.Cursor >= len(m.Sidebar.Phases) {
+		return
+	}
+	// Sync the NebulaView cursor.
+	m.NebulaView.Cursor = m.Sidebar.Cursor
+	// Sync the Board view cursor (it uses flat ordering, which may differ).
+	// For simplicity, sync the NebulaView cursor — board cursor is separate.
+	m.Board.Cursor = m.Sidebar.Cursor
 }
 
 // updateDetailFromSelection updates the detail panel content
@@ -2581,8 +2671,9 @@ func (m AppModel) View() string {
 		return m.renderSplash()
 	}
 
-	// Content uses full terminal width (side panel mode removed).
-	contentWidth := m.Width
+	// Content width depends on whether the sidebar is visible.
+	contentWidth := m.contentWidth()
+	sidebarW := m.sidebarWidth()
 
 	var sections []string
 
@@ -2599,51 +2690,68 @@ func (m AppModel) View() string {
 	sections = append(sections, m.StatusBar.View())
 	sections = append(sections, "") // Spacing between header and content.
 
-	// Tab bar — only in nebula mode at DepthPhases level.
-	if m.Mode == ModeNebula && m.Depth == DepthPhases {
-		tb := TabBar{ActiveTab: m.ActiveTab, Width: contentWidth}
-		sections = append(sections, tb.View())
-	}
-
-	// Top banner (S-A or XS-A modes) — between status bar and content.
-	// Skip when the terminal is too short to avoid pushing content off-screen.
-	if m.Height >= BannerCollapseHeight {
-		if bannerView := m.Banner.View(); bannerView != "" {
-			sections = append(sections, bannerView)
-		}
-	}
-
-	// Build the "middle" section: breadcrumb + main view + detail + gate + toasts.
+	// Build the "middle" section: sidebar (if visible) + right area.
 	var middle []string
 
-	// Breadcrumb (nebula drill-down) — hide if too narrow.
-	if m.Mode == ModeNebula && m.Depth > DepthPhases && contentWidth >= CompactWidth {
-		middle = append(middle, m.renderBreadcrumb())
-	}
+	if sidebarW > 0 {
+		// Split-pane layout: sidebar | right area (tabs + main + detail).
+		m.Sidebar.SyncPhases(m.NebulaView.Phases)
+		m.Sidebar.Width = sidebarW
+		m.Sidebar.Height = m.sidebarHeight()
+		m.Sidebar.Focus = m.PaneFocus == PaneFocusSidebar
 
-	// Main view.
-	middle = append(middle, m.renderMainView())
+		// Right area: tabs + main + detail stacked vertically.
+		rightArea := m.renderRightArea(contentWidth)
 
-	// Detail panel (when drilled into agent output) — auto-collapse on short terminals.
-	// Home mode uses a higher threshold because the banner also consumes vertical space.
-	detailThreshold := DetailCollapseHeight
-	if m.Mode == ModeHome {
-		detailThreshold = HomeDetailCollapseHeight
-	}
-	if m.showDetailPanel() && m.Height >= detailThreshold {
-		sep := styleSectionBorder.Width(contentWidth).Render("")
-		middle = append(middle, sep)
-		middle = append(middle, m.Detail.View())
-	}
+		sidebarStr := m.Sidebar.View()
+		combined := lipgloss.JoinHorizontal(lipgloss.Top, sidebarStr, rightArea)
+		middle = append(middle, combined)
+	} else {
+		// Traditional full-width vertical layout.
 
-	// Gate overlay.
-	if m.Gate != nil {
-		middle = append(middle, m.Gate.View())
-	}
+		// Tab bar — only in nebula mode at DepthPhases level.
+		if m.Mode == ModeNebula && m.Depth == DepthPhases {
+			tb := TabBar{ActiveTab: m.ActiveTab, Width: contentWidth}
+			middle = append(middle, tb.View())
+		}
 
-	// Toast notifications (above footer).
-	if len(m.Toasts) > 0 {
-		middle = append(middle, RenderToasts(m.Toasts, contentWidth))
+		// Top banner (S-A or XS-A modes) — between status bar and content.
+		// Skip when the terminal is too short to avoid pushing content off-screen.
+		if m.Height >= BannerCollapseHeight {
+			if bannerView := m.Banner.View(); bannerView != "" {
+				middle = append(middle, bannerView)
+			}
+		}
+
+		// Breadcrumb (nebula drill-down) — hide if too narrow.
+		if m.Mode == ModeNebula && m.Depth > DepthPhases && contentWidth >= CompactWidth {
+			middle = append(middle, m.renderBreadcrumb())
+		}
+
+		// Main view.
+		middle = append(middle, m.renderMainView())
+
+		// Detail panel (when drilled into agent output) — auto-collapse on short terminals.
+		// Home mode uses a higher threshold because the banner also consumes vertical space.
+		detailThreshold := DetailCollapseHeight
+		if m.Mode == ModeHome {
+			detailThreshold = HomeDetailCollapseHeight
+		}
+		if m.showDetailPanel() && m.Height >= detailThreshold {
+			sep := styleSectionBorder.Width(contentWidth).Render("")
+			middle = append(middle, sep)
+			middle = append(middle, m.Detail.View())
+		}
+
+		// Gate overlay.
+		if m.Gate != nil {
+			middle = append(middle, m.Gate.View())
+		}
+
+		// Toast notifications (above footer).
+		if len(m.Toasts) > 0 {
+			middle = append(middle, RenderToasts(m.Toasts, contentWidth))
+		}
 	}
 
 	middleStr := lipgloss.JoinVertical(lipgloss.Left, middle...)
@@ -2722,8 +2830,36 @@ func (m AppModel) renderSplash() string {
 }
 
 // contentWidth returns the available width for main content.
+// In nebula mode at DepthPhases with a wide-enough terminal, this subtracts
+// the sidebar width to leave room for the split-pane layout.
 func (m AppModel) contentWidth() int {
+	sw := m.sidebarWidth()
+	if sw > 0 {
+		return m.Width - sw
+	}
 	return m.Width
+}
+
+// sidebarWidth returns the sidebar width for the current terminal size.
+// Returns 0 when the sidebar should be hidden (non-nebula mode, drilled in,
+// or terminal too narrow).
+func (m AppModel) sidebarWidth() int {
+	if m.Mode != ModeNebula || m.Depth != DepthPhases {
+		return 0
+	}
+	return ComputeSidebarWidth(m.Width)
+}
+
+// sidebarHeight returns the available height for the sidebar content area.
+// This matches the total height between the status bar and bottom bar/footer.
+func (m AppModel) sidebarHeight() int {
+	// Chrome: status bar (1) + spacing (1) + bottom bar (1) + footer (1) = 4.
+	chrome := 4
+	h := m.Height - chrome
+	if h < 3 {
+		h = 3
+	}
+	return h
 }
 
 // renderBreadcrumb renders the navigation path for drill-down.
@@ -2751,6 +2887,39 @@ func (m AppModel) renderBreadcrumb() string {
 	renderedSep := styleBreadcrumbSep.Render(sep)
 	path := strings.Join(parts, renderedSep)
 	return styleBreadcrumb.Width(w).Render(path)
+}
+
+// renderRightArea renders the right side of the split-pane layout.
+// This includes the tab bar, main content view, and detail panel stacked vertically.
+func (m AppModel) renderRightArea(width int) string {
+	var parts []string
+
+	// Tab bar.
+	tb := TabBar{ActiveTab: m.ActiveTab, Width: width}
+	parts = append(parts, tb.View())
+
+	// Main content.
+	parts = append(parts, m.renderMainView())
+
+	// Detail panel — show when applicable, splitting the right area ~60/40.
+	detailThreshold := DetailCollapseHeight
+	if m.showDetailPanel() && m.Height >= detailThreshold {
+		sep := styleSectionBorder.Width(width).Render("")
+		parts = append(parts, sep)
+		parts = append(parts, m.Detail.View())
+	}
+
+	// Gate overlay.
+	if m.Gate != nil {
+		parts = append(parts, m.Gate.View())
+	}
+
+	// Toast notifications.
+	if len(m.Toasts) > 0 {
+		parts = append(parts, RenderToasts(m.Toasts, width))
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
 // renderMainView renders the appropriate view for the current depth.
@@ -2880,6 +3049,8 @@ func (m AppModel) buildFooter() Footer {
 			if m.selectedPhaseFailed() {
 				f.Bindings = append(f.Bindings, m.Keys.Retry)
 			}
+		} else if m.sidebarWidth() > 0 && m.PaneFocus == PaneFocusSidebar {
+			f.Bindings = SidebarFooterBindings(m.Keys)
 		} else if m.BoardActive {
 			f.Bindings = CockpitFooterBindings(m.Keys)
 			if m.selectedPhaseFailed() {

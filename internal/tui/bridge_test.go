@@ -44,7 +44,7 @@ func TestUIBridgeMethodsDoNotPanic(t *testing.T) {
 	b.TaskStarted("bead-123", "test task")
 	b.CycleStart(1, 5)
 	b.AgentStart("coder")
-	b.AgentDone("coder", 0.45, 12300)
+	b.AgentDone("coder", 0.45, 12300, 5000)
 	b.AgentOutput("coder", 1, "some output")
 	b.CycleSummary(ui.CycleSummaryData{
 		Cycle:     1,

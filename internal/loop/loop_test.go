@@ -28,7 +28,7 @@ func (n *noopUI) TaskStarted(string, string)                        {}
 func (n *noopUI) TaskComplete(string, float64)                      {}
 func (n *noopUI) CycleStart(int, int)                               {}
 func (n *noopUI) AgentStart(string)                                 {}
-func (n *noopUI) AgentDone(string, float64, int64)                  {}
+func (n *noopUI) AgentDone(string, float64, int64, int)             {}
 func (n *noopUI) CycleSummary(ui.CycleSummaryData)                  {}
 func (n *noopUI) IssuesFound(int)                                   {}
 func (n *noopUI) Approved()                                         {}
@@ -110,7 +110,7 @@ func (r *recordingUI) AgentStart(role string) {
 	defer r.mu.Unlock()
 	r.agentStarts = append(r.agentStarts, role)
 }
-func (r *recordingUI) AgentDone(role string, _ float64, _ int64) {
+func (r *recordingUI) AgentDone(role string, _ float64, _ int64, _ int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.agentDones = append(r.agentDones, role)
