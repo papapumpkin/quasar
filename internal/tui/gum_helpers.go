@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/papapumpkin/quasar/internal/gum"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
@@ -29,30 +30,11 @@ func (m AppModel) buildGumHailCmd(hail ui.HailInfo) *exec.Cmd {
 
 	var script strings.Builder
 
-	// Build markdown context for display.
-	var md strings.Builder
-	md.WriteString(fmt.Sprintf("# ⚠ HAIL: %s\n\n", hail.Summary))
-	if hail.Kind != "" {
-		md.WriteString(fmt.Sprintf("**Kind:** %s\n", hail.Kind))
-	}
-	if hail.SourceRole != "" {
-		md.WriteString(fmt.Sprintf("**From:** %s", hail.SourceRole))
-		if hail.Cycle > 0 {
-			md.WriteString(fmt.Sprintf(" · cycle %d", hail.Cycle))
-		}
-		md.WriteString("\n")
-	}
-	if hail.Detail != "" {
-		md.WriteString("\n")
-		// Strip option lines from detail (they're shown separately by gum choose).
-		stripped := stripOptionLines(hail.Detail)
-		if stripped != "" {
-			md.WriteString(stripped)
-			md.WriteString("\n")
-		}
-	}
+	// Build markdown context using the shared builder from the gum package.
+	mdContent := gum.BuildHailMarkdown(hail)
 
-	escaped := shellEscape(md.String())
+	// Strip option lines from detail in the markdown (they're shown separately by gum choose).
+	escaped := shellEscape(mdContent)
 
 	// Step 1: show context via gum format.
 	script.WriteString(fmt.Sprintf("printf '%%s' '%s' | %s format --type markdown >&2\n",

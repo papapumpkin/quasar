@@ -22,8 +22,6 @@ const (
 	colorBlueshift = "#7aa2f7"
 	colorAccent    = "#ff9e64"
 	colorSuccess   = "#9ece6a"
-	colorDanger    = "#ff7b72"
-	colorMuted     = "#7f8490"
 )
 
 // Gum wraps the gum CLI binary for interactive prompts.

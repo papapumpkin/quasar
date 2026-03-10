@@ -40,6 +40,12 @@ type KeyMap struct {
 
 	// ChatPhase — opens a contextual chat for the selected phase.
 	ChatPhase key.Binding
+
+	// Tree view shortcuts (Below-inspired).
+	TreeSortCost     key.Binding // C — sort phases by cost
+	TreeSortDuration key.Binding // D — sort by duration
+	TreeCollapse     key.Binding // = — collapse children of selected node
+	TreeZoom         key.Binding // z — zoom: expand selected, collapse others
 }
 
 // DefaultKeyMap returns the default keybinding configuration.
@@ -142,6 +148,22 @@ func DefaultKeyMap() KeyMap {
 		ChatPhase: key.NewBinding(
 			key.WithKeys("c"),
 			key.WithHelp("c", "chat about phase"),
+		),
+		TreeSortCost: key.NewBinding(
+			key.WithKeys("C"),
+			key.WithHelp("C", "sort by cost"),
+		),
+		TreeSortDuration: key.NewBinding(
+			key.WithKeys("D"),
+			key.WithHelp("D", "sort by duration"),
+		),
+		TreeCollapse: key.NewBinding(
+			key.WithKeys("="),
+			key.WithHelp("=", "collapse children"),
+		),
+		TreeZoom: key.NewBinding(
+			key.WithKeys("z"),
+			key.WithHelp("z", "zoom"),
 		),
 	}
 }

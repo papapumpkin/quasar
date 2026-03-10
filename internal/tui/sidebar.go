@@ -18,8 +18,8 @@ const (
 )
 
 // Sidebar renders a persistent vertical list of all phases with status icons.
-// It replaces the need for the board view to show full phase names, letting
-// the board become a compact visual status display.
+// When Tree is non-nil, it renders an expandable hierarchical tree instead of
+// the flat phase list, delegating navigation and rendering to TreeView.
 type Sidebar struct {
 	Phases []PhaseEntry
 	Cursor int  // currently highlighted phase index
@@ -27,6 +27,9 @@ type Sidebar struct {
 	Width  int  // available width for the sidebar
 	Height int  // available height for the sidebar content area
 	Focus  bool // whether the sidebar currently has keyboard focus
+
+	// Tree view state — when non-nil, the sidebar renders a hierarchical tree.
+	Tree *TreeView
 }
 
 // NewSidebar creates an empty sidebar.
@@ -35,7 +38,29 @@ func NewSidebar() Sidebar {
 }
 
 // SelectedPhase returns the phase entry at the cursor position, or nil.
+// When tree mode is active, it returns the phase entry from the selected tree node.
 func (s Sidebar) SelectedPhase() *PhaseEntry {
+	if s.Tree != nil {
+		node := s.Tree.SelectedNode()
+		if node == nil {
+			return nil
+		}
+		// Return the phase entry directly if this is a phase node.
+		if node.PhaseEntry != nil {
+			return node.PhaseEntry
+		}
+		// For cycle/agent nodes, find the ancestor phase.
+		phaseID := s.Tree.SelectedPhaseID()
+		if phaseID == "" {
+			return nil
+		}
+		for i := range s.Phases {
+			if s.Phases[i].ID == phaseID {
+				return &s.Phases[i]
+			}
+		}
+		return nil
+	}
 	if s.Cursor < 0 || s.Cursor >= len(s.Phases) {
 		return nil
 	}
@@ -44,6 +69,10 @@ func (s Sidebar) SelectedPhase() *PhaseEntry {
 
 // MoveUp moves the cursor up by one, clamping at 0.
 func (s *Sidebar) MoveUp() {
+	if s.Tree != nil {
+		s.Tree.MoveUp()
+		return
+	}
 	if s.Cursor > 0 {
 		s.Cursor--
 	}
@@ -52,6 +81,10 @@ func (s *Sidebar) MoveUp() {
 
 // MoveDown moves the cursor down by one, clamping at the last phase.
 func (s *Sidebar) MoveDown() {
+	if s.Tree != nil {
+		s.Tree.MoveDown()
+		return
+	}
 	max := len(s.Phases) - 1
 	if max < 0 {
 		max = 0
@@ -87,6 +120,57 @@ func (s *Sidebar) SyncPhases(phases []PhaseEntry) {
 		s.Cursor = 0
 	}
 	s.ensureVisible()
+}
+
+// SyncTree updates the tree view with the latest data from phases and loop views.
+// If the tree view doesn't exist yet, it initializes one.
+func (s *Sidebar) SyncTree(nebulaName string, phases []PhaseEntry, phaseLoops map[string]*LoopView, totalCost float64) {
+	s.Phases = phases
+	if s.Tree == nil {
+		tv := NewTreeView()
+		s.Tree = &tv
+	}
+	s.Tree.SyncTree(nebulaName, phases, phaseLoops, totalCost)
+}
+
+// ToggleExpand toggles expand/collapse on the selected tree node.
+// No-op when the tree view is not active.
+func (s *Sidebar) ToggleExpand() {
+	if s.Tree != nil {
+		s.Tree.ToggleExpand()
+	}
+}
+
+// CollapseChildren collapses children of the selected tree node.
+// No-op when the tree view is not active.
+func (s *Sidebar) CollapseChildren() {
+	if s.Tree != nil {
+		s.Tree.CollapseChildren()
+	}
+}
+
+// Zoom expands the selected node and collapses siblings.
+// No-op when the tree view is not active.
+func (s *Sidebar) Zoom() {
+	if s.Tree != nil {
+		s.Tree.Zoom()
+	}
+}
+
+// SortPhases sorts tree phases by the given mode.
+// No-op when the tree view is not active.
+func (s *Sidebar) SortTree(mode TreeSortMode) {
+	if s.Tree != nil {
+		s.Tree.SortPhases(mode)
+	}
+}
+
+// SelectedTreeNode returns the currently selected tree node, or nil.
+func (s *Sidebar) SelectedTreeNode() *TreeNode {
+	if s.Tree != nil {
+		return s.Tree.SelectedNode()
+	}
+	return nil
 }
 
 // phaseStatusIcon returns a status icon for a phase.
@@ -126,7 +210,14 @@ func phaseStatusStyle(status PhaseStatus) lipgloss.Style {
 }
 
 // View renders the sidebar as a bordered panel with phase list.
+// When tree mode is active, delegates to TreeView.View().
 func (s Sidebar) View() string {
+	if s.Tree != nil {
+		s.Tree.Width = s.Width
+		s.Tree.Height = s.Height
+		s.Tree.Focus = s.Focus
+		return s.Tree.View()
+	}
 	if s.Width < 4 || s.Height < 1 {
 		return ""
 	}

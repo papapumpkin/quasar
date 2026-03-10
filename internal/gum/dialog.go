@@ -6,9 +6,13 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/papapumpkin/quasar/internal/dialog"
 )
+
+// Verify DialogOpener satisfies dialog.Opener at compile time.
+var _ dialog.Opener = (*DialogOpener)(nil)
 
 // DialogOpener implements dialog.Opener using gum subprocess calls.
 // When a dialog is opened, it runs gum commands to display context and
@@ -43,6 +47,7 @@ func (d *DialogOpener) Open(ctx context.Context, req dialog.Request) (dialog.Ses
 		msg := dialog.Message{
 			Role:    dialog.RoleHuman,
 			Content: response,
+			Time:    time.Now(),
 		}
 		select {
 		case sess.FromHuman() <- msg:
@@ -121,7 +126,7 @@ func GumDialogCmd(ctx context.Context, gumPath string, req dialog.Request) *exec
 
 	// Escape single quotes for shell.
 	escaped := strings.ReplaceAll(fullContent, "'", "'\\''")
-	script.WriteString(fmt.Sprintf("echo '%s' | %s format --type markdown >&2\n", escaped, gumPath))
+	script.WriteString(fmt.Sprintf("printf '%%s' '%s' | %s format --type markdown >&2\n", escaped, gumPath))
 
 	if len(req.Options) > 0 {
 		// Use gum choose.

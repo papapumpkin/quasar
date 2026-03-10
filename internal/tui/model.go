@@ -773,6 +773,26 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Dialog = nil
 		}
 
+	case MsgGumDialogResult:
+		// Gum dialog subprocess completed — close the dialog overlay.
+		if m.Dialog != nil && m.Dialog.Session.ID() == msg.SessionID {
+			if msg.Err == nil && msg.Response != "" {
+				m.Dialog.Session.Close()
+			}
+			m.Dialog = nil
+		}
+		var toastMsg string
+		if msg.Err != nil {
+			toastMsg = fmt.Sprintf("dialog error: %s", msg.Err)
+		} else if msg.Response != "" {
+			toastMsg = "dialog response recorded"
+		} else {
+			toastMsg = "dialog dismissed"
+		}
+		toast, cmd := NewToast(toastMsg, msg.Err != nil)
+		m.Toasts = append(m.Toasts, toast)
+		cmds = append(cmds, cmd)
+
 	case MsgOpenPhaseChat:
 		m.openEmbeddedPhaseChat(msg)
 
@@ -1158,6 +1178,28 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.Board.MoveRight()
 				return m, nil
 			}
+		}
+	}
+
+	// Tree view key handling — when sidebar has focus and tree is active.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.sidebarWidth() > 0 && m.PaneFocus == PaneFocusSidebar && m.Sidebar.Tree != nil {
+		switch {
+		case key.Matches(msg, m.Keys.Enter):
+			m.Sidebar.ToggleExpand()
+			m.updateDetailFromSelection()
+			return m, nil
+		case key.Matches(msg, m.Keys.TreeCollapse):
+			m.Sidebar.CollapseChildren()
+			return m, nil
+		case key.Matches(msg, m.Keys.TreeZoom):
+			m.Sidebar.Zoom()
+			return m, nil
+		case key.Matches(msg, m.Keys.TreeSortCost):
+			m.Sidebar.SortTree(TreeSortCost)
+			return m, nil
+		case key.Matches(msg, m.Keys.TreeSortDuration):
+			m.Sidebar.SortTree(TreeSortDuration)
+			return m, nil
 		}
 	}
 
@@ -2517,9 +2559,128 @@ func (m *AppModel) updateNebulaDetail() {
 		body := FormatAgentOutput(agent.Output, m.Detail.viewport.Width)
 		m.Detail.SetContentWithHeader(title, header, body)
 
+	case DepthPhases:
+		// When tree view is active, show detail based on the selected node.
+		m.updateTreeDetail()
+
 	default:
 		m.Detail.SetEmpty("Press enter to expand details")
 	}
+}
+
+// updateTreeDetail populates the detail panel based on the selected tree node.
+func (m *AppModel) updateTreeDetail() {
+	node := m.Sidebar.SelectedTreeNode()
+	if node == nil {
+		m.Detail.SetEmpty("Navigate tree to see details")
+		return
+	}
+
+	switch node.Kind {
+	case TreeNodeNebula:
+		m.Detail.SetContent("nebula: "+node.Label, m.buildNebulaOverview())
+
+	case TreeNodePhase:
+		if node.PhaseEntry == nil {
+			m.Detail.SetEmpty("(no phase data)")
+			return
+		}
+		p := node.PhaseEntry
+		header := FormatPhaseHeader(PhaseContext{
+			ID:        p.ID,
+			Title:     p.Title,
+			Status:    p.Status,
+			CostUSD:   p.CostUSD,
+			Cycles:    p.Cycles,
+			BlockedBy: p.BlockedBy,
+		})
+		body := ""
+		if p.PlanBody != "" {
+			body = p.PlanBody
+		} else {
+			body = "(no plan body available)"
+		}
+		// If the phase is done/failed, show completion summary.
+		if p.Status == PhaseDone || p.Status == PhaseFailed {
+			lv := m.PhaseLoops[p.ID]
+			body = FormatPhaseSummary(*p, lv)
+		}
+		m.Detail.SetContentWithHeader(p.ID, header, body)
+
+	case TreeNodeCycle:
+		if node.CycleEntry == nil {
+			m.Detail.SetEmpty("(no cycle data)")
+			return
+		}
+		c := node.CycleEntry
+		var body strings.Builder
+		body.WriteString(fmt.Sprintf("Cycle %d\n\n", c.Number))
+		for _, a := range c.Agents {
+			if a.Done {
+				secs := float64(a.DurationMs) / 1000.0
+				body.WriteString(fmt.Sprintf("  %s %s  %.1fs  $%.4f", iconDone, a.Role, secs, a.CostUSD))
+				if a.IssueCount > 0 {
+					body.WriteString(fmt.Sprintf("  %d issue(s)", a.IssueCount))
+				}
+			} else {
+				body.WriteString(fmt.Sprintf("  %s %s  (in progress)", iconWorking, a.Role))
+			}
+			body.WriteString("\n")
+			if a.Summary != "" {
+				body.WriteString("    " + a.Summary + "\n")
+			}
+		}
+		m.Detail.SetContent(fmt.Sprintf("cycle %d", c.Number), body.String())
+
+	case TreeNodeAgent:
+		if node.AgentEntry == nil {
+			m.Detail.SetEmpty("(no agent data)")
+			return
+		}
+		a := node.AgentEntry
+		header := FormatAgentHeader(AgentContext{
+			Role:       a.Role,
+			DurationMs: a.DurationMs,
+			CostUSD:    a.CostUSD,
+			IssueCount: a.IssueCount,
+			Done:       a.Done,
+			Summary:    a.Summary,
+		})
+		if a.Output == "" {
+			m.Detail.SetContentWithHeader(a.Role+" output", header, "(output will appear when agent completes)")
+		} else {
+			body := FormatAgentOutput(a.Output, m.Detail.viewport.Width)
+			m.Detail.SetContentWithHeader(a.Role+" output", header, body)
+		}
+
+	default:
+		m.Detail.SetEmpty("Press enter to expand details")
+	}
+}
+
+// buildNebulaOverview builds a summary string for the nebula root node.
+func (m *AppModel) buildNebulaOverview() string {
+	var b strings.Builder
+	phases := m.NebulaView.Phases
+	done, working, waiting, failed := 0, 0, 0, 0
+	var totalCost float64
+	for _, p := range phases {
+		totalCost += p.CostUSD
+		switch p.Status {
+		case PhaseDone, PhaseSkipped:
+			done++
+		case PhaseWorking, PhaseGate:
+			working++
+		case PhaseFailed:
+			failed++
+		default:
+			waiting++
+		}
+	}
+	b.WriteString(fmt.Sprintf("Progress: %d/%d phases complete\n", done, len(phases)))
+	b.WriteString(fmt.Sprintf("Working: %d  Waiting: %d  Failed: %d\n", working, waiting, failed))
+	b.WriteString(fmt.Sprintf("Total cost: $%.2f\n", totalCost))
+	return b.String()
 }
 
 // findPhase returns the PhaseEntry for a given phase ID, or nil.
@@ -2773,7 +2934,8 @@ func (m AppModel) View() string {
 
 	if sidebarW > 0 {
 		// Split-pane layout: sidebar | right area (tabs + main + detail).
-		m.Sidebar.SyncPhases(m.NebulaView.Phases)
+		// Use tree view for hierarchical expand/collapse in the sidebar.
+		m.Sidebar.SyncTree(m.StatusBar.Name, m.NebulaView.Phases, m.PhaseLoops, m.StatusBar.CostUSD)
 		m.Sidebar.Width = sidebarW
 		m.Sidebar.Height = m.sidebarHeight()
 		m.Sidebar.Focus = m.PaneFocus == PaneFocusSidebar

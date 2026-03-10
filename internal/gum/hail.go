@@ -2,6 +2,7 @@ package gum
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -29,12 +30,9 @@ type HailResolution struct {
 	Skipped  bool // true if the user pressed Esc/cancelled
 }
 
-// ResolveOne resolves a single hail using gum prompts. It:
-// 1. Shows hail context via gum format
-// 2. If the hail has options: gum choose
-// 3. Otherwise: gum write for free-text
-func (r *HailResolver) ResolveOne(ctx context.Context, hail ui.HailInfo) (HailResolution, error) {
-	// Build and display context.
+// BuildHailMarkdown constructs the markdown context string for a hail.
+// Exported so the tui package can reuse it in buildGumHailCmd without duplication.
+func BuildHailMarkdown(hail ui.HailInfo) string {
 	var md strings.Builder
 	md.WriteString(fmt.Sprintf("# ⚠ HAIL: %s\n\n", hail.Summary))
 
@@ -54,13 +52,22 @@ func (r *HailResolver) ResolveOne(ctx context.Context, hail ui.HailInfo) (HailRe
 		md.WriteString(hail.Detail)
 		md.WriteString("\n")
 	}
+	return md.String()
+}
+
+// ResolveOne resolves a single hail using gum prompts. It:
+// 1. Shows hail context via gum format
+// 2. If the hail has options: gum choose
+// 3. Otherwise: gum write for free-text
+func (r *HailResolver) ResolveOne(ctx context.Context, hail ui.HailInfo) (HailResolution, error) {
+	mdContent := BuildHailMarkdown(hail)
 
 	// Render context to stderr.
-	formatted, err := r.gum.Format(ctx, md.String())
+	formatted, err := r.gum.Format(ctx, mdContent)
 	if err == nil {
 		fmt.Fprint(os.Stderr, formatted)
 	} else {
-		fmt.Fprint(os.Stderr, md.String())
+		fmt.Fprint(os.Stderr, mdContent)
 	}
 
 	// Collect response.
@@ -164,26 +171,9 @@ func (r *HailResolver) ResolveAll(ctx context.Context, hails []ui.HailInfo) ([]H
 func GumHailCmd(ctx context.Context, gumPath string, hail ui.HailInfo) *exec.Cmd {
 	var script strings.Builder
 
-	// Show context.
-	var md strings.Builder
-	md.WriteString(fmt.Sprintf("# ⚠ HAIL: %s\n\n", hail.Summary))
-	if hail.Kind != "" {
-		md.WriteString(fmt.Sprintf("**Kind:** %s\n", hail.Kind))
-	}
-	if hail.SourceRole != "" {
-		md.WriteString(fmt.Sprintf("**From:** %s", hail.SourceRole))
-		if hail.Cycle > 0 {
-			md.WriteString(fmt.Sprintf(" · cycle %d", hail.Cycle))
-		}
-		md.WriteString("\n")
-	}
-	if hail.Detail != "" {
-		md.WriteString("\n")
-		md.WriteString(hail.Detail)
-	}
-
-	escaped := strings.ReplaceAll(md.String(), "'", "'\\''")
-	script.WriteString(fmt.Sprintf("echo '%s' | %s format --type markdown >&2\n", escaped, gumPath))
+	mdContent := BuildHailMarkdown(hail)
+	escaped := strings.ReplaceAll(mdContent, "'", "'\\''")
+	script.WriteString(fmt.Sprintf("printf '%%s' '%s' | %s format --type markdown >&2\n", escaped, gumPath))
 
 	if len(hail.Options) > 0 {
 		script.WriteString(fmt.Sprintf("%s choose --header 'Choose a resolution:' --cursor.foreground '%s' --header.foreground '%s' --selected.foreground '%s'",
@@ -203,14 +193,7 @@ func GumHailCmd(ctx context.Context, gumPath string, hail ui.HailInfo) *exec.Cmd
 }
 
 // isExitError checks whether err wraps an *exec.ExitError and populates target.
+// Uses errors.As to handle wrapped errors correctly.
 func isExitError(err error, target **exec.ExitError) bool {
-	if err == nil {
-		return false
-	}
-	e, ok := err.(*exec.ExitError)
-	if ok {
-		*target = e
-		return true
-	}
-	return false
+	return errors.As(err, target)
 }
