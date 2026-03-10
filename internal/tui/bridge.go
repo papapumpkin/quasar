@@ -248,13 +248,14 @@ func tryGitDiff(workDir string, diffArgs []string, baseRef, headRef string) diff
 	}
 }
 
-// captureGitDiffStat runs "git diff --stat <refRange>" and parses the per-file
-// stats into FileStatEntry slices. Returns nil on any error.
-func captureGitDiffStat(workDir, refRange string) []FileStatEntry {
+// captureGitDiffStat runs "git diff --numstat <args...>" and parses the
+// per-file stats into FileStatEntry slices. Returns nil on any error.
+func captureGitDiffStat(workDir string, diffArgs []string) []FileStatEntry {
 	ctx, cancel := context.WithTimeout(context.Background(), gitDiffTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "diff", "--numstat", refRange)
+	args := append([]string{"diff", "--numstat"}, diffArgs...)
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = workDir
 	var out bytes.Buffer
 	cmd.Stdout = &out

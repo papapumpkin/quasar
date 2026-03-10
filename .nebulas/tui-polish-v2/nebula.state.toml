@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'tui-polish-v2'
-total_cost_usd = 1.5916284500000004
+total_cost_usd = 4.3526824500000005
 
 [phases]
 [phases.agent-chat-gum]
@@ -11,9 +11,15 @@ updated_at = 2026-03-09T20:26:03.338227-04:00
 
 [phases.board-phase-names]
 bead_id = 'quasar-4c8l'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-09T20:23:47.022688-04:00
-updated_at = 2026-03-09T20:26:03.440525-04:00
+updated_at = 2026-03-09T20:32:43.450833-04:00
+
+[phases.board-phase-names.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Board view phase name readability improvements are well-implemented with proper width-adaptive column sizing, two-line entries, selected-phase subtitle, and good test coverage.'
 
 [phases.color-theme]
 bead_id = 'quasar-jjy5'
@@ -53,9 +59,9 @@ updated_at = 2026-03-09T20:26:03.10456-04:00
 
 [phases.split-pane-layout]
 bead_id = 'quasar-bexx'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-09T20:23:47.640047-04:00
-updated_at = 2026-03-09T20:26:02.991482-04:00
+updated_at = 2026-03-09T20:32:43.466542-04:00
 
 [phases.token-count-live]
 bead_id = 'quasar-b986'
