@@ -1,22 +1,12 @@
 package tui
 
 import (
-	"sync"
-
 	"github.com/charmbracelet/glamour"
 )
 
-// mdRenderer caches a glamour renderer per word-wrap width so we don't
-// recreate it on every frame. A sync.Map avoids locking on the hot path
-// once a width has been seen.
-var mdRenderers sync.Map // map[int]*glamour.TermRenderer
-
-// getRenderer returns (or lazily creates) a glamour renderer for the
-// given wrap width. Returns nil on creation error.
-func getRenderer(width int) *glamour.TermRenderer {
-	if v, ok := mdRenderers.Load(width); ok {
-		return v.(*glamour.TermRenderer)
-	}
+// newRenderer creates a glamour renderer for the given wrap width.
+// Returns nil on creation error.
+func newRenderer(width int) *glamour.TermRenderer {
 	r, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle("dark"),
 		glamour.WithWordWrap(width),
@@ -24,7 +14,6 @@ func getRenderer(width int) *glamour.TermRenderer {
 	if err != nil {
 		return nil
 	}
-	mdRenderers.Store(width, r)
 	return r
 }
 
@@ -35,7 +24,7 @@ func RenderMarkdown(content string, width int) string {
 	if width <= 0 {
 		width = 80
 	}
-	r := getRenderer(width)
+	r := newRenderer(width)
 	if r == nil {
 		return content
 	}

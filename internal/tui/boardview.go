@@ -320,11 +320,7 @@ func (bv BoardView) View() string {
 		}
 		if len(fullTitle) > titleWidth {
 			icon, _ := phaseIconAndStyleStatic(*sel)
-			subtitle := lipgloss.NewStyle().
-				Foreground(colorAccent).
-				Bold(true).
-				Render(icon + " " + fullTitle)
-			board += "\n" + subtitle
+			board += "\n" + icon + " " + styleSelectedTitle.Render(fullTitle)
 		}
 	}
 

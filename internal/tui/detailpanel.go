@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // maxOutputLines is the maximum number of lines shown before truncation.
@@ -299,8 +300,10 @@ func HighlightOutput(text string) string {
 }
 
 // highlightLine applies pattern highlighting to a single line.
+// It strips ANSI escape codes before pattern matching so that
+// glamour-rendered text is still correctly detected.
 func highlightLine(line string) string {
-	upper := strings.ToUpper(line)
+	upper := strings.ToUpper(ansi.Strip(line))
 	switch {
 	case strings.Contains(upper, "SEVERITY: CRITICAL"), strings.Contains(upper, "SEVERITY:CRITICAL"):
 		return styleHighlightCritical.Render(line)

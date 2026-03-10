@@ -359,4 +359,3 @@ func (lv LoopView) View() string {
 	}
 	return b.String()
 }
-

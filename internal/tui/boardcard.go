@@ -42,14 +42,14 @@ func (bv BoardView) renderBoardEntry(p PhaseEntry, selected bool, colWidth int) 
 
 	// Two-line entries: show phase ID on a second line when column is wide enough
 	// and the phase has both a title and an ID that differ.
-	if colWidth >= 35 && p.Title != "" && p.ID != "" {
+	if colWidth >= 35 && p.Title != "" && p.ID != "" && p.Title != p.ID {
 		idWidth := colWidth - 4
 		if idWidth < 4 {
 			idWidth = 4
 		}
 		truncID := TruncateWithEllipsis(p.ID, idWidth)
 		sb.WriteString("\n    ")
-		sb.WriteString(lipgloss.NewStyle().Foreground(colorMuted).Render(truncID))
+		sb.WriteString(styleCardPhaseID.Render(truncID))
 	}
 
 	// Next line: health dot + progress indicator + cost badge (for active/completed phases).

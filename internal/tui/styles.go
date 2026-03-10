@@ -170,6 +170,12 @@ var (
 
 	// styleProgressRed styles the progress indicator for final cycle.
 	styleProgressRed = lipgloss.NewStyle().Foreground(colorDanger)
+
+	// styleCardPhaseID styles the muted phase ID on two-line board card entries.
+	styleCardPhaseID = lipgloss.NewStyle().Foreground(colorMutedLight)
+
+	// styleSelectedTitle styles the full title subtitle shown below the board for the selected phase.
+	styleSelectedTitle = lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
 )
 
 // styleTreeConnector styles the tree-drawing characters (├──, └──) in the cycle timeline.

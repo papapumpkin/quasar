@@ -200,7 +200,6 @@ func TestPluralS(t *testing.T) {
 	}
 }
 
-
 func TestParseUnifiedDiff_HunkHeader(t *testing.T) {
 	t.Parallel()
 	files := ParseUnifiedDiff(sampleDiff)
