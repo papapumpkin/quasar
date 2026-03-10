@@ -24,9 +24,9 @@ func NewHailResolver(g *Gum) *HailResolver {
 
 // HailResolution holds the result of resolving a single hail.
 type HailResolution struct {
-	HailID     string
-	Response   string
-	Skipped    bool // true if the user pressed Esc/cancelled
+	HailID   string
+	Response string
+	Skipped  bool // true if the user pressed Esc/cancelled
 }
 
 // ResolveOne resolves a single hail using gum prompts. It:

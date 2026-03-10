@@ -447,10 +447,10 @@ type MsgDialogClosed struct {
 // MsgGumHailResult is sent after a gum-backed hail resolution subprocess
 // completes. The TUI resumes and applies the resolution.
 type MsgGumHailResult struct {
-	PhaseID    string // phase that raised the hail
-	HailID     string // hail identifier
-	Response   string // human's response (empty if skipped/cancelled)
-	Err        error  // non-nil if gum subprocess failed
+	PhaseID  string // phase that raised the hail
+	HailID   string // hail identifier
+	Response string // human's response (empty if skipped/cancelled)
+	Err      error  // non-nil if gum subprocess failed
 }
 
 // MsgGumDialogResult is sent after a gum-backed dialog subprocess
