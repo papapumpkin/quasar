@@ -1,7 +1,6 @@
 package claude
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -11,15 +10,14 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 
 	"github.com/papapumpkin/quasar/internal/agent"
 )
 
 // Invoker runs the Claude CLI as a subprocess and parses JSON output.
 type Invoker struct {
-	ClaudePath         string
-	Verbose            bool
+	ClaudePath string
+	Verbose    bool
 	// OnOutput is called for each line of stderr output during invocation.
 	// When nil, stderr is silently consumed (backward compatible).
 	// The callback runs in a dedicated reader goroutine and must be non-blocking.
