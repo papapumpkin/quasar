@@ -37,7 +37,7 @@ type InvocationResult struct {
 	ResultText       string
 	CostUSD          float64
 	DurationMs       int64
-	TotalTokens      int    // Combined input + output tokens consumed by this invocation.
+	TotalTokens      int // Combined input + output tokens consumed by this invocation.
 	SessionID        string
 	SystemPromptLen  int    // Length of the system prompt in bytes.
 	UserPromptLen    int    // Length of the user prompt in bytes.

@@ -22,11 +22,11 @@ const (
 // the board become a compact visual status display.
 type Sidebar struct {
 	Phases []PhaseEntry
-	Cursor int    // currently highlighted phase index
-	Offset int    // scroll offset for phases that exceed viewport height
-	Width  int    // available width for the sidebar
-	Height int    // available height for the sidebar content area
-	Focus  bool   // whether the sidebar currently has keyboard focus
+	Cursor int  // currently highlighted phase index
+	Offset int  // scroll offset for phases that exceed viewport height
+	Width  int  // available width for the sidebar
+	Height int  // available height for the sidebar content area
+	Focus  bool // whether the sidebar currently has keyboard focus
 }
 
 // NewSidebar creates an empty sidebar.
