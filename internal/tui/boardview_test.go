@@ -782,3 +782,107 @@ func TestStatusToColumn(t *testing.T) {
 		})
 	}
 }
+
+func TestBoardViewColumnWidth_ScalesWithTerminal(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		width    int
+		numCols  int
+		minWidth int
+		maxWidth int
+	}{
+		{"narrow caps at 30", 120, 5, 12, 30},
+		{"wide 140 caps at 40", 140, 6, 12, 40},
+		{"wider 160 caps at 45", 160, 6, 12, 45},
+		{"very wide 200 caps at 50", 200, 6, 12, 50},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			bv := BoardView{Width: tc.width}
+			w := bv.columnWidth(tc.numCols)
+			if w < tc.minWidth {
+				t.Errorf("columnWidth(%d) = %d, want >= %d", tc.numCols, w, tc.minWidth)
+			}
+			if w > tc.maxWidth {
+				t.Errorf("columnWidth(%d) = %d, want <= %d", tc.numCols, w, tc.maxWidth)
+			}
+		})
+	}
+}
+
+func TestBoardViewView_SelectedPhaseFullTitle(t *testing.T) {
+	t.Parallel()
+	longTitle := "Wire streaming invoker output to the event bus for processing"
+	bv := NewBoardView()
+	bv.Width = 150
+	bv.Phases = []PhaseEntry{
+		{ID: "streaming-invoker", Title: longTitle, Status: PhaseWorking, Cycles: 1, MaxCycles: 5},
+	}
+	bv.Cursor = 0
+
+	view := bv.View()
+
+	// The full title should appear below the board as a subtitle.
+	if !strings.Contains(view, longTitle) {
+		t.Errorf("expected full title %q in board view for selected phase", longTitle)
+	}
+}
+
+func TestBoardViewView_NoSubtitleWhenTitleFits(t *testing.T) {
+	t.Parallel()
+	bv := NewBoardView()
+	bv.Width = 150
+	bv.Phases = []PhaseEntry{
+		{ID: "short-id", Title: "Short", Status: PhaseDone},
+	}
+	bv.Cursor = 0
+
+	view := bv.View()
+
+	// Count occurrences of "Short" — should appear only in the card, not as a subtitle.
+	count := strings.Count(view, "Short")
+	if count > 1 {
+		t.Errorf("expected title 'Short' once (no subtitle needed), found %d times", count)
+	}
+}
+
+func TestBoardViewView_TwoLineEntryOnWideTerminal(t *testing.T) {
+	t.Parallel()
+	bv := NewBoardView()
+	bv.Width = 250 // Wide enough that columns are >= 35 even with 6 columns.
+	bv.Phases = []PhaseEntry{
+		{ID: "setup-database", Title: "Setup Database", Status: PhaseWaiting},
+	}
+
+	view := bv.View()
+
+	// Both title and ID should appear since columns are wide enough for two-line entries.
+	if !strings.Contains(view, "Setup Database") {
+		t.Error("expected title 'Setup Database' in two-line entry")
+	}
+	if !strings.Contains(view, "setup-database") {
+		t.Error("expected phase ID 'setup-database' in two-line entry on wide terminal")
+	}
+}
+
+func TestBoardViewView_NarrowTerminalGraceful(t *testing.T) {
+	t.Parallel()
+	bv := NewBoardView()
+	bv.Width = 100 // Minimum non-fallback width.
+	bv.Phases = []PhaseEntry{
+		{ID: "a-phase", Title: "A Phase", Status: PhaseWaiting},
+		{ID: "b-phase", Title: "B Phase", Status: PhaseWorking, Cycles: 1, MaxCycles: 5},
+	}
+
+	view := bv.View()
+
+	// Should render without panic and contain column headers.
+	if !strings.Contains(view, "Queued") {
+		t.Error("expected Queued column at narrow width")
+	}
+	if !strings.Contains(view, "Running") {
+		t.Error("expected Running column at narrow width")
+	}
+}

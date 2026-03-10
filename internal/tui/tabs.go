@@ -3,8 +3,6 @@ package tui
 import (
 	"fmt"
 	"strings"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 // CockpitTab identifies a top-level tab in nebula cockpit mode.
@@ -69,31 +67,24 @@ type TabBar struct {
 	Width     int
 }
 
-// View renders the tab bar as a single styled line.
-// The active tab is highlighted with the nebula accent color and bold.
-// Inactive tabs use the muted color.
+// View renders the tab bar as a single styled line with a bottom border.
+// The active tab has a filled background and bold purple foreground.
+// Inactive tabs use muted foreground with no background fill.
 func (tb TabBar) View() string {
-	activeStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(colorNebula)
-
-	inactiveStyle := lipgloss.NewStyle().
-		Foreground(colorMuted)
-
 	var parts []string
 	for i := 0; i < cockpitTabCount; i++ {
 		tab := CockpitTab(i)
 		label := fmt.Sprintf("[%d] %s", i+1, tab.Label())
 		if tab == tb.ActiveTab {
-			parts = append(parts, activeStyle.Render(label))
+			parts = append(parts, styleTabActive.Render(label))
 		} else {
-			parts = append(parts, inactiveStyle.Render(label))
+			parts = append(parts, styleTabInactive.Render(label))
 		}
 	}
 
-	line := strings.Join(parts, "  ")
-	return lipgloss.NewStyle().
+	line := strings.Join(parts, " ")
+	return styleTabBar.
 		Width(tb.Width).
-		PaddingLeft(2).
+		PaddingLeft(1).
 		Render(line)
 }

@@ -32,6 +32,44 @@ const (
 	BoardMinWidth = 100
 )
 
+// Split-pane sidebar layout constants.
+const (
+	// SidebarCollapseWidth is the minimum terminal width for showing the sidebar.
+	// Below this width, the sidebar is hidden and the layout falls back to the
+	// current full-width vertical layout.
+	SidebarCollapseWidth = 100
+
+	// SidebarMinWidth is the minimum width for the sidebar panel.
+	SidebarMinWidth = 20
+
+	// SidebarMaxWidth is the maximum width for the sidebar panel.
+	SidebarMaxWidth = 35
+
+	// SidebarWidthFraction is the fraction of terminal width allocated to the sidebar.
+	// Applied between SidebarMinWidth and SidebarMaxWidth bounds.
+	SidebarWidthFraction = 0.22
+
+	// DetailSplitRatio is the fraction of right-area height allocated to the main view.
+	// The remainder goes to the detail panel.
+	DetailSplitRatio = 0.6
+)
+
+// ComputeSidebarWidth returns the sidebar width for a given terminal width.
+// Returns 0 when the terminal is too narrow and the sidebar should be hidden.
+func ComputeSidebarWidth(termWidth int) int {
+	if termWidth < SidebarCollapseWidth {
+		return 0
+	}
+	w := int(float64(termWidth) * SidebarWidthFraction)
+	if w < SidebarMinWidth {
+		w = SidebarMinWidth
+	}
+	if w > SidebarMaxWidth {
+		w = SidebarMaxWidth
+	}
+	return w
+}
+
 // TruncateWithEllipsis truncates s to maxLen runes, appending "..." if truncated.
 // If maxLen is less than 4, returns s truncated to maxLen runes without ellipsis.
 // Returns s unchanged if it fits within maxLen runes.

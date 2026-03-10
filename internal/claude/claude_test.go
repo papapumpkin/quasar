@@ -101,6 +101,32 @@ func TestInvoke_Success(t *testing.T) {
 	}
 }
 
+func TestInvoke_PopulatesTotalTokens(t *testing.T) {
+	resp := CLIResponse{
+		Result:       "done",
+		SessionID:    "sess-tokens",
+		TotalCostUSD: 0.50,
+		DurationMs:   2000,
+		InputTokens:  15000,
+		OutputTokens: 3000,
+	}
+	jsonBytes, _ := json.Marshal(resp)
+
+	dir := t.TempDir()
+	script := writeScript(t, dir, "claude", "printf '%s' '"+string(jsonBytes)+"'")
+
+	inv := newTestInvoker("claude", false, fakeExecContextWith(script), nil)
+	a := agent.Agent{}
+	result, err := inv.Invoke(context.Background(), a, "do stuff", dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.TotalTokens != 18000 {
+		t.Errorf("TotalTokens = %d, want %d", result.TotalTokens, 18000)
+	}
+}
+
 func TestInvoke_IsError(t *testing.T) {
 	resp := CLIResponse{
 		IsError: true,

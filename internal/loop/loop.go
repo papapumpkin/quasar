@@ -50,6 +50,8 @@ type Loop struct {
 	CheckpointDir     string           // Directory for checkpoint files. Empty disables checkpointing.
 	FixEffort         string           // Effort level for lint/filter fix invocations (e.g. "low"). Empty = Claude's default.
 	FallbackModel     string           // Automatic fallback model passed to all agents.
+	GuidanceDir       string           // Directory to scan for GUIDANCE-<phaseID> files. Empty disables guidance file consumption.
+	PhaseID           string           // Phase ID for guidance file consumption (empty in loop mode).
 	// NewCheckpointHook, when non-nil, is called by RunTask and RunExistingTask
 	// to create a checkpoint hook that is prepended to Hooks. The function
 	// receives a state accessor (returning the current *CycleState) and must
@@ -628,7 +630,7 @@ func (l *Loop) runLintFixLoop(ctx context.Context, state *CycleState, perAgentBu
 
 		state.CoderOutput = result.ResultText
 		state.TotalCostUSD += result.CostUSD
-		l.UI.AgentDone("coder", result.CostUSD, result.DurationMs)
+		l.UI.AgentDone("coder", result.CostUSD, result.DurationMs, result.TotalTokens)
 
 		if err := l.checkBudget(ctx, state); err != nil {
 			return err
@@ -777,7 +779,7 @@ func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkNam
 		state.FilterFixAttempts++
 		state.CycleFilterFixCostUSD += result.CostUSD
 		state.CycleFilterFixAttempts++
-		l.UI.AgentDone("coder", result.CostUSD, result.DurationMs)
+		l.UI.AgentDone("coder", result.CostUSD, result.DurationMs, result.TotalTokens)
 
 		if err := l.checkBudget(ctx, state); err != nil {
 			return false, err
@@ -1034,7 +1036,7 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	state.TotalCostUSD += result.CostUSD
 	state.Phase = PhaseCodeComplete
 	l.UI.AgentOutput("coder", state.Cycle, result.ResultText)
-	l.UI.AgentDone("coder", result.CostUSD, result.DurationMs)
+	l.UI.AgentDone("coder", result.CostUSD, result.DurationMs, result.TotalTokens)
 	l.emitCycleSummary(state, PhaseCodeComplete, result)
 	l.markHailsRelayed(relayIDs)
 
@@ -1094,7 +1096,7 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	state.TotalCostUSD += result.CostUSD
 	state.Phase = PhaseReviewComplete
 	l.UI.AgentOutput("reviewer", state.Cycle, result.ResultText)
-	l.UI.AgentDone("reviewer", result.CostUSD, result.DurationMs)
+	l.UI.AgentDone("reviewer", result.CostUSD, result.DurationMs, result.TotalTokens)
 	l.markHailsRelayed(relayIDs)
 	state.Findings = ParseReviewFindings(result.ResultText)
 	state.Verifications = ParseVerifications(result.ResultText)

@@ -1,6 +1,8 @@
 package loop
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -396,6 +398,88 @@ func TestFormatHailRelay_AutoResolved(t *testing.T) {
 	})
 }
 
+func TestFormatHailRelay_Guidance(t *testing.T) {
+	t.Parallel()
+
+	t.Run("guidance hail uses HUMAN GUIDANCE format", func(t *testing.T) {
+		t.Parallel()
+		hails := []Hail{{
+			Kind:       HailGuidance,
+			Summary:    "developer guidance",
+			Cycle:      2,
+			Resolution: "Focus on the diffview.go file first, the tests are failing there.",
+		}}
+		got := formatHailRelay(hails)
+
+		if !strings.Contains(got, "[HUMAN GUIDANCE]") {
+			t.Error("expected [HUMAN GUIDANCE] header for guidance hail")
+		}
+		if !strings.Contains(got, "Focus on the diffview.go file") {
+			t.Error("expected guidance text in relay block")
+		}
+		if !strings.Contains(got, "incorporate this into your current work") {
+			t.Error("expected incorporation instruction")
+		}
+		// Guidance hails should NOT use the standard "was answered:" format.
+		if strings.Contains(got, "was answered:") {
+			t.Error("guidance hail should not use 'was answered:' format")
+		}
+	})
+
+	t.Run("mixed guidance and standard hails", func(t *testing.T) {
+		t.Parallel()
+		hails := []Hail{
+			{Kind: HailBlocker, Summary: "missing dep", Cycle: 1, Resolution: "Add it to go.mod"},
+			{Kind: HailGuidance, Summary: "developer guidance", Cycle: 2, Resolution: "Use the unified diff format"},
+		}
+		got := formatHailRelay(hails)
+
+		// Standard hail uses "was answered:" format.
+		if !strings.Contains(got, "was answered:") {
+			t.Error("standard hail should use 'was answered:' format")
+		}
+		// Guidance hail uses [HUMAN GUIDANCE] format.
+		if !strings.Contains(got, "[HUMAN GUIDANCE]") {
+			t.Error("guidance hail should use [HUMAN GUIDANCE] format")
+		}
+		if !strings.Contains(got, "Use the unified diff format") {
+			t.Error("expected guidance text")
+		}
+	})
+}
+
+func TestHailGuidanceKind(t *testing.T) {
+	t.Parallel()
+
+	t.Run("HailGuidance is a valid kind", func(t *testing.T) {
+		t.Parallel()
+		if err := ValidateHailKind(HailGuidance); err != nil {
+			t.Errorf("ValidateHailKind(HailGuidance) = %v, want nil", err)
+		}
+	})
+
+	t.Run("guidance hail can be posted", func(t *testing.T) {
+		t.Parallel()
+		q := NewMemoryHailQueue()
+		err := q.Post(Hail{
+			ID:      "guidance-1",
+			Kind:    HailGuidance,
+			Summary: "developer guidance",
+		})
+		if err != nil {
+			t.Fatalf("Post(guidance hail) = %v, want nil", err)
+		}
+
+		all := q.All()
+		if len(all) != 1 {
+			t.Fatalf("All() = %d items, want 1", len(all))
+		}
+		if all[0].Kind != HailGuidance {
+			t.Errorf("Kind = %q, want %q", all[0].Kind, HailGuidance)
+		}
+	})
+}
+
 func TestPendingHailRelay_SweepsExpired(t *testing.T) {
 	t.Parallel()
 
@@ -503,6 +587,104 @@ func TestPendingHailRelay_SweepsExpired(t *testing.T) {
 		unresolved := q.Unresolved()
 		if len(unresolved) != 1 || unresolved[0].ID != "h-fresh" {
 			t.Errorf("Unresolved() = %v, want [h-fresh]", unresolved)
+		}
+	})
+}
+
+func TestConsumeGuidanceFiles(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no guidance dir returns empty", func(t *testing.T) {
+		t.Parallel()
+		l := &Loop{UI: &noopUI{}}
+		block, ids := l.consumeGuidanceFiles()
+		if block != "" || ids != nil {
+			t.Errorf("consumeGuidanceFiles() with no dir = (%q, %v), want empty", block, ids)
+		}
+	})
+
+	t.Run("no guidance file returns empty", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		l := &Loop{UI: &noopUI{}, GuidanceDir: dir, PhaseID: "test-phase"}
+		block, ids := l.consumeGuidanceFiles()
+		if block != "" || ids != nil {
+			t.Errorf("consumeGuidanceFiles() with no file = (%q, %v), want empty", block, ids)
+		}
+	})
+
+	t.Run("reads and removes guidance file", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		phaseID := "my-phase"
+		guidance := "Focus on the error handling in main.go"
+
+		// Write guidance file.
+		guidancePath := filepath.Join(dir, "GUIDANCE-"+phaseID)
+		if err := os.WriteFile(guidancePath, []byte(guidance), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		l := &Loop{UI: &noopUI{}, GuidanceDir: dir, PhaseID: phaseID}
+		block, ids := l.consumeGuidanceFiles()
+
+		// Should contain the guidance text.
+		if !strings.Contains(block, "[HUMAN GUIDANCE]") {
+			t.Error("expected [HUMAN GUIDANCE] header")
+		}
+		if !strings.Contains(block, "Focus on the error handling") {
+			t.Error("expected guidance text in relay block")
+		}
+		if len(ids) != 1 {
+			t.Fatalf("ids = %v, want 1 entry", ids)
+		}
+
+		// File should be removed after consumption.
+		if _, err := os.Stat(guidancePath); !os.IsNotExist(err) {
+			t.Error("guidance file should be removed after consumption")
+		}
+	})
+
+	t.Run("empty guidance file returns empty", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		phaseID := "empty-phase"
+
+		guidancePath := filepath.Join(dir, "GUIDANCE-"+phaseID)
+		if err := os.WriteFile(guidancePath, []byte("   \n  "), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		l := &Loop{UI: &noopUI{}, GuidanceDir: dir, PhaseID: phaseID}
+		block, ids := l.consumeGuidanceFiles()
+
+		if block != "" || ids != nil {
+			t.Errorf("empty guidance file: got (%q, %v), want empty", block, ids)
+		}
+	})
+
+	t.Run("guidance integrates with pendingHailRelay", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		phaseID := "integrated-phase"
+		guidance := "Please add tests for the new feature"
+
+		guidancePath := filepath.Join(dir, "GUIDANCE-"+phaseID)
+		if err := os.WriteFile(guidancePath, []byte(guidance), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		l := &Loop{UI: &noopUI{}, GuidanceDir: dir, PhaseID: phaseID}
+		block, ids := l.pendingHailRelay()
+
+		if !strings.Contains(block, "[HUMAN GUIDANCE]") {
+			t.Error("expected [HUMAN GUIDANCE] in pendingHailRelay output")
+		}
+		if !strings.Contains(block, "Please add tests") {
+			t.Error("expected guidance text in relay block")
+		}
+		if len(ids) != 1 {
+			t.Fatalf("ids = %v, want 1 entry", ids)
 		}
 	})
 }

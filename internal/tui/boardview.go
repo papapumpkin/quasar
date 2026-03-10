@@ -304,10 +304,31 @@ func (bv BoardView) View() string {
 		rendered = append(rendered, colStyle.Render(sb.String()))
 	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, rendered...)
+	board := lipgloss.JoinHorizontal(lipgloss.Top, rendered...)
+
+	// Show the full title of the selected phase below the board.
+	sel := bv.SelectedPhase()
+	if sel != nil {
+		fullTitle := sel.Title
+		if fullTitle == "" {
+			fullTitle = sel.ID
+		}
+		// Only show the subtitle if the title was actually truncated.
+		titleWidth := colWidth - 4
+		if titleWidth < 4 {
+			titleWidth = 4
+		}
+		if len(fullTitle) > titleWidth {
+			icon, _ := phaseIconAndStyleStatic(*sel)
+			board += "\n" + icon + " " + styleSelectedTitle.Render(fullTitle)
+		}
+	}
+
+	return board
 }
 
 // columnWidth computes the width for each column given the number of visible columns.
+// On wide terminals the cap scales up so phase titles remain readable.
 func (bv BoardView) columnWidth(numCols int) int {
 	if numCols <= 0 {
 		return 20
@@ -317,8 +338,17 @@ func (bv BoardView) columnWidth(numCols int) int {
 	if w < 12 {
 		w = 12
 	}
-	if w > 30 {
-		w = 30
+	// Scale max width with terminal size for better readability.
+	maxW := 30
+	if bv.Width >= 200 {
+		maxW = 50
+	} else if bv.Width >= 160 {
+		maxW = 45
+	} else if bv.Width >= boardWidthFull {
+		maxW = 40
+	}
+	if w > maxW {
+		w = maxW
 	}
 	return w
 }

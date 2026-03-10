@@ -2,21 +2,22 @@ package tui
 
 import "github.com/charmbracelet/lipgloss"
 
-// Semantic color palette — galactic theme.
+// Semantic color palette — galactic theme (Catppuccin-inspired richness).
 var (
-	colorPrimary       = lipgloss.Color("#58A6FF") // Starlight blue — primary accent
-	colorAccent        = lipgloss.Color("#FFA657") // Supernova orange — attention/gate
+	colorPrimary       = lipgloss.Color("#7DCFFF") // Starlight blue — primary accent (richer)
+	colorAccent        = lipgloss.Color("#FF9E64") // Supernova orange — attention/gate (warmer)
 	colorSuccess       = lipgloss.Color("#00E676") // Green — completed (unchanged)
-	colorDanger        = lipgloss.Color("#FF7B72") // Supernova red — errors/failures
+	colorDanger        = lipgloss.Color("#FF7B72") // Supernova red — errors/failures (unchanged)
 	colorMuted         = lipgloss.Color("#484F58") // Space dust gray — de-emphasized
 	colorMutedLight    = lipgloss.Color("#8B949E") // Cosmic dust — normal text
-	colorWhite         = lipgloss.Color("#E6EDF3") // Distant starlight — primary text
+	colorWhite         = lipgloss.Color("#CDD6F4") // Distant starlight — primary text (Catppuccin-inspired)
 	colorBrightWhite   = lipgloss.Color("#FFFFFF") // Pure white — emphatic text
 	colorSurface       = lipgloss.Color("#1A1A40") // Deep indigo — status bar bg (clearly tinted)
-	colorSurfaceBright = lipgloss.Color("#161B22") // Nebula dust — breadcrumb bg
+	colorSurfaceBright = lipgloss.Color("#1E2030") // Nebula dust — breadcrumb bg (slightly lighter)
 	colorSurfaceDim    = lipgloss.Color("#080B10") // Void black — footer bg
+	colorSurfacePanel  = lipgloss.Color("#11111B") // Panel interior — subtle lift from terminal bg
 	colorBlue          = lipgloss.Color("#79C0FF") // Stellar blue — working/active
-	colorBudgetWarn    = lipgloss.Color("#FFA657") // Supernova orange — budget warning
+	colorBudgetWarn    = lipgloss.Color("#FF9E64") // Supernova orange — budget warning
 	colorReviewer      = lipgloss.Color("#E3B341") // Star yellow — reviewer spinner
 	colorStarYellow    = lipgloss.Color("#E3B341") // Star yellow — highlights, sparkle accents
 	colorNebula        = lipgloss.Color("#BC8CFF") // Nebula purple — breadcrumbs, secondary UI
@@ -24,6 +25,10 @@ var (
 	colorRedshift      = lipgloss.Color("#FF6B6B") // Warm red — Doppler left jet
 	colorBlueshift     = lipgloss.Color("#4FC3F7") // Cool cyan — Doppler right jet
 	colorSelectionBg   = lipgloss.Color("#2D2D5E") // Dim nebula tint — selected row background
+	colorPanelBorder   = lipgloss.Color("#45475A") // Subtle border — visible but not distracting
+	colorFocusedBorder = lipgloss.Color("#89B4FA") // Bright border — focused panel indicator
+	colorTabActive     = lipgloss.Color("#CBA6F7") // Active tab — rich purple highlight
+	colorTabActiveBg   = lipgloss.Color("#313244") // Active tab background — subtle fill
 )
 
 // Selection indicator prepended to the active row.
@@ -170,6 +175,12 @@ var (
 
 	// styleProgressRed styles the progress indicator for final cycle.
 	styleProgressRed = lipgloss.NewStyle().Foreground(colorDanger)
+
+	// styleCardPhaseID styles the muted phase ID on two-line board card entries.
+	styleCardPhaseID = lipgloss.NewStyle().Foreground(colorMutedLight)
+
+	// styleSelectedTitle styles the full title subtitle shown below the board for the selected phase.
+	styleSelectedTitle = lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
 )
 
 // styleTreeConnector styles the tree-drawing characters (├──, └──) in the cycle timeline.
@@ -184,7 +195,7 @@ var styleWaveHeader = lipgloss.NewStyle().
 var (
 	styleDetailBorder = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(colorMuted).
+				BorderForeground(colorPanelBorder).
 				Padding(0, 1)
 
 	styleDetailTitle = lipgloss.NewStyle().
@@ -228,11 +239,11 @@ var (
 			Foreground(colorMuted)
 )
 
-// Diff view styles — side-by-side diff rendering.
+// Diff view styles — unified diff rendering (red removes, blue adds).
 var (
-	// styleDiffAdd styles added lines with a green background.
+	// styleDiffAdd styles added lines with blue foreground (Claude Code convention).
 	styleDiffAdd = lipgloss.NewStyle().
-			Foreground(colorSuccess)
+			Foreground(colorBlueshift)
 
 	// styleDiffRemove styles removed lines with a red foreground.
 	styleDiffRemove = lipgloss.NewStyle().
@@ -286,7 +297,7 @@ var (
 
 	// styleDiffStatAdd styles the "+" portion of file stats.
 	styleDiffStatAdd = lipgloss.NewStyle().
-				Foreground(colorSuccess)
+				Foreground(colorBlueshift)
 
 	// styleDiffStatDel styles the "-" portion of file stats.
 	styleDiffStatDel = lipgloss.NewStyle().
@@ -335,7 +346,7 @@ var (
 			Foreground(colorMuted).
 			Background(colorSurfaceDim).
 			Border(lipgloss.NormalBorder(), true, false, false, false).
-			BorderForeground(colorMuted)
+			BorderForeground(colorPanelBorder)
 
 	styleFooterKey = lipgloss.NewStyle().
 			Foreground(colorPrimary).
@@ -351,7 +362,7 @@ var (
 // Section border for separating view regions.
 var styleSectionBorder = lipgloss.NewStyle().
 	Border(lipgloss.NormalBorder(), true, false, false, false).
-	BorderForeground(colorMuted)
+	BorderForeground(colorPanelBorder)
 
 // Completion overlay styles.
 var (
@@ -464,3 +475,50 @@ var styleToast = lipgloss.NewStyle().
 	Foreground(colorBrightWhite).
 	Bold(true).
 	Padding(0, 1)
+
+// Tab bar styles — active tab has a filled background, inactive tabs are muted.
+var (
+	// styleTabActive styles the active tab with a rich purple foreground and filled background.
+	styleTabActive = lipgloss.NewStyle().
+			Foreground(colorTabActive).
+			Background(colorTabActiveBg).
+			Bold(true).
+			Padding(0, 1)
+
+	// styleTabInactive styles inactive tabs with muted foreground.
+	styleTabInactive = lipgloss.NewStyle().
+				Foreground(colorMuted).
+				Padding(0, 1)
+
+	// styleTabBar styles the full tab bar row with a bottom border separating it from content.
+	styleTabBar = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder(), false, false, true, false).
+			BorderForeground(colorPanelBorder)
+)
+
+// panelBorderColor returns the appropriate border color based on focus state.
+func panelBorderColor(focused bool) lipgloss.Color {
+	if focused {
+		return colorFocusedBorder
+	}
+	return colorPanelBorder
+}
+
+// panelStyle returns a bordered panel style with the given focus state.
+func panelStyle(focused bool) lipgloss.Style {
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(panelBorderColor(focused)).
+		Padding(0, 1)
+}
+
+// panelHeaderStyle returns the style for a panel's inline header label.
+func panelHeaderStyle(focused bool) lipgloss.Style {
+	fg := colorPanelBorder
+	if focused {
+		fg = colorFocusedBorder
+	}
+	return lipgloss.NewStyle().
+		Foreground(fg).
+		Bold(true)
+}

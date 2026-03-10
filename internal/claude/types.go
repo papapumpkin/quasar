@@ -1,5 +1,6 @@
 package claude
 
+// CLIResponse represents the JSON output from the Claude CLI.
 type CLIResponse struct {
 	Type          string  `json:"type"`
 	Subtype       string  `json:"subtype"`
@@ -10,4 +11,6 @@ type CLIResponse struct {
 	Result        string  `json:"result"`
 	SessionID     string  `json:"session_id"`
 	TotalCostUSD  float64 `json:"total_cost_usd"`
+	InputTokens   int     `json:"input_tokens"`
+	OutputTokens  int     `json:"output_tokens"`
 }

@@ -123,6 +123,7 @@ func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, wo
 		ResultText:       resp.Result,
 		CostUSD:          resp.TotalCostUSD,
 		DurationMs:       resp.DurationMs,
+		TotalTokens:      resp.InputTokens + resp.OutputTokens,
 		SessionID:        resp.SessionID,
 		SystemPromptLen:  len(a.SystemPrompt),
 		UserPromptLen:    len(prompt),

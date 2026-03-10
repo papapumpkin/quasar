@@ -1,0 +1,136 @@
+version = 1
+nebula_name = 'tui-polish-v2'
+total_cost_usd = 50.42704925
+
+[phases]
+[phases.agent-chat-gum]
+bead_id = 'quasar-a81i'
+status = 'done'
+created_at = 2026-03-09T20:23:47.993917-04:00
+updated_at = 2026-03-09T21:30:33.546837-04:00
+
+[phases.agent-chat-gum.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Well-implemented gum-based guidance intervention system with clean file-based loop integration, comprehensive tests, and proper graceful degradation — only minor formatting nits found.'
+
+[phases.board-phase-names]
+bead_id = 'quasar-4c8l'
+status = 'done'
+created_at = 2026-03-09T20:23:47.022688-04:00
+updated_at = 2026-03-09T20:32:43.450833-04:00
+
+[phases.board-phase-names.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Board view phase name readability improvements are well-implemented with proper width-adaptive column sizing, two-line entries, selected-phase subtitle, and good test coverage.'
+
+[phases.color-theme]
+bead_id = 'quasar-jjy5'
+status = 'done'
+created_at = 2026-03-09T20:23:47.876557-04:00
+updated_at = 2026-03-09T21:03:26.305918-04:00
+
+[phases.color-theme.report]
+satisfaction = 'medium'
+risk = 'low'
+needs_human_review = false
+summary = 'Lint-fix commit correctly extracts gum detection into a shared helper; the substantive color theme work was completed in prior commits and the codebase meets all acceptance criteria.'
+
+[phases.glamour-markdown]
+bead_id = 'quasar-obj5'
+status = 'done'
+created_at = 2026-03-09T20:23:46.775369-04:00
+updated_at = 2026-03-09T20:31:51.369683-04:00
+
+[phases.glamour-markdown.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Glamour markdown rendering integrated cleanly into the TUI detail panel and dialog overlay with proper fallback, width awareness, and good test coverage.'
+
+[phases.hail-gum]
+bead_id = 'quasar-6wwh'
+status = 'done'
+created_at = 2026-03-09T20:23:47.512247-04:00
+updated_at = 2026-03-09T21:13:29.108604-04:00
+
+[phases.hail-gum.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'All prior findings (errors.As, dead constants, echo→printf, DRY extraction, missing Time field, unhandled message, interface check, test coverage) are fully resolved; code is clean and well-tested.'
+
+[phases.line-count-bug]
+bead_id = 'quasar-8utb'
+status = 'done'
+created_at = 2026-03-09T20:23:47.139551-04:00
+updated_at = 2026-03-09T20:34:48.490566-04:00
+
+[phases.line-count-bug.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Fixed the +0 -0 line count bug by making git diff capture try staged and unstaged changes before the HEAD~1..HEAD fallback, with thorough test coverage across all strategies.'
+
+[phases.process-drilldown]
+bead_id = 'quasar-quta'
+status = 'done'
+created_at = 2026-03-09T20:23:47.757344-04:00
+updated_at = 2026-03-09T21:22:01.193282-04:00
+
+[phases.process-drilldown.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Hierarchical tree view implementation is solid — all prior issues resolved, build/vet/tests pass, code is well-structured with good test coverage across all tree operations.'
+
+[phases.split-pane-layout]
+bead_id = 'quasar-bexx'
+status = 'done'
+created_at = 2026-03-09T20:23:47.640047-04:00
+updated_at = 2026-03-09T20:44:42.079982-04:00
+
+[phases.split-pane-layout.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Split-pane sidebar layout with bidirectional cursor sync implemented cleanly; both prior findings (left-key fallthrough and unidirectional sync) are resolved.'
+
+[phases.token-count-live]
+bead_id = 'quasar-b986'
+status = 'done'
+created_at = 2026-03-09T20:23:47.386162-04:00
+updated_at = 2026-03-09T20:41:21.890057-04:00
+
+[phases.token-count-live.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Correctly fixes the broken token count pipeline by adding JSON field parsing to CLIResponse and threading TotalTokens through InvocationResult → UI interface → TUI messages → StatusBar display.'
+
+[phases.unified-diff]
+bead_id = 'quasar-76ic'
+status = 'done'
+created_at = 2026-03-09T20:23:46.898659-04:00
+updated_at = 2026-03-09T20:42:57.727958-04:00
+
+[phases.unified-diff.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean switch from side-by-side to unified diff rendering with red/blue color convention — minimal, correct, well-tested.'
+
+[phases.worker-card-richness]
+bead_id = 'quasar-3mu7'
+status = 'done'
+created_at = 2026-03-09T20:23:47.269707-04:00
+updated_at = 2026-03-09T20:53:13.876295-04:00
+
+[phases.worker-card-richness.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Worker cards enhanced with phase title, elapsed time, per-card cost accumulation, cycle progress bar, and richer contextual activity — all cleanly implemented with good test coverage and no regressions.'

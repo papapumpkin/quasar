@@ -708,3 +708,65 @@ func TestNewColorsDefined(t *testing.T) {
 		t.Error("colorNebulaDeep should not be empty")
 	}
 }
+
+func TestPanelBorderColorsDefined(t *testing.T) {
+	t.Parallel()
+	colors := map[string]lipgloss.Color{
+		"colorPanelBorder":   colorPanelBorder,
+		"colorFocusedBorder": colorFocusedBorder,
+		"colorTabActive":     colorTabActive,
+		"colorTabActiveBg":   colorTabActiveBg,
+		"colorSurfacePanel":  colorSurfacePanel,
+	}
+	for name, c := range colors {
+		if string(c) == "" {
+			t.Errorf("%s is empty", name)
+		}
+	}
+}
+
+func TestPanelBorderColorFocus(t *testing.T) {
+	t.Parallel()
+	unfocused := panelBorderColor(false)
+	focused := panelBorderColor(true)
+	if unfocused == focused {
+		t.Error("focused and unfocused panel border colors should be different")
+	}
+	if unfocused != colorPanelBorder {
+		t.Errorf("unfocused border = %v, want %v", unfocused, colorPanelBorder)
+	}
+	if focused != colorFocusedBorder {
+		t.Errorf("focused border = %v, want %v", focused, colorFocusedBorder)
+	}
+}
+
+func TestPanelStyleHasRoundedBorder(t *testing.T) {
+	t.Parallel()
+	style := panelStyle(false)
+	border := style.GetBorderStyle()
+	rounded := lipgloss.RoundedBorder()
+	if border.TopLeft != rounded.TopLeft || border.TopRight != rounded.TopRight {
+		t.Error("panelStyle should use rounded border")
+	}
+}
+
+func TestPanelStyleFocusBorderColor(t *testing.T) {
+	t.Parallel()
+	focused := panelStyle(true)
+	unfocused := panelStyle(false)
+	focusedBorder := focused.GetBorderTopForeground()
+	unfocusedBorder := unfocused.GetBorderTopForeground()
+	if focusedBorder == unfocusedBorder {
+		t.Error("focused and unfocused panel styles should have different border colors")
+	}
+}
+
+func TestTabBarStylesDefined(t *testing.T) {
+	t.Parallel()
+	if !styleTabActive.GetBold() {
+		t.Error("active tab style should be bold")
+	}
+	if styleTabBar.GetBorderBottom() != true {
+		t.Error("tab bar should have a bottom border")
+	}
+}

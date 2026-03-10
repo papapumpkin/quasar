@@ -60,8 +60,8 @@ func (b *UIBridge) AgentStart(role string) {
 
 // AgentDone sends MsgAgentDone. For coder agents, it also captures the git
 // diff of the most recent commit and sends MsgAgentDiff.
-func (b *UIBridge) AgentDone(role string, costUSD float64, durationMs int64) {
-	b.program.Send(MsgAgentDone{Role: role, CostUSD: costUSD, DurationMs: durationMs})
+func (b *UIBridge) AgentDone(role string, costUSD float64, durationMs int64, tokens int) {
+	b.program.Send(MsgAgentDone{Role: role, CostUSD: costUSD, DurationMs: durationMs, Tokens: tokens})
 	if role == "coder" {
 		if dr := captureGitDiff(b.workDir, "", ""); dr.Diff != "" {
 			b.program.Send(MsgAgentDiff{
@@ -177,28 +177,54 @@ type diffResult struct {
 	Files   []FileStatEntry
 }
 
-// captureGitDiff runs "git diff <base>..<head>" in the given directory and
-// returns both the raw unified diff and pre-parsed file stats. When baseRef or
-// headRef are empty it falls back to HEAD~1..HEAD. Returns a zero diffResult on
-// any error (no git repo, no commits, command failure) — diff capture is
-// best-effort.
+// captureGitDiff runs git diff in the given directory and returns both the raw
+// unified diff and pre-parsed file stats. It tries multiple strategies in order
+// to reliably capture changes regardless of whether the agent committed,
+// staged, or left changes unstaged:
+//
+//  1. If baseRef and headRef are provided → git diff baseRef..headRef
+//  2. git diff --cached (staged but uncommitted changes)
+//  3. git diff (unstaged working tree changes)
+//  4. git diff HEAD~1..HEAD (most recent commit)
+//
+// Returns a zero diffResult on any error (no git repo, no commits, command
+// failure) — diff capture is best-effort.
 func captureGitDiff(workDir, baseRef, headRef string) diffResult {
 	if workDir == "" {
 		return diffResult{}
 	}
 
-	// Fall back to HEAD~1..HEAD when refs are not provided.
-	if baseRef == "" || headRef == "" {
-		baseRef = "HEAD~1"
-		headRef = "HEAD"
+	// Strategy 1: explicit refs provided by the caller.
+	if baseRef != "" && headRef != "" {
+		if dr := tryGitDiff(workDir, []string{baseRef + ".." + headRef}, baseRef, headRef); dr.Diff != "" {
+			return dr
+		}
 	}
 
-	refRange := baseRef + ".." + headRef
+	// Strategy 2: staged (cached) changes — agent may have git-added but not committed.
+	if dr := tryGitDiff(workDir, []string{"--cached"}, "staged", "working-tree"); dr.Diff != "" {
+		return dr
+	}
+
+	// Strategy 3: unstaged working-tree changes.
+	if dr := tryGitDiff(workDir, nil, "working-tree", "unstaged"); dr.Diff != "" {
+		return dr
+	}
+
+	// Strategy 4: last commit (original fallback).
+	return tryGitDiff(workDir, []string{"HEAD~1..HEAD"}, "HEAD~1", "HEAD")
+}
+
+// tryGitDiff executes a single git diff invocation with the given args and
+// returns a populated diffResult if the diff is non-empty. The baseRef and
+// headRef labels are recorded in the result for display purposes.
+func tryGitDiff(workDir string, diffArgs []string, baseRef, headRef string) diffResult {
 	ctx, cancel := context.WithTimeout(context.Background(), gitDiffTimeout)
 	defer cancel()
 
 	// Capture raw unified diff.
-	cmd := exec.CommandContext(ctx, "git", "diff", refRange)
+	args := append([]string{"diff"}, diffArgs...)
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = workDir
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -211,8 +237,8 @@ func captureGitDiff(workDir, baseRef, headRef string) diffResult {
 		return diffResult{}
 	}
 
-	// Parse file stats from git diff --stat.
-	files := captureGitDiffStat(workDir, refRange)
+	// Parse file stats using the same diff args.
+	files := captureGitDiffStat(workDir, diffArgs)
 
 	return diffResult{
 		Diff:    rawDiff,
@@ -222,13 +248,14 @@ func captureGitDiff(workDir, baseRef, headRef string) diffResult {
 	}
 }
 
-// captureGitDiffStat runs "git diff --stat <refRange>" and parses the per-file
-// stats into FileStatEntry slices. Returns nil on any error.
-func captureGitDiffStat(workDir, refRange string) []FileStatEntry {
+// captureGitDiffStat runs "git diff --numstat <args...>" and parses the
+// per-file stats into FileStatEntry slices. Returns nil on any error.
+func captureGitDiffStat(workDir string, diffArgs []string) []FileStatEntry {
 	ctx, cancel := context.WithTimeout(context.Background(), gitDiffTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "diff", "--numstat", refRange)
+	args := append([]string{"diff", "--numstat"}, diffArgs...)
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = workDir
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -309,8 +336,8 @@ func (b *PhaseUIBridge) AgentStart(role string) {
 
 // AgentDone sends MsgPhaseAgentDone. For coder agents, it also captures the
 // git diff of the most recent commit and sends MsgPhaseAgentDiff.
-func (b *PhaseUIBridge) AgentDone(role string, costUSD float64, durationMs int64) {
-	b.program.Send(MsgPhaseAgentDone{PhaseID: b.phaseID, Role: role, CostUSD: costUSD, DurationMs: durationMs})
+func (b *PhaseUIBridge) AgentDone(role string, costUSD float64, durationMs int64, tokens int) {
+	b.program.Send(MsgPhaseAgentDone{PhaseID: b.phaseID, Role: role, CostUSD: costUSD, DurationMs: durationMs, Tokens: tokens})
 	b.ScratchpadNote(b.phaseID, fmt.Sprintf("%s done ($%.2f)", role, costUSD))
 	if role == "coder" {
 		if dr := captureGitDiff(b.workDir, "", ""); dr.Diff != "" {

@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // maxOutputLines is the maximum number of lines shown before truncation.
@@ -20,6 +21,7 @@ type DetailPanel struct {
 	totalLines  int // total lines of content (before viewport clipping)
 	emptyHint   string
 	headerBlock string // rendered header (above viewport content)
+	Focus       bool   // whether the detail panel currently has keyboard focus
 }
 
 // NewDetailPanel creates a detail panel with the given dimensions.
@@ -103,11 +105,13 @@ func (d *DetailPanel) Update(msg tea.Msg) {
 	d.viewport, _ = d.viewport.Update(msg)
 }
 
-// View renders the detail panel with a rounded border and scroll indicators.
+// View renders the detail panel with a focus-aware rounded border and scroll indicators.
 func (d DetailPanel) View() string {
+	border := panelStyle(d.Focus)
+
 	if d.emptyHint != "" {
 		content := styleDetailDim.Render(d.emptyHint)
-		return styleDetailBorder.Render(content)
+		return border.Render(content)
 	}
 
 	var b strings.Builder
@@ -131,7 +135,7 @@ func (d DetailPanel) View() string {
 		b.WriteString(styleScrollIndicator.Render(fmt.Sprintf("↓ %d more", downMore)))
 	}
 
-	return styleDetailBorder.Render(b.String())
+	return border.Render(b.String())
 }
 
 // linesAbove returns the number of content lines above the viewport.
@@ -299,8 +303,10 @@ func HighlightOutput(text string) string {
 }
 
 // highlightLine applies pattern highlighting to a single line.
+// It strips ANSI escape codes before pattern matching so that
+// glamour-rendered text is still correctly detected.
 func highlightLine(line string) string {
-	upper := strings.ToUpper(line)
+	upper := strings.ToUpper(ansi.Strip(line))
 	switch {
 	case strings.Contains(upper, "SEVERITY: CRITICAL"), strings.Contains(upper, "SEVERITY:CRITICAL"):
 		return styleHighlightCritical.Render(line)
@@ -325,8 +331,12 @@ func TruncateOutput(text string, maxLines int) string {
 	return truncated + indicator
 }
 
-// FormatAgentOutput applies truncation and highlighting to agent output.
-func FormatAgentOutput(output string) string {
+// FormatAgentOutput applies truncation, markdown rendering, and keyword
+// highlighting to agent output. Markdown is rendered first (headings, code
+// blocks, lists get ANSI styling), then keyword highlights are layered on
+// top for APPROVED/ISSUE/SEVERITY lines.
+func FormatAgentOutput(output string, width int) string {
 	truncated := TruncateOutput(output, maxOutputLines)
-	return HighlightOutput(truncated)
+	rendered := RenderMarkdown(truncated, width)
+	return HighlightOutput(rendered)
 }

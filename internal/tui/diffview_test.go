@@ -200,7 +200,6 @@ func TestPluralS(t *testing.T) {
 	}
 }
 
-
 func TestParseUnifiedDiff_HunkHeader(t *testing.T) {
 	t.Parallel()
 	files := ParseUnifiedDiff(sampleDiff)
@@ -408,6 +407,61 @@ func TestComputeDiffStat_ChangeType(t *testing.T) {
 	}
 	if stat.FileStats[1].Change != ChangeAdded {
 		t.Errorf("expected auth.go stat Change=ChangeAdded, got %d", stat.FileStats[1].Change)
+	}
+}
+
+func TestRenderDiffView_UnifiedFormat(t *testing.T) {
+	t.Parallel()
+
+	result := RenderDiffView(sampleDiff, 120)
+
+	// Unified mode should not contain the side-by-side separator.
+	if strings.Contains(result, " │ ") {
+		t.Error("unified mode should not contain side-by-side separator")
+	}
+
+	// Should contain add prefix with "+".
+	if !strings.Contains(result, "+") {
+		t.Error("expected '+' prefix for added lines")
+	}
+
+	// Should contain remove prefix with "-".
+	if !strings.Contains(result, "-") {
+		t.Error("expected '-' prefix for removed lines")
+	}
+
+	// Should contain added content from the diff.
+	if !strings.Contains(result, "token, err := generateToken()") {
+		t.Error("expected added line content in unified output")
+	}
+
+	// Should contain removed content from the diff.
+	if !strings.Contains(result, "token := generateToken()") {
+		t.Error("expected removed line content in unified output")
+	}
+}
+
+func TestRenderHunkUnified_LineNumbers(t *testing.T) {
+	t.Parallel()
+
+	files := ParseUnifiedDiff(sampleDiff)
+	if len(files) == 0 || len(files[0].Hunks) == 0 {
+		t.Fatal("expected parsed hunks")
+	}
+
+	result := renderHunkUnified(files[0].Hunks[0])
+
+	// Should contain line numbers.
+	if !strings.Contains(result, "10") {
+		t.Error("expected line number 10 in unified output")
+	}
+
+	// Each line should have a prefix ("+", "-", or " ").
+	lines := strings.Split(strings.TrimRight(result, "\n"), "\n")
+	for i, line := range lines {
+		if !strings.Contains(line, "+") && !strings.Contains(line, "-") && !strings.Contains(line, " ") {
+			t.Errorf("line %d missing prefix: %q", i, line)
+		}
 	}
 }
 

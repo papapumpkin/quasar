@@ -39,7 +39,7 @@ type UI interface {
 	TaskComplete(beadID string, totalCost float64)
 	CycleStart(cycle, maxCycles int)
 	AgentStart(role string)
-	AgentDone(role string, costUSD float64, durationMs int64)
+	AgentDone(role string, costUSD float64, durationMs int64, tokens int)
 	CycleSummary(d CycleSummaryData)
 	IssuesFound(count int)
 	Approved()
@@ -117,7 +117,7 @@ func (p *Printer) AgentStart(role string) {
 }
 
 // AgentDone prints a completion line with cost and duration.
-func (p *Printer) AgentDone(role string, costUSD float64, durationMs int64) {
+func (p *Printer) AgentDone(role string, costUSD float64, durationMs int64, tokens int) {
 	color := blue
 	if role == "reviewer" {
 		color = yellow

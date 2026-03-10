@@ -95,6 +95,21 @@ func CockpitFooterBindings(km KeyMap) []key.Binding {
 	return []key.Binding{km.Up, km.Down, km.Enter, tab, boardToggle, km.Info, km.Pause, km.Stop, km.Quit}
 }
 
+// SidebarFooterBindings returns footer bindings when the sidebar has focus.
+// Includes tree-specific shortcuts (C/D/=/z) for the expandable tree view.
+func SidebarFooterBindings(km KeyMap) []key.Binding {
+	focus := key.NewBinding(
+		key.WithKeys("right", "tab"),
+		key.WithHelp("→/tab", "main"),
+	)
+	return []key.Binding{
+		km.Up, km.Down, km.Enter, focus,
+		km.TreeSortCost, km.TreeSortDuration,
+		km.TreeCollapse, km.TreeZoom,
+		km.Quit,
+	}
+}
+
 // GateFooterBindings returns footer bindings during gate prompts.
 // Includes Esc (back/skip) so users know they can dismiss the prompt.
 func GateFooterBindings(km KeyMap) []key.Binding {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,10 +17,18 @@ import (
 	"github.com/papapumpkin/quasar/internal/chat"
 	"github.com/papapumpkin/quasar/internal/dialog"
 	"github.com/papapumpkin/quasar/internal/fabric"
+	"github.com/papapumpkin/quasar/internal/gum"
 	"github.com/papapumpkin/quasar/internal/nebula"
 	"github.com/papapumpkin/quasar/internal/tycho"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
+
+// GuidanceEntry carries a human-initiated guidance message from the TUI
+// back to the loop's hail queue for relay to the agent.
+type GuidanceEntry struct {
+	PhaseID  string // target phase (empty in loop mode)
+	Guidance string // free-text guidance from the developer
+}
 
 // Mode indicates which top-level view the TUI is displaying.
 type Mode int
@@ -44,24 +53,28 @@ const (
 
 // AppModel is the root BubbleTea model composing all sub-views.
 type AppModel struct {
-	Mode         Mode
-	StatusBar    StatusBar
-	Banner       Banner
-	LoopView     LoopView // used in loop mode (single task)
-	NebulaView   NebulaView
-	Detail       DetailPanel
-	Gate         *GatePrompt
-	PendingGates []MsgGatePrompt // queued gate prompts waiting for the current gate to resolve
-	Hail         *HailOverlay
-	Overlay      *CompletionOverlay
-	Toasts       []Toast
-	Keys         KeyMap
-	Width        int
-	Height       int
-	StartTime    time.Time
-	Done         bool
-	DoneErr      error
-	Messages     []string // recent info/error messages
+	Mode              Mode
+	StatusBar         StatusBar
+	Banner            Banner
+	LoopView          LoopView // used in loop mode (single task)
+	NebulaView        NebulaView
+	Detail            DetailPanel
+	Gate              *GatePrompt
+	PendingGates      []MsgGatePrompt // queued gate prompts waiting for the current gate to resolve
+	Hail              *HailOverlay
+	GumAvailable      bool                 // true if gum binary is in PATH
+	GumBinPath        string               // resolved path to gum binary
+	gumHailResponseCh chan<- string        // stashed response channel for active gum hail
+	GuidanceCh        chan<- GuidanceEntry // optional; when set, guidance is posted to the loop's hail queue
+	Overlay           *CompletionOverlay
+	Toasts            []Toast
+	Keys              KeyMap
+	Width             int
+	Height            int
+	StartTime         time.Time
+	Done              bool
+	DoneErr           error
+	Messages          []string // recent info/error messages
 
 	// Nebula navigation state.
 	Depth        ViewDepth            // current navigation depth
@@ -95,6 +108,10 @@ type AppModel struct {
 	Board        BoardView // columnar board renderer
 	BoardActive  bool      // true = columnar board, false = table view
 	boardSizedAt bool      // true after the first WindowSizeMsg sets the default
+
+	// Split-pane sidebar state — persistent phase list on the left.
+	Sidebar   Sidebar   // phase list sidebar component
+	PaneFocus PaneFocus // which pane (sidebar vs main) has keyboard focus
 
 	// Worker card state — live detail cards for active quasars.
 	WorkerCards   map[string]*WorkerCard // phaseID → live worker card
@@ -160,6 +177,8 @@ func NewAppModel(mode Mode) AppModel {
 		NebulaView:  NewNebulaView(),
 		Board:       NewBoardView(),
 		BoardActive: false, // set to true on first WindowSizeMsg if terminal is wide enough
+		Sidebar:     NewSidebar(),
+		PaneFocus:   PaneFocusMain, // start with main area focused
 		Keys:        DefaultKeyMap(),
 		StartTime:   time.Now(),
 		PhaseLoops:  make(map[string]*LoopView),
@@ -246,7 +265,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Banner.Width = msg.Width
 		m.Banner.Height = msg.Height
 		m.StatusBar.Width = msg.Width
-		contentWidth := msg.Width
+
+		// Sidebar sizing — updates dimensions for split-pane layout.
+		sidebarW := m.sidebarWidth()
+		if sidebarW > 0 {
+			m.Sidebar.Width = sidebarW
+			m.Sidebar.Height = m.sidebarHeight()
+			m.Sidebar.Focus = m.PaneFocus == PaneFocusSidebar
+		}
+
+		contentWidth := m.contentWidth()
 		detailHeight := m.detailHeight()
 		if m.Mode == ModeHome {
 			detailHeight = m.homeDetailHeight()
@@ -376,7 +404,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseWorking)
 		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseWorking)
 		// Create a worker card for this active phase.
-		m.ensureWorkerCard(msg.PhaseID)
+		wc := m.ensureWorkerCard(msg.PhaseID)
+		wc.StartedAt = time.Now()
+		// Populate phase title from the message or from the phase table.
+		if msg.Title != "" {
+			wc.PhaseTitle = msg.Title
+		} else if p := m.findPhase(msg.PhaseID); p != nil {
+			wc.PhaseTitle = p.Title
+		}
 	case MsgPhaseTaskComplete:
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseDone)
 		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseDone)
@@ -404,14 +439,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgPhaseAgentStart:
 		lv := m.ensurePhaseLoop(msg.PhaseID)
 		lv.StartAgent(msg.Role)
-		// Update worker card agent role and activity.
-		activity := activityFromRole(msg.Role)
+		// Update worker card agent role and activity with phase context.
 		if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
 			wc.AgentRole = msg.Role
-			wc.Activity = activity
+			wc.Activity = richActivity(msg.Role, wc.PhaseTitle, wc.Claims)
 		}
-		// Propagate activity to board card.
-		m.NebulaView.SetPhaseActivity(msg.PhaseID, activity)
+		// Propagate simple activity to board card.
+		m.NebulaView.SetPhaseActivity(msg.PhaseID, activityFromRole(msg.Role))
 	case MsgWorkerActivity:
 		if msg.PhaseID != "" {
 			if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
@@ -426,9 +460,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.FocusedPhase == msg.PhaseID {
 			m.updateDetailFromSelection()
 		}
-		// Update worker card token count.
+		// Update worker card token count and cost immediately on each agent
+		// completion (coder + reviewer), not just at phase end.
 		if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
 			wc.TokensUsed += msg.Tokens
+			wc.CostUSD += msg.CostUSD
 		}
 	case MsgPhaseAgentOutput:
 		lv := m.ensurePhaseLoop(msg.PhaseID)
@@ -636,8 +672,32 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgHail:
 		// Show the hail overlay in any nebula view; queue if one is already active.
 		if m.Mode == ModeNebula {
-			if m.Hail != nil {
-				// Already showing a hail — queue for later.
+			if m.GumAvailable {
+				// Use gum-backed hail resolution — suspend TUI, run gum subprocess.
+				hailInfo := ui.HailInfo{
+					ID:         fmt.Sprintf("hail-%d", len(m.PendingHails)),
+					Kind:       msg.Discovery.Kind,
+					Summary:    msg.Discovery.Detail,
+					Detail:     msg.Discovery.Detail,
+					SourceRole: msg.Discovery.SourceTask,
+					Options:    extractOptions(msg.Discovery.Detail),
+				}
+				cmd := m.buildGumHailCmd(hailInfo)
+				phaseID := msg.PhaseID
+				responseCh := msg.ResponseCh
+				m.gumHailResponseCh = responseCh
+				cmds = append(cmds, tea.ExecProcess(cmd, func(err error) tea.Msg {
+					// Read the response from the temp file.
+					response := readGumResponseFile(cmd)
+					return MsgGumHailResult{
+						PhaseID:  phaseID,
+						HailID:   hailInfo.ID,
+						Response: response,
+						Err:      err,
+					}
+				}))
+			} else if m.Hail != nil {
+				// Fallback: already showing a hail — queue for later.
 				hailInfo := ui.HailInfo{
 					Kind:    msg.Discovery.Kind,
 					Summary: msg.Discovery.Detail,
@@ -649,6 +709,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Toasts = append(m.Toasts, toast)
 				cmds = append(cmds, cmd)
 			} else {
+				// Fallback: show BubbleTea overlay.
 				m.Hail = NewHailOverlay(msg, msg.ResponseCh)
 				cmds = append(cmds, m.Hail.Input.Focus())
 			}
@@ -661,6 +722,33 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.PhaseID != "" {
 			m.NebulaView.SetPhaseHails(msg.PhaseID, true)
 		}
+
+	case MsgGumHailResult:
+		// Gum hail subprocess completed — send response back to the agent.
+		if msg.Err == nil && msg.Response != "" && m.gumHailResponseCh != nil {
+			select {
+			case m.gumHailResponseCh <- msg.Response:
+			default:
+			}
+		}
+		m.gumHailResponseCh = nil
+		// Remove from pending hails if tracked.
+		m.removePendingHail(msg.HailID)
+		m.syncHailBadge()
+		if msg.PhaseID != "" {
+			m.syncPhaseHails(msg.PhaseID)
+		}
+		var toastMsg string
+		if msg.Err != nil {
+			toastMsg = fmt.Sprintf("hail error: %s", msg.Err)
+		} else if msg.Response != "" {
+			toastMsg = "response sent to agent"
+		} else {
+			toastMsg = "hail dismissed"
+		}
+		toast, cmd := NewToast(toastMsg, msg.Err != nil)
+		m.Toasts = append(m.Toasts, toast)
+		cmds = append(cmds, cmd)
 
 	case MsgHailReceived:
 		m.PendingHails = append(m.PendingHails, msg.Hail)
@@ -694,6 +782,46 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.Dialog != nil && m.Dialog.Session.ID() == msg.SessionID {
 			m.Dialog = nil
 		}
+
+	case MsgGumDialogResult:
+		// Gum dialog subprocess completed — close the dialog overlay.
+		if m.Dialog != nil && m.Dialog.Session.ID() == msg.SessionID {
+			if msg.Err == nil && msg.Response != "" {
+				m.Dialog.Session.Close()
+			}
+			m.Dialog = nil
+		}
+		var toastMsg string
+		if msg.Err != nil {
+			toastMsg = fmt.Sprintf("dialog error: %s", msg.Err)
+		} else if msg.Response != "" {
+			toastMsg = "dialog response recorded"
+		} else {
+			toastMsg = "dialog dismissed"
+		}
+		toast, cmd := NewToast(toastMsg, msg.Err != nil)
+		m.Toasts = append(m.Toasts, toast)
+		cmds = append(cmds, cmd)
+
+	case MsgGuidanceSent:
+		// Gum guidance subprocess completed — post guidance as a hail
+		// for relay to the agent in the next cycle.
+		var toastMsg string
+		if msg.Err != nil {
+			toastMsg = fmt.Sprintf("guidance error: %s", msg.Err)
+		} else if msg.Response != "" {
+			m.postGuidanceHail(msg.PhaseID, msg.Response)
+			kind := "guidance"
+			if msg.Quick {
+				kind = "quick guidance"
+			}
+			toastMsg = fmt.Sprintf("%s sent to %s", kind, msg.PhaseID)
+		} else {
+			toastMsg = "guidance cancelled"
+		}
+		toast, cmd := NewToast(toastMsg, msg.Err != nil)
+		m.Toasts = append(m.Toasts, toast)
+		cmds = append(cmds, cmd)
 
 	case MsgOpenPhaseChat:
 		m.openEmbeddedPhaseChat(msg)
@@ -821,6 +949,15 @@ func clampCursors(m *AppModel) {
 		}
 	} else {
 		m.NebulaView.Cursor = 0
+	}
+
+	// Clamp sidebar cursor.
+	if max := len(m.Sidebar.Phases) - 1; max >= 0 {
+		if m.Sidebar.Cursor > max {
+			m.Sidebar.Cursor = max
+		}
+	} else {
+		m.Sidebar.Cursor = 0
 	}
 
 	// Clamp LoopView cursor.
@@ -1039,6 +1176,63 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.showFileDiff()
 	}
 
+	// Sidebar focus toggle — when the sidebar is visible, left/right and Tab
+	// toggle focus between the sidebar and the main content area.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.sidebarWidth() > 0 {
+		switch msg.String() {
+		case "left", "h":
+			if m.PaneFocus == PaneFocusSidebar {
+				// Already in leftmost pane — no-op. Return early to prevent
+				// the fallback board left/right handler from firing.
+				return m, nil
+			}
+			// In main: try moving left in the board first, then switch to sidebar.
+			if m.BoardActive && m.ActiveTab == TabBoard {
+				m.Board.MoveLeft()
+				return m, nil
+			}
+			m.PaneFocus = PaneFocusSidebar
+			m.Sidebar.Focus = true
+			// Reverse-sync: adopt main area's cursor so sidebar matches.
+			m.Sidebar.Cursor = m.activePhaseCursor()
+			m.Sidebar.ensureVisible()
+			return m, nil
+		case "right", "l":
+			if m.PaneFocus == PaneFocusSidebar {
+				m.PaneFocus = PaneFocusMain
+				m.Sidebar.Focus = false
+				return m, nil
+			}
+			// If already in main and board is active, move right in board.
+			if m.BoardActive && m.ActiveTab == TabBoard {
+				m.Board.MoveRight()
+				return m, nil
+			}
+		}
+	}
+
+	// Tree view key handling — when sidebar has focus and tree is active.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.sidebarWidth() > 0 && m.PaneFocus == PaneFocusSidebar && m.Sidebar.Tree != nil {
+		switch {
+		case key.Matches(msg, m.Keys.Enter):
+			m.Sidebar.ToggleExpand()
+			m.updateDetailFromSelection()
+			return m, nil
+		case key.Matches(msg, m.Keys.TreeCollapse):
+			m.Sidebar.CollapseChildren()
+			return m, nil
+		case key.Matches(msg, m.Keys.TreeZoom):
+			m.Sidebar.Zoom()
+			return m, nil
+		case key.Matches(msg, m.Keys.TreeSortCost):
+			m.Sidebar.SortTree(TreeSortCost)
+			return m, nil
+		case key.Matches(msg, m.Keys.TreeSortDuration):
+			m.Sidebar.SortTree(TreeSortDuration)
+			return m, nil
+		}
+	}
+
 	// Tab navigation and board toggle — only active in nebula mode at DepthPhases.
 	if m.Mode == ModeNebula && m.Depth == DepthPhases {
 		switch msg.String() {
@@ -1052,6 +1246,12 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "tab":
+			// When sidebar is visible and focused, Tab moves focus to main.
+			if m.sidebarWidth() > 0 && m.PaneFocus == PaneFocusSidebar {
+				m.PaneFocus = PaneFocusMain
+				m.Sidebar.Focus = false
+				return m, nil
+			}
 			m.ActiveTab = m.ActiveTab.Next()
 			return m, nil
 		case "shift+tab":
@@ -1064,7 +1264,7 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "left", "h":
-			// Left/right navigation for board columns.
+			// Left/right navigation for board columns (fallback when sidebar not visible).
 			if m.BoardActive && m.ActiveTab == TabBoard {
 				m.Board.MoveLeft()
 				return m, nil
@@ -1077,10 +1277,28 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Board tab: contextual chat keybinding.
+	// Board tab: contextual chat and guidance keybindings.
 	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.ActiveTab == TabBoard {
 		if key.Matches(msg, m.Keys.ChatPhase) {
+			if m.GumAvailable && m.isSelectedPhaseRunning() {
+				return m.openGumGuidance(false)
+			}
 			return m.openPhaseChat()
+		}
+		if key.Matches(msg, m.Keys.Guidance) {
+			if m.GumAvailable && m.isSelectedPhaseRunning() {
+				return m.openGumGuidance(true)
+			}
+		}
+	}
+
+	// Sidebar tree view: guidance keybindings on running phases.
+	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.sidebarWidth() > 0 && m.PaneFocus == PaneFocusSidebar {
+		if key.Matches(msg, m.Keys.ChatPhase) && m.GumAvailable && m.isSelectedPhaseRunning() {
+			return m.openGumGuidance(false)
+		}
+		if key.Matches(msg, m.Keys.Guidance) && m.GumAvailable && m.isSelectedPhaseRunning() {
+			return m.openGumGuidance(true)
 		}
 	}
 
@@ -1706,9 +1924,13 @@ func (m *AppModel) drillDown() {
 			m.DiffFileOpen = false
 			m.ShowBeads = false
 			// Drill into the selected phase's loop view.
-			// Use the active tab's cursor to determine which phase.
+			// Use the sidebar cursor when it has focus, otherwise the active tab.
 			var phaseID string
-			if m.ActiveTab == TabGraph {
+			if m.sidebarWidth() > 0 && m.PaneFocus == PaneFocusSidebar {
+				if p := m.Sidebar.SelectedPhase(); p != nil {
+					phaseID = p.ID
+				}
+			} else if m.ActiveTab == TabGraph {
 				phaseID = m.Graph.SelectedPhaseID()
 			} else if m.BoardActive && m.ActiveTab == TabBoard {
 				m.Board.Phases = m.NebulaView.Phases
@@ -2080,6 +2302,126 @@ func (m *AppModel) openPhaseChat() (tea.Model, tea.Cmd) {
 	}
 }
 
+// isSelectedPhaseRunning reports whether the currently selected phase in the
+// board or sidebar is actively running (PhaseWorking status).
+func (m *AppModel) isSelectedPhaseRunning() bool {
+	phase := m.selectedPhase()
+	return phase != nil && phase.Status == PhaseWorking
+}
+
+// selectedPhase returns the PhaseEntry currently selected in the board view
+// or the sidebar tree, depending on which is active.
+func (m *AppModel) selectedPhase() *PhaseEntry {
+	if m.BoardActive {
+		return m.Board.SelectedPhase()
+	}
+	// Sidebar or table view selection.
+	if m.PaneFocus == PaneFocusSidebar && m.Sidebar.Tree != nil {
+		// Map sidebar cursor to phase entry.
+		idx := m.NebulaView.Cursor
+		if idx >= 0 && idx < len(m.NebulaView.Phases) {
+			return &m.NebulaView.Phases[idx]
+		}
+	}
+	return m.NebulaView.SelectedPhase()
+}
+
+// openGumGuidance suspends the TUI and opens a gum-based guidance prompt
+// for the selected running phase. If quick is true, uses gum input for a
+// single-line instruction; otherwise uses gum write for multi-line guidance.
+func (m AppModel) openGumGuidance(quick bool) (tea.Model, tea.Cmd) {
+	phase := m.selectedPhase()
+	if phase == nil {
+		return m, nil
+	}
+
+	ctx := m.buildGumPhaseContext(phase)
+	phaseID := phase.ID
+
+	var cmd *exec.Cmd
+	if quick {
+		cmd = gum.GumGuidanceInputCmd(m.GumBinPath, ctx)
+	} else {
+		cmd = gum.GumGuidanceWriteCmd(m.GumBinPath, ctx)
+	}
+
+	// Store temp file path for response capture (same pattern as hail).
+	tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("quasar-gum-guidance-%s", phaseID))
+	cmd.Env = append(os.Environ(), fmt.Sprintf("GUM_RESPONSE_FILE=%s", tmpFile))
+
+	// Wrap the command's script to tee output to the temp file.
+	origArgs := cmd.Args
+	if len(origArgs) >= 3 {
+		script := origArgs[2]
+		// Replace trailing newline of the last gum command with a tee pipe.
+		script = strings.TrimRight(script, "\n") + fmt.Sprintf(" | tee '%s'\n", tmpFile)
+		cmd.Args = []string{"sh", "-c", script}
+	}
+
+	isQuick := quick
+	return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
+		response := readGumResponseFile(cmd)
+		return MsgGuidanceSent{
+			PhaseID:  phaseID,
+			Response: response,
+			Quick:    isQuick,
+			Err:      err,
+		}
+	})
+}
+
+// buildGumPhaseContext assembles gum.PhaseContext from the selected phase's
+// execution state for display in the guidance prompt.
+func (m *AppModel) buildGumPhaseContext(phase *PhaseEntry) gum.PhaseContext {
+	ctx := gum.PhaseContext{
+		PhaseID:    phase.ID,
+		PhaseTitle: phase.Title,
+		Cycle:      phase.Cycles,
+		MaxCycles:  phase.MaxCycles,
+	}
+
+	// Enrich with worker card data if available.
+	if wc := m.WorkerCards[phase.ID]; wc != nil {
+		ctx.ActiveAgent = wc.AgentRole
+		if wc.Stream.Len() > 0 {
+			ctx.RecentActivity = wc.Stream.Latest().Text
+		}
+		ctx.FileClaims = wc.Claims
+	}
+
+	// Enrich with reviewer feedback from loop view.
+	if lv, ok := m.PhaseLoops[phase.ID]; ok {
+		ctx.LastFeedback = lastReviewerSummary(lv)
+	}
+
+	return ctx
+}
+
+// postGuidanceHail writes a guidance file to the nebula directory for the
+// loop to pick up and relay to the agent in the next cycle. The file is
+// named GUIDANCE-<phaseID> and contains the guidance text. This follows
+// the same intervention-file pattern as PAUSE/STOP/RETRY.
+//
+// If GuidanceCh is configured, guidance is also sent via the channel for
+// programmatic consumption (e.g., tests or single-task loop mode).
+func (m *AppModel) postGuidanceHail(phaseID, guidance string) {
+	// Write the guidance intervention file.
+	if m.NebulaDir != "" {
+		guidancePath := filepath.Join(m.NebulaDir, fmt.Sprintf("GUIDANCE-%s", phaseID))
+		if err := os.WriteFile(guidancePath, []byte(guidance), 0644); err != nil {
+			m.addMessage("failed to write guidance file: %s", err)
+		}
+	}
+
+	// Also send via channel if configured (for loop mode or programmatic use).
+	if m.GuidanceCh != nil {
+		select {
+		case m.GuidanceCh <- GuidanceEntry{PhaseID: phaseID, Guidance: guidance}:
+		default:
+		}
+	}
+}
+
 // lastAgentSummary returns the summary from the most recent agent (coder or reviewer).
 func lastAgentSummary(lv *LoopView) string {
 	for i := len(lv.Cycles) - 1; i >= 0; i-- {
@@ -2111,6 +2453,13 @@ func (m *AppModel) moveUp() {
 	case ModeLoop:
 		m.LoopView.MoveUp()
 	case ModeNebula:
+		// When sidebar is visible and focused, navigate the sidebar.
+		if m.Depth == DepthPhases && m.sidebarWidth() > 0 && m.PaneFocus == PaneFocusSidebar {
+			m.Sidebar.MoveUp()
+			m.syncSidebarSelection()
+			m.updateDetailFromSelection()
+			return
+		}
 		if m.Depth == DepthPhases {
 			if m.ActiveTab == TabEntanglements {
 				m.EntanglementView.MoveUp()
@@ -2152,6 +2501,13 @@ func (m *AppModel) moveDown() {
 	case ModeLoop:
 		m.LoopView.MoveDown()
 	case ModeNebula:
+		// When sidebar is visible and focused, navigate the sidebar.
+		if m.Depth == DepthPhases && m.sidebarWidth() > 0 && m.PaneFocus == PaneFocusSidebar {
+			m.Sidebar.MoveDown()
+			m.syncSidebarSelection()
+			m.updateDetailFromSelection()
+			return
+		}
 		if m.Depth == DepthPhases {
 			if m.ActiveTab == TabEntanglements {
 				m.EntanglementView.MoveDown()
@@ -2169,6 +2525,28 @@ func (m *AppModel) moveDown() {
 		}
 	}
 	m.updateDetailFromSelection()
+}
+
+// syncSidebarSelection synchronizes the sidebar selection with the main views.
+// When the user navigates in the sidebar, the board/nebula view cursor follows.
+func (m *AppModel) syncSidebarSelection() {
+	if m.Sidebar.Cursor < 0 || m.Sidebar.Cursor >= len(m.Sidebar.Phases) {
+		return
+	}
+	// Sync the NebulaView cursor.
+	m.NebulaView.Cursor = m.Sidebar.Cursor
+	// Sync the Board view cursor (it uses flat ordering, which may differ).
+	// For simplicity, sync the NebulaView cursor — board cursor is separate.
+	m.Board.Cursor = m.Sidebar.Cursor
+}
+
+// activePhaseCursor returns the current phase cursor from the active main view.
+// Used for reverse-syncing the sidebar when focus moves from main → sidebar.
+func (m AppModel) activePhaseCursor() int {
+	if m.BoardActive && m.ActiveTab == TabBoard {
+		return m.Board.Cursor
+	}
+	return m.NebulaView.Cursor
 }
 
 // updateDetailFromSelection updates the detail panel content
@@ -2224,7 +2602,7 @@ func (m *AppModel) updateDetailFromSelection() {
 			)
 			return
 		}
-		body := FormatAgentOutput(agent.Output)
+		body := FormatAgentOutput(agent.Output, m.Detail.viewport.Width)
 		m.Detail.SetContentWithHeader(agent.Role+" output", header, body)
 
 	case ModeNebula:
@@ -2346,12 +2724,131 @@ func (m *AppModel) updateNebulaDetail() {
 			m.Detail.SetContentWithHeader(title, header, "(output will appear when agent completes)")
 			return
 		}
-		body := FormatAgentOutput(agent.Output)
+		body := FormatAgentOutput(agent.Output, m.Detail.viewport.Width)
 		m.Detail.SetContentWithHeader(title, header, body)
+
+	case DepthPhases:
+		// When tree view is active, show detail based on the selected node.
+		m.updateTreeDetail()
 
 	default:
 		m.Detail.SetEmpty("Press enter to expand details")
 	}
+}
+
+// updateTreeDetail populates the detail panel based on the selected tree node.
+func (m *AppModel) updateTreeDetail() {
+	node := m.Sidebar.SelectedTreeNode()
+	if node == nil {
+		m.Detail.SetEmpty("Navigate tree to see details")
+		return
+	}
+
+	switch node.Kind {
+	case TreeNodeNebula:
+		m.Detail.SetContent("nebula: "+node.Label, m.buildNebulaOverview())
+
+	case TreeNodePhase:
+		if node.PhaseEntry == nil {
+			m.Detail.SetEmpty("(no phase data)")
+			return
+		}
+		p := node.PhaseEntry
+		header := FormatPhaseHeader(PhaseContext{
+			ID:        p.ID,
+			Title:     p.Title,
+			Status:    p.Status,
+			CostUSD:   p.CostUSD,
+			Cycles:    p.Cycles,
+			BlockedBy: p.BlockedBy,
+		})
+		body := ""
+		if p.PlanBody != "" {
+			body = p.PlanBody
+		} else {
+			body = "(no plan body available)"
+		}
+		// If the phase is done/failed, show completion summary.
+		if p.Status == PhaseDone || p.Status == PhaseFailed {
+			lv := m.PhaseLoops[p.ID]
+			body = FormatPhaseSummary(*p, lv)
+		}
+		m.Detail.SetContentWithHeader(p.ID, header, body)
+
+	case TreeNodeCycle:
+		if node.CycleEntry == nil {
+			m.Detail.SetEmpty("(no cycle data)")
+			return
+		}
+		c := node.CycleEntry
+		var body strings.Builder
+		body.WriteString(fmt.Sprintf("Cycle %d\n\n", c.Number))
+		for _, a := range c.Agents {
+			if a.Done {
+				secs := float64(a.DurationMs) / 1000.0
+				body.WriteString(fmt.Sprintf("  %s %s  %.1fs  $%.4f", iconDone, a.Role, secs, a.CostUSD))
+				if a.IssueCount > 0 {
+					body.WriteString(fmt.Sprintf("  %d issue(s)", a.IssueCount))
+				}
+			} else {
+				body.WriteString(fmt.Sprintf("  %s %s  (in progress)", iconWorking, a.Role))
+			}
+			body.WriteString("\n")
+			if a.Summary != "" {
+				body.WriteString("    " + a.Summary + "\n")
+			}
+		}
+		m.Detail.SetContent(fmt.Sprintf("cycle %d", c.Number), body.String())
+
+	case TreeNodeAgent:
+		if node.AgentEntry == nil {
+			m.Detail.SetEmpty("(no agent data)")
+			return
+		}
+		a := node.AgentEntry
+		header := FormatAgentHeader(AgentContext{
+			Role:       a.Role,
+			DurationMs: a.DurationMs,
+			CostUSD:    a.CostUSD,
+			IssueCount: a.IssueCount,
+			Done:       a.Done,
+			Summary:    a.Summary,
+		})
+		if a.Output == "" {
+			m.Detail.SetContentWithHeader(a.Role+" output", header, "(output will appear when agent completes)")
+		} else {
+			body := FormatAgentOutput(a.Output, m.Detail.viewport.Width)
+			m.Detail.SetContentWithHeader(a.Role+" output", header, body)
+		}
+
+	default:
+		m.Detail.SetEmpty("Press enter to expand details")
+	}
+}
+
+// buildNebulaOverview builds a summary string for the nebula root node.
+func (m *AppModel) buildNebulaOverview() string {
+	var b strings.Builder
+	phases := m.NebulaView.Phases
+	done, working, waiting, failed := 0, 0, 0, 0
+	var totalCost float64
+	for _, p := range phases {
+		totalCost += p.CostUSD
+		switch p.Status {
+		case PhaseDone, PhaseSkipped:
+			done++
+		case PhaseWorking, PhaseGate:
+			working++
+		case PhaseFailed:
+			failed++
+		default:
+			waiting++
+		}
+	}
+	b.WriteString(fmt.Sprintf("Progress: %d/%d phases complete\n", done, len(phases)))
+	b.WriteString(fmt.Sprintf("Working: %d  Waiting: %d  Failed: %d\n", working, waiting, failed))
+	b.WriteString(fmt.Sprintf("Total cost: $%.2f\n", totalCost))
+	return b.String()
 }
 
 // findPhase returns the PhaseEntry for a given phase ID, or nil.
@@ -2581,8 +3078,9 @@ func (m AppModel) View() string {
 		return m.renderSplash()
 	}
 
-	// Content uses full terminal width (side panel mode removed).
-	contentWidth := m.Width
+	// Content width depends on whether the sidebar is visible.
+	contentWidth := m.contentWidth()
+	sidebarW := m.sidebarWidth()
 
 	var sections []string
 
@@ -2599,51 +3097,70 @@ func (m AppModel) View() string {
 	sections = append(sections, m.StatusBar.View())
 	sections = append(sections, "") // Spacing between header and content.
 
-	// Tab bar — only in nebula mode at DepthPhases level.
-	if m.Mode == ModeNebula && m.Depth == DepthPhases {
-		tb := TabBar{ActiveTab: m.ActiveTab, Width: contentWidth}
-		sections = append(sections, tb.View())
-	}
-
-	// Top banner (S-A or XS-A modes) — between status bar and content.
-	// Skip when the terminal is too short to avoid pushing content off-screen.
-	if m.Height >= BannerCollapseHeight {
-		if bannerView := m.Banner.View(); bannerView != "" {
-			sections = append(sections, bannerView)
-		}
-	}
-
-	// Build the "middle" section: breadcrumb + main view + detail + gate + toasts.
+	// Build the "middle" section: sidebar (if visible) + right area.
 	var middle []string
 
-	// Breadcrumb (nebula drill-down) — hide if too narrow.
-	if m.Mode == ModeNebula && m.Depth > DepthPhases && contentWidth >= CompactWidth {
-		middle = append(middle, m.renderBreadcrumb())
-	}
+	if sidebarW > 0 {
+		// Split-pane layout: sidebar | right area (tabs + main + detail).
+		// Use tree view for hierarchical expand/collapse in the sidebar.
+		m.Sidebar.SyncTree(m.StatusBar.Name, m.NebulaView.Phases, m.PhaseLoops, m.StatusBar.CostUSD)
+		m.Sidebar.Width = sidebarW
+		m.Sidebar.Height = m.sidebarHeight()
+		m.Sidebar.Focus = m.PaneFocus == PaneFocusSidebar
 
-	// Main view.
-	middle = append(middle, m.renderMainView())
+		// Right area: tabs + main + detail stacked vertically.
+		rightArea := m.renderRightArea(contentWidth)
 
-	// Detail panel (when drilled into agent output) — auto-collapse on short terminals.
-	// Home mode uses a higher threshold because the banner also consumes vertical space.
-	detailThreshold := DetailCollapseHeight
-	if m.Mode == ModeHome {
-		detailThreshold = HomeDetailCollapseHeight
-	}
-	if m.showDetailPanel() && m.Height >= detailThreshold {
-		sep := styleSectionBorder.Width(contentWidth).Render("")
-		middle = append(middle, sep)
-		middle = append(middle, m.Detail.View())
-	}
+		sidebarStr := m.Sidebar.View()
+		combined := lipgloss.JoinHorizontal(lipgloss.Top, sidebarStr, rightArea)
+		middle = append(middle, combined)
+	} else {
+		// Traditional full-width vertical layout.
 
-	// Gate overlay.
-	if m.Gate != nil {
-		middle = append(middle, m.Gate.View())
-	}
+		// Tab bar — only in nebula mode at DepthPhases level.
+		if m.Mode == ModeNebula && m.Depth == DepthPhases {
+			tb := TabBar{ActiveTab: m.ActiveTab, Width: contentWidth}
+			middle = append(middle, tb.View())
+		}
 
-	// Toast notifications (above footer).
-	if len(m.Toasts) > 0 {
-		middle = append(middle, RenderToasts(m.Toasts, contentWidth))
+		// Top banner (S-A or XS-A modes) — between status bar and content.
+		// Skip when the terminal is too short to avoid pushing content off-screen.
+		if m.Height >= BannerCollapseHeight {
+			if bannerView := m.Banner.View(); bannerView != "" {
+				middle = append(middle, bannerView)
+			}
+		}
+
+		// Breadcrumb (nebula drill-down) — hide if too narrow.
+		if m.Mode == ModeNebula && m.Depth > DepthPhases && contentWidth >= CompactWidth {
+			middle = append(middle, m.renderBreadcrumb())
+		}
+
+		// Main view.
+		middle = append(middle, m.renderMainView())
+
+		// Detail panel (when drilled into agent output) — auto-collapse on short terminals.
+		// Home mode uses a higher threshold because the banner also consumes vertical space.
+		detailThreshold := DetailCollapseHeight
+		if m.Mode == ModeHome {
+			detailThreshold = HomeDetailCollapseHeight
+		}
+		if m.showDetailPanel() && m.Height >= detailThreshold {
+			sep := styleSectionBorder.Width(contentWidth).Render("")
+			middle = append(middle, sep)
+			m.Detail.Focus = true // full-width layout: detail always has focus
+			middle = append(middle, m.Detail.View())
+		}
+
+		// Gate overlay.
+		if m.Gate != nil {
+			middle = append(middle, m.Gate.View())
+		}
+
+		// Toast notifications (above footer).
+		if len(m.Toasts) > 0 {
+			middle = append(middle, RenderToasts(m.Toasts, contentWidth))
+		}
 	}
 
 	middleStr := lipgloss.JoinVertical(lipgloss.Left, middle...)
@@ -2722,8 +3239,36 @@ func (m AppModel) renderSplash() string {
 }
 
 // contentWidth returns the available width for main content.
+// In nebula mode at DepthPhases with a wide-enough terminal, this subtracts
+// the sidebar width to leave room for the split-pane layout.
 func (m AppModel) contentWidth() int {
+	sw := m.sidebarWidth()
+	if sw > 0 {
+		return m.Width - sw
+	}
 	return m.Width
+}
+
+// sidebarWidth returns the sidebar width for the current terminal size.
+// Returns 0 when the sidebar should be hidden (non-nebula mode, drilled in,
+// or terminal too narrow).
+func (m AppModel) sidebarWidth() int {
+	if m.Mode != ModeNebula || m.Depth != DepthPhases {
+		return 0
+	}
+	return ComputeSidebarWidth(m.Width)
+}
+
+// sidebarHeight returns the available height for the sidebar content area.
+// This matches the total height between the status bar and bottom bar/footer.
+func (m AppModel) sidebarHeight() int {
+	// Chrome: status bar (1) + spacing (1) + bottom bar (1) + footer (1) = 4.
+	chrome := 4
+	h := m.Height - chrome
+	if h < 3 {
+		h = 3
+	}
+	return h
 }
 
 // renderBreadcrumb renders the navigation path for drill-down.
@@ -2751,6 +3296,40 @@ func (m AppModel) renderBreadcrumb() string {
 	renderedSep := styleBreadcrumbSep.Render(sep)
 	path := strings.Join(parts, renderedSep)
 	return styleBreadcrumb.Width(w).Render(path)
+}
+
+// renderRightArea renders the right side of the split-pane layout.
+// This includes the tab bar, main content view, and detail panel stacked vertically.
+func (m AppModel) renderRightArea(width int) string {
+	var parts []string
+
+	// Tab bar.
+	tb := TabBar{ActiveTab: m.ActiveTab, Width: width}
+	parts = append(parts, tb.View())
+
+	// Main content.
+	parts = append(parts, m.renderMainView())
+
+	// Detail panel — show when applicable, splitting the right area ~60/40.
+	detailThreshold := DetailCollapseHeight
+	if m.showDetailPanel() && m.Height >= detailThreshold {
+		sep := styleSectionBorder.Width(width).Render("")
+		parts = append(parts, sep)
+		m.Detail.Focus = m.PaneFocus == PaneFocusMain
+		parts = append(parts, m.Detail.View())
+	}
+
+	// Gate overlay.
+	if m.Gate != nil {
+		parts = append(parts, m.Gate.View())
+	}
+
+	// Toast notifications.
+	if len(m.Toasts) > 0 {
+		parts = append(parts, RenderToasts(m.Toasts, width))
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
 // renderMainView renders the appropriate view for the current depth.
@@ -2880,6 +3459,8 @@ func (m AppModel) buildFooter() Footer {
 			if m.selectedPhaseFailed() {
 				f.Bindings = append(f.Bindings, m.Keys.Retry)
 			}
+		} else if m.sidebarWidth() > 0 && m.PaneFocus == PaneFocusSidebar {
+			f.Bindings = SidebarFooterBindings(m.Keys)
 		} else if m.BoardActive {
 			f.Bindings = CockpitFooterBindings(m.Keys)
 			if m.selectedPhaseFailed() {

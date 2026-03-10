@@ -79,11 +79,12 @@ func (b *BusUIBridge) AgentStart(role string) {
 
 // AgentDone publishes KindPhaseAgentDone. For coder agents, it also captures
 // the git diff and publishes KindPhaseAgentDiff.
-func (b *BusUIBridge) AgentDone(role string, costUSD float64, durationMs int64) {
+func (b *BusUIBridge) AgentDone(role string, costUSD float64, durationMs int64, tokens int) {
 	ev := bus.NewPhase(bus.KindPhaseAgentDone, b.phaseID)
 	ev.Role = role
 	ev.CostUSD = costUSD
 	ev.DurationMs = durationMs
+	ev.Tokens = tokens
 	b.publish(ev)
 	b.scratchpad(fmt.Sprintf("%s done ($%.2f)", role, costUSD))
 

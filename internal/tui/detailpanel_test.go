@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestHighlightOutput(t *testing.T) {
@@ -270,13 +271,14 @@ func TestPhaseStatusString(t *testing.T) {
 
 func TestFormatAgentOutput(t *testing.T) {
 	t.Parallel()
-	// FormatAgentOutput combines truncation and highlighting.
+	// FormatAgentOutput combines truncation, markdown rendering, and highlighting.
 	input := "APPROVED\nISSUE: missing tests\nnormal"
-	result := FormatAgentOutput(input)
-	if !strings.Contains(result, "APPROVED") {
+	result := FormatAgentOutput(input, 80)
+	plain := ansi.Strip(result)
+	if !strings.Contains(plain, "APPROVED") {
 		t.Error("should contain APPROVED")
 	}
-	if !strings.Contains(result, "ISSUE:") {
+	if !strings.Contains(plain, "ISSUE:") {
 		t.Error("should contain ISSUE:")
 	}
 }

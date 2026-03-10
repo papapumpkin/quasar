@@ -551,6 +551,7 @@ func buildTUIWorkerOpts(
 		checkpointDir:    ecfg.NebulaDir,
 		fixEffort:        ecfg.FixEffort,
 		fallbackModel:    ecfg.FallbackModel,
+		nebulaDir:        ecfg.NebulaDir,
 	}
 
 	opts := []nebula.Option{

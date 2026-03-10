@@ -571,7 +571,7 @@ func TestAgentDone(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			output := captureStderr(func() {
-				p.AgentDone(tt.role, tt.costUSD, tt.durationMs)
+				p.AgentDone(tt.role, tt.costUSD, tt.durationMs, 0)
 			})
 			checks := []string{tt.wantRole, tt.wantCost, tt.wantSecs, "done"}
 			for _, want := range checks {

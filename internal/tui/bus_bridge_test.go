@@ -133,7 +133,7 @@ func TestBusUIBridgeAgentDoneReviewer(t *testing.T) {
 	defer sub.Unsubscribe()
 
 	bridge := NewBusUIBridge(b, "phase-5", "/tmp/work")
-	bridge.AgentDone("reviewer", 0.75, 1200)
+	bridge.AgentDone("reviewer", 0.75, 1200, 3000)
 
 	ev := mustDrain(t, sub)
 	if ev.Kind != bus.KindPhaseAgentDone {
@@ -531,7 +531,7 @@ func TestBusUIBridgeCycleStartUpdatesCycleField(t *testing.T) {
 
 	// Verify the bridge's internal cycle counter is updated correctly
 	// by checking that AgentDone for reviewer doesn't produce a diff event.
-	bridge.AgentDone("reviewer", 0.50, 500)
+	bridge.AgentDone("reviewer", 0.50, 500, 2000)
 	ev := mustDrain(t, sub) // KindPhaseAgentDone
 	if ev.Kind != bus.KindPhaseAgentDone {
 		t.Errorf("Kind = %q, want %q", ev.Kind, bus.KindPhaseAgentDone)

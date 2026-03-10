@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -43,7 +44,7 @@ func TestUIBridgeMethodsDoNotPanic(t *testing.T) {
 	b.TaskStarted("bead-123", "test task")
 	b.CycleStart(1, 5)
 	b.AgentStart("coder")
-	b.AgentDone("coder", 0.45, 12300)
+	b.AgentDone("coder", 0.45, 12300, 5000)
 	b.AgentOutput("coder", 1, "some output")
 	b.CycleSummary(ui.CycleSummaryData{
 		Cycle:     1,
@@ -1216,11 +1217,125 @@ func TestSetAgentDiffFilesNoMatchDoesNotPanic(t *testing.T) {
 }
 
 func TestCaptureGitDiffFallsBackToDefaultRefs(t *testing.T) {
-	// When both refs are empty, captureGitDiff should use HEAD~1..HEAD.
-	// We can't easily verify the actual git command, but we can verify
-	// the function doesn't panic and returns a zero result for a bad dir.
+	// When both refs are empty, captureGitDiff tries multiple strategies
+	// (staged, unstaged, HEAD~1..HEAD). With an invalid dir all strategies
+	// fail gracefully and return a zero result.
 	result := captureGitDiff("/nonexistent", "", "")
 	if result.Diff != "" {
 		t.Errorf("expected empty diff, got %q", result.Diff)
 	}
+}
+
+func TestCaptureGitDiffMultiStrategy(t *testing.T) {
+	// Set up a temporary git repo with an uncommitted (staged) change
+	// to verify that captureGitDiff picks up staged changes even when
+	// no refs are provided.
+	dir := t.TempDir()
+
+	// Initialize repo with an initial commit.
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=test",
+			"GIT_AUTHOR_EMAIL=test@test.com",
+			"GIT_COMMITTER_NAME=test",
+			"GIT_COMMITTER_EMAIL=test@test.com",
+		)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	run("git", "init")
+	run("git", "checkout", "-b", "main")
+
+	// Create initial file and commit.
+	if err := os.WriteFile(dir+"/hello.go", []byte("package hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("git", "add", "hello.go")
+	run("git", "commit", "-m", "initial")
+
+	t.Run("staged changes detected", func(t *testing.T) {
+		// Stage a change without committing.
+		if err := os.WriteFile(dir+"/hello.go", []byte("package hello\n\nfunc Hello() {}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		run("git", "add", "hello.go")
+
+		result := captureGitDiff(dir, "", "")
+		if result.Diff == "" {
+			t.Error("expected non-empty diff for staged changes")
+		}
+		if len(result.Files) == 0 {
+			t.Error("expected file stats for staged changes")
+		}
+		// Verify line counts are non-zero.
+		totalAdds := 0
+		for _, f := range result.Files {
+			totalAdds += f.Additions
+		}
+		if totalAdds == 0 {
+			t.Error("expected non-zero additions in file stats")
+		}
+	})
+
+	t.Run("unstaged changes detected", func(t *testing.T) {
+		// Reset staging area so changes are only in the working tree.
+		run("git", "reset", "HEAD", "hello.go")
+
+		result := captureGitDiff(dir, "", "")
+		if result.Diff == "" {
+			t.Error("expected non-empty diff for unstaged changes")
+		}
+		if len(result.Files) == 0 {
+			t.Error("expected file stats for unstaged changes")
+		}
+	})
+
+	t.Run("committed changes detected", func(t *testing.T) {
+		// Commit the change so only HEAD~1..HEAD shows it.
+		run("git", "add", "hello.go")
+		run("git", "commit", "-m", "add Hello func")
+
+		result := captureGitDiff(dir, "", "")
+		if result.Diff == "" {
+			t.Error("expected non-empty diff for committed changes")
+		}
+		if len(result.Files) == 0 {
+			t.Error("expected file stats for committed changes")
+		}
+	})
+
+	t.Run("explicit refs used first", func(t *testing.T) {
+		// Get the two commit SHAs.
+		cmd := exec.Command("git", "rev-parse", "HEAD~1")
+		cmd.Dir = dir
+		baseOut, err := cmd.Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd = exec.Command("git", "rev-parse", "HEAD")
+		cmd.Dir = dir
+		headOut, err := cmd.Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		base := strings.TrimSpace(string(baseOut))
+		head := strings.TrimSpace(string(headOut))
+
+		result := captureGitDiff(dir, base, head)
+		if result.Diff == "" {
+			t.Error("expected non-empty diff with explicit refs")
+		}
+		if result.BaseRef != base {
+			t.Errorf("BaseRef = %q, want %q", result.BaseRef, base)
+		}
+		if result.HeadRef != head {
+			t.Errorf("HeadRef = %q, want %q", result.HeadRef, head)
+		}
+	})
 }
