@@ -113,3 +113,47 @@ func TestRenderBoardEntry_CompletionNote(t *testing.T) {
 		t.Error("expected completion note on done phase card")
 	}
 }
+
+func TestRenderBoardEntry_TwoLineWideColumn(t *testing.T) {
+	t.Parallel()
+	bv := NewBoardView()
+	bv.Width = 250
+
+	p := PhaseEntry{ID: "streaming-invoker", Title: "Wire Streaming", Status: PhaseWaiting}
+	result := bv.renderBoardEntry(p, false, 40)
+
+	if !strings.Contains(result, "Wire Streaming") {
+		t.Error("expected title in wide card")
+	}
+	if !strings.Contains(result, "streaming-invoker") {
+		t.Error("expected phase ID on second line in wide card")
+	}
+}
+
+func TestRenderBoardEntry_NoIDLineWhenNarrow(t *testing.T) {
+	t.Parallel()
+	bv := NewBoardView()
+	bv.Width = 150
+
+	p := PhaseEntry{ID: "streaming-invoker", Title: "Wire Streaming", Status: PhaseWaiting}
+	result := bv.renderBoardEntry(p, false, 25)
+
+	if strings.Contains(result, "streaming-invoker") {
+		t.Error("should not show phase ID on narrow column")
+	}
+}
+
+func TestRenderBoardEntry_NoIDLineWhenTitleEqualsID(t *testing.T) {
+	t.Parallel()
+	bv := NewBoardView()
+	bv.Width = 250
+
+	p := PhaseEntry{ID: "same-name", Title: "same-name", Status: PhaseWaiting}
+	result := bv.renderBoardEntry(p, false, 40)
+
+	// Count occurrences: should appear once (title only), not twice.
+	count := strings.Count(result, "same-name")
+	if count > 1 {
+		t.Errorf("expected 'same-name' once when Title == ID, found %d times", count)
+	}
+}
