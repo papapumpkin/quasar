@@ -1,0 +1,37 @@
+[nebula]
+name = "web-dashboard-live"
+description = "Make the htmx+Go web dashboard fully live — wire SSE events to all pages, read real data from the accumulator, add navigation, and fix cockpit mode"
+
+[defaults]
+type = "bug"
+priority = 2
+labels = ["quasar", "web"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 40.0
+model = ""
+gate = ""
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Dashboard shows live cost, cycle, and status data from PhaseAccumulator",
+    "Phase detail page receives HTML-fragment SSE events for real-time cycle timeline updates",
+    "DAG page nodes update status colors in real time via SSE",
+    "Navigation bar in layout allows discovery of all pages",
+    "Cockpit (read-only) mode loads nebula from disk and renders static state",
+]
+constraints = [
+    "htmx + Go templates only — no client-side JS frameworks",
+    "Preserve existing galactic dark theme and CSS structure",
+    "Match TUI color palette and visual language where applicable",
+    "All SSE events use htmx sse-swap with hx-swap-oob for targeted DOM updates",
+    "No breaking changes to existing EventSource/BusAdapter interfaces",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

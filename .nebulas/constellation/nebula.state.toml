@@ -1,0 +1,51 @@
+version = 1
+nebula_name = 'constellation'
+
+[phases]
+[phases.cli-commands]
+bead_id = 'quasar-yt7l'
+status = 'created'
+created_at = 2026-03-09T21:55:58.721565-04:00
+updated_at = 2026-03-09T21:55:58.721565-04:00
+
+[phases.cross-nebula-fabric]
+bead_id = 'quasar-7yce'
+status = 'in_progress'
+created_at = 2026-03-09T21:55:58.322087-04:00
+updated_at = 2026-03-09T21:55:59.1466-04:00
+
+[phases.dag-scheduler]
+bead_id = 'quasar-qx80'
+status = 'in_progress'
+created_at = 2026-03-09T21:55:58.206344-04:00
+updated_at = 2026-03-09T21:55:59.146878-04:00
+
+[phases.manifest-types]
+bead_id = 'quasar-eapt'
+status = 'in_progress'
+created_at = 2026-03-09T21:55:57.979742-04:00
+updated_at = 2026-03-09T21:55:59.146175-04:00
+
+[phases.oracle-agent]
+bead_id = 'quasar-rl45'
+status = 'created'
+created_at = 2026-03-09T21:55:58.442993-04:00
+updated_at = 2026-03-09T21:55:58.442993-04:00
+
+[phases.state-persistence]
+bead_id = 'quasar-ziwz'
+status = 'created'
+created_at = 2026-03-09T21:55:58.578539-04:00
+updated_at = 2026-03-09T21:55:58.578539-04:00
+
+[phases.validation]
+bead_id = 'quasar-77wq'
+status = 'in_progress'
+created_at = 2026-03-09T21:55:58.092196-04:00
+updated_at = 2026-03-09T21:55:59.147285-04:00
+
+[phases.web-dashboard]
+bead_id = 'quasar-uly5'
+status = 'created'
+created_at = 2026-03-09T21:55:58.844364-04:00
+updated_at = 2026-03-09T21:55:58.844364-04:00

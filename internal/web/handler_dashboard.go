@@ -79,7 +79,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	startTime := s.startTime
 	s.mu.RUnlock()
 
-	data := buildDashboardData(neb, state, startTime)
+	data := buildDashboardData(neb, state, startTime, s.accumulator)
 
 	// Render to a buffer first so that template errors produce a clean 500
 	// response instead of garbled partial HTML with headers already sent.
@@ -93,7 +93,9 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildDashboardData transforms nebula and state into a template-ready view model.
-func buildDashboardData(neb *nebula.Nebula, state *nebula.State, startTime time.Time) DashboardData {
+// When acc is non-nil, per-phase cost and cycle counts are read from the
+// accumulator instead of defaulting to zero.
+func buildDashboardData(neb *nebula.Nebula, state *nebula.State, startTime time.Time, acc *PhaseAccumulator) DashboardData {
 	if neb == nil {
 		return DashboardData{}
 	}
@@ -128,7 +130,11 @@ func buildDashboardData(neb *nebula.Nebula, state *nebula.State, startTime time.
 			maxCycles = 5
 		}
 
-		cycles := "0/" + fmt.Sprintf("%d", maxCycles)
+		costUSD, cycleCount := accumulatedCostAndCycles(acc, phase.ID)
+
+		// Use accumulator status when it has a more recent value (e.g.,
+		// in_progress before the state file is written).
+		status = accumulatorStatus(acc, phase.ID, status)
 
 		blockedBy := computeBlockedBy(phase.ID, phase.DependsOn, state, dg)
 
@@ -137,8 +143,8 @@ func buildDashboardData(neb *nebula.Nebula, state *nebula.State, startTime time.
 			Title:      phase.Title,
 			Status:     statusString(status),
 			StatusIcon: statusIcon(status),
-			CostUSD:    fmt.Sprintf("%.4f", 0.0),
-			Cycles:     cycles,
+			CostUSD:    fmt.Sprintf("%.4f", costUSD),
+			Cycles:     fmt.Sprintf("%d/%d", cycleCount, maxCycles),
 			Wave:       waveForPhase[phase.ID],
 			BlockedBy:  blockedBy,
 			DependsOn:  phase.DependsOn,
@@ -165,6 +171,35 @@ func buildDashboardData(neb *nebula.Nebula, state *nebula.State, startTime time.
 		ElapsedSec:  elapsedSec,
 		ProgressPct: progressPct,
 	}
+}
+
+// accumulatedCostAndCycles returns the total cost and cycle count for a phase
+// from the accumulator. Returns zero values when acc is nil or the phase has
+// no accumulated data yet.
+func accumulatedCostAndCycles(acc *PhaseAccumulator, phaseID string) (costUSD float64, cycles int) {
+	if acc == nil {
+		return 0, 0
+	}
+	detail := acc.Get(phaseID)
+	if detail == nil {
+		return 0, 0
+	}
+	return detail.TotalCost, len(detail.Cycles)
+}
+
+// accumulatorStatus returns the accumulator's status for a phase when it
+// carries a more informative value than the state file. For example, the
+// accumulator may know "in_progress" before the state file is written.
+// Falls back to the provided stateStatus when the accumulator has no data.
+func accumulatorStatus(acc *PhaseAccumulator, phaseID string, stateStatus nebula.PhaseStatus) nebula.PhaseStatus {
+	if acc == nil {
+		return stateStatus
+	}
+	detail := acc.Get(phaseID)
+	if detail == nil || detail.Status == "" {
+		return stateStatus
+	}
+	return nebula.PhaseStatus(detail.Status)
 }
 
 // buildDAGAndWaves constructs a DAG from phase specs and computes waves.

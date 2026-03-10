@@ -219,7 +219,7 @@ func TestBuildDashboardData(t *testing.T) {
 		},
 	}
 
-	data := buildDashboardData(neb, state, time.Now().Add(-30*time.Second))
+	data := buildDashboardData(neb, state, time.Now().Add(-30*time.Second), nil)
 
 	if data.NebulaName != "data-test" {
 		t.Errorf("expected name data-test, got %s", data.NebulaName)
@@ -265,7 +265,7 @@ func TestBuildDashboardData(t *testing.T) {
 func TestBuildDashboardData_NilNebula(t *testing.T) {
 	t.Parallel()
 
-	data := buildDashboardData(nil, nil, time.Time{})
+	data := buildDashboardData(nil, nil, time.Time{}, nil)
 	if data.Total != 0 {
 		t.Errorf("expected 0 total for nil nebula, got %d", data.Total)
 	}

@@ -147,6 +147,12 @@ func (b *SSEBridge) renderPhaseRow(phaseID string) (string, error) {
 		maxCycles = 5
 	}
 
+	// Read accumulated cost and cycle data.
+	costUSD, cycleCount := accumulatedCostAndCycles(b.server.accumulator, phaseID)
+
+	// Use accumulator status when it has a more recent value.
+	status = accumulatorStatus(b.server.accumulator, phaseID, status)
+
 	// Build DAG for wave and blocked-by info.
 	dg, waves := buildDAGAndWaves(neb.Phases)
 	waveForPhase := mapPhasesToWaves(waves)
@@ -157,8 +163,8 @@ func (b *SSEBridge) renderPhaseRow(phaseID string) (string, error) {
 		Title:      spec.Title,
 		Status:     statusString(status),
 		StatusIcon: statusIcon(status),
-		CostUSD:    fmt.Sprintf("%.4f", 0.0),
-		Cycles:     fmt.Sprintf("0/%d", maxCycles),
+		CostUSD:    fmt.Sprintf("%.4f", costUSD),
+		Cycles:     fmt.Sprintf("%d/%d", cycleCount, maxCycles),
 		Wave:       waveForPhase[spec.ID],
 		BlockedBy:  blockedBy,
 		DependsOn:  spec.DependsOn,
