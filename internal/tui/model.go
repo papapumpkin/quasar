@@ -23,6 +23,13 @@ import (
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
+// GuidanceEntry carries a human-initiated guidance message from the TUI
+// back to the loop's hail queue for relay to the agent.
+type GuidanceEntry struct {
+	PhaseID  string // target phase (empty in loop mode)
+	Guidance string // free-text guidance from the developer
+}
+
 // Mode indicates which top-level view the TUI is displaying.
 type Mode int
 
@@ -57,7 +64,8 @@ type AppModel struct {
 	Hail              *HailOverlay
 	GumAvailable      bool          // true if gum binary is in PATH
 	GumBinPath        string        // resolved path to gum binary
-	gumHailResponseCh chan<- string // stashed response channel for active gum hail
+	gumHailResponseCh chan<- string        // stashed response channel for active gum hail
+	GuidanceCh        chan<- GuidanceEntry // optional; when set, guidance is posted to the loop's hail queue
 	Overlay           *CompletionOverlay
 	Toasts            []Toast
 	Keys              KeyMap
@@ -2389,24 +2397,17 @@ func (m *AppModel) buildGumPhaseContext(phase *PhaseEntry) gum.PhaseContext {
 	return ctx
 }
 
-// postGuidanceHail posts a guidance hail to the hail queue for the given
-// phase. The hail is pre-resolved with the guidance text so it will be
-// picked up by the relay in the next cycle.
+// postGuidanceHail posts a guidance hail via the GuidanceCh channel
+// for the loop to pick up and relay to the agent in the next cycle.
+// If no GuidanceCh is configured, the guidance is silently dropped.
 func (m *AppModel) postGuidanceHail(phaseID, guidance string) {
-	hailInfo := ui.HailInfo{
-		ID:         fmt.Sprintf("guidance-%s-%d", phaseID, time.Now().UnixMilli()),
-		Kind:       "guidance",
-		Summary:    "developer guidance",
-		Detail:     guidance,
-		SourceRole: "human",
+	if m.GuidanceCh != nil {
+		select {
+		case m.GuidanceCh <- GuidanceEntry{PhaseID: phaseID, Guidance: guidance}:
+		default:
+			// Channel full — drop gracefully.
+		}
 	}
-	m.PendingHails = append(m.PendingHails, hailInfo)
-	m.syncHailBadge()
-
-	// Also post a toast-style resolved hail so MsgHailResolved propagates.
-	toast, cmd := NewToast(fmt.Sprintf("guidance queued for %s", phaseID), false)
-	_ = cmd
-	m.Toasts = append(m.Toasts, toast)
 }
 
 // lastAgentSummary returns the summary from the most recent agent (coder or reviewer).
