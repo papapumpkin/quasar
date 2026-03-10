@@ -234,11 +234,11 @@ var (
 			Foreground(colorMuted)
 )
 
-// Diff view styles — side-by-side diff rendering.
+// Diff view styles — unified diff rendering (red removes, blue adds).
 var (
-	// styleDiffAdd styles added lines with a green background.
+	// styleDiffAdd styles added lines with blue foreground (Claude Code convention).
 	styleDiffAdd = lipgloss.NewStyle().
-			Foreground(colorSuccess)
+			Foreground(colorBlueshift)
 
 	// styleDiffRemove styles removed lines with a red foreground.
 	styleDiffRemove = lipgloss.NewStyle().

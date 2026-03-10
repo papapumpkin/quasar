@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'tui-polish-v2'
-total_cost_usd = 5.461984950000001
+total_cost_usd = 8.502966700000002
 
 [phases]
 [phases.agent-chat-gum]
@@ -71,15 +71,21 @@ updated_at = 2026-03-09T20:32:43.466542-04:00
 
 [phases.token-count-live]
 bead_id = 'quasar-b986'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-09T20:23:47.386162-04:00
-updated_at = 2026-03-09T20:34:48.499374-04:00
+updated_at = 2026-03-09T20:41:21.890057-04:00
+
+[phases.token-count-live.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Correctly fixes the broken token count pipeline by adding JSON field parsing to CLIResponse and threading TotalTokens through InvocationResult → UI interface → TUI messages → StatusBar display.'
 
 [phases.unified-diff]
 bead_id = 'quasar-76ic'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-09T20:23:46.898659-04:00
-updated_at = 2026-03-09T20:26:02.279641-04:00
+updated_at = 2026-03-09T20:41:21.906317-04:00
 
 [phases.worker-card-richness]
 bead_id = 'quasar-3mu7'
