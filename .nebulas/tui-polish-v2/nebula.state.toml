@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'tui-polish-v2'
-total_cost_usd = 15.114611650000002
+total_cost_usd = 17.798843400000003
 
 [phases]
 [phases.agent-chat-gum]
@@ -41,9 +41,9 @@ summary = 'Glamour markdown rendering integrated cleanly into the TUI detail pan
 
 [phases.hail-gum]
 bead_id = 'quasar-6wwh'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-09T20:23:47.512247-04:00
-updated_at = 2026-03-09T20:26:02.877498-04:00
+updated_at = 2026-03-09T20:53:13.889512-04:00
 
 [phases.line-count-bug]
 bead_id = 'quasar-8utb'
@@ -101,6 +101,12 @@ summary = 'Clean switch from side-by-side to unified diff rendering with red/blu
 
 [phases.worker-card-richness]
 bead_id = 'quasar-3mu7'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-09T20:23:47.269707-04:00
-updated_at = 2026-03-09T20:42:57.737301-04:00
+updated_at = 2026-03-09T20:53:13.876295-04:00
+
+[phases.worker-card-richness.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Worker cards enhanced with phase title, elapsed time, per-card cost accumulation, cycle progress bar, and richer contextual activity — all cleanly implemented with good test coverage and no regressions.'

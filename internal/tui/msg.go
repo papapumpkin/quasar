@@ -442,6 +442,25 @@ type MsgDialogClosed struct {
 	SessionID string
 }
 
+// --- Gum subprocess messages ---
+
+// MsgGumHailResult is sent after a gum-backed hail resolution subprocess
+// completes. The TUI resumes and applies the resolution.
+type MsgGumHailResult struct {
+	PhaseID    string // phase that raised the hail
+	HailID     string // hail identifier
+	Response   string // human's response (empty if skipped/cancelled)
+	Err        error  // non-nil if gum subprocess failed
+}
+
+// MsgGumDialogResult is sent after a gum-backed dialog subprocess
+// completes. The TUI resumes and records the response.
+type MsgGumDialogResult struct {
+	SessionID string
+	Response  string
+	Err       error
+}
+
 // MsgOpenPhaseChat is sent when the user presses the contextual chat
 // keybinding on a phase in the board view. It embeds the phase context
 // needed to seed a context-aware chat conversation.

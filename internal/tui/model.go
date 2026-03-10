@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -53,6 +54,8 @@ type AppModel struct {
 	Gate         *GatePrompt
 	PendingGates []MsgGatePrompt // queued gate prompts waiting for the current gate to resolve
 	Hail         *HailOverlay
+	GumAvailable bool   // true if gum binary is in PATH
+	GumBinPath   string // resolved path to gum binary
 	Overlay      *CompletionOverlay
 	Toasts       []Toast
 	Keys         KeyMap
@@ -177,6 +180,11 @@ func NewAppModel(mode Mode) AppModel {
 	}
 	m.StatusBar.StartTime = m.StartTime
 	m.StatusBar.Thresholds = m.Thresholds
+	// Detect gum availability at startup.
+	if gumPath, err := exec.LookPath("gum"); err == nil {
+		m.GumAvailable = true
+		m.GumBinPath = gumPath
+	}
 	// In home mode, show the detail panel by default.
 	if mode == ModeHome {
 		m.ShowPlan = true
@@ -659,8 +667,36 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgHail:
 		// Show the hail overlay in any nebula view; queue if one is already active.
 		if m.Mode == ModeNebula {
-			if m.Hail != nil {
-				// Already showing a hail — queue for later.
+			if m.GumAvailable {
+				// Use gum-backed hail resolution — suspend TUI, run gum subprocess.
+				hailInfo := ui.HailInfo{
+					ID:         fmt.Sprintf("hail-%d", len(m.PendingHails)),
+					Kind:       msg.Discovery.Kind,
+					Summary:    msg.Discovery.Detail,
+					Detail:     msg.Discovery.Detail,
+					SourceRole: msg.Discovery.SourceTask,
+					Options:    extractOptions(msg.Discovery.Detail),
+				}
+				gumCmd := gumExec.GumHailCmd(context.Background(), m.GumBinPath, hailInfo)
+				phaseID := msg.PhaseID
+				responseCh := msg.ResponseCh
+				cmds = append(cmds, tea.ExecProcess(gumCmd, func(err error) tea.Msg {
+					response := ""
+					if err == nil && gumCmd.ProcessState != nil && gumCmd.ProcessState.ExitCode() == 0 {
+						// Response was written to stdout by the gum script.
+						response = strings.TrimSpace(gumCmd.ProcessState.String())
+					}
+					return MsgGumHailResult{
+						PhaseID:  phaseID,
+						HailID:   hailInfo.ID,
+						Response: response,
+						Err:      err,
+					}
+				}))
+				// Store the response channel for later use when MsgGumHailResult arrives.
+				m.gumHailResponseCh = responseCh
+			} else if m.Hail != nil {
+				// Fallback: already showing a hail — queue for later.
 				hailInfo := ui.HailInfo{
 					Kind:    msg.Discovery.Kind,
 					Summary: msg.Discovery.Detail,
@@ -672,6 +708,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Toasts = append(m.Toasts, toast)
 				cmds = append(cmds, cmd)
 			} else {
+				// Fallback: show BubbleTea overlay.
 				m.Hail = NewHailOverlay(msg, msg.ResponseCh)
 				cmds = append(cmds, m.Hail.Input.Focus())
 			}
