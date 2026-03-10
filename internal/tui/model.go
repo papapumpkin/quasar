@@ -391,7 +391,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseWorking)
 		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseWorking)
 		// Create a worker card for this active phase.
-		m.ensureWorkerCard(msg.PhaseID)
+		wc := m.ensureWorkerCard(msg.PhaseID)
+		wc.StartedAt = time.Now()
+		// Populate phase title from the message or from the phase table.
+		if msg.Title != "" {
+			wc.PhaseTitle = msg.Title
+		} else if p := m.findPhase(msg.PhaseID); p != nil {
+			wc.PhaseTitle = p.Title
+		}
 	case MsgPhaseTaskComplete:
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseDone)
 		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseDone)
@@ -419,14 +426,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgPhaseAgentStart:
 		lv := m.ensurePhaseLoop(msg.PhaseID)
 		lv.StartAgent(msg.Role)
-		// Update worker card agent role and activity.
-		activity := activityFromRole(msg.Role)
+		// Update worker card agent role and activity with phase context.
 		if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
 			wc.AgentRole = msg.Role
-			wc.Activity = activity
+			wc.Activity = richActivity(msg.Role, wc.PhaseTitle, wc.Claims)
 		}
-		// Propagate activity to board card.
-		m.NebulaView.SetPhaseActivity(msg.PhaseID, activity)
+		// Propagate simple activity to board card.
+		m.NebulaView.SetPhaseActivity(msg.PhaseID, activityFromRole(msg.Role))
 	case MsgWorkerActivity:
 		if msg.PhaseID != "" {
 			if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
@@ -441,9 +447,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.FocusedPhase == msg.PhaseID {
 			m.updateDetailFromSelection()
 		}
-		// Update worker card token count.
+		// Update worker card token count and cost immediately on each agent
+		// completion (coder + reviewer), not just at phase end.
 		if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
 			wc.TokensUsed += msg.Tokens
+			wc.CostUSD += msg.CostUSD
 		}
 	case MsgPhaseAgentOutput:
 		lv := m.ensurePhaseLoop(msg.PhaseID)
@@ -2755,6 +2763,7 @@ func (m AppModel) View() string {
 		if m.showDetailPanel() && m.Height >= detailThreshold {
 			sep := styleSectionBorder.Width(contentWidth).Render("")
 			middle = append(middle, sep)
+			m.Detail.Focus = true // full-width layout: detail always has focus
 			middle = append(middle, m.Detail.View())
 		}
 
@@ -2921,6 +2930,7 @@ func (m AppModel) renderRightArea(width int) string {
 	if m.showDetailPanel() && m.Height >= detailThreshold {
 		sep := styleSectionBorder.Width(width).Render("")
 		parts = append(parts, sep)
+		m.Detail.Focus = m.PaneFocus == PaneFocusMain
 		parts = append(parts, m.Detail.View())
 	}
 

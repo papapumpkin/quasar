@@ -25,7 +25,7 @@ func TestWorkerCardView_BasicContent(t *testing.T) {
 		"implement-auth",
 		"q-1",
 		"cycle 2/5",
-		"tokens 12000",
+		"12.0k tokens",
 		"login.go",
 		"token.go",
 		"coding...",
@@ -542,5 +542,173 @@ func TestFormatDurationBrief(t *testing.T) {
 				t.Errorf("formatDurationBrief(%v) = %q, want %q", tc.d, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestWorkerCardView_PhaseTitle(t *testing.T) {
+	t.Parallel()
+	wc := &WorkerCard{
+		PhaseID:    "wire-streaming",
+		PhaseTitle: "Wire streaming invoker",
+		QuasarID:   "q-1",
+		Cycle:      1,
+		MaxCycles:  5,
+		AgentRole:  "coder",
+	}
+
+	out := wc.View(50)
+	// Title should show the phase title, not the ID.
+	if !strings.Contains(out, "Wire streaming invoker") {
+		t.Errorf("expected phase title in output:\n%s", out)
+	}
+	// Phase ID should still appear on the quasar line.
+	if !strings.Contains(out, "wire-streaming") {
+		t.Errorf("expected phase ID on quasar line:\n%s", out)
+	}
+}
+
+func TestWorkerCardView_ElapsedTime(t *testing.T) {
+	t.Parallel()
+	wc := &WorkerCard{
+		PhaseID:   "elapsed-test",
+		QuasarID:  "q-1",
+		AgentRole: "coder",
+		StartedAt: time.Now().Add(-2*time.Minute - 15*time.Second),
+	}
+
+	out := wc.View(50)
+	if !strings.Contains(out, "⏱") {
+		t.Errorf("expected elapsed time indicator ⏱ in output:\n%s", out)
+	}
+	// Should contain minute-second format.
+	if !strings.Contains(out, "2m") {
+		t.Errorf("expected ~2m elapsed time:\n%s", out)
+	}
+}
+
+func TestWorkerCardView_CostAndTokens(t *testing.T) {
+	t.Parallel()
+	wc := &WorkerCard{
+		PhaseID:    "cost-test",
+		QuasarID:   "q-1",
+		Cycle:      2,
+		MaxCycles:  5,
+		TokensUsed: 45000,
+		CostUSD:    1.23,
+		AgentRole:  "coder",
+	}
+
+	out := wc.View(50)
+	if !strings.Contains(out, "$1.23") {
+		t.Errorf("expected cost $1.23 in output:\n%s", out)
+	}
+	if !strings.Contains(out, "45.0k") {
+		t.Errorf("expected token count 45.0k in output:\n%s", out)
+	}
+}
+
+func TestWorkerCardView_CycleBar(t *testing.T) {
+	t.Parallel()
+	wc := &WorkerCard{
+		PhaseID:   "cycle-bar-test",
+		QuasarID:  "q-1",
+		Cycle:     3,
+		MaxCycles: 5,
+		AgentRole: "coder",
+	}
+
+	out := wc.View(50)
+	// Should contain the mini cycle bar brackets.
+	if !strings.Contains(out, "[") || !strings.Contains(out, "]") {
+		t.Errorf("expected cycle bar with brackets in output:\n%s", out)
+	}
+	if !strings.Contains(out, "█") {
+		t.Errorf("expected filled blocks in cycle bar:\n%s", out)
+	}
+}
+
+func TestRichActivity(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		role       string
+		phaseTitle string
+		claims     []string
+		wantContains string
+	}{
+		{
+			name:         "coder with title",
+			role:         "coder",
+			phaseTitle:   "Wire streaming invoker",
+			wantContains: "coding: Wire streaming invoker",
+		},
+		{
+			name:         "reviewer with title",
+			role:         "reviewer",
+			phaseTitle:   "Add error handling",
+			wantContains: "reviewing: Add error handling",
+		},
+		{
+			name:         "coder with claims no title",
+			role:         "coder",
+			claims:       []string{"internal/tui/model.go", "internal/tui/view.go"},
+			wantContains: "coding: 2 files in internal/tui/",
+		},
+		{
+			name:         "coder no title no claims",
+			role:         "coder",
+			wantContains: "coding...",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := richActivity(tc.role, tc.phaseTitle, tc.claims)
+			if !strings.Contains(got, tc.wantContains) {
+				t.Errorf("richActivity(%q, %q, %v) = %q, want to contain %q",
+					tc.role, tc.phaseTitle, tc.claims, got, tc.wantContains)
+			}
+		})
+	}
+}
+
+func TestCommonDir(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		paths []string
+		want  string
+	}{
+		{"same dir", []string{"a/b/c.go", "a/b/d.go"}, "a/b/"},
+		{"nested", []string{"a/b/c/x.go", "a/b/c/y.go", "a/b/c/z.go"}, "a/b/c/"},
+		{"no common", []string{"x/a.go", "y/b.go"}, ""},
+		{"single file", []string{"a/b/c.go"}, "a/b/"},
+		{"empty", nil, ""},
+		{"root files", []string{"a.go", "b.go"}, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := commonDir(tc.paths)
+			if got != tc.want {
+				t.Errorf("commonDir(%v) = %q, want %q", tc.paths, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRenderWorkerCycleBar(t *testing.T) {
+	t.Parallel()
+
+	// Should return empty for zero max cycles.
+	if got := renderWorkerCycleBar(0, 0); got != "" {
+		t.Errorf("renderWorkerCycleBar(0, 0) = %q, want empty", got)
+	}
+
+	// Should contain brackets and blocks for valid input.
+	got := renderWorkerCycleBar(3, 5)
+	if !strings.Contains(got, "[") || !strings.Contains(got, "]") {
+		t.Errorf("renderWorkerCycleBar(3, 5) missing brackets: %q", got)
+	}
+	if !strings.Contains(got, "█") || !strings.Contains(got, "░") {
+		t.Errorf("renderWorkerCycleBar(3, 5) missing bar characters: %q", got)
 	}
 }

@@ -18,9 +18,10 @@ type DetailPanel struct {
 	viewport    viewport.Model
 	title       string
 	ready       bool
-	totalLines  int // total lines of content (before viewport clipping)
+	totalLines  int    // total lines of content (before viewport clipping)
 	emptyHint   string
 	headerBlock string // rendered header (above viewport content)
+	Focus       bool   // whether the detail panel currently has keyboard focus
 }
 
 // NewDetailPanel creates a detail panel with the given dimensions.
@@ -104,11 +105,13 @@ func (d *DetailPanel) Update(msg tea.Msg) {
 	d.viewport, _ = d.viewport.Update(msg)
 }
 
-// View renders the detail panel with a rounded border and scroll indicators.
+// View renders the detail panel with a focus-aware rounded border and scroll indicators.
 func (d DetailPanel) View() string {
+	border := panelStyle(d.Focus)
+
 	if d.emptyHint != "" {
 		content := styleDetailDim.Render(d.emptyHint)
-		return styleDetailBorder.Render(content)
+		return border.Render(content)
 	}
 
 	var b strings.Builder
@@ -132,7 +135,7 @@ func (d DetailPanel) View() string {
 		b.WriteString(styleScrollIndicator.Render(fmt.Sprintf("↓ %d more", downMore)))
 	}
 
-	return styleDetailBorder.Render(b.String())
+	return border.Render(b.String())
 }
 
 // linesAbove returns the number of content lines above the viewport.

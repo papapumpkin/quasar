@@ -167,27 +167,67 @@ func (wc *WorkerCard) View(width int) string {
 
 	var b strings.Builder
 
-	// Title: phase name in accent color.
+	// Title: phase title (or ID fallback) in accent color.
 	titleStyle := lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
-	title := TruncateWithEllipsis(wc.PhaseID, innerWidth)
+	titleText := wc.PhaseTitle
+	if titleText == "" {
+		titleText = wc.PhaseID
+	}
+	title := TruncateWithEllipsis(titleText, innerWidth)
 	b.WriteString(titleStyle.Render(title))
 	b.WriteString("\n")
 
-	// Quasar ID in nebula color.
+	// Quasar ID and phase ID (when title is available) in nebula color.
 	qStyle := lipgloss.NewStyle().Foreground(colorNebula)
-	b.WriteString(qStyle.Render(wc.QuasarID))
+	qLine := wc.QuasarID
+	if wc.PhaseTitle != "" {
+		// Show phase ID alongside quasar ID for context.
+		maxID := innerWidth - len(wc.QuasarID) - 3 // " · " separator
+		if maxID > 0 {
+			qLine += " · " + TruncateWithEllipsis(wc.PhaseID, maxID)
+		}
+	}
+	b.WriteString(qStyle.Render(qLine))
 	b.WriteString("\n")
 
-	// Cycle counter.
-	cycleLabel := fmt.Sprintf("cycle %d/%d", wc.Cycle, wc.MaxCycles)
 	dimStyle := lipgloss.NewStyle().Foreground(colorMuted)
-	b.WriteString(dimStyle.Render(cycleLabel))
+
+	// Cycle counter with mini progress bar.
+	cycleLabel := fmt.Sprintf("cycle %d/%d", wc.Cycle, wc.MaxCycles)
+	if wc.MaxCycles > 0 {
+		cycleBar := renderWorkerCycleBar(wc.Cycle, wc.MaxCycles)
+		b.WriteString(dimStyle.Render(cycleLabel) + " " + cycleBar)
+	} else {
+		b.WriteString(dimStyle.Render(cycleLabel))
+	}
 	b.WriteString("\n")
 
-	// Token spend.
-	tokenLabel := fmt.Sprintf("tokens %d", wc.TokensUsed)
-	b.WriteString(dimStyle.Render(tokenLabel))
-	b.WriteString("\n")
+	// Elapsed time + cost/tokens line.
+	var metricsLine strings.Builder
+	if !wc.StartedAt.IsZero() {
+		elapsed := time.Since(wc.StartedAt)
+		metricsLine.WriteString(dimStyle.Render(fmt.Sprintf("⏱ %s", formatDurationBrief(elapsed))))
+	}
+	if wc.CostUSD > 0 {
+		if metricsLine.Len() > 0 {
+			metricsLine.WriteString(dimStyle.Render("  "))
+		}
+		costStyle := lipgloss.NewStyle().Foreground(colorMutedLight)
+		metricsLine.WriteString(costStyle.Render(fmt.Sprintf("$%.2f", wc.CostUSD)))
+		if wc.TokensUsed > 0 {
+			metricsLine.WriteString(dimStyle.Render(" · "))
+			metricsLine.WriteString(dimStyle.Render(FormatTokens(wc.TokensUsed)))
+		}
+	} else if wc.TokensUsed > 0 {
+		if metricsLine.Len() > 0 {
+			metricsLine.WriteString(dimStyle.Render("  "))
+		}
+		metricsLine.WriteString(dimStyle.Render(FormatTokens(wc.TokensUsed) + " tokens"))
+	}
+	if metricsLine.Len() > 0 {
+		b.WriteString(metricsLine.String())
+		b.WriteString("\n")
+	}
 
 	// Claims (file paths) — show up to 3, then "...".
 	if len(wc.Claims) > 0 {
@@ -215,7 +255,7 @@ func (wc *WorkerCard) View(width int) string {
 	if activity == "" {
 		activity = activityFromRole(wc.AgentRole)
 	}
-	b.WriteString(actStyle.Render(activity))
+	b.WriteString(actStyle.Render(TruncateWithEllipsis(activity, innerWidth)))
 
 	// Rolling activity stream line — shows latest real-time action from the agent.
 	if streamLine := wc.renderStreamLine(innerWidth); streamLine != "" {
@@ -226,11 +266,32 @@ func (wc *WorkerCard) View(width int) string {
 	// Wrap in a rounded border box.
 	cardStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(colorMuted).
+		BorderForeground(colorPanelBorder).
 		Width(width-2). // account for border width
 		Padding(0, 1)
 
 	return cardStyle.Render(b.String())
+}
+
+// renderWorkerCycleBar creates a mini cycle progress bar for worker cards.
+// Unlike the status bar version, this one omits the surface background
+// so it blends with the card's default background.
+func renderWorkerCycleBar(cycle, maxCycles int) string {
+	if maxCycles <= 0 {
+		return ""
+	}
+	const barWidth = 5
+	filled := cycle * barWidth / maxCycles
+	if filled > barWidth {
+		filled = barWidth
+	}
+	empty := barWidth - filled
+
+	bracket := lipgloss.NewStyle().Foreground(colorMutedLight)
+	return bracket.Render("[") +
+		lipgloss.NewStyle().Foreground(colorMutedLight).Render(strings.Repeat("█", filled)) +
+		lipgloss.NewStyle().Foreground(colorMuted).Render(strings.Repeat("░", empty)) +
+		bracket.Render("]")
 }
 
 // renderStreamLine renders the latest activity stream entry. When the entry is
@@ -274,18 +335,6 @@ func formatDurationBrief(d time.Duration) string {
 		return fmt.Sprintf("%dm%ds", int(d.Minutes()), int(d.Seconds())%60)
 	default:
 		return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
-	}
-}
-
-// activityFromRole returns a default activity string based on the agent role.
-func activityFromRole(role string) string {
-	switch role {
-	case "coder":
-		return "coding..."
-	case "reviewer":
-		return "reviewing..."
-	default:
-		return "working..."
 	}
 }
 

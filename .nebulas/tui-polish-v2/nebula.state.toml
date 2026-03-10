@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'tui-polish-v2'
-total_cost_usd = 9.197582450000002
+total_cost_usd = 15.114611650000002
 
 [phases]
 [phases.agent-chat-gum]
@@ -23,9 +23,9 @@ summary = 'Board view phase name readability improvements are well-implemented w
 
 [phases.color-theme]
 bead_id = 'quasar-jjy5'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-09T20:23:47.876557-04:00
-updated_at = 2026-03-09T20:26:03.222303-04:00
+updated_at = 2026-03-09T20:44:42.102012-04:00
 
 [phases.glamour-markdown]
 bead_id = 'quasar-obj5'
@@ -65,9 +65,15 @@ updated_at = 2026-03-09T20:26:03.10456-04:00
 
 [phases.split-pane-layout]
 bead_id = 'quasar-bexx'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-09T20:23:47.640047-04:00
-updated_at = 2026-03-09T20:32:43.466542-04:00
+updated_at = 2026-03-09T20:44:42.079982-04:00
+
+[phases.split-pane-layout.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Split-pane sidebar layout with bidirectional cursor sync implemented cleanly; both prior findings (left-key fallthrough and unidirectional sync) are resolved.'
 
 [phases.token-count-live]
 bead_id = 'quasar-b986'

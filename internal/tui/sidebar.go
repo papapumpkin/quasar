@@ -190,16 +190,7 @@ func (s Sidebar) View() string {
 
 	content := strings.Join(rows, "\n")
 
-	// Border color changes based on focus state.
-	borderColor := colorMuted
-	if s.Focus {
-		borderColor = colorNebulaDeep
-	}
-
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(borderColor).
-		Padding(0, 1).
+	borderStyle := panelStyle(s.Focus).
 		Width(s.Width - 2). // subtract border width
 		Height(s.Height)
 
