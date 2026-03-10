@@ -18,9 +18,12 @@ func formatHailRelay(hails []Hail) string {
 	var b strings.Builder
 	b.WriteString("[HUMAN RESPONSES]\n")
 	for _, h := range hails {
-		if h.AutoResolved {
+		switch {
+		case h.Kind == HailGuidance:
+			fmt.Fprintf(&b, "[HUMAN GUIDANCE]\nThe developer sent the following guidance for this phase:\n%q\nPlease incorporate this into your current work.\n\n", h.Resolution)
+		case h.AutoResolved:
 			fmt.Fprintf(&b, "[HAIL TIMEOUT] No response to your %s about %q (cycle %d). Proceed with your best judgment.\n\n", h.Kind, h.Summary, h.Cycle)
-		} else {
+		default:
 			fmt.Fprintf(&b, "Your %s about %q (cycle %d) was answered:\n", h.Kind, h.Summary, h.Cycle)
 			fmt.Fprintf(&b, "%q\n\n", h.Resolution)
 		}

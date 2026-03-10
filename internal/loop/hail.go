@@ -18,6 +18,10 @@ const (
 	HailBlocker HailKind = "blocker"
 	// HailHumanReviewFlag indicates the reviewer flagged work for human eyes.
 	HailHumanReviewFlag HailKind = "human_review"
+	// HailGuidance indicates a human-initiated guidance message sent to an
+	// agent mid-flight. Unlike other hail kinds (which are agent-initiated),
+	// this is posted by the developer via the TUI's chat intervention.
+	HailGuidance HailKind = "guidance"
 )
 
 // validHailKinds enumerates the recognized HailKind values.
@@ -26,12 +30,13 @@ var validHailKinds = map[HailKind]bool{
 	HailAmbiguity:       true,
 	HailBlocker:         true,
 	HailHumanReviewFlag: true,
+	HailGuidance:        true,
 }
 
 // ValidateHailKind returns an error if kind is not a recognized hail kind.
 func ValidateHailKind(kind HailKind) error {
 	if !validHailKinds[kind] {
-		return fmt.Errorf("invalid hail kind %q: must be one of decision_needed, ambiguity, blocker, human_review", kind)
+		return fmt.Errorf("invalid hail kind %q: must be one of decision_needed, ambiguity, blocker, human_review, guidance", kind)
 	}
 	return nil
 }
