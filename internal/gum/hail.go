@@ -202,16 +202,11 @@ func GumHailCmd(ctx context.Context, gumPath string, hail ui.HailInfo) *exec.Cmd
 	return cmd
 }
 
-// isExitError is a helper that checks whether an error is an exec.ExitError.
+// isExitError checks whether err wraps an *exec.ExitError and populates target.
 func isExitError(err error, target **exec.ExitError) bool {
 	if err == nil {
 		return false
 	}
-	var exitErr *exec.ExitError
-	if ok := strings.Contains(err.Error(), "exit status"); ok {
-		_ = exitErr
-	}
-	// Use type assertion instead of errors.As to keep dependency minimal.
 	e, ok := err.(*exec.ExitError)
 	if ok {
 		*target = e
