@@ -1,0 +1,21 @@
+version = 1
+nebula_name = 'pulsar-streaming'
+
+[phases]
+[phases.activity-digester]
+bead_id = 'quasar-gqn5'
+status = 'created'
+created_at = 2026-03-09T21:39:19.624151-04:00
+updated_at = 2026-03-09T21:39:19.624151-04:00
+
+[phases.loop-bus-wiring]
+bead_id = 'quasar-x4nm'
+status = 'created'
+created_at = 2026-03-09T21:39:19.499285-04:00
+updated_at = 2026-03-09T21:39:19.499285-04:00
+
+[phases.streaming-invoker]
+bead_id = 'quasar-nfvi'
+status = 'in_progress'
+created_at = 2026-03-09T21:39:19.371935-04:00
+updated_at = 2026-03-09T21:39:23.20424-04:00
