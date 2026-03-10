@@ -630,10 +630,10 @@ func TestWorkerCardView_CycleBar(t *testing.T) {
 func TestRichActivity(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name       string
-		role       string
-		phaseTitle string
-		claims     []string
+		name         string
+		role         string
+		phaseTitle   string
+		claims       []string
 		wantContains string
 	}{
 		{

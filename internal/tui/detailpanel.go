@@ -18,7 +18,7 @@ type DetailPanel struct {
 	viewport    viewport.Model
 	title       string
 	ready       bool
-	totalLines  int    // total lines of content (before viewport clipping)
+	totalLines  int // total lines of content (before viewport clipping)
 	emptyHint   string
 	headerBlock string // rendered header (above viewport content)
 	Focus       bool   // whether the detail panel currently has keyboard focus
