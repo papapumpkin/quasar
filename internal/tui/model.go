@@ -1068,16 +1068,22 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.Mode == ModeNebula && m.Depth == DepthPhases && m.sidebarWidth() > 0 {
 		switch msg.String() {
 		case "left", "h":
-			if m.PaneFocus == PaneFocusMain {
-				// If in board column mode, try moving left in the board first.
-				if m.BoardActive && m.ActiveTab == TabBoard {
-					m.Board.MoveLeft()
-					return m, nil
-				}
-				m.PaneFocus = PaneFocusSidebar
-				m.Sidebar.Focus = true
+			if m.PaneFocus == PaneFocusSidebar {
+				// Already in leftmost pane — no-op. Return early to prevent
+				// the fallback board left/right handler from firing.
 				return m, nil
 			}
+			// In main: try moving left in the board first, then switch to sidebar.
+			if m.BoardActive && m.ActiveTab == TabBoard {
+				m.Board.MoveLeft()
+				return m, nil
+			}
+			m.PaneFocus = PaneFocusSidebar
+			m.Sidebar.Focus = true
+			// Reverse-sync: adopt main area's cursor so sidebar matches.
+			m.Sidebar.Cursor = m.activePhaseCursor()
+			m.Sidebar.ensureVisible()
+			return m, nil
 		case "right", "l":
 			if m.PaneFocus == PaneFocusSidebar {
 				m.PaneFocus = PaneFocusMain
@@ -2259,6 +2265,15 @@ func (m *AppModel) syncSidebarSelection() {
 	// Sync the Board view cursor (it uses flat ordering, which may differ).
 	// For simplicity, sync the NebulaView cursor — board cursor is separate.
 	m.Board.Cursor = m.Sidebar.Cursor
+}
+
+// activePhaseCursor returns the current phase cursor from the active main view.
+// Used for reverse-syncing the sidebar when focus moves from main → sidebar.
+func (m AppModel) activePhaseCursor() int {
+	if m.BoardActive && m.ActiveTab == TabBoard {
+		return m.Board.Cursor
+	}
+	return m.NebulaView.Cursor
 }
 
 // updateDetailFromSelection updates the detail panel content

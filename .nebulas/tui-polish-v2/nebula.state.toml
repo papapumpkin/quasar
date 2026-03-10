@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'tui-polish-v2'
-total_cost_usd = 8.502966700000002
+total_cost_usd = 9.197582450000002
 
 [phases]
 [phases.agent-chat-gum]
@@ -83,12 +83,18 @@ summary = 'Correctly fixes the broken token count pipeline by adding JSON field 
 
 [phases.unified-diff]
 bead_id = 'quasar-76ic'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-09T20:23:46.898659-04:00
-updated_at = 2026-03-09T20:41:21.906317-04:00
+updated_at = 2026-03-09T20:42:57.727958-04:00
+
+[phases.unified-diff.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Clean switch from side-by-side to unified diff rendering with red/blue color convention — minimal, correct, well-tested.'
 
 [phases.worker-card-richness]
 bead_id = 'quasar-3mu7'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-09T20:23:47.269707-04:00
-updated_at = 2026-03-09T20:26:02.634661-04:00
+updated_at = 2026-03-09T20:42:57.737301-04:00

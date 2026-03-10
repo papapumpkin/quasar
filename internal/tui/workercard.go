@@ -71,13 +71,16 @@ func (s *ActivityStream) Len() int {
 // Data is populated from MsgPhase* and MsgWorkerActivity messages.
 type WorkerCard struct {
 	PhaseID    string   // phase being executed
+	PhaseTitle string   // human-readable phase title (from nebula spec)
 	QuasarID   string   // worker identifier (e.g. "q-1")
 	Cycle      int      // current cycle number
 	MaxCycles  int      // maximum allowed cycles
 	TokensUsed int      // cumulative tokens spent on this phase
+	CostUSD    float64  // cumulative cost spent on this phase
 	Claims     []string // file paths currently touched by this quasar
 	Activity   string   // human-readable activity: "coding...", "reviewing..."
 	AgentRole  string   // "coder" or "reviewer"
+	StartedAt  time.Time // when this phase started executing
 
 	// Stream holds the rolling ring buffer of real-time activity events.
 	Stream ActivityStream
