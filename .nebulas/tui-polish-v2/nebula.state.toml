@@ -1,5 +1,6 @@
 version = 1
 nebula_name = 'tui-polish-v2'
+total_cost_usd = 1.5916284500000004
 
 [phases]
 [phases.agent-chat-gum]
@@ -22,9 +23,15 @@ updated_at = 2026-03-09T20:26:03.222303-04:00
 
 [phases.glamour-markdown]
 bead_id = 'quasar-obj5'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-03-09T20:23:46.775369-04:00
-updated_at = 2026-03-09T20:26:03.439961-04:00
+updated_at = 2026-03-09T20:31:51.369683-04:00
+
+[phases.glamour-markdown.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Glamour markdown rendering integrated cleanly into the TUI detail panel and dialog overlay with proper fallback, width awareness, and good test coverage.'
 
 [phases.hail-gum]
 bead_id = 'quasar-6wwh'
@@ -34,9 +41,9 @@ updated_at = 2026-03-09T20:26:02.877498-04:00
 
 [phases.line-count-bug]
 bead_id = 'quasar-8utb'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-03-09T20:23:47.139551-04:00
-updated_at = 2026-03-09T20:26:02.516747-04:00
+updated_at = 2026-03-09T20:31:51.384433-04:00
 
 [phases.process-drilldown]
 bead_id = 'quasar-quta'
