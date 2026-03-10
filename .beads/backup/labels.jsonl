@@ -709,6 +709,12 @@
 {"issue_id":"quasar-bcsk","label":"reliability"}
 {"issue_id":"quasar-bexx","label":"quasar"}
 {"issue_id":"quasar-bexx","label":"tui"}
+{"issue_id":"quasar-bexx.1","label":"quasar"}
+{"issue_id":"quasar-bexx.1","label":"review-finding"}
+{"issue_id":"quasar-bexx.1","label":"tui"}
+{"issue_id":"quasar-bexx.2","label":"quasar"}
+{"issue_id":"quasar-bexx.2","label":"review-finding"}
+{"issue_id":"quasar-bexx.2","label":"tui"}
 {"issue_id":"quasar-bg7t","label":"quasar"}
 {"issue_id":"quasar-bg7t","label":"tui"}
 {"issue_id":"quasar-bgay","label":"quasar"}

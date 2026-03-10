@@ -129,6 +129,8 @@
 {"created_at":"2026-02-18T13:42:58Z","created_by":"Aaron","depends_on_id":"quasar-axu","issue_id":"quasar-axu.2","type":"parent-child"}
 {"created_at":"2026-02-24T21:40:30Z","created_by":"Aaron","depends_on_id":"quasar-az8o","issue_id":"quasar-az8o.1","type":"parent-child"}
 {"created_at":"2026-02-24T21:40:30Z","created_by":"Aaron","depends_on_id":"quasar-az8o","issue_id":"quasar-az8o.2","type":"parent-child"}
+{"created_at":"2026-03-09T20:43:03Z","created_by":"Aaron","depends_on_id":"quasar-bexx","issue_id":"quasar-bexx.1","type":"parent-child"}
+{"created_at":"2026-03-09T20:43:03Z","created_by":"Aaron","depends_on_id":"quasar-bexx","issue_id":"quasar-bexx.2","type":"parent-child"}
 {"created_at":"2026-02-24T09:10:50Z","created_by":"Aaron","depends_on_id":"quasar-bnd0","issue_id":"quasar-bnd0.1","type":"parent-child"}
 {"created_at":"2026-02-24T09:10:51Z","created_by":"Aaron","depends_on_id":"quasar-bnd0","issue_id":"quasar-bnd0.2","type":"parent-child"}
 {"created_at":"2026-02-24T09:10:52Z","created_by":"Aaron","depends_on_id":"quasar-bnd0","issue_id":"quasar-bnd0.3","type":"parent-child"}
