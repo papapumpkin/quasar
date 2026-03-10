@@ -62,8 +62,8 @@ type AppModel struct {
 	Gate              *GatePrompt
 	PendingGates      []MsgGatePrompt // queued gate prompts waiting for the current gate to resolve
 	Hail              *HailOverlay
-	GumAvailable      bool          // true if gum binary is in PATH
-	GumBinPath        string        // resolved path to gum binary
+	GumAvailable      bool                 // true if gum binary is in PATH
+	GumBinPath        string               // resolved path to gum binary
 	gumHailResponseCh chan<- string        // stashed response channel for active gum hail
 	GuidanceCh        chan<- GuidanceEntry // optional; when set, guidance is posted to the loop's hail queue
 	Overlay           *CompletionOverlay
