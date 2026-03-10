@@ -240,6 +240,10 @@
 {"created_at":"2026-02-23T15:14:29Z","created_by":"Aaron","depends_on_id":"quasar-qla","issue_id":"quasar-qla.2","type":"parent-child"}
 {"created_at":"2026-03-02T23:53:47Z","created_by":"Aaron","depends_on_id":"quasar-qunm","issue_id":"quasar-qunm.1","type":"parent-child"}
 {"created_at":"2026-03-02T23:53:47Z","created_by":"Aaron","depends_on_id":"quasar-qunm","issue_id":"quasar-qunm.2","type":"parent-child"}
+{"created_at":"2026-03-09T21:18:52Z","created_by":"Aaron","depends_on_id":"quasar-quta","issue_id":"quasar-quta.1","type":"parent-child"}
+{"created_at":"2026-03-09T21:18:52Z","created_by":"Aaron","depends_on_id":"quasar-quta","issue_id":"quasar-quta.2","type":"parent-child"}
+{"created_at":"2026-03-09T21:18:52Z","created_by":"Aaron","depends_on_id":"quasar-quta","issue_id":"quasar-quta.3","type":"parent-child"}
+{"created_at":"2026-03-09T21:18:53Z","created_by":"Aaron","depends_on_id":"quasar-quta","issue_id":"quasar-quta.4","type":"parent-child"}
 {"created_at":"2026-03-02T13:26:23Z","created_by":"Aaron","depends_on_id":"quasar-r5ee","issue_id":"quasar-r5ee.1","type":"parent-child"}
 {"created_at":"2026-02-24T10:05:28Z","created_by":"Aaron","depends_on_id":"quasar-r9d1","issue_id":"quasar-r9d1.1","type":"parent-child"}
 {"created_at":"2026-02-17T16:51:11Z","created_by":"Aaron","depends_on_id":"quasar-s0d","issue_id":"quasar-s0d.1","type":"parent-child"}
