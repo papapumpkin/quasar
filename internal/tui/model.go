@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -45,27 +44,27 @@ const (
 
 // AppModel is the root BubbleTea model composing all sub-views.
 type AppModel struct {
-	Mode         Mode
-	StatusBar    StatusBar
-	Banner       Banner
-	LoopView     LoopView // used in loop mode (single task)
-	NebulaView   NebulaView
-	Detail       DetailPanel
-	Gate         *GatePrompt
-	PendingGates []MsgGatePrompt // queued gate prompts waiting for the current gate to resolve
-	Hail         *HailOverlay
-	GumAvailable        bool       // true if gum binary is in PATH
-	GumBinPath          string     // resolved path to gum binary
-	gumHailResponseCh   chan<- string // stashed response channel for active gum hail
-	Overlay      *CompletionOverlay
-	Toasts       []Toast
-	Keys         KeyMap
-	Width        int
-	Height       int
-	StartTime    time.Time
-	Done         bool
-	DoneErr      error
-	Messages     []string // recent info/error messages
+	Mode              Mode
+	StatusBar         StatusBar
+	Banner            Banner
+	LoopView          LoopView // used in loop mode (single task)
+	NebulaView        NebulaView
+	Detail            DetailPanel
+	Gate              *GatePrompt
+	PendingGates      []MsgGatePrompt // queued gate prompts waiting for the current gate to resolve
+	Hail              *HailOverlay
+	GumAvailable      bool          // true if gum binary is in PATH
+	GumBinPath        string        // resolved path to gum binary
+	gumHailResponseCh chan<- string // stashed response channel for active gum hail
+	Overlay           *CompletionOverlay
+	Toasts            []Toast
+	Keys              KeyMap
+	Width             int
+	Height            int
+	StartTime         time.Time
+	Done              bool
+	DoneErr           error
+	Messages          []string // recent info/error messages
 
 	// Nebula navigation state.
 	Depth        ViewDepth            // current navigation depth

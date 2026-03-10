@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"io"
+	"os/exec"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -17,6 +18,7 @@ type Program = tea.Program
 func NewProgram(mode Mode, noSplash bool, opts ...tea.ProgramOption) *Program {
 	model := NewAppModel(mode)
 	model.Detail = NewDetailPanel(80, 10)
+	detectGum(&model)
 	if noSplash {
 		model.DisableSplash()
 	}
@@ -45,6 +47,7 @@ func NewProgramRaw(mode Mode) *Program {
 func NewNebulaProgram(name string, phases []PhaseInfo, nebulaDir string, noSplash bool) *Program {
 	model := NewAppModel(ModeNebula)
 	model.Detail = NewDetailPanel(80, 10)
+	detectGum(&model)
 	if noSplash {
 		model.DisableSplash()
 	}
@@ -68,6 +71,7 @@ func NewNebulaProgram(name string, phases []PhaseInfo, nebulaDir string, noSplas
 func NewHomeProgram(nebulaeDir string, choices []NebulaChoice, noSplash bool) *Program {
 	model := NewAppModel(ModeHome)
 	model.Detail = NewDetailPanel(80, 10)
+	detectGum(&model)
 	if noSplash {
 		model.DisableSplash()
 	}
@@ -85,6 +89,15 @@ func Run(mode Mode, noSplash bool) error {
 		return fmt.Errorf("TUI error: %w", err)
 	}
 	return nil
+}
+
+// detectGum checks if the gum binary is in PATH and configures the model
+// to use gum-backed interactive prompts when available.
+func detectGum(m *AppModel) {
+	if path, err := exec.LookPath("gum"); err == nil {
+		m.GumAvailable = true
+		m.GumBinPath = path
+	}
 }
 
 // WithOutput returns a program option that directs TUI output to the given writer.
