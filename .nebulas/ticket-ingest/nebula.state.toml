@@ -6,34 +6,34 @@ nebula_name = 'ticket-ingest'
 bead_id = 'architect-ticket-adapter'
 status = 'created'
 created_at = 2026-06-04T15:19:11.067795-04:00
-updated_at = 2026-06-04T18:31:33.517579-04:00
+updated_at = 2026-06-04T19:19:03.012751-04:00
 
 [phases.github-ticket-source]
 bead_id = 'github-ticket-source'
 status = 'created'
 created_at = 2026-06-04T15:19:11.067316-04:00
-updated_at = 2026-06-04T18:31:33.517089-04:00
+updated_at = 2026-06-04T19:19:03.012283-04:00
 
 [phases.gitops-and-pre-commit]
 bead_id = 'gitops-and-pre-commit'
 status = 'created'
 created_at = 2026-06-04T15:19:11.067601-04:00
-updated_at = 2026-06-04T18:31:33.517383-04:00
+updated_at = 2026-06-04T19:19:03.01253-04:00
 
 [phases.init-doctor-docs-arch]
 bead_id = 'init-doctor-docs-arch'
-status = 'failed'
+status = 'created'
 created_at = 2026-06-04T15:19:11.068171-04:00
-updated_at = 2026-06-04T18:31:42.777013-04:00
+updated_at = 2026-06-04T19:19:03.013151-04:00
 
 [phases.integration-layer]
 bead_id = 'integration-layer'
-status = 'failed'
+status = 'in_progress'
 created_at = 2026-06-04T15:19:11.066738-04:00
-updated_at = 2026-06-04T18:31:36.226637-04:00
+updated_at = 2026-06-04T19:19:03.459553-04:00
 
 [phases.nebula-new-from-source]
 bead_id = 'nebula-new-from-source'
-status = 'failed'
+status = 'created'
 created_at = 2026-06-04T15:19:11.067977-04:00
-updated_at = 2026-06-04T18:31:40.538894-04:00
+updated_at = 2026-06-04T19:19:03.012951-04:00

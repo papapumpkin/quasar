@@ -101,6 +101,13 @@ type Nebula struct {
 	Dir      string
 	Manifest Manifest
 	Phases   []PhaseSpec
+
+	// SourceName and SourceID record the external tracker this nebula was
+	// generated from (e.g. "github" / "papapumpkin/quasar#42"). Both are
+	// empty for manually authored nebulas. They are populated by the
+	// `nebula new <source>:<id>` flow in a later phase.
+	SourceName string
+	SourceID   string
 }
 
 // HasDependencies reports whether any phase in the nebula has explicit

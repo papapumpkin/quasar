@@ -13,6 +13,13 @@ import (
 // but don't match the automated detection heuristics. Each entry documents why
 // it is acceptable.
 var allowedGlobals = map[string][]string{
+	// integrations: the process-wide adapter registry. Adapters register
+	// into it from their package init(); it is the single intentional global
+	// the integration design mandates (a sync-protected Registry value). Tests
+	// that need isolation construct their own via NewRegistry().
+	"integrations": {
+		"defaultRegistry",
+	},
 	// tui: vars that don't match prefix or heuristic patterns.
 	"tui": {
 		// splashDopplerRamps: array declared without initializer, populated in init().

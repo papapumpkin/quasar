@@ -2,12 +2,21 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/viper"
 )
 
 // DefaultLintCommands are the lint commands executed after each coder pass.
 var DefaultLintCommands = []string{"go vet ./...", "go fmt ./..."}
+
+// PreCommitConfig holds per-repo commands run before every Quasar commit
+// (formatters/linters such as gofmt, prettier, ruff). The schema is reserved
+// here; consumption lands in a later phase.
+type PreCommitConfig struct {
+	// Commands run with the worktree as CWD, in order, before each commit.
+	Commands []string `mapstructure:"commands"`
+}
 
 // Config holds all runtime configuration for a quasar session.
 // Values are populated from .quasar.yaml, QUASAR_* env vars, and CLI flags.
@@ -55,7 +64,28 @@ type Config struct {
 	// model is overloaded. Empty means no fallback.
 	// Default: "".
 	FallbackModel string `mapstructure:"fallback_model"`
+
+	// IntegrationSections holds the parsed [integrations.*] blocks keyed by
+	// adapter name (e.g. "github"). Each section is stored opaquely as a
+	// map so adding a new adapter requires no parser change — strong-typing
+	// happens inside each adapter's constructor. Empty when no integrations
+	// are configured.
+	IntegrationSections map[string]map[string]any `mapstructure:"integrations"`
+
+	// ForgeSections holds the parsed [forge.*] blocks keyed by forge name.
+	// Stored opaquely for the same reason as IntegrationSections. The forge
+	// surface is reserved in this phase; full PR-creation methods land later.
+	ForgeSections map[string]map[string]any `mapstructure:"forge"`
+
+	// PreCommit holds the [pre_commit] section. Reserved here; consumption
+	// (running the commands before each commit) lands in a later phase.
+	PreCommit PreCommitConfig `mapstructure:"pre_commit"`
 }
+
+// ErrInlineToken indicates an integration or forge section stored a secret
+// inline. Tokens must be supplied via token_env or token_file, never written
+// to .quasar.yaml.
+var ErrInlineToken = fmt.Errorf("inline token is not allowed; use token_env or token_file")
 
 // Load reads configuration from viper, applying built-in defaults for any
 // values not set by config file, environment, or flags.
@@ -81,5 +111,29 @@ func Load() (Config, error) {
 	if err := viper.Unmarshal(&cfg); err != nil {
 		return Config{}, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
+
+	// Tokens must never live in .quasar.yaml. Reject any integration or forge
+	// section that contains an inline `token` key (case-insensitive).
+	if err := checkInlineTokens("integrations", cfg.IntegrationSections); err != nil {
+		return Config{}, err
+	}
+	if err := checkInlineTokens("forge", cfg.ForgeSections); err != nil {
+		return Config{}, err
+	}
+
 	return cfg, nil
+}
+
+// checkInlineTokens returns ErrInlineToken (wrapped with the offending section
+// name) if any section under kind defines a `token` key. The check is
+// case-insensitive so `Token`, `TOKEN`, etc. are all rejected.
+func checkInlineTokens(kind string, sections map[string]map[string]any) error {
+	for name, section := range sections {
+		for key := range section {
+			if strings.EqualFold(key, "token") {
+				return fmt.Errorf("config: [%s.%s] contains an inline token: %w", kind, name, ErrInlineToken)
+			}
+		}
+	}
+	return nil
 }
