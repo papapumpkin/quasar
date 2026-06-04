@@ -138,7 +138,7 @@ func (b *UIBridge) HailResolved(id, resolution string) {
 // BeadUpdate sends MsgBeadUpdate with the bead hierarchy.
 func (b *UIBridge) BeadUpdate(taskBeadID, title, status string, children []ui.BeadChild) {
 	root := buildBeadInfoTree(taskBeadID, title, status, children)
-	b.program.Send(MsgBeadUpdate{TaskBeadID: taskBeadID, Root: root})
+	b.program.Send(MsgBeadUpdate{TaskID: taskBeadID, Root: root})
 }
 
 // buildBeadInfoTree converts a task bead and its children into a BeadInfo tree.
@@ -377,7 +377,7 @@ func (b *PhaseUIBridge) RefactorApplied(phaseID string) {
 // BeadUpdate sends MsgPhaseBeadUpdate with the bead hierarchy for this phase.
 func (b *PhaseUIBridge) BeadUpdate(taskBeadID, title, status string, children []ui.BeadChild) {
 	root := buildBeadInfoTree(taskBeadID, title, status, children)
-	b.program.Send(MsgPhaseBeadUpdate{PhaseID: b.phaseID, TaskBeadID: taskBeadID, Root: root})
+	b.program.Send(MsgPhaseBeadUpdate{PhaseID: b.phaseID, TaskID: taskBeadID, Root: root})
 }
 
 // FindingLifecycle is a no-op for PhaseUIBridge; finding lifecycle data is

@@ -14,7 +14,7 @@ import (
 // makeState returns a sample CycleState for testing.
 func makeState() *loop.CycleState {
 	return &loop.CycleState{
-		TaskBeadID:    "bead-hook-test",
+		TaskID:        "bead-hook-test",
 		TaskTitle:     "Test hook checkpoint",
 		Phase:         loop.PhaseReviewing,
 		Cycle:         2,
@@ -27,7 +27,6 @@ func makeState() *loop.CycleState {
 		BaseCommitSHA: "abc123",
 		CycleCommits:  []string{"commit-1"},
 		FilterHistory: []string{"check-build"},
-		ChildBeadIDs:  []string{"child-1"},
 		Findings: []loop.ReviewFinding{
 			{ID: "f1", Severity: "high", Description: "missing error handling", Cycle: 2, Status: loop.FindingStatusFound},
 		},
@@ -69,8 +68,8 @@ func TestCheckpointHookWritesOnReviewComplete(t *testing.T) {
 	if cp.Cycle != 2 {
 		t.Errorf("Cycle = %d, want 2", cp.Cycle)
 	}
-	if cp.TaskBeadID != "bead-hook-test" {
-		t.Errorf("TaskBeadID = %q, want %q", cp.TaskBeadID, "bead-hook-test")
+	if cp.TaskID != "bead-hook-test" {
+		t.Errorf("TaskID = %q, want %q", cp.TaskID, "bead-hook-test")
 	}
 }
 

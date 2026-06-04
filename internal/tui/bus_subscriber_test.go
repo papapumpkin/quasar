@@ -661,8 +661,8 @@ func TestMapEvent_BeadUpdate(t *testing.T) {
 			Kind:    bus.KindPhaseBeadUpdate,
 			PhaseID: "p1",
 			BeadTree: &bus.BeadTreePayload{
-				TaskBeadID: "b1",
-				Root:       root,
+				TaskID: "b1",
+				Root:   root,
 			},
 		}
 		msg := sub.mapEvent(ev)
@@ -670,7 +670,7 @@ func TestMapEvent_BeadUpdate(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected MsgPhaseBeadUpdate, got %T", msg)
 		}
-		if m.TaskBeadID != "b1" || m.Root.ID != "b1" {
+		if m.TaskID != "b1" || m.Root.ID != "b1" {
 			t.Errorf("fields mismatch: %+v", m)
 		}
 	})
@@ -680,8 +680,8 @@ func TestMapEvent_BeadUpdate(t *testing.T) {
 		ev := bus.Event{
 			Kind: bus.KindBeadUpdate,
 			BeadTree: &bus.BeadTreePayload{
-				TaskBeadID: "b2",
-				Root:       root,
+				TaskID: "b2",
+				Root:   root,
 			},
 		}
 		msg := sub.mapEvent(ev)
@@ -689,8 +689,8 @@ func TestMapEvent_BeadUpdate(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected MsgBeadUpdate, got %T", msg)
 		}
-		if m.TaskBeadID != "b2" {
-			t.Errorf("TaskBeadID = %q, want b2", m.TaskBeadID)
+		if m.TaskID != "b2" {
+			t.Errorf("TaskID = %q, want b2", m.TaskID)
 		}
 	})
 
@@ -707,8 +707,8 @@ func TestMapEvent_BeadUpdate(t *testing.T) {
 		ev := bus.Event{
 			Kind: bus.KindPhaseBeadUpdate,
 			BeadTree: &bus.BeadTreePayload{
-				TaskBeadID: "b1",
-				Root:       "not-a-bead-info",
+				TaskID: "b1",
+				Root:   "not-a-bead-info",
 			},
 		}
 		if msg := sub.mapEvent(ev); msg != nil {

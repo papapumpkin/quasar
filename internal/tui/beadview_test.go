@@ -277,7 +277,7 @@ func TestMsgBeadUpdateAutoRefreshesBeadPanel(t *testing.T) {
 
 	var tm tea.Model = m
 	tm, _ = tm.Update(MsgBeadUpdate{
-		TaskBeadID: "bead-1",
+		TaskID: "bead-1",
 		Root: BeadInfo{
 			ID:     "bead-1",
 			Title:  "Test task",
@@ -304,7 +304,7 @@ func TestMsgBeadUpdatePopulatesModel(t *testing.T) {
 
 	var tm tea.Model = m
 	tm, _ = tm.Update(MsgBeadUpdate{
-		TaskBeadID: "bead-1",
+		TaskID: "bead-1",
 		Root: BeadInfo{
 			ID:     "bead-1",
 			Title:  "Test task",
@@ -334,8 +334,8 @@ func TestMsgPhaseBeadUpdatePopulatesModel(t *testing.T) {
 
 	var tm tea.Model = m
 	tm, _ = tm.Update(MsgPhaseBeadUpdate{
-		PhaseID:    "setup",
-		TaskBeadID: "bead-2",
+		PhaseID: "setup",
+		TaskID:  "bead-2",
 		Root: BeadInfo{
 			ID:     "bead-2",
 			Title:  "Setup task",

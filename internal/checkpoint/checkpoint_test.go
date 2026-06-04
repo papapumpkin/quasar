@@ -32,7 +32,7 @@ func TestFromCycleStateToCycleStateRoundTrip(t *testing.T) {
 		{
 			name: "mid-cycle state with findings",
 			cs: &loop.CycleState{
-				TaskBeadID:   "bead-123",
+				TaskID:       "bead-123",
 				TaskTitle:    "Implement feature X",
 				Phase:        loop.PhaseReviewing,
 				Cycle:        2,
@@ -70,7 +70,6 @@ func TestFromCycleStateToCycleStateRoundTrip(t *testing.T) {
 				BaseCommitSHA: "abc123",
 				CycleCommits:  []string{"commit1"},
 				FilterHistory: []string{"check-lint"},
-				ChildBeadIDs:  []string{"child-1", "child-2"},
 				Refactored:    true,
 			},
 			phaseID:    "phase-1",
@@ -80,7 +79,7 @@ func TestFromCycleStateToCycleStateRoundTrip(t *testing.T) {
 		{
 			name: "multi-cycle state with commits",
 			cs: &loop.CycleState{
-				TaskBeadID:    "bead-456",
+				TaskID:        "bead-456",
 				TaskTitle:     "Fix bug Y",
 				Phase:         loop.PhaseCodeComplete,
 				Cycle:         3,
@@ -93,7 +92,6 @@ func TestFromCycleStateToCycleStateRoundTrip(t *testing.T) {
 				BaseCommitSHA: "aaa111",
 				CycleCommits:  []string{"commit-a", "commit-b", "commit-c"},
 				FilterHistory: []string{"", "check-lint", "check-lint"},
-				ChildBeadIDs:  []string{},
 				Findings:      nil,
 				AllFindings: []loop.ReviewFinding{
 					{
@@ -155,7 +153,7 @@ func TestTOMLRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	cs := &loop.CycleState{
-		TaskBeadID:    "bead-toml",
+		TaskID:        "bead-toml",
 		TaskTitle:     "TOML round-trip test",
 		Phase:         loop.PhaseCoding,
 		Cycle:         1,
@@ -168,7 +166,6 @@ func TestTOMLRoundTrip(t *testing.T) {
 		BaseCommitSHA: "sha-toml",
 		CycleCommits:  []string{"c1", "c2"},
 		FilterHistory: []string{"check-build"},
-		ChildBeadIDs:  []string{"child-toml"},
 		Findings: []loop.ReviewFinding{
 			{
 				ID:          "tf1",
@@ -303,7 +300,6 @@ func TestFromCycleStateSliceIsolation(t *testing.T) {
 	cs := &loop.CycleState{
 		CycleCommits:  []string{"c1", "c2"},
 		FilterHistory: []string{"check-lint", "check-build"},
-		ChildBeadIDs:  []string{"b1"},
 		Findings: []loop.ReviewFinding{
 			{ID: "f1", Severity: "high", Description: "issue", Cycle: 1, Status: loop.FindingStatusFound},
 		},
@@ -314,7 +310,6 @@ func TestFromCycleStateSliceIsolation(t *testing.T) {
 	// Mutate originals — checkpoint should not be affected.
 	cs.CycleCommits[0] = "MUTATED"
 	cs.FilterHistory[0] = "MUTATED"
-	cs.ChildBeadIDs[0] = "MUTATED"
 	cs.Findings[0].Description = "MUTATED"
 
 	if cp.CycleCommits[0] == "MUTATED" {
@@ -322,9 +317,6 @@ func TestFromCycleStateSliceIsolation(t *testing.T) {
 	}
 	if cp.FilterHistory[0] == "MUTATED" {
 		t.Error("FilterHistory should be isolated from source")
-	}
-	if cp.ChildBeadIDs[0] == "MUTATED" {
-		t.Error("ChildBeadIDs should be isolated from source")
 	}
 	if cp.Findings[0].Description == "MUTATED" {
 		t.Error("Findings should be isolated from source")
@@ -336,8 +328,8 @@ func TestFromCycleStateSliceIsolation(t *testing.T) {
 func assertCycleStateEqual(t *testing.T, want, got *loop.CycleState) {
 	t.Helper()
 
-	if got.TaskBeadID != want.TaskBeadID {
-		t.Errorf("TaskBeadID = %q, want %q", got.TaskBeadID, want.TaskBeadID)
+	if got.TaskID != want.TaskID {
+		t.Errorf("TaskID = %q, want %q", got.TaskID, want.TaskID)
 	}
 	if got.TaskTitle != want.TaskTitle {
 		t.Errorf("TaskTitle = %q, want %q", got.TaskTitle, want.TaskTitle)
@@ -376,7 +368,6 @@ func assertCycleStateEqual(t *testing.T, want, got *loop.CycleState) {
 	// Compare slices.
 	assertStringSliceEqual(t, "CycleCommits", want.CycleCommits, got.CycleCommits)
 	assertStringSliceEqual(t, "FilterHistory", want.FilterHistory, got.FilterHistory)
-	assertStringSliceEqual(t, "ChildBeadIDs", want.ChildBeadIDs, got.ChildBeadIDs)
 	assertFindingsEqual(t, "Findings", want.Findings, got.Findings)
 	assertFindingsEqual(t, "AllFindings", want.AllFindings, got.AllFindings)
 }

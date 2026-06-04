@@ -14,7 +14,7 @@ const (
 	EventCycleStart EventKind = iota
 	// EventAgentDone is emitted after an agent (coder or reviewer) completes.
 	EventAgentDone
-	// EventReviewComplete is emitted after findings are parsed and child beads created.
+	// EventReviewComplete is emitted after findings are parsed.
 	EventReviewComplete
 	// EventTaskSuccess is emitted when the reviewer approves the changes.
 	EventTaskSuccess
@@ -43,7 +43,7 @@ type Event struct {
 	Kind      EventKind
 	Cycle     int
 	Agent     string // "coder" or "reviewer"
-	BeadID    string
+	TaskID    string
 	Result    *agent.InvocationResult
 	Findings  []ReviewFinding
 	Report    *agent.ReviewReport
@@ -72,15 +72,3 @@ type HookFunc func(ctx context.Context, event Event)
 
 // OnEvent calls the wrapped function.
 func (f HookFunc) OnEvent(ctx context.Context, event Event) { f(ctx, event) }
-
-// TaskCreator creates a new task bead and returns its ID. This is separate
-// from Hook because the loop needs the return value to proceed.
-type TaskCreator interface {
-	CreateTask(ctx context.Context, description string) (string, error)
-}
-
-// FindingCreator creates child beads for review findings and returns
-// their IDs. This is separate from Hook because the loop needs the return values.
-type FindingCreator interface {
-	CreateFindingChildIDs(ctx context.Context, parentBeadID string, findings []ReviewFinding) []string
-}

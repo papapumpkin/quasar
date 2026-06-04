@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/papapumpkin/quasar/internal/agent"
-	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/bus"
 )
 
@@ -183,8 +182,7 @@ type Engine struct {
 	phase EnginePhase
 
 	// Dependencies injected at construction time.
-	invoker     agent.Invoker
-	beadsClient beads.Client
+	invoker agent.Invoker
 
 	// Internal state populated during Run.
 	nebula     *Nebula
@@ -200,12 +198,11 @@ type Engine struct {
 
 // NewEngine creates an Engine with the given configuration and bus.
 // The bus may be nil for plan-only (non-auto) mode.
-func NewEngine(cfg EngineConfig, b bus.Bus, invoker agent.Invoker, beadsClient beads.Client) *Engine {
+func NewEngine(cfg EngineConfig, b bus.Bus, invoker agent.Invoker) *Engine {
 	return &Engine{
-		cfg:         cfg,
-		bus:         b,
-		phase:       EngineIdle,
-		invoker:     invoker,
-		beadsClient: beadsClient,
+		cfg:     cfg,
+		bus:     b,
+		phase:   EngineIdle,
+		invoker: invoker,
 	}
 }

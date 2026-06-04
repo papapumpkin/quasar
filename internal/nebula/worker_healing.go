@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/telemetry"
 )
@@ -198,27 +197,10 @@ func (wg *WorkerGroup) attemptHealing(ctx context.Context, phaseID string, err e
 		"rewired_dependents": rewired,
 	})
 
-	// Create a bead for the remediation phase (outside lock to avoid blocking).
-	beadID := ""
-	if wg.BeadsClient != nil {
-		var createErr error
-		beadID, createErr = wg.BeadsClient.Create(ctx, remSpec.Title, beads.CreateOpts{
-			Description: remSpec.Body,
-			Type:        remSpec.Type,
-			Labels:      remSpec.Labels,
-			Assignee:    remSpec.Assignee,
-			Priority:    priorityStr(remSpec.Priority),
-		})
-		if createErr != nil {
-			fmt.Fprintf(wg.logger(), "healing: failed to create bead for remediation phase %q: %v\n", remSpec.ID, createErr)
-			// Continue without bead — phase will fail at executePhase, which is
-			// acceptable as a degraded-mode fallback.
-		}
-	}
-
-	// Register state under lock.
+	// Register state under lock. The remediation phase uses its own ID as the
+	// tracking key (no external bead system).
 	wg.mu.Lock()
-	wg.State.SetPhaseState(remSpec.ID, beadID, PhaseStatusPending)
+	wg.State.SetPhaseState(remSpec.ID, remSpec.ID, PhaseStatusPending)
 	wg.progress.SaveState()
 	wg.progress.ReportProgress()
 

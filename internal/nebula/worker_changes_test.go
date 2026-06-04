@@ -3,7 +3,6 @@ package nebula
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -473,108 +472,6 @@ func TestHandlePhaseAdded_OnHotAddCallback(t *testing.T) {
 	}
 	if len(callbackDeps) != 1 || callbackDeps[0] != "existing" {
 		t.Errorf("callback deps = %v, want [existing]", callbackDeps)
-	}
-}
-
-func TestHandlePhaseAdded_CreatesBead(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	var buf bytes.Buffer
-	var mu sync.Mutex
-	neb := &Nebula{
-		Dir:      dir,
-		Manifest: Manifest{},
-		Phases:   []PhaseSpec{{ID: "existing", Title: "Existing"}},
-	}
-	state := &State{
-		Version: 1,
-		Phases:  map[string]*PhaseState{"existing": {Status: PhaseStatusDone}},
-	}
-	graph, _ := phasesToDAG(neb.Phases)
-	client := newMockBeadsClient()
-	phasesByID := map[string]*PhaseSpec{"existing": &neb.Phases[0]}
-
-	hr := newTestHotReloaderWithLiveState(t, &buf, &mu, neb, state, graph, phasesByID, map[string]bool{"existing": true}, map[string]bool{}, map[string]bool{}, func(cfg *HotReloaderConfig) {
-		cfg.BeadsClient = client
-	})
-
-	path := writeTestPhaseFile(t, dir, "bead-phase", "Bead phase body")
-
-	hr.handlePhaseAdded(context.Background(), Change{
-		Kind:    ChangeAdded,
-		PhaseID: "bead-phase",
-		File:    path,
-	})
-
-	mu.Lock()
-	ps := state.Phases["bead-phase"]
-	mu.Unlock()
-
-	if ps == nil {
-		t.Fatal("expected state entry for bead-phase")
-	}
-	if ps.BeadID == "" {
-		t.Error("expected non-empty bead ID after hot-add with BeadsClient")
-	}
-	if ps.Status != PhaseStatusPending {
-		t.Errorf("expected status pending, got %v", ps.Status)
-	}
-	if len(client.created) == 0 {
-		t.Error("expected BeadsClient.Create to be called")
-	}
-}
-
-func TestHandlePhaseAdded_BeadCreateFails(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	var buf bytes.Buffer
-	var mu sync.Mutex
-	neb := &Nebula{
-		Dir:      dir,
-		Manifest: Manifest{},
-		Phases:   []PhaseSpec{{ID: "existing", Title: "Existing"}},
-	}
-	state := &State{
-		Version: 1,
-		Phases:  map[string]*PhaseState{"existing": {Status: PhaseStatusDone}},
-	}
-	graph, _ := phasesToDAG(neb.Phases)
-	client := newMockBeadsClient()
-	client.createErr = fmt.Errorf("bead creation failed")
-	phasesByID := map[string]*PhaseSpec{"existing": &neb.Phases[0]}
-
-	hr := newTestHotReloaderWithLiveState(t, &buf, &mu, neb, state, graph, phasesByID, map[string]bool{"existing": true}, map[string]bool{}, map[string]bool{}, func(cfg *HotReloaderConfig) {
-		cfg.BeadsClient = client
-	})
-
-	path := writeTestPhaseFile(t, dir, "fail-bead", "Fail bead body")
-
-	hr.handlePhaseAdded(context.Background(), Change{
-		Kind:    ChangeAdded,
-		PhaseID: "fail-bead",
-		File:    path,
-	})
-
-	mu.Lock()
-	ps := state.Phases["fail-bead"]
-	mu.Unlock()
-
-	if ps == nil {
-		t.Fatal("expected state entry for fail-bead")
-	}
-	if ps.Status != PhaseStatusFailed {
-		t.Errorf("expected status failed when bead creation fails, got %v", ps.Status)
-	}
-
-	// Phase should NOT be signaled as ready.
-	select {
-	case id := <-hr.hotAdded:
-		t.Errorf("phase %q should not be on hotAdded channel after bead creation failure", id)
-	default:
-	}
-
-	if !strings.Contains(buf.String(), "failed to create bead") {
-		t.Error("expected warning about bead creation failure")
 	}
 }
 

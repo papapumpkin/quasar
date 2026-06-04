@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/dag"
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
@@ -441,8 +440,8 @@ func (wg *WorkerGroup) decomposePhase(ctx context.Context, phaseID string, resul
 		}
 	}
 
-	// Create beads for sub-phases outside the lock to avoid panics from
-	// a deferred Unlock when the RPC is in an unlocked state.
+	// Build tracking entries for sub-phases. Each sub-phase uses its own ID
+	// as the tracking key (no external bead system).
 	type beadResult struct {
 		specID string
 		beadID string
@@ -450,26 +449,14 @@ func (wg *WorkerGroup) decomposePhase(ctx context.Context, phaseID string, resul
 	}
 	var beadResults []beadResult
 	for _, sp := range op.SubPhases {
-		br := beadResult{specID: sp.Spec.ID}
-		if wg.BeadsClient != nil {
-			id, createErr := wg.BeadsClient.Create(ctx, sp.Spec.Title, beads.CreateOpts{
-				Description: sp.Body,
-				Type:        sp.Spec.Type,
-				Labels:      sp.Spec.Labels,
-				Assignee:    sp.Spec.Assignee,
-				Priority:    priorityStr(sp.Spec.Priority),
-			})
-			if createErr != nil {
-				fmt.Fprintf(wg.logger(), "warning: failed to create bead for sub-phase %q: %v\n", sp.Spec.ID, createErr)
-				continue
-			}
-			br.beadID = id
-		}
-		br.ok = true
-		beadResults = append(beadResults, br)
+		beadResults = append(beadResults, beadResult{
+			specID: sp.Spec.ID,
+			beadID: sp.Spec.ID,
+			ok:     true,
+		})
 	}
 
-	// Apply bead results and fabric state under lock.
+	// Apply tracking results and fabric state under lock.
 	wg.mu.Lock()
 	for _, br := range beadResults {
 		if !br.ok {

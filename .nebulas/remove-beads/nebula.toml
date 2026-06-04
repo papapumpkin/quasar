@@ -1,0 +1,42 @@
+[nebula]
+name = "remove-beads"
+description = "Completely remove the beads external task-tracking dependency from Quasar. Purely subtractive: delete the internal/beads package, strip beads references from loop/nebula/cmd/ui/config layers, remove beads from architecture tests and documentation, and verify the codebase builds and tests pass without beads. This is the prerequisite cleanup for the autonomous issue-to-PR pipeline (see docs/superpowers/specs/2026-06-03-quasar-autonomous-issue-to-pr-design.md), so subsequent nebulas assume no beads dependency."
+
+[defaults]
+type = "task"
+priority = 1
+labels = ["quasar", "cleanup", "beads-removal"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 15.0
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Delete the internal/beads package entirely (beads.go, beads_test.go, types.go)",
+    "Remove the Beads field from the Loop struct and all references to beads.Client across internal/loop/",
+    "Strip beads references from internal/nebula/ (worker, plan, engine, apply, hotreload, tests)",
+    "Remove beads-driven code from cmd/ (run, validate, nebula_*, tui, fabric_read) and from internal/tui/beadview.go, internal/ui/nebula.go, internal/checkpoint/checkpoint.go",
+    "Drop beads-related config keys from internal/config/ and remove requires_beads from the nebula manifest schema in internal/nebula/types.go",
+    "Update arch tests (internal/arch_test/layering_test.go, interfaces_test.go) so the layering DAG no longer includes beads",
+    "Scrub beads references from documentation (CLAUDE.md, AGENTS.md, README.md, configs/default.yaml, examples/)",
+    "Final state: `go build ./...`, `go test ./...`, and `go vet ./...` all pass cleanly; no production code references beads",
+]
+constraints = [
+    "This nebula is pure deletion + reference removal. Do NOT introduce replacement task-tracking logic — phase status lives in nebula.state.toml and SQLite already; that is sufficient.",
+    "Do NOT modify behavior beyond what beads-removal requires. No drive-by refactors, no renames, no architectural changes.",
+    "Preserve all non-beads functionality. After this nebula, `quasar nebula apply <path>` must still run nebulas end-to-end (just without beads side effects).",
+    "Preserve internal/loop/finding_*.go files — the linting/finding tracking is unrelated to beads and stays.",
+    "If a test depended on a beads mock, rewrite the test to not exercise the beads code path (do not just delete the test unless the assertion was purely about beads behavior).",
+    "Do NOT touch internal/loop/loop_test.go fixtures beyond the minimum needed to remove beads coupling — keep the rest of the loop test suite intact.",
+    "All comments removed alongside beads code should be deleted, not just commented-out. No dead code left behind.",
+    "The .claude/ global hook that injects beads workflow context at session start is NOT part of this repository — it lives in the user's global Claude Code config. Out of scope for this nebula.",
+]
+
+[dependencies]
+requires_beads = []
+requires_nebulae = []

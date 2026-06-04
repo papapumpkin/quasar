@@ -15,7 +15,6 @@ go vet ./...                   # static analysis
 cmd/          CLI commands (Cobra). Each file = one command.
 internal/
   agent/      Agent types, roles, and the Invoker interface
-  beads/      Beads CLI wrapper (Client interface + CLI impl)
   claude/     Claude CLI invoker (satisfies agent.Invoker)
   config/     Viper-based config loading (.quasar.yaml / env QUASAR_*)
   loop/       Core coder-reviewer loop and state machine
@@ -27,7 +26,7 @@ internal/
 
 ### Interfaces & Dependencies
 - Define interfaces where they are consumed, not where they are implemented.
-- `Loop.Invoker` is `agent.Invoker`; `Loop.Beads` is `beads.Client`. Follow this pattern.
+- `Loop.Invoker` is `agent.Invoker`. Follow this pattern (interface defined where consumed).
 - Use constructor functions to inject dependencies. No global mutable state.
 - Prefer small, purpose-specific interfaces (1-3 methods) over large ones.
 
@@ -46,7 +45,7 @@ internal/
 - Use stdlib `testing` only. No external test frameworks.
 - Table-driven tests with `t.Run` for subtests. Use `t.Parallel()` where safe.
 - Use `strings.Contains` from stdlib, not custom helpers.
-- Mock interfaces for unit tests. Follow `beads.Client` mock pattern.
+- Mock interfaces for unit tests.
 - Name test functions `TestFunctionName` with subtests via `t.Run("case name", ...)`.
 
 ### Output & UI
@@ -110,7 +109,7 @@ goals = ["Goal 1", "Goal 2"]
 constraints = ["Constraint 1"]
 
 [dependencies]
-requires_beads = []    # bead IDs that must be closed first
+requires_beads = []    # legacy field — beads has been removed; ignored if present
 requires_nebulae = []  # nebula names that must complete first
 ```
 

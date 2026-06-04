@@ -36,12 +36,11 @@ Dual-agent AI coding coordinator that cycles a coder and reviewer until the revi
 
 ## What It Does
 
-Quasar coordinates two AI agents — a **coder** and a **reviewer** — that iterate on a coding task in a loop. The coder implements the requested changes, then the reviewer reads the actual source files to verify correctness, security, and code quality. If the reviewer finds issues, they're sent back to the coder for another pass. Each task is tracked as a [Beads](https://github.com/aaronsalm/beads) issue, with review findings recorded as child issues.
+Quasar coordinates two AI agents — a **coder** and a **reviewer** — that iterate on a coding task in a loop. The coder implements the requested changes, then the reviewer reads the actual source files to verify correctness, security, and code quality. If the reviewer finds issues, they're sent back to the coder for another pass. Phase status is tracked in each nebula's `nebula.state.toml` and in SQLite.
 
 ## Prerequisites
 
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude`) — must be installed and authenticated
-- [Beads CLI](https://github.com/aaronsalm/beads) (`beads`) — for task/issue tracking
 - [Go](https://go.dev/) 1.25+ — to build from source
 
 ## Install
@@ -115,7 +114,7 @@ Running `quasar` with no subcommand in a directory containing `.nebulas/` auto-l
 |----------------------|------------------------------------------------|
 | `run`                | Start the interactive coder-reviewer REPL      |
 | `cockpit`            | Launch the interactive TUI home screen         |
-| `validate`           | Check that `claude` and `beads` CLIs are found |
+| `validate`           | Check that the `claude` CLI is found            |
 | `version`            | Print the version number                       |
 
 Running `quasar` with no subcommand auto-launches the cockpit when a `.nebulas/` directory exists in the working directory.
@@ -126,7 +125,7 @@ Running `quasar` with no subcommand auto-launches the cockpit when a `.nebulas/`
 |----------------------|--------------------------------------------------|
 | `nebula validate`    | Validate a nebula blueprint directory             |
 | `nebula plan`        | Preview the execution plan for a nebula           |
-| `nebula apply`       | Create/update beads and optionally run workers    |
+| `nebula apply`       | Record phase tracking state and optionally run workers    |
 | `nebula show`        | Display current nebula state                      |
 | `nebula status`      | Display metrics and run history for a nebula      |
 
@@ -225,7 +224,6 @@ Create a `.quasar.yaml` in your project root (or home directory):
 ```yaml
 # Path to CLI binaries
 claude_path: claude
-beads_path: beads
 
 # Working directory for agent invocations
 work_dir: "."
@@ -317,7 +315,7 @@ cmd/              CLI commands (Cobra): run, validate, version, nebula, fabric, 
 internal/
   agent/          Agent types, roles, and the Invoker interface
   ansi/           ANSI escape code constants for terminal styling
-  beads/          Beads CLI wrapper (Client interface + CLI impl)
+
   claude/         Claude CLI invoker (satisfies agent.Invoker)
   config/         Viper-based config loading (.quasar.yaml / env QUASAR_*)
   dag/            Directed acyclic graph engine (topological sort, cycle detection)
@@ -375,7 +373,7 @@ The process exits with code 0 on approval, non-zero on failure or max cycles rea
 
 ## Nebula Blueprints
 
-Nebula is a structured multi-task blueprint system inspired by OpenTofu's plan/apply lifecycle. Define a set of related tasks in a directory, and Quasar will create beads, resolve dependencies, and execute them with the coder-reviewer loop.
+Nebula is a structured multi-task blueprint system inspired by OpenTofu's plan/apply lifecycle. Define a set of related tasks in a directory, and Quasar will record phase tracking, resolve dependencies, and execute them with the coder-reviewer loop.
 
 ### File Format
 
@@ -491,7 +489,7 @@ The `[dependencies]` section declares prerequisites that must be met before `neb
 |------------------------------|--------------------------------------------------|
 | `nebula validate <path>`     | Validate structure, frontmatter, and dependencies |
 | `nebula plan <path>`         | Preview the execution plan for a nebula          |
-| `nebula apply <path>`        | Create/update beads from the blueprint           |
+| `nebula apply <path>`        | Record phase tracking state from the blueprint           |
 | `nebula show <path>`         | Display current nebula state                     |
 | `nebula status <path>`       | Display metrics and run history                  |
 

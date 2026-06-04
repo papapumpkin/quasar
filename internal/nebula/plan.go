@@ -8,25 +8,14 @@ import (
 	"strings"
 
 	"github.com/papapumpkin/quasar/internal/ansi"
-	"github.com/papapumpkin/quasar/internal/beads"
 )
 
 // CheckDependencies verifies that all external dependencies declared in the nebula are met.
-// For requires_beads: each bead must exist and be closed.
 // For requires_nebulae: each named nebula's state file must show all phases done.
-func CheckDependencies(ctx context.Context, deps Dependencies, nebulaDir string, client beads.Client) error {
+// (requires_beads is a legacy field retained for manifest backward compatibility
+// but is no longer enforced — beads have been removed from Quasar.)
+func CheckDependencies(ctx context.Context, deps Dependencies, nebulaDir string) error {
 	var unmet []string
-
-	for _, beadID := range deps.RequiresBeads {
-		b, err := client.Show(ctx, beadID)
-		if err != nil {
-			unmet = append(unmet, fmt.Sprintf("bead %q: %v", beadID, err))
-			continue
-		}
-		if b.Status != "closed" {
-			unmet = append(unmet, fmt.Sprintf("bead %q: status is %q, expected closed", beadID, b.Status))
-		}
-	}
 
 	for _, name := range deps.RequiresNebulae {
 		stateDir := filepath.Join(filepath.Dir(nebulaDir), name)
@@ -52,13 +41,13 @@ func CheckDependencies(ctx context.Context, deps Dependencies, nebulaDir string,
 	return nil
 }
 
-// BuildPlan diffs the desired nebula state against actual beads state,
+// BuildPlan diffs the desired nebula state against actual phase tracking state,
 // producing a plan of create/update/skip/close/retry actions.
-func BuildPlan(ctx context.Context, n *Nebula, state *State, client beads.Client) (*Plan, error) {
+func BuildPlan(ctx context.Context, n *Nebula, state *State) (*Plan, error) {
 	// Check external dependencies before building the plan.
 	deps := n.Manifest.Dependencies
-	if len(deps.RequiresBeads) > 0 || len(deps.RequiresNebulae) > 0 {
-		if err := CheckDependencies(ctx, deps, n.Dir, client); err != nil {
+	if len(deps.RequiresNebulae) > 0 {
+		if err := CheckDependencies(ctx, deps, n.Dir); err != nil {
 			return nil, err
 		}
 	}
@@ -81,7 +70,7 @@ func BuildPlan(ctx context.Context, n *Nebula, state *State, client beads.Client
 			plan.Actions = append(plan.Actions, Action{
 				PhaseID: p.ID,
 				Type:    ActionCreate,
-				Reason:  fmt.Sprintf("create bead for %q", p.Title),
+				Reason:  fmt.Sprintf("create phase tracking for %q", p.Title),
 			})
 			continue
 		}
@@ -106,43 +95,31 @@ func BuildPlan(ctx context.Context, n *Nebula, state *State, client beads.Client
 			continue
 		}
 
-		// Failed phases are retried with a new bead.
+		// Failed phases are retried.
 		if ps.Status == PhaseStatusFailed {
 			plan.Actions = append(plan.Actions, Action{
 				PhaseID: p.ID,
 				Type:    ActionRetry,
-				Reason:  fmt.Sprintf("retrying failed phase (previous bead: %s)", ps.BeadID),
+				Reason:  "retrying failed phase",
 			})
 			continue
 		}
 
-		// Phase exists in state but bead may need updating.
+		// Phase exists in state with a tracking ID — update.
 		if ps.BeadID != "" {
-			// Verify bead still exists.
-			_, err := client.Show(ctx, ps.BeadID)
-			if err != nil {
-				// Bead missing — recreate.
-				plan.Actions = append(plan.Actions, Action{
-					PhaseID: p.ID,
-					Type:    ActionCreate,
-					Reason:  fmt.Sprintf("bead %s not found, recreating", ps.BeadID),
-				})
-				continue
-			}
-
 			plan.Actions = append(plan.Actions, Action{
 				PhaseID: p.ID,
 				Type:    ActionUpdate,
-				Reason:  fmt.Sprintf("update bead %s", ps.BeadID),
+				Reason:  "update phase tracking",
 			})
 			continue
 		}
 
-		// State entry without bead ID — create.
+		// State entry without tracking ID — create.
 		plan.Actions = append(plan.Actions, Action{
 			PhaseID: p.ID,
 			Type:    ActionCreate,
-			Reason:  fmt.Sprintf("create bead for %q (no bead ID in state)", p.Title),
+			Reason:  fmt.Sprintf("create phase tracking for %q (no tracking ID in state)", p.Title),
 		})
 	}
 

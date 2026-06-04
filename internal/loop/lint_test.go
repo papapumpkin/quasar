@@ -95,7 +95,7 @@ func TestRunLintFixLoop(t *testing.T) {
 			UI:     &noopUI{},
 			Linter: nil,
 		}
-		state := &CycleState{TaskBeadID: "bead-1", TaskTitle: "task"}
+		state := &CycleState{TaskID: "bead-1", TaskTitle: "task"}
 		err := l.runLintFixLoop(context.Background(), state, 1.0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -112,7 +112,7 @@ func TestRunLintFixLoop(t *testing.T) {
 			UI:     &noopUI{},
 			Linter: linter,
 		}
-		state := &CycleState{TaskBeadID: "bead-1", TaskTitle: "task"}
+		state := &CycleState{TaskID: "bead-1", TaskTitle: "task"}
 		err := l.runLintFixLoop(context.Background(), state, 1.0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -141,7 +141,7 @@ func TestRunLintFixLoop(t *testing.T) {
 			MaxLintRetries: 2,
 			MaxCycles:      3,
 		}
-		state := &CycleState{TaskBeadID: "bead-1", TaskTitle: "task", Cycle: 1}
+		state := &CycleState{TaskID: "bead-1", TaskTitle: "task", Cycle: 1}
 		err := l.runLintFixLoop(context.Background(), state, 1.0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -182,7 +182,7 @@ func TestRunLintFixLoop(t *testing.T) {
 			MaxLintRetries: 2,
 			MaxCycles:      3,
 		}
-		state := &CycleState{TaskBeadID: "bead-1", TaskTitle: "task", Cycle: 1}
+		state := &CycleState{TaskID: "bead-1", TaskTitle: "task", Cycle: 1}
 		err := l.runLintFixLoop(context.Background(), state, 1.0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -212,7 +212,7 @@ func TestRunLintFixLoop(t *testing.T) {
 			UI:     rUI,
 			Linter: linter,
 		}
-		state := &CycleState{TaskBeadID: "bead-1", TaskTitle: "task"}
+		state := &CycleState{TaskID: "bead-1", TaskTitle: "task"}
 		err := l.runLintFixLoop(context.Background(), state, 1.0)
 		if err != nil {
 			t.Fatalf("lint execution error should not be fatal: %v", err)
@@ -236,7 +236,7 @@ func TestRunLintFixLoop(t *testing.T) {
 			MaxLintRetries: 2,
 			MaxCycles:      3,
 		}
-		state := &CycleState{TaskBeadID: "bead-1", TaskTitle: "task", Cycle: 1}
+		state := &CycleState{TaskID: "bead-1", TaskTitle: "task", Cycle: 1}
 		err := l.runLintFixLoop(context.Background(), state, 1.0)
 		if err == nil {
 			t.Fatal("expected error from coder lint-fix invocation")
@@ -263,7 +263,7 @@ func TestRunLintFixLoop(t *testing.T) {
 			MaxLintRetries: 2,
 			MaxCycles:      3,
 		}
-		state := &CycleState{TaskBeadID: "bead-1", TaskTitle: "task", Cycle: 1}
+		state := &CycleState{TaskID: "bead-1", TaskTitle: "task", Cycle: 1}
 		err := l.runLintFixLoop(context.Background(), state, 1.0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -293,7 +293,7 @@ func TestRunLintFixLoop(t *testing.T) {
 			MaxBudgetUSD:   5.0,
 			MaxCycles:      3,
 		}
-		state := &CycleState{TaskBeadID: "bead-1", TaskTitle: "task", Cycle: 1}
+		state := &CycleState{TaskID: "bead-1", TaskTitle: "task", Cycle: 1}
 		err := l.runLintFixLoop(context.Background(), state, 1.0)
 		if !errors.Is(err, ErrBudgetExceeded) {
 			t.Errorf("expected ErrBudgetExceeded, got %v", err)
@@ -310,7 +310,7 @@ func TestBuildLintFixPrompt(t *testing.T) {
 
 	l := &Loop{}
 	state := &CycleState{
-		TaskBeadID: "bead-42",
+		TaskID:     "bead-42",
 		TaskTitle:  "fix the bug",
 		LintOutput: "main.go:10: unused variable x",
 	}
@@ -338,7 +338,7 @@ func TestBuildReviewerPromptWithLintOutput(t *testing.T) {
 		t.Parallel()
 		l := &Loop{}
 		state := &CycleState{
-			TaskBeadID:  "bead-1",
+			TaskID:      "bead-1",
 			TaskTitle:   "task",
 			CoderOutput: "done",
 			LintOutput:  "",
@@ -356,7 +356,7 @@ func TestBuildReviewerPromptWithLintOutput(t *testing.T) {
 		t.Parallel()
 		l := &Loop{}
 		state := &CycleState{
-			TaskBeadID:  "bead-1",
+			TaskID:      "bead-1",
 			TaskTitle:   "task",
 			CoderOutput: "done",
 			LintOutput:  "main.go:5: error return value not checked",
