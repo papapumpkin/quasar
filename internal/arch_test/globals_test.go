@@ -20,6 +20,14 @@ var allowedGlobals = map[string][]string{
 	"integrations": {
 		"defaultRegistry",
 	},
+	// nebula: the ticket architect prompt template. ticketPromptSource is the
+	// //go:embed target (embed requires a package-level var) and ticketPromptTmpl
+	// is the once-parsed template built from it. Both are immutable after package
+	// init — the embed is read-only and the template is never reassigned.
+	"nebula": {
+		"ticketPromptSource",
+		"ticketPromptTmpl",
+	},
 	// tui: vars that don't match prefix or heuristic patterns.
 	"tui": {
 		// splashDopplerRamps: array declared without initializer, populated in init().

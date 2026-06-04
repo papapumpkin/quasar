@@ -64,6 +64,14 @@ type Dependencies struct {
 type Info struct {
 	Name        string `toml:"name"`
 	Description string `toml:"description"`
+
+	// SourceName and SourceID record the external tracker a nebula was
+	// generated from (e.g. "github" / "papapumpkin/quasar#42"). They are
+	// populated by the ticket-driven `nebula new <source>:<id>` flow and
+	// omitted from the manifest for manually authored or freeform-generated
+	// nebulas.
+	SourceName string `toml:"source_name,omitempty"`
+	SourceID   string `toml:"source_id,omitempty"`
 }
 
 // Defaults holds fallback values applied to phases that omit those fields.
