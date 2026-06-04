@@ -340,7 +340,6 @@ type MsgDiscoveryPosted struct {
 	Discovery fabric.Discovery
 }
 
-
 // MsgScratchpadEntry adds a timestamped note to the scratchpad view.
 type MsgScratchpadEntry struct {
 	Timestamp time.Time

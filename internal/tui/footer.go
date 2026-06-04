@@ -97,4 +97,3 @@ func GateFooterBindings(km KeyMap) []key.Binding {
 	esc.SetHelp("esc", "skip")
 	return []key.Binding{km.Accept, km.Reject, km.Retry, km.Skip, esc}
 }
-

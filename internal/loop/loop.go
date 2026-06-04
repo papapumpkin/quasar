@@ -255,7 +255,6 @@ func (l *Loop) resumeLoop(ctx context.Context, cs *CycleState) (*TaskResult, err
 			})
 		}
 
-
 		if isApproved(cs.ReviewOutput) {
 			return l.handleApproval(ctx, cs)
 		}
@@ -476,7 +475,6 @@ func (l *Loop) runLoop(ctx context.Context, taskID, taskDescription string) (*Ta
 				Regressed:    summary.Regressed,
 			})
 		}
-
 
 		if isApproved(state.ReviewOutput) {
 			return l.handleApproval(ctx, state)

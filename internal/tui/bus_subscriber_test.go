@@ -753,7 +753,6 @@ func TestMapEvent_HealingAttempt(t *testing.T) {
 	}
 }
 
-
 func TestMapEvent_StaleWarning(t *testing.T) {
 	t.Parallel()
 	sub := &BusSubscriber{done: make(chan struct{})}

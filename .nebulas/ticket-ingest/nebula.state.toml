@@ -22,18 +22,18 @@ updated_at = 2026-06-04T19:19:03.01253-04:00
 
 [phases.init-doctor-docs-arch]
 bead_id = 'init-doctor-docs-arch'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-04T15:19:11.068171-04:00
-updated_at = 2026-06-04T19:19:03.013151-04:00
+updated_at = 2026-06-04T19:25:10.869601-04:00
 
 [phases.integration-layer]
 bead_id = 'integration-layer'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-06-04T15:19:11.066738-04:00
-updated_at = 2026-06-04T19:19:03.459553-04:00
+updated_at = 2026-06-04T19:25:06.586423-04:00
 
 [phases.nebula-new-from-source]
 bead_id = 'nebula-new-from-source'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-04T15:19:11.067977-04:00
-updated_at = 2026-06-04T19:19:03.012951-04:00
+updated_at = 2026-06-04T19:25:08.596228-04:00
