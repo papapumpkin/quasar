@@ -125,16 +125,6 @@ func (b *UIBridge) RefactorApplied(phaseID string) {}
 // data is displayed through the phase detail view.
 func (b *UIBridge) FindingLifecycle(cycle int, summary ui.FindingLifecycleData) {}
 
-// HailReceived sends MsgHailReceived when an agent posts a hail.
-func (b *UIBridge) HailReceived(h ui.HailInfo) {
-	b.program.Send(MsgHailReceived{Hail: h})
-}
-
-// HailResolved sends MsgHailResolved when a hail is resolved by the human.
-func (b *UIBridge) HailResolved(id, resolution string) {
-	b.program.Send(MsgHailResolved{ID: id, Resolution: resolution})
-}
-
 // BeadUpdate sends MsgBeadUpdate with the bead hierarchy.
 func (b *UIBridge) BeadUpdate(taskBeadID, title, status string, children []ui.BeadChild) {
 	root := buildBeadInfoTree(taskBeadID, title, status, children)
@@ -384,16 +374,6 @@ func (b *PhaseUIBridge) BeadUpdate(taskBeadID, title, status string, children []
 // surfaced through the phase detail view rather than as a standalone message.
 func (b *PhaseUIBridge) FindingLifecycle(cycle int, summary ui.FindingLifecycleData) {}
 
-// HailReceived sends MsgHailReceived tagged with this phase's ID.
-func (b *PhaseUIBridge) HailReceived(h ui.HailInfo) {
-	b.program.Send(MsgHailReceived{PhaseID: b.phaseID, Hail: h})
-}
-
-// HailResolved sends MsgHailResolved tagged with this phase's ID.
-func (b *PhaseUIBridge) HailResolved(id, resolution string) {
-	b.program.Send(MsgHailResolved{PhaseID: b.phaseID, ID: id, Resolution: resolution})
-}
-
 // EntanglementPublished sends MsgEntanglementUpdate with the full entanglement list.
 func (b *PhaseUIBridge) EntanglementPublished(entanglements []fabric.Entanglement) {
 	b.program.Send(MsgEntanglementUpdate{Entanglements: entanglements})
@@ -402,28 +382,6 @@ func (b *PhaseUIBridge) EntanglementPublished(entanglements []fabric.Entanglemen
 // DiscoveryPosted sends MsgDiscoveryPosted when a new discovery is recorded.
 func (b *PhaseUIBridge) DiscoveryPosted(d fabric.Discovery) {
 	b.program.Send(MsgDiscoveryPosted{Discovery: d})
-}
-
-// Hail sends MsgHail when a phase requires human attention.
-// The ResponseCh is nil here (fire-and-forget). Callers that need to block on
-// the user's response should use HailAndWait instead, which creates a channel
-// and blocks until the overlay resolves or the context is canceled.
-func (b *PhaseUIBridge) Hail(phaseID string, d fabric.Discovery) {
-	b.program.Send(MsgHail{PhaseID: phaseID, Discovery: d})
-}
-
-// HailAndWait sends MsgHail and blocks until the user responds or the context
-// is canceled. Returns the user's free-text response.
-func (b *PhaseUIBridge) HailAndWait(ctx context.Context, phaseID string, d fabric.Discovery) (string, error) {
-	responseCh := make(chan string, 1)
-	b.program.Send(MsgHail{PhaseID: phaseID, Discovery: d, ResponseCh: responseCh})
-
-	select {
-	case <-ctx.Done():
-		return "", ctx.Err()
-	case resp := <-responseCh:
-		return resp, nil
-	}
 }
 
 // ScratchpadNote sends MsgScratchpadEntry with a timestamped note.

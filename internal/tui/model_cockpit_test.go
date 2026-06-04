@@ -319,48 +319,6 @@ func TestMsgStaleWarningShowsToast(t *testing.T) {
 	}
 }
 
-func TestMsgHailTriggersOverlayWhenBoardActive(t *testing.T) {
-	t.Parallel()
-
-	m := newNebulaModelWithPhases("", []PhaseEntry{
-		{ID: "p1", Title: "Phase 1"},
-	})
-	m.BoardActive = true
-	m.ActiveTab = TabBoard
-
-	result, _ := m.Update(MsgHail{
-		PhaseID:   "p1",
-		Discovery: fabric.Discovery{Kind: "conflict", Detail: "test hail"},
-	})
-	updated := result.(AppModel)
-
-	if updated.Hail == nil {
-		t.Error("expected Hail overlay to be set when board is active")
-	}
-}
-
-func TestMsgHailShowsToastWhenBoardNotActive(t *testing.T) {
-	t.Parallel()
-
-	m := newNebulaModelWithPhases("", []PhaseEntry{
-		{ID: "p1", Title: "Phase 1"},
-	})
-	m.BoardActive = false
-
-	result, _ := m.Update(MsgHail{
-		PhaseID:   "p1",
-		Discovery: fabric.Discovery{Kind: "conflict", Detail: "test hail"},
-	})
-	updated := result.(AppModel)
-
-	if updated.Hail != nil {
-		t.Error("expected Hail overlay to NOT be set when board is not active")
-	}
-	if len(updated.Toasts) != 1 {
-		t.Errorf("expected 1 toast fallback when board is not active, got %d", len(updated.Toasts))
-	}
-}
-
 // --- Board navigation tests ---
 
 func TestBoardNavigationUpDown(t *testing.T) {

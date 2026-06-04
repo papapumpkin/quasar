@@ -205,7 +205,7 @@ func WithGitSHAFunc(fn func(ctx context.Context) (string, error)) Option {
 }
 
 // WithBus sets the event bus for publishing lifecycle events. When non-nil,
-// the WorkerGroup publishes progress, refactor, hot-add, hail, and scanning
+// the WorkerGroup publishes progress, refactor, hot-add, and scanning
 // events to the bus alongside existing callback invocations. This enables
 // bus-mediated delivery to the TUI via BusSubscriber.
 func WithBus(b bus.Bus) Option {

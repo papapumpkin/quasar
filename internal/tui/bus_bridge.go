@@ -201,25 +201,6 @@ func (b *BusUIBridge) BeadUpdate(taskBeadID, title, status string, children []ui
 // surfaced through the phase detail view rather than as a standalone message.
 func (b *BusUIBridge) FindingLifecycle(cycle int, summary ui.FindingLifecycleData) {}
 
-// HailReceived publishes KindPhaseHailReceived.
-func (b *BusUIBridge) HailReceived(h ui.HailInfo) {
-	ev := bus.NewPhase(bus.KindPhaseHailReceived, b.phaseID)
-	ev.Hail = &bus.HailPayload{
-		Discovery: h,
-	}
-	b.publish(ev)
-}
-
-// HailResolved publishes KindPhaseHailResolved.
-func (b *BusUIBridge) HailResolved(id, resolution string) {
-	ev := bus.NewPhase(bus.KindPhaseHailResolved, b.phaseID)
-	ev.HailResolved = &bus.HailResolvedPayload{
-		ID:         id,
-		Resolution: resolution,
-	}
-	b.publish(ev)
-}
-
 // fileStatPaths extracts file paths from a slice of FileStatEntry.
 // The bus AgentDiffPayload carries paths as []string; this converts from the
 // richer diffResult.Files representation.

@@ -67,8 +67,6 @@ const (
 	KindPhaseHotAdded         Kind = "phase.hot.added"
 	KindPhaseScanning         Kind = "phase.scanning"
 	KindPhaseFindingLifecycle Kind = "phase.finding.lifecycle"
-	KindPhaseHailReceived     Kind = "phase.hail.received"
-	KindPhaseHailResolved     Kind = "phase.hail.resolved"
 )
 
 // Single-task lifecycle event kinds — correspond to Msg* TUI messages (loop mode).
@@ -88,8 +86,6 @@ const (
 	KindError            Kind = "error"
 	KindInfo             Kind = "info"
 	KindBeadUpdate       Kind = "bead.update"
-	KindHailReceived     Kind = "hail.received"
-	KindHailResolved     Kind = "hail.resolved"
 )
 
 // Nebula control event kinds — correspond to nebula lifecycle TUI messages.
@@ -110,10 +106,6 @@ const (
 	KindPlanAction Kind = "plan.action"
 	KindPlanError  Kind = "plan.error"
 )
-
-// KindHail represents a full request-response hail interrupt requiring human
-// attention. Corresponds to MsgHail in the TUI.
-const KindHail Kind = "hail"
 
 // KindStaleWarning represents a stale-state alert from the Tycho scheduler.
 // Corresponds to MsgStaleWarning in the TUI.
@@ -171,8 +163,6 @@ type Event struct {
 	HotAdd       *HotAddPayload
 	Healing      *HealingPayload
 	Finding      *FindingPayload
-	Hail         *HailPayload
-	HailResolved *HailResolvedPayload
 	PlanReady    *PlanReadyPayload
 	PlanAction   *PlanActionPayload
 	PlanError    *PlanErrorPayload
@@ -260,18 +250,6 @@ type FindingPayload struct {
 	Fixed        int
 	StillPresent int
 	Regressed    int
-}
-
-// HailPayload carries a human-attention-required interrupt from a worker.
-type HailPayload struct {
-	Discovery  any        // fabric.Discovery — kept as any to avoid import cycle
-	ResponseCh chan<- any // response channel for human input
-}
-
-// HailResolvedPayload carries the resolution of a hail interrupt.
-type HailResolvedPayload struct {
-	ID         string
-	Resolution string
 }
 
 // PlanReadyPayload carries a computed execution plan for preview.

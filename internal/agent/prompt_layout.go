@@ -41,8 +41,7 @@ const (
 	//   4. Lint output from lint pass
 	//   5. Filter output from pre-reviewer checks
 	//   6. Fabric snapshot (fabric.RenderSnapshot) — claims, pulses, phase states
-	//   7. Hail relay blocks — resolved hails injected per invocation
-	//   8. Refactor instructions — injected mid-run when user edits task
+	//   7. Refactor instructions — injected mid-run when user edits task
 	ZoneVolatileSuffix
 )
 
@@ -72,7 +71,6 @@ const (
 	LabelLintOutput           = "lint-output"
 	LabelFilterOutput         = "filter-output"
 	LabelFabricSnapshot       = "fabric-snapshot"
-	LabelHailRelay            = "hail-relay"
 	LabelRefactorInstructions = "refactor-instructions"
 )
 
@@ -91,7 +89,6 @@ var ContentZone = map[string]PromptZone{
 	LabelLintOutput:           ZoneVolatileSuffix,
 	LabelFilterOutput:         ZoneVolatileSuffix,
 	LabelFabricSnapshot:       ZoneVolatileSuffix,
-	LabelHailRelay:            ZoneVolatileSuffix,
 	LabelRefactorInstructions: ZoneVolatileSuffix,
 }
 

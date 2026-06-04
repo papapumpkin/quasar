@@ -483,14 +483,6 @@ func (wg *WorkerGroup) decomposePhase(ctx context.Context, phaseID string, resul
 		}
 	}
 
-	// Post a hail if configured.
-	if wg.OnHail != nil {
-		wg.OnHail(phaseID, fabric.Discovery{
-			Kind:   "decomposition",
-			Detail: fmt.Sprintf("Phase %q decomposed into %d sub-phases: %s (reason: %s)", phaseID, len(subIDs), strings.Join(subIDs, ", "), result.StruggleReason),
-		})
-	}
-
 	fmt.Fprintf(wg.logger(), "phase %q decomposed into %d sub-phases: %s\n", phaseID, len(subIDs), strings.Join(subIDs, ", "))
 
 	return subIDs, nil

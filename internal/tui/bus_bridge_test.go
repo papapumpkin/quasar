@@ -400,66 +400,6 @@ func TestBusUIBridgeFindingLifecycleNoop(t *testing.T) {
 	}
 }
 
-func TestBusUIBridgeHailReceived(t *testing.T) {
-	t.Parallel()
-	b := bus.NewMemoryBus()
-	defer b.Close()
-	sub := b.Subscribe("test", 16)
-	defer sub.Unsubscribe()
-
-	bridge := NewBusUIBridge(b, "phase-17", "/tmp/work")
-	hail := ui.HailInfo{
-		ID:      "hail-1",
-		Kind:    "decision_needed",
-		Summary: "Need input on approach",
-	}
-	bridge.HailReceived(hail)
-
-	ev := mustDrain(t, sub)
-	if ev.Kind != bus.KindPhaseHailReceived {
-		t.Errorf("Kind = %q, want %q", ev.Kind, bus.KindPhaseHailReceived)
-	}
-	if ev.Hail == nil {
-		t.Fatal("Hail payload is nil")
-	}
-	// The Discovery field carries the HailInfo as any.
-	gotHail, ok := ev.Hail.Discovery.(ui.HailInfo)
-	if !ok {
-		t.Fatal("Hail.Discovery is not ui.HailInfo")
-	}
-	if gotHail.ID != "hail-1" {
-		t.Errorf("HailInfo.ID = %q, want %q", gotHail.ID, "hail-1")
-	}
-	if gotHail.Kind != "decision_needed" {
-		t.Errorf("HailInfo.Kind = %q, want %q", gotHail.Kind, "decision_needed")
-	}
-}
-
-func TestBusUIBridgeHailResolved(t *testing.T) {
-	t.Parallel()
-	b := bus.NewMemoryBus()
-	defer b.Close()
-	sub := b.Subscribe("test", 16)
-	defer sub.Unsubscribe()
-
-	bridge := NewBusUIBridge(b, "phase-18", "/tmp/work")
-	bridge.HailResolved("hail-1", "user approved")
-
-	ev := mustDrain(t, sub)
-	if ev.Kind != bus.KindPhaseHailResolved {
-		t.Errorf("Kind = %q, want %q", ev.Kind, bus.KindPhaseHailResolved)
-	}
-	if ev.HailResolved == nil {
-		t.Fatal("HailResolved payload is nil")
-	}
-	if ev.HailResolved.ID != "hail-1" {
-		t.Errorf("HailResolved.ID = %q, want %q", ev.HailResolved.ID, "hail-1")
-	}
-	if ev.HailResolved.Resolution != "user approved" {
-		t.Errorf("HailResolved.Resolution = %q, want %q", ev.HailResolved.Resolution, "user approved")
-	}
-}
-
 func TestBusUIBridgeScratchpadOnTaskStarted(t *testing.T) {
 	t.Parallel()
 	b := bus.NewMemoryBus()

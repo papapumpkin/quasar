@@ -23,7 +23,7 @@ type WaveScanner struct {
 
 	// OnEscalate is called when the pushback handler returns ActionEscalate
 	// for a blocked phase. The Scheduler wires this to its own escalatePhase
-	// method so that escalation logic (state transition, logging, OnHail) is
+	// method so that escalation logic (state transition, logging) is
 	// not duplicated. If nil, escalations are logged but not surfaced.
 	OnEscalate func(ctx context.Context, phaseID string, bp *fabric.BlockedPhase)
 }

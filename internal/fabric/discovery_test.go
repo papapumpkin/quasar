@@ -5,31 +5,6 @@ import (
 	"testing"
 )
 
-func TestIsHail(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		kind string
-		want bool
-	}{
-		{DiscoveryEntanglementDispute, true},
-		{DiscoveryMissingDependency, true},
-		{DiscoveryFileConflict, true},
-		{DiscoveryRequirementsAmbiguity, true},
-		{DiscoveryBudgetAlert, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.kind, func(t *testing.T) {
-			t.Parallel()
-			d := Discovery{Kind: tt.kind}
-			if got := d.IsHail(); got != tt.want {
-				t.Errorf("Discovery{Kind: %q}.IsHail() = %v, want %v", tt.kind, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestValidateDiscoveryKind(t *testing.T) {
 	t.Parallel()
 
@@ -62,62 +37,6 @@ func TestValidateDiscoveryKind(t *testing.T) {
 			t.Error("ValidateDiscoveryKind(\"\") = nil, want error")
 		}
 	})
-}
-
-func TestPendingHails(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	b := testFabric(t)
-
-	// Post a mix of discovery kinds.
-	discoveries := []Discovery{
-		{SourceTask: "p1", Kind: DiscoveryFileConflict, Detail: "conflict"},
-		{SourceTask: "p2", Kind: DiscoveryBudgetAlert, Detail: "budget warning"},
-		{SourceTask: "p1", Kind: DiscoveryMissingDependency, Detail: "missing dep"},
-	}
-	for _, d := range discoveries {
-		if _, err := b.PostDiscovery(ctx, d); err != nil {
-			t.Fatalf("PostDiscovery(%q): %v", d.Kind, err)
-		}
-	}
-
-	hails, err := PendingHails(ctx, b)
-	if err != nil {
-		t.Fatalf("PendingHails: %v", err)
-	}
-
-	// budget_alert should be excluded, leaving 2 hails.
-	if len(hails) != 2 {
-		t.Fatalf("len(PendingHails) = %d, want 2", len(hails))
-	}
-	for _, h := range hails {
-		if h.Kind == DiscoveryBudgetAlert {
-			t.Errorf("PendingHails included budget_alert discovery")
-		}
-	}
-}
-
-func TestPendingHails_ExcludesResolved(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	b := testFabric(t)
-
-	// Post and immediately resolve a hail-worthy discovery.
-	id, err := b.PostDiscovery(ctx, Discovery{SourceTask: "p1", Kind: DiscoveryFileConflict, Detail: "conflict"})
-	if err != nil {
-		t.Fatalf("PostDiscovery: %v", err)
-	}
-	if err := b.ResolveDiscovery(ctx, id); err != nil {
-		t.Fatalf("ResolveDiscovery: %v", err)
-	}
-
-	hails, err := PendingHails(ctx, b)
-	if err != nil {
-		t.Fatalf("PendingHails: %v", err)
-	}
-	if len(hails) != 0 {
-		t.Errorf("len(PendingHails) = %d, want 0 (resolved discovery should be excluded)", len(hails))
-	}
 }
 
 func TestPostDiscovery_ReturnsID(t *testing.T) {

@@ -21,7 +21,7 @@ func TestLoopPackageBuilds(t *testing.T) {
 }
 
 // noopUI satisfies ui.UI for tests without producing any output. Defined here
-// because other test files in this package (hail_*, lint_, prompts_, refactor_)
+// because other test files in this package (lint_, prompts_, refactor_)
 // reference noopUI and fakeInvoker for their own assertions.
 type noopUI struct{}
 
@@ -43,8 +43,6 @@ func (n *noopUI) BeadUpdate(string, string, string, []ui.BeadChild) {}
 func (n *noopUI) CycleSummary(ui.CycleSummaryData)                  {}
 func (n *noopUI) RefactorApplied(string)                            {}
 func (n *noopUI) FindingLifecycle(int, ui.FindingLifecycleData)     {}
-func (n *noopUI) HailReceived(ui.HailInfo)                          {}
-func (n *noopUI) HailResolved(string, string)                       {}
 
 // fakeInvoker returns controlled responses for testing the loop. Other tests
 // in this package use it to assert prompt content and per-cycle behavior.

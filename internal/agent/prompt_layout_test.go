@@ -40,7 +40,6 @@ func TestPromptZoneClassification(t *testing.T) {
 			{"lint output", "## Lint Output"},
 			{"filter output", "## Filter Output"},
 			{"fabric snapshot", "## Fabric State"},
-			{"hail relay", "## Hail Relay"},
 			{"refactor instructions", "## Refactor"},
 			{"task description", "## Task"},
 		}
@@ -147,7 +146,6 @@ func TestContentZoneClassification(t *testing.T) {
 		LabelLintOutput,
 		LabelFilterOutput,
 		LabelFabricSnapshot,
-		LabelHailRelay,
 		LabelRefactorInstructions,
 	}
 

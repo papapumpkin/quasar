@@ -8,10 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/papapumpkin/quasar/internal/bus"
-	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/nebula"
 	"github.com/papapumpkin/quasar/internal/tycho"
-	"github.com/papapumpkin/quasar/internal/ui"
 )
 
 // ── Mock bus/subscription for testing ────────────────────────────────────────
@@ -379,159 +377,6 @@ func TestMapEvent_SingleTaskLifecycle(t *testing.T) {
 			tc.check(t, msg)
 		})
 	}
-}
-
-// ── Hail mapping tests ──────────────────────────────────────────────────────
-
-func TestMapEvent_HailReceived_MapsToMsgHailReceived(t *testing.T) {
-	t.Parallel()
-	sub := &BusSubscriber{done: make(chan struct{})}
-
-	hailInfo := ui.HailInfo{
-		ID:         "h1",
-		Kind:       "decision_needed",
-		Cycle:      2,
-		SourceRole: "coder",
-		Summary:    "Need help",
-		Detail:     "What should I do?",
-		Options:    []string{"A", "B"},
-	}
-
-	t.Run("KindHailReceived", func(t *testing.T) {
-		t.Parallel()
-		ev := bus.Event{
-			Kind: bus.KindHailReceived,
-			Hail: &bus.HailPayload{Discovery: hailInfo},
-		}
-		msg := sub.mapEvent(ev)
-		m, ok := msg.(MsgHailReceived)
-		if !ok {
-			t.Fatalf("expected MsgHailReceived, got %T", msg)
-		}
-		if m.Hail.ID != "h1" || m.Hail.Kind != "decision_needed" || m.Hail.Summary != "Need help" {
-			t.Errorf("HailInfo mismatch: %+v", m.Hail)
-		}
-	})
-
-	t.Run("KindPhaseHailReceived", func(t *testing.T) {
-		t.Parallel()
-		ev := bus.Event{
-			Kind:    bus.KindPhaseHailReceived,
-			PhaseID: "p1",
-			Hail:    &bus.HailPayload{Discovery: hailInfo},
-		}
-		msg := sub.mapEvent(ev)
-		m, ok := msg.(MsgHailReceived)
-		if !ok {
-			t.Fatalf("expected MsgHailReceived, got %T", msg)
-		}
-		if m.PhaseID != "p1" {
-			t.Errorf("PhaseID = %q, want p1", m.PhaseID)
-		}
-		if m.Hail.ID != "h1" {
-			t.Errorf("HailInfo.ID = %q, want h1", m.Hail.ID)
-		}
-	})
-
-	t.Run("KindHailReceived_nil_payload", func(t *testing.T) {
-		t.Parallel()
-		ev := bus.Event{Kind: bus.KindHailReceived}
-		msg := sub.mapEvent(ev)
-		if msg != nil {
-			t.Fatalf("expected nil for nil payload, got %T", msg)
-		}
-	})
-
-	t.Run("KindHailReceived_wrong_type", func(t *testing.T) {
-		t.Parallel()
-		ev := bus.Event{
-			Kind: bus.KindHailReceived,
-			Hail: &bus.HailPayload{Discovery: "not a HailInfo"},
-		}
-		msg := sub.mapEvent(ev)
-		if msg != nil {
-			t.Fatalf("expected nil for wrong Discovery type, got %T", msg)
-		}
-	})
-}
-
-func TestMapEvent_Hail_MapsToMsgHail(t *testing.T) {
-	t.Parallel()
-	sub := &BusSubscriber{done: make(chan struct{})}
-
-	t.Run("valid_discovery", func(t *testing.T) {
-		t.Parallel()
-		ev := bus.Event{
-			Kind:    bus.KindHail,
-			PhaseID: "p1",
-			Hail: &bus.HailPayload{
-				Discovery: fabric.Discovery{Kind: "ambiguity", Detail: "unclear spec"},
-			},
-		}
-		msg := sub.mapEvent(ev)
-		m, ok := msg.(MsgHail)
-		if !ok {
-			t.Fatalf("expected MsgHail, got %T", msg)
-		}
-		if m.PhaseID != "p1" || m.Discovery.Kind != "ambiguity" {
-			t.Errorf("fields mismatch: %+v", m)
-		}
-		if m.ResponseCh != nil {
-			t.Error("expected nil ResponseCh when bus has no ResponseCh")
-		}
-	})
-
-	t.Run("with_response_channel", func(t *testing.T) {
-		t.Parallel()
-		responseCh := make(chan any, 1)
-		ev := bus.Event{
-			Kind:    bus.KindHail,
-			PhaseID: "p1",
-			Hail: &bus.HailPayload{
-				Discovery:  fabric.Discovery{Kind: "decision"},
-				ResponseCh: responseCh,
-			},
-		}
-		msg := sub.mapEvent(ev)
-		m, ok := msg.(MsgHail)
-		if !ok {
-			t.Fatalf("expected MsgHail, got %T", msg)
-		}
-		if m.ResponseCh == nil {
-			t.Fatal("expected non-nil ResponseCh")
-		}
-		// Send a response through the typed channel and verify it arrives.
-		m.ResponseCh <- "approved"
-		select {
-		case got := <-responseCh:
-			if got != "approved" {
-				t.Errorf("forwarded response = %v, want 'approved'", got)
-			}
-		case <-time.After(time.Second):
-			t.Fatal("timeout waiting for forwarded response")
-		}
-	})
-
-	t.Run("nil_payload", func(t *testing.T) {
-		t.Parallel()
-		ev := bus.Event{Kind: bus.KindHail}
-		msg := sub.mapEvent(ev)
-		if msg != nil {
-			t.Fatalf("expected nil, got %T", msg)
-		}
-	})
-
-	t.Run("wrong_discovery_type", func(t *testing.T) {
-		t.Parallel()
-		ev := bus.Event{
-			Kind: bus.KindHail,
-			Hail: &bus.HailPayload{Discovery: 42},
-		}
-		msg := sub.mapEvent(ev)
-		if msg != nil {
-			t.Fatalf("expected nil for wrong Discovery type, got %T", msg)
-		}
-	})
 }
 
 // ── Rich payload mapping tests ───────────────────────────────────────────────
@@ -908,43 +753,6 @@ func TestMapEvent_HealingAttempt(t *testing.T) {
 	}
 }
 
-func TestMapEvent_HailResolved(t *testing.T) {
-	t.Parallel()
-	sub := &BusSubscriber{done: make(chan struct{})}
-
-	t.Run("phase", func(t *testing.T) {
-		t.Parallel()
-		ev := bus.Event{
-			Kind:         bus.KindPhaseHailResolved,
-			PhaseID:      "p1",
-			HailResolved: &bus.HailResolvedPayload{ID: "h1", Resolution: "approved"},
-		}
-		msg := sub.mapEvent(ev)
-		m, ok := msg.(MsgHailResolved)
-		if !ok {
-			t.Fatalf("expected MsgHailResolved, got %T", msg)
-		}
-		if m.PhaseID != "p1" || m.ID != "h1" || m.Resolution != "approved" {
-			t.Errorf("fields mismatch: %+v", m)
-		}
-	})
-
-	t.Run("loop", func(t *testing.T) {
-		t.Parallel()
-		ev := bus.Event{
-			Kind:         bus.KindHailResolved,
-			HailResolved: &bus.HailResolvedPayload{ID: "h2", Resolution: "rejected"},
-		}
-		msg := sub.mapEvent(ev)
-		m, ok := msg.(MsgHailResolved)
-		if !ok {
-			t.Fatalf("expected MsgHailResolved, got %T", msg)
-		}
-		if m.ID != "h2" || m.Resolution != "rejected" {
-			t.Errorf("fields mismatch: %+v", m)
-		}
-	})
-}
 
 func TestMapEvent_StaleWarning(t *testing.T) {
 	t.Parallel()
@@ -1038,28 +846,6 @@ func TestForwardGateAction_ExitsOnDone(t *testing.T) {
 	}
 }
 
-func TestForwardHailResponse_ExitsOnDone(t *testing.T) {
-	t.Parallel()
-	from := make(chan string, 1)
-	to := make(chan any, 1)
-	done := make(chan struct{})
-
-	finished := make(chan struct{})
-	go func() {
-		forwardHailResponse(from, to, done)
-		close(finished)
-	}()
-
-	// Close done without sending a response — goroutine should exit.
-	close(done)
-	select {
-	case <-finished:
-		// Success: goroutine exited.
-	case <-time.After(time.Second):
-		t.Fatal("forwardHailResponse did not exit after done closed")
-	}
-}
-
 func TestForwardGateAction_Forwards(t *testing.T) {
 	t.Parallel()
 	from := make(chan nebula.GateAction, 1)
@@ -1080,35 +866,6 @@ func TestForwardGateAction_Forwards(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for forwarded gate action")
-	}
-
-	select {
-	case <-finished:
-	case <-time.After(time.Second):
-		t.Fatal("goroutine did not exit after forwarding")
-	}
-}
-
-func TestForwardHailResponse_Forwards(t *testing.T) {
-	t.Parallel()
-	from := make(chan string, 1)
-	to := make(chan any, 1)
-	done := make(chan struct{})
-
-	finished := make(chan struct{})
-	go func() {
-		forwardHailResponse(from, to, done)
-		close(finished)
-	}()
-
-	from <- "response"
-	select {
-	case got := <-to:
-		if got != "response" {
-			t.Errorf("forwarded = %v, want 'response'", got)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for forwarded hail response")
 	}
 
 	select {
