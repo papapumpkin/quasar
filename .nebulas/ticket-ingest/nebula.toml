@@ -1,0 +1,46 @@
+[nebula]
+name = "ticket-ingest"
+description = "Add a pluggable ticket-source integration layer so Quasar can generate nebulas from external work-tracking systems (GitHub Issues first; Jira/Linear/etc. later via the same interface). Establish a vanilla-git output safety perimeter with a per-repo pre-commit hook runner. Reserve the .quasar.yaml schema for output-side forge configuration (PR/MR creation lands in Nebula 3 — master-review-pr-loop). This is the foundation nebula on top of which Nebulas 2-4 build."
+
+[defaults]
+type = "task"
+priority = 1
+labels = ["quasar", "integrations", "foundation"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 40.0
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Define a TicketSource interface + Ticket DTO that is forge-agnostic (GitHub Issues, Jira, Linear, etc. can all plug in the same way)",
+    "Implement a GitHub Issues TicketSource backed by the `gh` CLI (read-only; no PR creation in this nebula)",
+    "Implement a Forge interface stub (Name() only) and reserve the .quasar.yaml [forge.*] schema so Nebula 3 can plug in PR creation without a config-schema change",
+    "Build a vanilla-git output safety perimeter in internal/gitops/ that allows pushes only to refs matching quasar/* and rejects every destructive op against base branches",
+    "Provide a per-repo pre-commit hook runner ([pre_commit] in .quasar.yaml) so each project can force formatters/linters to run before every Quasar commit — gofmt, tofu fmt, prettier, ruff format, cargo fmt, etc.",
+    "Resolve integration credentials Docker-friendly: token_env (env var) or token_file (Docker secret mount), with adapter-specific fallbacks (gh delegation for GitHub)",
+    "Extend the architect adapter (internal/nebula/architect.go) to accept a *Ticket as an alternative input to the existing freeform prompt path",
+    "Add a `quasar nebula new <source>:<id>` command that resolves the source via the registry, fetches the ticket, runs the architect, and writes the resulting nebula files",
+    "Add `quasar init` (auto-detect language for [verify]) and `quasar doctor` (validate registered integrations + git config)",
+    "Land docs/safety.md documenting the git-only output perimeter and architecture tests forbidding direct exec.Command(git/gh, …) outside the wrapper packages",
+]
+constraints = [
+    "ALL git write operations (push, branch -D, reset, etc.) MUST go through internal/gitops/. Direct exec.Command(\"git\", \"push\", …) outside that package is a layering violation enforced by arch tests.",
+    "internal/gitops/ uses vanilla git (os/exec around the git binary). Do NOT shell out to `gh` for git operations — that is forge-specific and forks Quasar's forge support. `gh` is allowed only inside internal/integrations/github/ for ticket reading.",
+    "internal/gitops/Push refuses to push if the target ref does not start with `quasar/`. There is no override flag. Refusal is a runtime error, not a panic.",
+    "Tokens MUST NOT be readable from .quasar.yaml. Only token_env and token_file fields are accepted; an inline `token: \"…\"` field must produce a config-load error pointing to the env/file pattern.",
+    "Forge interface in this nebula has ONLY Name() string. Methods for PR creation, comment polling, status sync are reserved for Nebula 3 — do not add them here on speculation.",
+    "No ticket cache in SQLite. Tickets are fetched on demand at `nebula new` time. If caching is needed later, it is added as a decorator around TicketSource, not as a built-in.",
+    "The integration registry uses the source name as the dispatch key (e.g. \"github\", \"jira\"). Registration happens via init() functions in each adapter package. No global mutable state outside the registry itself.",
+    "Pre-commit commands run with the worktree as CWD. They MUST be deterministic and side-effect-limited to file mutations within the repo. Network calls in pre-commit commands are a smell but not enforced.",
+    "Backward compatibility: existing manual nebula authoring (`.nebulas/<name>/` with hand-written manifest + phase files, run via `quasar nebula apply <path>`) continues to work unchanged. The new `quasar nebula new <source>:<id>` flow is additive.",
+    "Existing .quasar.yaml files without the new [integrations.*], [forge.*], [pre_commit] sections continue to load with sensible empty defaults (no integrations available, no pre-commit commands, no forge configured).",
+    "The bootstrap problem from Nebula 0 (Quasar cannot execute the nebula that removes its own dependencies) does NOT apply here — Quasar can apply this nebula via its own engine once Nebula 0 is merged.",
+]
+
+[dependencies]
+requires_nebulae = ["remove-beads"]
