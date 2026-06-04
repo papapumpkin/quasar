@@ -175,7 +175,6 @@ func (l *Loop) resumeLoop(ctx context.Context, cs *CycleState) (*TaskResult, err
 	perAgentBudget := l.perAgentBudget()
 	l.UI.TaskStarted(cs.TaskID, cs.TaskTitle)
 
-
 	for cycle := cs.Cycle; cycle <= l.MaxCycles; cycle++ {
 		cs.Cycle = cycle
 		cs.FilterFixedThisCycle = false
@@ -382,8 +381,6 @@ func (l *Loop) runLoop(ctx context.Context, taskID, taskDescription string) (*Ta
 	// Auto-wire checkpoint hook when CheckpointDir is set and a factory
 	// is provided. The hook is prepended so it runs before other hooks.
 	l.wireCheckpointHook(func() *CycleState { return state })
-
-
 
 	for cycle := 1; cycle <= l.MaxCycles; cycle++ {
 		state.Cycle = cycle
@@ -678,7 +675,6 @@ func (l *Loop) runFilterChecks(ctx context.Context, state *CycleState) (failed b
 	state.Phase = PhaseResolvingIssues
 	state.AllFindings = append(state.AllFindings, state.Findings...)
 
-
 	return true, nil
 }
 
@@ -903,7 +899,7 @@ func (l *Loop) initCycleState(ctx context.Context, taskID, taskDescription strin
 	}
 
 	return &CycleState{
-		TaskID:    taskID,
+		TaskID:        taskID,
 		TaskTitle:     taskDescription,
 		Phase:         PhaseTaskCreated,
 		MaxCycles:     l.MaxCycles,
@@ -1260,7 +1256,6 @@ func (l *Loop) handleApproval(ctx context.Context, state *CycleState) (*TaskResu
 		Report: report,
 	})
 
-
 	l.UI.TaskComplete(state.TaskID, state.TotalCostUSD)
 	return &TaskResult{
 		TotalCostUSD:     state.TotalCostUSD,
@@ -1301,4 +1296,3 @@ func (l *Loop) finalCommitSHA(ctx context.Context, state *CycleState) string {
 	}
 	return ""
 }
-

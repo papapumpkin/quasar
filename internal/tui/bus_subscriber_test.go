@@ -662,7 +662,7 @@ func TestMapEvent_BeadUpdate(t *testing.T) {
 			PhaseID: "p1",
 			BeadTree: &bus.BeadTreePayload{
 				TaskID: "b1",
-				Root:       root,
+				Root:   root,
 			},
 		}
 		msg := sub.mapEvent(ev)
@@ -681,7 +681,7 @@ func TestMapEvent_BeadUpdate(t *testing.T) {
 			Kind: bus.KindBeadUpdate,
 			BeadTree: &bus.BeadTreePayload{
 				TaskID: "b2",
-				Root:       root,
+				Root:   root,
 			},
 		}
 		msg := sub.mapEvent(ev)
@@ -708,7 +708,7 @@ func TestMapEvent_BeadUpdate(t *testing.T) {
 			Kind: bus.KindPhaseBeadUpdate,
 			BeadTree: &bus.BeadTreePayload{
 				TaskID: "b1",
-				Root:       "not-a-bead-info",
+				Root:   "not-a-bead-info",
 			},
 		}
 		if msg := sub.mapEvent(ev); msg != nil {

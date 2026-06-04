@@ -330,16 +330,16 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	wg.tracker = NewPhaseTracker(wg.Nebula.Phases, wg.State)
 	wg.progress = NewProgressReporter(wg.Nebula, wg.State, wg.OnProgress, wg.Metrics, wg.logger())
 	wg.hotReload = NewHotReloader(HotReloaderConfig{
-		Watcher:     wg.Watcher,
-		Nebula:      wg.Nebula,
-		State:       wg.State,
-		Tracker:     wg.tracker,
-		Progress:    wg.progress,
-		OnRefactor:  wg.OnRefactor,
-		OnHotAdd:    wg.OnHotAdd,
-		Logger:      wg.logger(),
-		Mu:          &wg.mu,
-		OutputMu:    &wg.outputMu,
+		Watcher:    wg.Watcher,
+		Nebula:     wg.Nebula,
+		State:      wg.State,
+		Tracker:    wg.tracker,
+		Progress:   wg.progress,
+		OnRefactor: wg.OnRefactor,
+		OnHotAdd:   wg.OnHotAdd,
+		Logger:     wg.logger(),
+		Mu:         &wg.mu,
+		OutputMu:   &wg.outputMu,
 	})
 
 	if wg.Watcher != nil {

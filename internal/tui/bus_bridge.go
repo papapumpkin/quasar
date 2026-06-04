@@ -192,7 +192,7 @@ func (b *BusUIBridge) BeadUpdate(taskBeadID, title, status string, children []ui
 	ev := bus.NewPhase(bus.KindPhaseBeadUpdate, b.phaseID)
 	ev.BeadTree = &bus.BeadTreePayload{
 		TaskID: taskBeadID,
-		Root:       &root,
+		Root:   &root,
 	}
 	b.publish(ev)
 }

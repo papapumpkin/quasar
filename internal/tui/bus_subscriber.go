@@ -308,9 +308,9 @@ func mapPhaseBeadUpdate(ev bus.Event) tea.Msg {
 		return nil
 	}
 	return MsgPhaseBeadUpdate{
-		PhaseID:    ev.PhaseID,
-		TaskID: ev.BeadTree.TaskID,
-		Root:       *root,
+		PhaseID: ev.PhaseID,
+		TaskID:  ev.BeadTree.TaskID,
+		Root:    *root,
 	}
 }
 
@@ -325,7 +325,7 @@ func mapBeadUpdate(ev bus.Event) tea.Msg {
 	}
 	return MsgBeadUpdate{
 		TaskID: ev.BeadTree.TaskID,
-		Root:       *root,
+		Root:   *root,
 	}
 }
 

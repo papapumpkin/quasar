@@ -129,9 +129,9 @@ func TestBuildCoderPromptFabricIntegration(t *testing.T) {
 			FabricEnabled: false,
 		}
 		state := &CycleState{
-			TaskID: "test-1",
-			TaskTitle:  "test task",
-			Cycle:      1,
+			TaskID:    "test-1",
+			TaskTitle: "test task",
+			Cycle:     1,
 		}
 		got := l.buildCoderPrompt(state)
 		if strings.Contains(got, "Fabric Protocol") {
@@ -279,9 +279,9 @@ func TestFabricContextInjectionInPrompts(t *testing.T) {
 		t.Parallel()
 		l := &Loop{Fabric: mf, FabricEnabled: true}
 		state := &CycleState{
-			TaskID: "test-1",
-			TaskTitle:  "implement X",
-			Cycle:      1,
+			TaskID:    "test-1",
+			TaskTitle: "implement X",
+			Cycle:     1,
 		}
 		prompt := l.buildCoderPrompt(state)
 		// buildCoderPrompt itself does NOT inject fabric — that happens in
@@ -295,9 +295,9 @@ func TestFabricContextInjectionInPrompts(t *testing.T) {
 		t.Parallel()
 		l := &Loop{Fabric: mf, FabricEnabled: true}
 		state := &CycleState{
-			TaskID: "test-1",
-			TaskTitle:  "implement X",
-			Cycle:      1,
+			TaskID:    "test-1",
+			TaskTitle: "implement X",
+			Cycle:     1,
 		}
 		prompt := l.buildCoderPrompt(state)
 		snap := l.buildFabricSnapshot(context.Background())
@@ -318,7 +318,7 @@ func TestFabricContextInjectionInPrompts(t *testing.T) {
 		t.Parallel()
 		l := &Loop{Fabric: mf, FabricEnabled: true}
 		state := &CycleState{
-			TaskID:  "test-1",
+			TaskID:      "test-1",
 			TaskTitle:   "implement X",
 			Cycle:       1,
 			CoderOutput: "I made changes to foo.go",
@@ -339,9 +339,9 @@ func TestFabricContextInjectionInPrompts(t *testing.T) {
 		t.Parallel()
 		l := &Loop{FabricEnabled: false}
 		state := &CycleState{
-			TaskID: "test-1",
-			TaskTitle:  "implement X",
-			Cycle:      1,
+			TaskID:    "test-1",
+			TaskTitle: "implement X",
+			Cycle:     1,
 		}
 		prompt := l.buildCoderPrompt(state)
 		if strings.Contains(prompt, "Fabric State") {
@@ -353,9 +353,9 @@ func TestFabricContextInjectionInPrompts(t *testing.T) {
 		t.Parallel()
 		l := &Loop{FabricEnabled: true, Fabric: nil}
 		state := &CycleState{
-			TaskID: "test-1",
-			TaskTitle:  "implement X",
-			Cycle:      1,
+			TaskID:    "test-1",
+			TaskTitle: "implement X",
+			Cycle:     1,
 		}
 		prompt := l.buildCoderPrompt(state)
 		if strings.Contains(prompt, "Fabric State") {

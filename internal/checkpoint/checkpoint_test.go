@@ -32,7 +32,7 @@ func TestFromCycleStateToCycleStateRoundTrip(t *testing.T) {
 		{
 			name: "mid-cycle state with findings",
 			cs: &loop.CycleState{
-				TaskID:   "bead-123",
+				TaskID:       "bead-123",
 				TaskTitle:    "Implement feature X",
 				Phase:        loop.PhaseReviewing,
 				Cycle:        2,
@@ -79,7 +79,7 @@ func TestFromCycleStateToCycleStateRoundTrip(t *testing.T) {
 		{
 			name: "multi-cycle state with commits",
 			cs: &loop.CycleState{
-				TaskID:    "bead-456",
+				TaskID:        "bead-456",
 				TaskTitle:     "Fix bug Y",
 				Phase:         loop.PhaseCodeComplete,
 				Cycle:         3,
@@ -153,7 +153,7 @@ func TestTOMLRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	cs := &loop.CycleState{
-		TaskID:    "bead-toml",
+		TaskID:        "bead-toml",
 		TaskTitle:     "TOML round-trip test",
 		Phase:         loop.PhaseCoding,
 		Cycle:         1,

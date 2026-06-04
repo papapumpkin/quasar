@@ -334,8 +334,8 @@ func TestMsgPhaseBeadUpdatePopulatesModel(t *testing.T) {
 
 	var tm tea.Model = m
 	tm, _ = tm.Update(MsgPhaseBeadUpdate{
-		PhaseID:    "setup",
-		TaskID: "bead-2",
+		PhaseID: "setup",
+		TaskID:  "bead-2",
 		Root: BeadInfo{
 			ID:     "bead-2",
 			Title:  "Setup task",

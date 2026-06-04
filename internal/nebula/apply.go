@@ -3,17 +3,7 @@ package nebula
 import (
 	"context"
 	"fmt"
-	"strconv"
 )
-
-// priorityStr renders an integer priority as a string suitable for a tracking
-// system; zero values render as empty string (meaning "no priority set").
-func priorityStr(p int) string {
-	if p == 0 {
-		return ""
-	}
-	return strconv.Itoa(p)
-}
 
 // Apply executes a plan's actions, updating phase tracking state and persisting
 // after each successful action.

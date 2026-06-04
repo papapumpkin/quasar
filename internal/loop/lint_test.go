@@ -310,7 +310,7 @@ func TestBuildLintFixPrompt(t *testing.T) {
 
 	l := &Loop{}
 	state := &CycleState{
-		TaskID: "bead-42",
+		TaskID:     "bead-42",
 		TaskTitle:  "fix the bug",
 		LintOutput: "main.go:10: unused variable x",
 	}
@@ -338,7 +338,7 @@ func TestBuildReviewerPromptWithLintOutput(t *testing.T) {
 		t.Parallel()
 		l := &Loop{}
 		state := &CycleState{
-			TaskID:  "bead-1",
+			TaskID:      "bead-1",
 			TaskTitle:   "task",
 			CoderOutput: "done",
 			LintOutput:  "",
@@ -356,7 +356,7 @@ func TestBuildReviewerPromptWithLintOutput(t *testing.T) {
 		t.Parallel()
 		l := &Loop{}
 		state := &CycleState{
-			TaskID:  "bead-1",
+			TaskID:      "bead-1",
 			TaskTitle:   "task",
 			CoderOutput: "done",
 			LintOutput:  "main.go:5: error return value not checked",

@@ -13,14 +13,14 @@ import (
 // HotReloader handles in-flight file watching, phase modification, hot-add
 // of new phases into the live DAG, and phase loop registration for refactors.
 type HotReloader struct {
-	watcher *Watcher
-	nebula  *Nebula
-	state       *State
-	tracker     *PhaseTracker
-	progress    *ProgressReporter
-	onRefactor  func(phaseID string, pending bool)
-	onHotAdd    HotAddFunc
-	logger      io.Writer
+	watcher    *Watcher
+	nebula     *Nebula
+	state      *State
+	tracker    *PhaseTracker
+	progress   *ProgressReporter
+	onRefactor func(phaseID string, pending bool)
+	onHotAdd   HotAddFunc
+	logger     io.Writer
 
 	// mu is a pointer to the WorkerGroup's mutex so all collaborators
 	// share the same lock for coordinating access to shared state.

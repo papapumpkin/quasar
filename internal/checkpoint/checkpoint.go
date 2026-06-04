@@ -44,7 +44,7 @@ type Checkpoint struct {
 	GitSHA     string    `toml:"git_sha"`     // HEAD at checkpoint time
 
 	// CycleState fields (mirrored from loop.CycleState).
-	TaskID    string   `toml:"task_bead_id"`
+	TaskID        string   `toml:"task_bead_id"`
 	TaskTitle     string   `toml:"task_title"`
 	Cycle         int      `toml:"cycle"`
 	MaxCycles     int      `toml:"max_cycles"`
@@ -83,7 +83,7 @@ func FromCycleState(cs *loop.CycleState, phaseID, nebulaName, gitSHA string) *Ch
 		CreatedAt:  time.Now(),
 		GitSHA:     gitSHA,
 
-		TaskID:    cs.TaskID,
+		TaskID:        cs.TaskID,
 		TaskTitle:     cs.TaskTitle,
 		Cycle:         cs.Cycle,
 		MaxCycles:     cs.MaxCycles,
@@ -117,7 +117,7 @@ func FromCycleState(cs *loop.CycleState, phaseID, nebulaName, gitSHA string) *Ch
 // (lastCycleSHA, bridgedDiscoveryIDs, cache stats, etc.) are zeroed.
 func (c *Checkpoint) ToCycleState() *loop.CycleState {
 	cs := &loop.CycleState{
-		TaskID:    c.TaskID,
+		TaskID:        c.TaskID,
 		TaskTitle:     c.TaskTitle,
 		Cycle:         c.Cycle,
 		MaxCycles:     c.MaxCycles,

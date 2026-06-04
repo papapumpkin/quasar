@@ -315,14 +315,14 @@ type BeadInfo struct {
 // MsgBeadUpdate carries the current bead hierarchy for a task (loop mode).
 type MsgBeadUpdate struct {
 	TaskID string
-	Root       BeadInfo
+	Root   BeadInfo
 }
 
 // MsgPhaseBeadUpdate carries bead state for a specific phase (nebula mode).
 type MsgPhaseBeadUpdate struct {
-	PhaseID    string
-	TaskID string
-	Root       BeadInfo
+	PhaseID string
+	TaskID  string
+	Root    BeadInfo
 }
 
 // MsgSplashDone signals that the splash screen timer has elapsed.

@@ -14,7 +14,7 @@ func TestBuildReviewerPrompt_NoPriorFindings(t *testing.T) {
 
 	l := &Loop{}
 	state := &CycleState{
-		TaskID:  "test-123",
+		TaskID:      "test-123",
 		TaskTitle:   "Fix the widget",
 		Cycle:       1,
 		CoderOutput: "I fixed the widget by updating foo.go.",
@@ -43,7 +43,7 @@ func TestBuildReviewerPrompt_WithPriorFindings(t *testing.T) {
 
 	l := &Loop{}
 	state := &CycleState{
-		TaskID:  "test-456",
+		TaskID:      "test-456",
 		TaskTitle:   "Refactor auth module",
 		Cycle:       2,
 		CoderOutput: "Applied fixes from reviewer feedback.",
@@ -111,7 +111,7 @@ func TestBuildReviewerPrompt_EmptyAllFindings(t *testing.T) {
 
 	l := &Loop{}
 	state := &CycleState{
-		TaskID:  "test-789",
+		TaskID:      "test-789",
 		TaskTitle:   "Add tests",
 		Cycle:       1,
 		CoderOutput: "Added unit tests.",
@@ -196,7 +196,7 @@ func TestBuildReviewerPrompt_WithLintOutput(t *testing.T) {
 
 	l := &Loop{}
 	state := &CycleState{
-		TaskID:  "test-lint",
+		TaskID:      "test-lint",
 		TaskTitle:   "Fix linting",
 		Cycle:       2,
 		CoderOutput: "Applied fixes.",
@@ -477,7 +477,7 @@ func TestBuildLintFixPrompt_DelegatesToFilterFix(t *testing.T) {
 
 	l := &Loop{MaxBudgetUSD: 10.0, MaxCycles: 5}
 	state := &CycleState{
-		TaskID: "bead-lint-delegate",
+		TaskID:     "bead-lint-delegate",
 		TaskTitle:  "fix lint",
 		LintOutput: "internal/loop/loop.go:42:15: unused import (unused)",
 	}
@@ -506,7 +506,7 @@ func TestBuildLintFixPrompt_EmptyLintOutput(t *testing.T) {
 
 	l := &Loop{}
 	state := &CycleState{
-		TaskID: "bead-empty-lint",
+		TaskID:     "bead-empty-lint",
 		LintOutput: "",
 	}
 

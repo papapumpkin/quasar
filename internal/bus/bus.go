@@ -221,7 +221,7 @@ type ProgressPayload struct {
 // BeadTreePayload carries a bead hierarchy snapshot.
 type BeadTreePayload struct {
 	TaskID string
-	Root       any // *tui.BeadInfo — kept as any to avoid import cycle
+	Root   any // *tui.BeadInfo — kept as any to avoid import cycle
 }
 
 // DonePayload carries completion results for a nebula run.

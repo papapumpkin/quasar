@@ -14,7 +14,7 @@ import (
 // makeState returns a sample CycleState for testing.
 func makeState() *loop.CycleState {
 	return &loop.CycleState{
-		TaskID:    "bead-hook-test",
+		TaskID:        "bead-hook-test",
 		TaskTitle:     "Test hook checkpoint",
 		Phase:         loop.PhaseReviewing,
 		Cycle:         2,
