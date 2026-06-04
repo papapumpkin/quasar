@@ -43,4 +43,8 @@ constraints = [
 ]
 
 [dependencies]
-requires_nebulae = ["remove-beads"]
+# Nebula 0 (remove-beads) was executed manually rather than via the engine,
+# so no `nebula.state.toml` exists for it to satisfy a `requires_nebulae`
+# check. The dependency is left documented here for the design record but
+# not enforced.
+requires_nebulae = []
