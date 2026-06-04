@@ -1,19 +1,25 @@
 version = 1
 nebula_name = 'ticket-ingest'
-total_cost_usd = 3.9896605000000003
+total_cost_usd = 7.964806499999999
 
 [phases]
 [phases.architect-ticket-adapter]
 bead_id = 'architect-ticket-adapter'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-04T15:19:11.067795-04:00
-updated_at = 2026-06-04T19:38:28.000468-04:00
+updated_at = 2026-06-04T19:49:37.873107-04:00
+
+[phases.architect-ticket-adapter.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = "The architect gains a ticket-driven input path that renders an `integrations.Ticket` into the spec's template and reuses the shared `runGenerate` back-half; correct, well-tested, and all of `go build`/`go vet`/`go test ./...` pass — approved with only minor non-blocking notes."
 
 [phases.github-ticket-source]
 bead_id = 'github-ticket-source'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-04T15:19:11.067316-04:00
-updated_at = 2026-06-04T19:28:47.477887-04:00
+updated_at = 2026-06-04T19:49:37.889565-04:00
 
 [phases.gitops-and-pre-commit]
 bead_id = 'gitops-and-pre-commit'
