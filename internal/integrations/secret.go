@@ -63,6 +63,12 @@ func (OSSecretResolver) Resolve(spec SecretSpec) (string, error) {
 // looser permissions yield a *SecretLooseError so misconfigured containers
 // surface the issue immediately. Returned secrets are trimmed of trailing
 // newlines (common in Docker secret files).
+//
+// If File is set but cannot be read securely (missing, or looser than
+// 0600/0400), that is a terminal error — there is NO fallback to Env. An
+// explicitly configured token_file that is broken should fail loudly rather
+// than silently degrade to the environment, which would mask the exact
+// container misconfiguration the permission check exists to surface.
 func ResolveSecret(spec SecretSpec) (string, error) {
 	if spec.File != "" {
 		return readSecretFile(spec.File)
