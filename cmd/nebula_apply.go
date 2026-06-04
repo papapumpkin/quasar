@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/papapumpkin/quasar/internal/agent"
-	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/bus"
 	"github.com/papapumpkin/quasar/internal/checkpoint"
 	"github.com/papapumpkin/quasar/internal/claude"
@@ -47,8 +46,7 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 
 	printer := ui.New()
 	invoker := claude.NewInvoker(ecfg.ClaudePath, ecfg.Verbose)
-	client := &beads.CLI{BeadsPath: ecfg.BeadsPath, Verbose: ecfg.Verbose}
-	engine := nebula.NewEngine(ecfg, nil, invoker, client)
+	engine := nebula.NewEngine(ecfg, nil, invoker)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -106,9 +104,9 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	engine.SetFabric(fc)
 
 	if ecfg.UseTUI {
-		return runApplyWithTUI(ctx, cancel, engine, invoker, client, ecfg, printer, projectCtx, fc)
+		return runApplyWithTUI(ctx, cancel, engine, invoker, ecfg, printer, projectCtx, fc)
 	}
-	return runApplyWithStderr(ctx, cancel, engine, invoker, client, ecfg, printer, projectCtx)
+	return runApplyWithStderr(ctx, cancel, engine, invoker, ecfg, printer, projectCtx)
 }
 
 // resolveEngineConfig reads CLI flags, Viper config, and derives the
@@ -218,14 +216,13 @@ func runApplyWithTUI(
 	cancel context.CancelFunc,
 	engine *nebula.Engine,
 	invoker *claude.Invoker,
-	client beads.Client,
 	ecfg nebula.EngineConfig,
 	printer *ui.Printer,
 	projectCtx string,
 	fc *fabricComponents,
 ) error {
 	for {
-		appModel, err := executeTUIRun(ctx, cancel, engine, invoker, client, ecfg, projectCtx)
+		appModel, err := executeTUIRun(ctx, cancel, engine, invoker, ecfg, projectCtx)
 		if err != nil {
 			return err
 		}
@@ -233,7 +230,7 @@ func runApplyWithTUI(
 		// Handle next-nebula selection.
 		if appModel.NextNebula != "" {
 			engine, ecfg, fc, ctx, cancel, err = prepareNextNebula(
-				appModel.NextNebula, ecfg, invoker, client, fc,
+				appModel.NextNebula, ecfg, invoker, fc,
 			)
 			if err != nil {
 				printer.Error(err.Error())
@@ -261,7 +258,6 @@ func executeTUIRun(
 	cancel context.CancelFunc,
 	engine *nebula.Engine,
 	invoker *claude.Invoker,
-	client beads.Client,
 	ecfg nebula.EngineConfig,
 	projectCtx string,
 ) (tui.AppModel, error) {
@@ -287,7 +283,7 @@ func executeTUIRun(
 	}
 
 	// Build worker options for the TUI path.
-	wgOpts := buildTUIWorkerOpts(engine, invoker, client, ecfg, tuiProgram, eventBus, projectCtx)
+	wgOpts := buildTUIWorkerOpts(engine, invoker, ecfg, tuiProgram, eventBus, projectCtx)
 
 	// Resume checkpoint handling.
 	cpDir := ecfg.NebulaDir
@@ -336,7 +332,6 @@ func runApplyWithStderr(
 	cancel context.CancelFunc,
 	engine *nebula.Engine,
 	invoker *claude.Invoker,
-	client beads.Client,
 	ecfg nebula.EngineConfig,
 	printer *ui.Printer,
 	projectCtx string,
@@ -351,7 +346,7 @@ func runApplyWithStderr(
 		Invoker:           invoker,
 		UI:                printer,
 		Git:               git,
-		Hooks:             []loop.Hook{&loop.BeadHook{Beads: client, UI: printer}},
+		Hooks:             []loop.Hook{},
 		Linter:            loop.NewLinter(ecfg.LintCommands, workDir),
 		MaxCycles:         ecfg.MaxReviewCycles,
 		MaxBudgetUSD:      ecfg.MaxBudgetUSD,
@@ -418,7 +413,6 @@ func runApplyWithStderr(
 func buildTUIWorkerOpts(
 	engine *nebula.Engine,
 	invoker *claude.Invoker,
-	client beads.Client,
 	ecfg nebula.EngineConfig,
 	tuiProgram *tui.Program,
 	eventBus *bus.MemoryBus,
@@ -429,7 +423,6 @@ func buildTUIWorkerOpts(
 	runner := &tuiLoopAdapter{
 		program:          tuiProgram,
 		invoker:          invoker,
-		beads:            client,
 		git:              git,
 		linter:           loop.NewLinter(ecfg.LintCommands, workDir),
 		maxCycles:        ecfg.MaxReviewCycles,
@@ -462,7 +455,6 @@ func prepareNextNebula(
 	nextDir string,
 	ecfg nebula.EngineConfig,
 	invoker *claude.Invoker,
-	client beads.Client,
 	prevFC *fabricComponents,
 ) (*nebula.Engine, nebula.EngineConfig, *fabricComponents, context.Context, context.CancelFunc, error) {
 	nextEcfg := ecfg
@@ -471,7 +463,7 @@ func prepareNextNebula(
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	engine := nebula.NewEngine(nextEcfg, nil, invoker, client)
+	engine := nebula.NewEngine(nextEcfg, nil, invoker)
 	if err := engine.Load(ctx); err != nil {
 		cancel()
 		return nil, ecfg, prevFC, nil, nil, err

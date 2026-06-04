@@ -314,14 +314,14 @@ type BeadInfo struct {
 
 // MsgBeadUpdate carries the current bead hierarchy for a task (loop mode).
 type MsgBeadUpdate struct {
-	TaskBeadID string
+	TaskID string
 	Root       BeadInfo
 }
 
 // MsgPhaseBeadUpdate carries bead state for a specific phase (nebula mode).
 type MsgPhaseBeadUpdate struct {
 	PhaseID    string
-	TaskBeadID string
+	TaskID string
 	Root       BeadInfo
 }
 

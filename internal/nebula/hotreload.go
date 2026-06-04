@@ -7,16 +7,14 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/dag"
 )
 
 // HotReloader handles in-flight file watching, phase modification, hot-add
 // of new phases into the live DAG, and phase loop registration for refactors.
 type HotReloader struct {
-	watcher     *Watcher
-	beadsClient beads.Client
-	nebula      *Nebula
+	watcher *Watcher
+	nebula  *Nebula
 	state       *State
 	tracker     *PhaseTracker
 	progress    *ProgressReporter
@@ -41,24 +39,22 @@ type HotReloader struct {
 
 // HotReloaderConfig holds the configuration for creating a HotReloader.
 type HotReloaderConfig struct {
-	Watcher     *Watcher
-	BeadsClient beads.Client
-	Nebula      *Nebula
-	State       *State
-	Tracker     *PhaseTracker
-	Progress    *ProgressReporter
-	OnRefactor  func(phaseID string, pending bool)
-	OnHotAdd    HotAddFunc
-	Logger      io.Writer
-	Mu          *sync.Mutex
-	OutputMu    *sync.Mutex
+	Watcher    *Watcher
+	Nebula     *Nebula
+	State      *State
+	Tracker    *PhaseTracker
+	Progress   *ProgressReporter
+	OnRefactor func(phaseID string, pending bool)
+	OnHotAdd   HotAddFunc
+	Logger     io.Writer
+	Mu         *sync.Mutex
+	OutputMu   *sync.Mutex
 }
 
 // NewHotReloader creates a HotReloader with the given configuration.
 func NewHotReloader(cfg HotReloaderConfig) *HotReloader {
 	return &HotReloader{
 		watcher:          cfg.Watcher,
-		beadsClient:      cfg.BeadsClient,
 		nebula:           cfg.Nebula,
 		state:            cfg.State,
 		tracker:          cfg.Tracker,
@@ -197,32 +193,8 @@ func (hr *HotReloader) handlePhaseAdded(ctx context.Context, change Change) {
 	hr.nebula.Phases = append(hr.nebula.Phases, phase)
 	hr.livePhasesByID[phase.ID] = &hr.nebula.Phases[len(hr.nebula.Phases)-1]
 
-	// Create a bead for the hot-added phase so that executePhase can use it.
-	beadID := ""
-	if hr.beadsClient != nil {
-		hr.mu.Unlock()
-		var createErr error
-		beadID, createErr = hr.beadsClient.Create(ctx, phase.Title, beads.CreateOpts{
-			Description: phase.Body,
-			Type:        phase.Type,
-			Labels:      phase.Labels,
-			Assignee:    phase.Assignee,
-			Priority:    priorityStr(phase.Priority),
-		})
-		hr.mu.Lock()
-		if createErr != nil {
-			fmt.Fprintf(hr.logger, "warning: failed to create bead for hot-added phase %q: %v\n", phase.ID, createErr)
-			hr.tracker.failed[phase.ID] = true
-			hr.tracker.done[phase.ID] = true
-			hr.state.SetPhaseState(phase.ID, "", PhaseStatusFailed)
-			hr.progress.SaveState()
-			hr.checkHotAddedReady()
-			return
-		}
-	}
-
-	// Create state entry with bead ID.
-	hr.state.SetPhaseState(phase.ID, beadID, PhaseStatusPending)
+	// Create state entry using the phase ID as the tracking key.
+	hr.state.SetPhaseState(phase.ID, phase.ID, PhaseStatusPending)
 	hr.progress.SaveState()
 
 	// Update progress counts.

@@ -129,7 +129,7 @@ func TestBuildCoderPromptFabricIntegration(t *testing.T) {
 			FabricEnabled: false,
 		}
 		state := &CycleState{
-			TaskBeadID: "test-1",
+			TaskID: "test-1",
 			TaskTitle:  "test task",
 			Cycle:      1,
 		}
@@ -279,7 +279,7 @@ func TestFabricContextInjectionInPrompts(t *testing.T) {
 		t.Parallel()
 		l := &Loop{Fabric: mf, FabricEnabled: true}
 		state := &CycleState{
-			TaskBeadID: "test-1",
+			TaskID: "test-1",
 			TaskTitle:  "implement X",
 			Cycle:      1,
 		}
@@ -295,7 +295,7 @@ func TestFabricContextInjectionInPrompts(t *testing.T) {
 		t.Parallel()
 		l := &Loop{Fabric: mf, FabricEnabled: true}
 		state := &CycleState{
-			TaskBeadID: "test-1",
+			TaskID: "test-1",
 			TaskTitle:  "implement X",
 			Cycle:      1,
 		}
@@ -318,7 +318,7 @@ func TestFabricContextInjectionInPrompts(t *testing.T) {
 		t.Parallel()
 		l := &Loop{Fabric: mf, FabricEnabled: true}
 		state := &CycleState{
-			TaskBeadID:  "test-1",
+			TaskID:  "test-1",
 			TaskTitle:   "implement X",
 			Cycle:       1,
 			CoderOutput: "I made changes to foo.go",
@@ -339,7 +339,7 @@ func TestFabricContextInjectionInPrompts(t *testing.T) {
 		t.Parallel()
 		l := &Loop{FabricEnabled: false}
 		state := &CycleState{
-			TaskBeadID: "test-1",
+			TaskID: "test-1",
 			TaskTitle:  "implement X",
 			Cycle:      1,
 		}
@@ -353,7 +353,7 @@ func TestFabricContextInjectionInPrompts(t *testing.T) {
 		t.Parallel()
 		l := &Loop{FabricEnabled: true, Fabric: nil}
 		state := &CycleState{
-			TaskBeadID: "test-1",
+			TaskID: "test-1",
 			TaskTitle:  "implement X",
 			Cycle:      1,
 		}

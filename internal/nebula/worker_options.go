@@ -5,7 +5,6 @@ import (
 	"io"
 
 	"github.com/papapumpkin/quasar/internal/agent"
-	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/bus"
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
@@ -94,11 +93,6 @@ func WithPrompter(p GatePrompter) Option {
 // WithDashboard enables dashboard output coordination in watch mode.
 func WithDashboard(d *Dashboard) Option {
 	return func(wg *WorkerGroup) { wg.Dashboard = d }
-}
-
-// WithBeadsClient sets the beads client for hot-added phase bead creation.
-func WithBeadsClient(c beads.Client) Option {
-	return func(wg *WorkerGroup) { wg.BeadsClient = c }
 }
 
 // WithGlobalCycles sets the default max review cycles for phases.

@@ -6,7 +6,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/claude"
 	"github.com/papapumpkin/quasar/internal/config"
 )
@@ -27,14 +26,6 @@ var validateCmd = &cobra.Command{
 			ok = false
 		} else {
 			fmt.Fprintln(os.Stderr, "✓ claude CLI found")
-		}
-
-		beadsClient := &beads.CLI{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
-		if err := beadsClient.Validate(); err != nil {
-			fmt.Fprintf(os.Stderr, "✗ beads: %v\n", err)
-			ok = false
-		} else {
-			fmt.Fprintln(os.Stderr, "✓ beads CLI found")
 		}
 
 		if !ok {

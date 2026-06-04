@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 
 	"github.com/papapumpkin/quasar/internal/agent"
-	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/bus"
 	"github.com/papapumpkin/quasar/internal/dag"
 	"github.com/papapumpkin/quasar/internal/fabric"
@@ -45,7 +44,6 @@ type WorkerGroup struct {
 	Gater               Gater             // nil = built from Prompter + manifest at Run time
 	Prompter            GatePrompter      // used to build Gater if Gater is nil
 	Dashboard           *Dashboard        // nil = no dashboard; used to coordinate watch-mode output
-	BeadsClient         beads.Client      // nil = hot-added phases cannot create beads
 	Fabric              fabric.Fabric     // nil = no fabric (legacy behavior)
 	Poller              fabric.Poller     // nil = skip polling (legacy behavior)
 	Publisher           *fabric.Publisher // nil = no entanglement publishing
@@ -333,7 +331,6 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	wg.progress = NewProgressReporter(wg.Nebula, wg.State, wg.OnProgress, wg.Metrics, wg.logger())
 	wg.hotReload = NewHotReloader(HotReloaderConfig{
 		Watcher:     wg.Watcher,
-		BeadsClient: wg.BeadsClient,
 		Nebula:      wg.Nebula,
 		State:       wg.State,
 		Tracker:     wg.tracker,

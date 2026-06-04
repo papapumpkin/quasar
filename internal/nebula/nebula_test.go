@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/papapumpkin/quasar/internal/agent"
-	"github.com/papapumpkin/quasar/internal/beads"
 )
 
 // --- Parse tests ---
@@ -350,60 +349,6 @@ updated_at = 2025-01-01T00:00:00Z
 	}
 }
 
-// --- Mock beads client for plan/apply tests ---
-
-type mockBeadsClient struct {
-	created   map[string]string // title → id
-	shown     map[string]*beads.Bead
-	closed    map[string]string
-	nextID    int
-	createErr error
-}
-
-func newMockBeadsClient() *mockBeadsClient {
-	return &mockBeadsClient{
-		created: make(map[string]string),
-		shown:   make(map[string]*beads.Bead),
-		closed:  make(map[string]string),
-	}
-}
-
-func (m *mockBeadsClient) Create(_ context.Context, title string, opts beads.CreateOpts) (string, error) {
-	if m.createErr != nil {
-		return "", m.createErr
-	}
-	m.nextID++
-	id := "bead-" + title
-	m.created[title] = id
-	m.shown[id] = &beads.Bead{ID: id, Title: title}
-	return id, nil
-}
-
-func (m *mockBeadsClient) Show(_ context.Context, id string) (*beads.Bead, error) {
-	b, ok := m.shown[id]
-	if !ok {
-		return nil, errors.New("not found")
-	}
-	return b, nil
-}
-
-func (m *mockBeadsClient) Update(_ context.Context, id string, opts beads.UpdateOpts) error {
-	return nil
-}
-
-func (m *mockBeadsClient) Close(_ context.Context, id string, reason string) error {
-	m.closed[id] = reason
-	return nil
-}
-
-func (m *mockBeadsClient) AddComment(_ context.Context, id string, body string) error {
-	return nil
-}
-
-func (m *mockBeadsClient) Validate() error {
-	return nil
-}
-
 // --- Plan tests ---
 
 func TestBuildPlan_NewNebula(t *testing.T) {
@@ -413,9 +358,8 @@ func TestBuildPlan_NewNebula(t *testing.T) {
 	}
 
 	state := &State{Version: 1, Phases: make(map[string]*PhaseState)}
-	client := newMockBeadsClient()
 
-	plan, err := BuildPlan(context.Background(), n, state, client)
+	plan, err := BuildPlan(context.Background(), n, state)
 	if err != nil {
 		t.Fatalf("BuildPlan failed: %v", err)
 	}
@@ -424,7 +368,6 @@ func TestBuildPlan_NewNebula(t *testing.T) {
 		t.Errorf("expected plan name 'test-nebula', got %q", plan.NebulaName)
 	}
 
-	// All 3 phases should be creates.
 	creates := 0
 	for _, a := range plan.Actions {
 		if a.Type == ActionCreate {
@@ -445,13 +388,11 @@ func TestBuildPlan_LockedPhase(t *testing.T) {
 	state := &State{
 		Version: 1,
 		Phases: map[string]*PhaseState{
-			"locked": {BeadID: "bead-123", Status: PhaseStatusInProgress},
+			"locked": {BeadID: "locked", Status: PhaseStatusInProgress},
 		},
 	}
-	client := newMockBeadsClient()
-	client.shown["bead-123"] = &beads.Bead{ID: "bead-123"}
 
-	plan, err := BuildPlan(context.Background(), n, state, client)
+	plan, err := BuildPlan(context.Background(), n, state)
 	if err != nil {
 		t.Fatalf("BuildPlan failed: %v", err)
 	}
@@ -473,12 +414,11 @@ func TestBuildPlan_FailedPhase(t *testing.T) {
 	state := &State{
 		Version: 1,
 		Phases: map[string]*PhaseState{
-			"fail-phase": {BeadID: "bead-old", Status: PhaseStatusFailed},
+			"fail-phase": {BeadID: "fail-phase", Status: PhaseStatusFailed},
 		},
 	}
-	client := newMockBeadsClient()
 
-	plan, err := BuildPlan(context.Background(), n, state, client)
+	plan, err := BuildPlan(context.Background(), n, state)
 	if err != nil {
 		t.Fatalf("BuildPlan failed: %v", err)
 	}
@@ -496,18 +436,16 @@ func TestBuildPlan_FailedPhase(t *testing.T) {
 
 // --- Apply tests ---
 
-func TestApply_CreatesBeads(t *testing.T) {
+func TestApply_CreatesPhaseTracking(t *testing.T) {
 	n, err := Load("testdata/valid")
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
 
-	// Use a temp dir so we don't write state into testdata.
 	tmpDir := t.TempDir()
 	n.Dir = tmpDir
 
 	state := &State{Version: 1, Phases: make(map[string]*PhaseState)}
-	client := newMockBeadsClient()
 
 	plan := &Plan{
 		NebulaName: "test-nebula",
@@ -518,15 +456,10 @@ func TestApply_CreatesBeads(t *testing.T) {
 		},
 	}
 
-	if err := Apply(context.Background(), plan, n, state, client); err != nil {
+	if err := Apply(context.Background(), plan, n, state); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
-	if len(client.created) != 3 {
-		t.Errorf("expected 3 beads created, got %d", len(client.created))
-	}
-
-	// State should have all 3 phases.
 	if len(state.Phases) != 3 {
 		t.Errorf("expected 3 phases in state, got %d", len(state.Phases))
 	}
@@ -541,62 +474,8 @@ func TestApply_CreatesBeads(t *testing.T) {
 			t.Errorf("phase %q status: %s, expected created", id, ps.Status)
 		}
 		if ps.BeadID == "" {
-			t.Errorf("phase %q has empty bead ID", id)
+			t.Errorf("phase %q has empty tracking ID", id)
 		}
-	}
-}
-
-func TestApply_RetriesFailedPhase(t *testing.T) {
-	n, err := Load("testdata/valid")
-	if err != nil {
-		t.Fatalf("Load failed: %v", err)
-	}
-
-	// Use a temp dir so we don't write state into testdata.
-	tmpDir := t.TempDir()
-	n.Dir = tmpDir
-
-	oldBeadID := "bead-old-failed"
-	state := &State{
-		Version: 1,
-		Phases: map[string]*PhaseState{
-			"first-task": {BeadID: oldBeadID, Status: PhaseStatusFailed},
-		},
-	}
-	client := newMockBeadsClient()
-
-	plan := &Plan{
-		NebulaName: "test-nebula",
-		Actions: []Action{
-			{PhaseID: "first-task", Type: ActionRetry, Reason: "retrying failed phase"},
-		},
-	}
-
-	if err := Apply(context.Background(), plan, n, state, client); err != nil {
-		t.Fatalf("Apply failed: %v", err)
-	}
-
-	// A new bead should have been created.
-	if len(client.created) != 1 {
-		t.Errorf("expected 1 bead created for retry, got %d", len(client.created))
-	}
-
-	ps, ok := state.Phases["first-task"]
-	if !ok {
-		t.Fatal("phase 'first-task' not in state after retry")
-	}
-
-	// The bead ID should be different from the old failed bead.
-	if ps.BeadID == oldBeadID {
-		t.Errorf("expected new bead ID after retry, but still has old ID %q", oldBeadID)
-	}
-	if ps.BeadID == "" {
-		t.Error("expected non-empty bead ID after retry")
-	}
-
-	// Status should be reset to created (not failed).
-	if ps.Status != PhaseStatusCreated {
-		t.Errorf("expected status %q after retry, got %q", PhaseStatusCreated, ps.Status)
 	}
 }
 

@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 
 	"github.com/papapumpkin/quasar/internal/agent"
-	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/bus"
 	"github.com/papapumpkin/quasar/internal/checkpoint"
 	"github.com/papapumpkin/quasar/internal/fabric"
@@ -120,7 +119,6 @@ func (a *loopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData any,
 type tuiLoopAdapter struct {
 	program          *tui.Program
 	invoker          agent.Invoker
-	beads            beads.Client
 	git              loop.CycleCommitter
 	linter           loop.Linter
 	maxCycles        int
@@ -158,7 +156,7 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 		Invoker:           a.invoker,
 		UI:                phaseUI,
 		Git:               a.git,
-		Hooks:             []loop.Hook{&loop.BeadHook{Beads: a.beads, UI: phaseUI}},
+		Hooks:             []loop.Hook{},
 		Linter:            a.linter,
 		MaxCycles:         a.maxCycles,
 		MaxBudgetUSD:      a.maxBudget,
@@ -258,7 +256,7 @@ func (a *tuiLoopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData a
 		Invoker:           a.invoker,
 		UI:                phaseUI,
 		Git:               a.git,
-		Hooks:             []loop.Hook{&loop.BeadHook{Beads: a.beads, UI: phaseUI}},
+		Hooks:             []loop.Hook{},
 		Linter:            a.linter,
 		MaxCycles:         a.maxCycles,
 		MaxBudgetUSD:      a.maxBudget,
@@ -323,7 +321,7 @@ func (a *tuiLoopAdapter) GenerateCheckpoint(ctx context.Context, beadID, phaseDe
 		Invoker:          a.invoker,
 		UI:               phaseUI,
 		Git:              a.git,
-		Hooks:            []loop.Hook{&loop.BeadHook{Beads: a.beads, UI: phaseUI}},
+		Hooks:            []loop.Hook{},
 		Linter:           a.linter,
 		MaxCycles:        a.maxCycles,
 		MaxBudgetUSD:     a.maxBudget,

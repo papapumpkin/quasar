@@ -5,7 +5,7 @@ type Phase int
 
 const (
 	PhaseIdle            Phase = iota // No work started.
-	PhaseBeadCreated                  // Task bead created, ready to begin.
+	PhaseTaskCreated                  // Task created, ready to begin.
 	PhaseCoding                       // Coder agent is running.
 	PhaseCodeComplete                 // Coder finished, awaiting review.
 	PhaseLinting                      // Running lint checks after coder pass.
@@ -22,8 +22,8 @@ func (p Phase) String() string {
 	switch p {
 	case PhaseIdle:
 		return "idle"
-	case PhaseBeadCreated:
-		return "bead_created"
+	case PhaseTaskCreated:
+		return "task_created"
 	case PhaseCoding:
 		return "coding"
 	case PhaseCodeComplete:
@@ -79,7 +79,7 @@ type FindingVerification struct {
 
 // CycleState tracks the mutable state of a coder-reviewer loop across cycles.
 type CycleState struct {
-	TaskBeadID             string
+	TaskID                 string
 	TaskTitle              string
 	Phase                  Phase
 	Cycle                  int
@@ -94,7 +94,6 @@ type CycleState struct {
 	Findings               []ReviewFinding       // current cycle's findings (reset each cycle)
 	Verifications          []FindingVerification // current cycle's verification results
 	AllFindings            []ReviewFinding       // accumulated findings across all cycles
-	ChildBeadIDs           []string              // accumulated child bead IDs across all cycles
 	Refactored             bool                  // true when a mid-run phase edit was applied
 	OriginalDescription    string                // task description before the refactor
 	RefactorDescription    string                // the new description from the user edit

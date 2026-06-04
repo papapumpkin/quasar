@@ -154,7 +154,7 @@ func (e *Engine) createBranch(ctx context.Context) error {
 
 // buildPlan builds the execution plan and publishes a PlanReady event.
 func (e *Engine) buildPlan(ctx context.Context) (*Plan, error) {
-	plan, err := BuildPlan(ctx, e.nebula, e.state, e.beadsClient)
+	plan, err := BuildPlan(ctx, e.nebula, e.state)
 	if err != nil {
 		return nil, fmt.Errorf("build plan: %w", err)
 	}
@@ -168,9 +168,9 @@ func (e *Engine) buildPlan(ctx context.Context) (*Plan, error) {
 	return plan, nil
 }
 
-// applyPlan executes the plan actions (create/update/close beads).
+// applyPlan executes the plan actions (record phase tracking state).
 func (e *Engine) applyPlan(ctx context.Context, plan *Plan) error {
-	if err := Apply(ctx, plan, e.nebula, e.state, e.beadsClient); err != nil {
+	if err := Apply(ctx, plan, e.nebula, e.state); err != nil {
 		return fmt.Errorf("apply plan: %w", err)
 	}
 	return nil
@@ -199,7 +199,6 @@ func (e *Engine) buildWorkerOptions() []Option {
 	committer := NewGitCommitterWithBranch(context.Background(), e.cfg.WorkDir, e.branchName)
 	opts := []Option{
 		WithMaxWorkers(e.cfg.MaxWorkers),
-		WithBeadsClient(e.beadsClient),
 		WithGlobalCycles(e.cfg.MaxReviewCycles),
 		WithGlobalBudget(e.cfg.MaxBudgetUSD),
 		WithGlobalModel(e.cfg.Model),

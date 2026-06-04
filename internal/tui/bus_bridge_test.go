@@ -373,8 +373,8 @@ func TestBusUIBridgeBeadUpdate(t *testing.T) {
 	if ev.BeadTree == nil {
 		t.Fatal("BeadTree payload is nil")
 	}
-	if ev.BeadTree.TaskBeadID != "bead-root" {
-		t.Errorf("TaskBeadID = %q, want %q", ev.BeadTree.TaskBeadID, "bead-root")
+	if ev.BeadTree.TaskID != "bead-root" {
+		t.Errorf("TaskID = %q, want %q", ev.BeadTree.TaskID, "bead-root")
 	}
 	if ev.BeadTree.Root == nil {
 		t.Fatal("BeadTree.Root is nil")

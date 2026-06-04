@@ -4,13 +4,20 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-
-	"github.com/papapumpkin/quasar/internal/beads"
 )
 
-// Apply executes a plan's actions, creating/updating/closing beads and
-// persisting state after each successful action.
-func Apply(ctx context.Context, plan *Plan, n *Nebula, state *State, client beads.Client) error {
+// priorityStr renders an integer priority as a string suitable for a tracking
+// system; zero values render as empty string (meaning "no priority set").
+func priorityStr(p int) string {
+	if p == 0 {
+		return ""
+	}
+	return strconv.Itoa(p)
+}
+
+// Apply executes a plan's actions, updating phase tracking state and persisting
+// after each successful action.
+func Apply(ctx context.Context, plan *Plan, n *Nebula, state *State) error {
 	state.NebulaName = plan.NebulaName
 
 	phasesByID := PhasesByID(n.Phases)
@@ -19,7 +26,7 @@ func Apply(ctx context.Context, plan *Plan, n *Nebula, state *State, client bead
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if err := applyAction(ctx, action, phasesByID, n.Dir, state, client); err != nil {
+		if err := applyAction(action, phasesByID, n.Dir, state); err != nil {
 			return err
 		}
 	}
@@ -27,7 +34,7 @@ func Apply(ctx context.Context, plan *Plan, n *Nebula, state *State, client bead
 }
 
 // applyAction dispatches a single plan action to the appropriate handler.
-func applyAction(ctx context.Context, action Action, phasesByID map[string]*PhaseSpec, dir string, state *State, client beads.Client) error {
+func applyAction(action Action, phasesByID map[string]*PhaseSpec, dir string, state *State) error {
 	switch action.Type {
 	case ActionSkip:
 		return nil
@@ -36,48 +43,34 @@ func applyAction(ctx context.Context, action Action, phasesByID map[string]*Phas
 		if phase == nil {
 			return nil
 		}
-		return applyCreateBead(ctx, client, phase, state, dir)
+		return applyCreatePhase(phase, state, dir)
 	case ActionUpdate:
-		return applyUpdateBead(ctx, client, phasesByID[action.PhaseID], state, dir)
+		return applyUpdatePhase(phasesByID[action.PhaseID], state, dir)
 	case ActionClose:
-		return applyCloseBead(ctx, client, action, state, dir)
+		return applyClosePhase(action, state, dir)
 	}
 	return nil
 }
 
-// applyCreateBead creates a new bead for a phase and persists state.
-// Used for both ActionCreate and ActionRetry.
-func applyCreateBead(ctx context.Context, client beads.Client, phase *PhaseSpec, state *State, dir string) error {
-	beadID, err := client.Create(ctx, phase.Title, beads.CreateOpts{
-		Description: phase.Body,
-		Type:        phase.Type,
-		Labels:      phase.Labels,
-		Assignee:    phase.Assignee,
-		Priority:    priorityStr(phase.Priority),
-	})
-	if err != nil {
-		return fmt.Errorf("creating bead for phase %q: %w", phase.ID, err)
-	}
-	state.SetPhaseState(phase.ID, beadID, PhaseStatusCreated)
+// applyCreatePhase records a new phase tracking entry and persists state.
+// The phase's own ID is used as the tracking ID (no external bead system).
+func applyCreatePhase(phase *PhaseSpec, state *State, dir string) error {
+	state.SetPhaseState(phase.ID, phase.ID, PhaseStatusCreated)
 	if err := SaveState(dir, state); err != nil {
 		return fmt.Errorf("saving state after creating %q: %w", phase.ID, err)
 	}
 	return nil
 }
 
-// applyUpdateBead updates an existing bead's assignee and persists state.
-func applyUpdateBead(ctx context.Context, client beads.Client, phase *PhaseSpec, state *State, dir string) error {
+// applyUpdatePhase persists the phase tracking entry without altering status.
+// Retained for backward compatibility with existing plan flows.
+func applyUpdatePhase(phase *PhaseSpec, state *State, dir string) error {
 	if phase == nil {
 		return nil
 	}
 	ps := state.Phases[phase.ID]
-	if ps == nil || ps.BeadID == "" {
+	if ps == nil {
 		return nil
-	}
-	if phase.Assignee != "" {
-		if err := client.Update(ctx, ps.BeadID, beads.UpdateOpts{Assignee: phase.Assignee}); err != nil {
-			return fmt.Errorf("updating bead %s for phase %q: %w", ps.BeadID, phase.ID, err)
-		}
 	}
 	state.SetPhaseState(phase.ID, ps.BeadID, ps.Status)
 	if err := SaveState(dir, state); err != nil {
@@ -86,25 +79,15 @@ func applyUpdateBead(ctx context.Context, client beads.Client, phase *PhaseSpec,
 	return nil
 }
 
-// applyCloseBead closes an existing bead and persists state.
-func applyCloseBead(ctx context.Context, client beads.Client, action Action, state *State, dir string) error {
+// applyClosePhase marks a phase tracking entry as done and persists state.
+func applyClosePhase(action Action, state *State, dir string) error {
 	ps := state.Phases[action.PhaseID]
-	if ps == nil || ps.BeadID == "" {
+	if ps == nil {
 		return nil
-	}
-	if err := client.Close(ctx, ps.BeadID, action.Reason); err != nil {
-		return fmt.Errorf("closing bead %s for phase %q: %w", ps.BeadID, action.PhaseID, err)
 	}
 	state.SetPhaseState(action.PhaseID, ps.BeadID, PhaseStatusDone)
 	if err := SaveState(dir, state); err != nil {
 		return fmt.Errorf("saving state after closing %q: %w", action.PhaseID, err)
 	}
 	return nil
-}
-
-func priorityStr(p int) string {
-	if p == 0 {
-		return ""
-	}
-	return strconv.Itoa(p)
 }

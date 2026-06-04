@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/papapumpkin/quasar/internal/agent"
-	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/claude"
 	"github.com/papapumpkin/quasar/internal/config"
 	"github.com/papapumpkin/quasar/internal/loop"
@@ -227,12 +226,6 @@ func buildLoop(cfg *config.Config, uiHandler ui.UI, coderPrompt, reviewerPrompt 
 		return nil, err
 	}
 
-	beadsClient := &beads.CLI{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
-	if err := beadsClient.Validate(); err != nil {
-		uiHandler.Error(fmt.Sprintf("beads not available: %v", err))
-		return nil, err
-	}
-
 	workDir, err := resolveWorkDir(cfg.WorkDir)
 	if err != nil {
 		return nil, err
@@ -240,13 +233,11 @@ func buildLoop(cfg *config.Config, uiHandler ui.UI, coderPrompt, reviewerPrompt 
 
 	git := loop.NewCycleCommitter(context.Background(), workDir)
 
-	beadHook := &loop.BeadHook{Beads: beadsClient, UI: uiHandler}
-
 	return &loop.Loop{
 		Invoker:       claudeInv,
 		UI:            uiHandler,
 		Git:           git,
-		Hooks:         []loop.Hook{beadHook},
+		Hooks:         []loop.Hook{},
 		Linter:        loop.NewLinter(cfg.LintCommands, workDir),
 		MaxCycles:     cfg.MaxReviewCycles,
 		MaxBudgetUSD:  cfg.MaxBudgetUSD,

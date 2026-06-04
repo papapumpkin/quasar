@@ -27,10 +27,10 @@ func (l *Loop) buildCoderPrompt(state *CycleState) string {
 	}
 
 	if state.Cycle == 1 {
-		fmt.Fprintf(&b, "Task (bead %s): %s\n\n", state.TaskBeadID, state.TaskTitle)
+		fmt.Fprintf(&b, "Task (bead %s): %s\n\n", state.TaskID, state.TaskTitle)
 		b.WriteString("Implement this task. Read existing code first to understand the codebase, then make the necessary changes.")
 	} else {
-		fmt.Fprintf(&b, "Task (bead %s): %s\n\n", state.TaskBeadID, state.TaskTitle)
+		fmt.Fprintf(&b, "Task (bead %s): %s\n\n", state.TaskID, state.TaskTitle)
 		b.WriteString("The reviewer found issues with your previous implementation. Please address them:\n\n")
 		// Filter out findings already marked as fixed so the coder only
 		// works on unresolved issues.
@@ -55,7 +55,7 @@ func (l *Loop) buildCoderPrompt(state *CycleState) string {
 func (l *Loop) buildRefactorPrompt(state *CycleState) string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "Task (bead %s):\n\n", state.TaskBeadID)
+	fmt.Fprintf(&b, "Task (bead %s):\n\n", state.TaskID)
 	b.WriteString("[REFACTOR — USER UPDATE]\n")
 	b.WriteString("The user has updated the task description while you were working.\n")
 	b.WriteString("The original task was:\n---\n")
@@ -103,7 +103,7 @@ func (l *Loop) buildLintFixPrompt(state *CycleState) string {
 
 	// No lint output — shouldn't normally happen, but return a minimal prompt.
 	var b strings.Builder
-	fmt.Fprintf(&b, "Task (bead %s): Fix failing lint check\n\n", state.TaskBeadID)
+	fmt.Fprintf(&b, "Task (bead %s): Fix failing lint check\n\n", state.TaskID)
 	b.WriteString("Your code has lint issues that need to be fixed before reviewer handoff.\n")
 	b.WriteString("\nRead each affected file, fix the listed errors, and verify your fix compiles.\n")
 	b.WriteString("Do NOT make any other changes. Stay focused on these specific errors.\n")
@@ -119,7 +119,7 @@ func (l *Loop) buildFilterFixPrompt(state *CycleState, parsed filter.ParseResult
 	var b strings.Builder
 
 	// 1. Context header — minimal, just bead ID and check name.
-	fmt.Fprintf(&b, "Task (bead %s): Fix failing %s check\n\n", state.TaskBeadID, parsed.CheckName)
+	fmt.Fprintf(&b, "Task (bead %s): Fix failing %s check\n\n", state.TaskID, parsed.CheckName)
 	fmt.Fprintf(&b, "Your code failed the %s filter check. Fix ONLY the errors listed below.\n", parsed.CheckName)
 	b.WriteString("Do not refactor, do not add features, do not change anything unrelated to these errors.\n\n")
 
@@ -223,7 +223,7 @@ func (l *Loop) filterFixBudget() float64 {
 func (l *Loop) buildReviewerPrompt(state *CycleState) string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "Task (bead %s): %s\n\n", state.TaskBeadID, state.TaskTitle)
+	fmt.Fprintf(&b, "Task (bead %s): %s\n\n", state.TaskID, state.TaskTitle)
 	b.WriteString("The coder has completed their work. Here is their summary:\n\n")
 	b.WriteString(truncate(state.CoderOutput, 3000))
 

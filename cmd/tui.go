@@ -9,7 +9,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/papapumpkin/quasar/internal/beads"
 	"github.com/papapumpkin/quasar/internal/claude"
 	"github.com/papapumpkin/quasar/internal/config"
 	"github.com/papapumpkin/quasar/internal/nebula"
@@ -144,8 +143,7 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 	ecfg := engineConfigFromSettings(cfg, dir, noSplash, maxWorkers, maxWorkersExplicit)
 
 	invoker := claude.NewInvoker(cfg.ClaudePath, cfg.Verbose)
-	client := &beads.CLI{BeadsPath: cfg.BeadsPath, Verbose: cfg.Verbose}
-	engine := nebula.NewEngine(ecfg, nil, invoker, client)
+	engine := nebula.NewEngine(ecfg, nil, invoker)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -188,7 +186,7 @@ func runSelectedNebula(cfg config.Config, printer *ui.Printer, dir string, noSpl
 	projectCtx := scanProjectContext(ctx, engine.WorkDir())
 
 	// Execute via shared TUI path.
-	appModel, err := executeTUIRun(ctx, cancel, engine, invoker, client, ecfg, projectCtx)
+	appModel, err := executeTUIRun(ctx, cancel, engine, invoker, ecfg, projectCtx)
 	if err != nil {
 		return nebulaResult{Err: err}
 	}

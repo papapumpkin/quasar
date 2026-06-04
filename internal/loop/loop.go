@@ -22,7 +22,7 @@ type Loop struct {
 	Invoker           agent.Invoker
 	UI                ui.UI
 	Git               CycleCommitter // Optional; nil disables per-cycle commits.
-	Hooks             []Hook         // Lifecycle hooks (e.g., BeadHook for tracking).
+	Hooks             []Hook         // Lifecycle hooks.
 	Linter            Linter         // Optional; nil disables lint checks between coder and reviewer.
 	Filter            filter.Filter  // Optional; nil skips pre-reviewer filtering and goes straight to reviewer.
 	MaxCycles         int
@@ -83,30 +83,24 @@ type TaskResult struct {
 	TotalCachedBytes int64               // Sum of SystemPromptLen for cache-hit invocations.
 }
 
-// RunTask creates a new bead for the given task and runs the coder-reviewer loop.
-// Bead creation is delegated to hooks that implement TaskCreator.
+// RunTask runs the coder-reviewer loop for the given task description,
+// generating a synthetic task ID.
 func (l *Loop) RunTask(ctx context.Context, taskDescription string) (*TaskResult, error) {
-	beadID, err := l.createTask(ctx, taskDescription)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create task bead: %w", err)
-	}
-	return l.runLoop(ctx, beadID, taskDescription)
+	return l.runLoop(ctx, generateTaskID(), taskDescription)
 }
 
-// createTask delegates task bead creation to the first hook implementing TaskCreator.
-// Returns an error if no hook provides the capability.
-func (l *Loop) createTask(ctx context.Context, description string) (string, error) {
-	for _, h := range l.Hooks {
-		if tc, ok := h.(TaskCreator); ok {
-			return tc.CreateTask(ctx, description)
-		}
-	}
-	return "", fmt.Errorf("no TaskCreator hook registered")
+// RunExistingTask runs the coder-reviewer loop for a caller-supplied task ID
+// (used when the caller already tracks the task externally, e.g. a nebula
+// phase ID).
+func (l *Loop) RunExistingTask(ctx context.Context, taskID, taskDescription string) (*TaskResult, error) {
+	return l.runLoop(ctx, taskID, taskDescription)
 }
 
-// RunExistingTask runs the coder-reviewer loop for an already-created bead.
-func (l *Loop) RunExistingTask(ctx context.Context, beadID, taskDescription string) (*TaskResult, error) {
-	return l.runLoop(ctx, beadID, taskDescription)
+// generateTaskID returns a synthetic task ID for ad-hoc loop runs that did not
+// supply one. Uses nanosecond timestamp; collisions are astronomically unlikely
+// within a single process.
+func generateTaskID() string {
+	return fmt.Sprintf("task-%d", time.Now().UnixNano())
 }
 
 // RunFromCheckpoint resumes a coder-reviewer loop from a previously saved
@@ -141,7 +135,7 @@ func (l *Loop) RunFromCheckpoint(ctx context.Context, cs *CycleState, checkpoint
 	// Emit a resume event so hooks/TUI can indicate we're resuming.
 	l.emit(ctx, Event{
 		Kind:    EventResumed,
-		BeadID:  cs.TaskBeadID,
+		TaskID:  cs.TaskID,
 		Cycle:   resumeCycle,
 		Message: "resumed from checkpoint",
 	})
@@ -179,8 +173,8 @@ func (l *Loop) resumeLoop(ctx context.Context, cs *CycleState) (*TaskResult, err
 	l.wireCheckpointHook(func() *CycleState { return cs })
 
 	perAgentBudget := l.perAgentBudget()
-	l.UI.TaskStarted(cs.TaskBeadID, cs.TaskTitle)
-	l.emitBeadUpdate(cs, "in_progress")
+	l.UI.TaskStarted(cs.TaskID, cs.TaskTitle)
+
 
 	for cycle := cs.Cycle; cycle <= l.MaxCycles; cycle++ {
 		cs.Cycle = cycle
@@ -214,7 +208,7 @@ func (l *Loop) resumeLoop(ctx context.Context, cs *CycleState) (*TaskResult, err
 					cs.FilterHistory = append(cs.FilterHistory, cs.FilterCheckName)
 					l.sealCycleSHA(cs)
 					l.drainRefactor(cs)
-					l.emit(ctx, Event{Kind: EventCycleStart, BeadID: cs.TaskBeadID, Cycle: cycle})
+					l.emit(ctx, Event{Kind: EventCycleStart, TaskID: cs.TaskID, Cycle: cycle})
 					continue
 				}
 				cs.FilterFixedThisCycle = true
@@ -235,7 +229,7 @@ func (l *Loop) resumeLoop(ctx context.Context, cs *CycleState) (*TaskResult, err
 					cs.FilterHistory = append(cs.FilterHistory, cs.FilterCheckName)
 					l.sealCycleSHA(cs)
 					l.drainRefactor(cs)
-					l.emit(ctx, Event{Kind: EventCycleStart, BeadID: cs.TaskBeadID, Cycle: cycle})
+					l.emit(ctx, Event{Kind: EventCycleStart, TaskID: cs.TaskID, Cycle: cycle})
 					continue
 				}
 				if len(cs.AllFindings) > 0 {
@@ -279,17 +273,14 @@ func (l *Loop) resumeLoop(ctx context.Context, cs *CycleState) (*TaskResult, err
 		for i := range cs.Findings {
 			cs.Findings[i].Cycle = cs.Cycle
 		}
-		newChildIDs := l.createFindingBeads(ctx, cs)
-		cs.ChildBeadIDs = append(cs.ChildBeadIDs, newChildIDs...)
 		cs.AllFindings = append(cs.AllFindings, cs.Findings...)
-		l.emitBeadUpdate(cs, "in_progress")
 
 		if l.StruggleConfig.Enabled {
 			signal := EvaluateStruggle(cs, l.StruggleConfig)
 			if signal.Triggered {
 				l.emit(ctx, Event{
 					Kind:    EventStruggleDetected,
-					BeadID:  cs.TaskBeadID,
+					TaskID:  cs.TaskID,
 					Cycle:   cycle,
 					Message: signal.Reason,
 				})
@@ -309,14 +300,14 @@ func (l *Loop) resumeLoop(ctx context.Context, cs *CycleState) (*TaskResult, err
 			}
 		}
 
-		l.emit(ctx, Event{Kind: EventCycleStart, BeadID: cs.TaskBeadID, Cycle: cycle})
+		l.emit(ctx, Event{Kind: EventCycleStart, TaskID: cs.TaskID, Cycle: cycle})
 	}
 
 	l.UI.MaxCyclesReached(l.MaxCycles)
 	l.postMaxCyclesHail(cs)
 	l.emit(ctx, Event{
 		Kind:    EventTaskFailed,
-		BeadID:  cs.TaskBeadID,
+		TaskID:  cs.TaskID,
 		Message: fmt.Sprintf("Max cycles reached (%d). Manual review recommended.", l.MaxCycles),
 	})
 	return &TaskResult{
@@ -343,7 +334,7 @@ func (l *Loop) wireCheckpointHook(stateFunc func() *CycleState) {
 }
 
 // GenerateCheckpoint asks the coder to summarize its current progress for resumption.
-func (l *Loop) GenerateCheckpoint(ctx context.Context, beadID, taskDescription string) (string, error) {
+func (l *Loop) GenerateCheckpoint(ctx context.Context, taskID, taskDescription string) (string, error) {
 	a := agent.Agent{
 		Role:         agent.RoleCoder,
 		SystemPrompt: l.CoderPrompt,
@@ -358,7 +349,7 @@ func (l *Loop) GenerateCheckpoint(ctx context.Context, beadID, taskDescription s
 			"- What files you changed\n"+
 			"- What remains to be done\n"+
 			"- Any important context for continuing",
-		beadID, taskDescription,
+		taskID, taskDescription,
 	)
 	result, err := l.Invoker.Invoke(ctx, a, prompt, l.WorkDir)
 	if err != nil {
@@ -375,7 +366,7 @@ func (l *Loop) emit(ctx context.Context, event Event) {
 }
 
 // runLoop is the core coder-reviewer loop extracted from RunTask.
-func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*TaskResult, error) {
+func (l *Loop) runLoop(ctx context.Context, taskID, taskDescription string) (*TaskResult, error) {
 	// Pre-compute system prompts once for the entire phase. These contain
 	// only stable content (ProjectContext + basePrompt + FabricProtocol)
 	// and must remain byte-identical across all cycles for prompt cache hits.
@@ -386,13 +377,13 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 	}
 
 	perAgentBudget := l.perAgentBudget()
-	state := l.initCycleState(ctx, beadID, taskDescription)
+	state := l.initCycleState(ctx, taskID, taskDescription)
 
 	// Auto-wire checkpoint hook when CheckpointDir is set and a factory
 	// is provided. The hook is prepended so it runs before other hooks.
 	l.wireCheckpointHook(func() *CycleState { return state })
 
-	l.emitBeadUpdate(state, "in_progress")
+
 
 	for cycle := 1; cycle <= l.MaxCycles; cycle++ {
 		state.Cycle = cycle
@@ -432,7 +423,7 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 					state.FilterHistory = append(state.FilterHistory, state.FilterCheckName)
 					l.sealCycleSHA(state)
 					l.drainRefactor(state)
-					l.emit(ctx, Event{Kind: EventCycleStart, BeadID: beadID, Cycle: cycle})
+					l.emit(ctx, Event{Kind: EventCycleStart, TaskID: taskID, Cycle: cycle})
 					continue
 				}
 				state.FilterFixedThisCycle = true
@@ -457,7 +448,7 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 					state.FilterHistory = append(state.FilterHistory, state.FilterCheckName)
 					l.sealCycleSHA(state)
 					l.drainRefactor(state)
-					l.emit(ctx, Event{Kind: EventCycleStart, BeadID: beadID, Cycle: cycle})
+					l.emit(ctx, Event{Kind: EventCycleStart, TaskID: taskID, Cycle: cycle})
 					continue
 				}
 
@@ -511,15 +502,12 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 
 		l.UI.IssuesFound(len(state.Findings))
 		state.Phase = PhaseResolvingIssues
-		// Tag findings with the current cycle number before creating beads
-		// or accumulating, so the Cycle field is available downstream.
+		// Tag findings with the current cycle number before accumulating
+		// so the Cycle field is available downstream.
 		for i := range state.Findings {
 			state.Findings[i].Cycle = state.Cycle
 		}
-		newChildIDs := l.createFindingBeads(ctx, state)
-		state.ChildBeadIDs = append(state.ChildBeadIDs, newChildIDs...)
 		state.AllFindings = append(state.AllFindings, state.Findings...)
-		l.emitBeadUpdate(state, "in_progress")
 
 		// Evaluate struggle detection after findings are accumulated.
 		if l.StruggleConfig.Enabled {
@@ -527,7 +515,7 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 			if signal.Triggered {
 				l.emit(ctx, Event{
 					Kind:    EventStruggleDetected,
-					BeadID:  beadID,
+					TaskID:  taskID,
 					Cycle:   cycle,
 					Message: signal.Reason,
 				})
@@ -547,14 +535,14 @@ func (l *Loop) runLoop(ctx context.Context, beadID, taskDescription string) (*Ta
 			}
 		}
 
-		l.emit(ctx, Event{Kind: EventCycleStart, BeadID: beadID, Cycle: cycle})
+		l.emit(ctx, Event{Kind: EventCycleStart, TaskID: taskID, Cycle: cycle})
 	}
 
 	l.UI.MaxCyclesReached(l.MaxCycles)
 	l.postMaxCyclesHail(state)
 	l.emit(ctx, Event{
 		Kind:    EventTaskFailed,
-		BeadID:  beadID,
+		TaskID:  taskID,
 		Message: fmt.Sprintf("Max cycles reached (%d). Manual review recommended.", l.MaxCycles),
 	})
 	return &TaskResult{
@@ -641,7 +629,7 @@ func (l *Loop) runLintFixLoop(ctx context.Context, state *CycleState, perAgentBu
 			if summary == "" {
 				summary = firstLine(state.TaskTitle, 72)
 			}
-			sha, commitErr := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle, summary+" (lint fix)", l.PhaseType)
+			sha, commitErr := l.Git.CommitCycle(ctx, state.TaskID, state.Cycle, summary+" (lint fix)", l.PhaseType)
 			if commitErr != nil {
 				l.UI.Error(fmt.Sprintf("failed to commit lint fix: %v", commitErr))
 			} else {
@@ -689,7 +677,7 @@ func (l *Loop) runFilterChecks(ctx context.Context, state *CycleState) (failed b
 	l.UI.IssuesFound(1)
 	state.Phase = PhaseResolvingIssues
 	state.AllFindings = append(state.AllFindings, state.Findings...)
-	l.emitBeadUpdate(state, "in_progress")
+
 
 	return true, nil
 }
@@ -789,7 +777,7 @@ func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkNam
 			if summary == "" {
 				summary = firstLine(state.TaskTitle, 72)
 			}
-			sha, commitErr := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle, summary+" (filter fix)", l.PhaseType)
+			sha, commitErr := l.Git.CommitCycle(ctx, state.TaskID, state.Cycle, summary+" (filter fix)", l.PhaseType)
 			if commitErr != nil {
 				l.UI.Error(fmt.Sprintf("failed to commit filter fix: %v", commitErr))
 			} else {
@@ -808,7 +796,7 @@ func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkNam
 		// Emit per-attempt telemetry event.
 		l.emit(ctx, Event{
 			Kind:   EventFilterFixAttempt,
-			BeadID: state.TaskBeadID,
+			TaskID: state.TaskID,
 			Cycle:  state.Cycle,
 			FilterFix: &FilterFixData{
 				CheckName:   checkName,
@@ -825,7 +813,7 @@ func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkNam
 			l.UI.Info(fmt.Sprintf("filter check %q fixed on attempt %d", checkName, attempt+1))
 			l.emit(ctx, Event{
 				Kind:   EventFilterFixResult,
-				BeadID: state.TaskBeadID,
+				TaskID: state.TaskID,
 				Cycle:  state.Cycle,
 				FilterFix: &FilterFixData{
 					CheckName:   checkName,
@@ -851,7 +839,7 @@ func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkNam
 		checkName, maxFixes))
 	l.emit(ctx, Event{
 		Kind:   EventFilterFixResult,
-		BeadID: state.TaskBeadID,
+		TaskID: state.TaskID,
 		Cycle:  state.Cycle,
 		FilterFix: &FilterFixData{
 			CheckName:   checkName,
@@ -899,9 +887,9 @@ func (l *Loop) perAgentBudget() float64 {
 }
 
 // initCycleState creates the initial cycle state and emits task-started events.
-func (l *Loop) initCycleState(ctx context.Context, beadID, taskDescription string) *CycleState {
-	l.UI.TaskStarted(beadID, taskDescription)
-	l.emit(ctx, Event{Kind: EventCycleStart, BeadID: beadID})
+func (l *Loop) initCycleState(ctx context.Context, taskID, taskDescription string) *CycleState {
+	l.UI.TaskStarted(taskID, taskDescription)
+	l.emit(ctx, Event{Kind: EventCycleStart, TaskID: taskID})
 
 	// Capture HEAD before the first cycle for later diffing.
 	var baseSHA string
@@ -915,9 +903,9 @@ func (l *Loop) initCycleState(ctx context.Context, beadID, taskDescription strin
 	}
 
 	return &CycleState{
-		TaskBeadID:    beadID,
+		TaskID:    taskID,
 		TaskTitle:     taskDescription,
-		Phase:         PhaseBeadCreated,
+		Phase:         PhaseTaskCreated,
 		MaxCycles:     l.MaxCycles,
 		MaxBudgetUSD:  l.MaxBudgetUSD,
 		BaseCommitSHA: baseSHA,
@@ -1045,7 +1033,7 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 		if summary == "" {
 			summary = firstLine(state.TaskTitle, 72)
 		}
-		sha, err := l.Git.CommitCycle(ctx, state.TaskBeadID, state.Cycle, summary, l.PhaseType)
+		sha, err := l.Git.CommitCycle(ctx, state.TaskID, state.Cycle, summary, l.PhaseType)
 		if err != nil {
 			l.UI.Error(fmt.Sprintf("failed to commit cycle %d: %v", state.Cycle, err))
 		} else {
@@ -1056,12 +1044,12 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 	if wasRefactored {
 		comment := fmt.Sprintf("[refactor cycle %d] User updated task description mid-execution.\nOriginal: %s\nUpdated: %s",
 			state.Cycle, truncate(origDesc, 500), truncate(refactorDesc, 500))
-		l.emit(ctx, Event{Kind: EventRefactored, BeadID: state.TaskBeadID, Cycle: state.Cycle, Message: comment})
-		l.UI.RefactorApplied(state.TaskBeadID)
+		l.emit(ctx, Event{Kind: EventRefactored, TaskID: state.TaskID, Cycle: state.Cycle, Message: comment})
+		l.UI.RefactorApplied(state.TaskID)
 	}
 	l.emit(ctx, Event{
 		Kind:    EventAgentDone,
-		BeadID:  state.TaskBeadID,
+		TaskID:  state.TaskID,
 		Cycle:   state.Cycle,
 		Agent:   "coder",
 		Result:  &result,
@@ -1100,7 +1088,7 @@ func (l *Loop) runReviewerPhase(ctx context.Context, state *CycleState, perAgent
 	state.Verifications = ParseVerifications(result.ResultText)
 	l.emit(ctx, Event{
 		Kind:    EventAgentDone,
-		BeadID:  state.TaskBeadID,
+		TaskID:  state.TaskID,
 		Cycle:   state.Cycle,
 		Agent:   "reviewer",
 		Result:  &result,
@@ -1233,7 +1221,7 @@ func (l *Loop) trackCacheMetrics(ctx context.Context, state *CycleState, agentRo
 
 	l.emit(ctx, Event{
 		Kind:   EventCacheMetrics,
-		BeadID: state.TaskBeadID,
+		TaskID: state.TaskID,
 		Cycle:  state.Cycle,
 		Agent:  agentRole,
 		Result: result,
@@ -1250,7 +1238,7 @@ func (l *Loop) checkBudget(ctx context.Context, state *CycleState) error {
 	l.UI.BudgetExceeded(state.TotalCostUSD, l.MaxBudgetUSD)
 	l.emit(ctx, Event{
 		Kind:    EventTaskFailed,
-		BeadID:  state.TaskBeadID,
+		TaskID:  state.TaskID,
 		Message: fmt.Sprintf("Budget exceeded: $%.4f / $%.2f", state.TotalCostUSD, l.MaxBudgetUSD),
 	})
 	return ErrBudgetExceeded
@@ -1267,13 +1255,13 @@ func (l *Loop) handleApproval(ctx context.Context, state *CycleState) (*TaskResu
 
 	l.emit(ctx, Event{
 		Kind:   EventTaskSuccess,
-		BeadID: state.TaskBeadID,
+		TaskID: state.TaskID,
 		Cycle:  state.Cycle,
 		Report: report,
 	})
-	l.emitBeadUpdate(state, "closed")
 
-	l.UI.TaskComplete(state.TaskBeadID, state.TotalCostUSD)
+
+	l.UI.TaskComplete(state.TaskID, state.TotalCostUSD)
 	return &TaskResult{
 		TotalCostUSD:     state.TotalCostUSD,
 		CyclesUsed:       state.Cycle,
@@ -1314,47 +1302,3 @@ func (l *Loop) finalCommitSHA(ctx context.Context, state *CycleState) string {
 	return ""
 }
 
-// emitBeadUpdate sends the current bead hierarchy to the UI.
-// It uses AllFindings (accumulated across cycles) to match ChildBeadIDs,
-// so that children from earlier cycles are preserved in the hierarchy.
-// When the parent task is closed (approved), all children are marked closed
-// since we don't track per-child status independently.
-func (l *Loop) emitBeadUpdate(state *CycleState, status string) {
-	// When the task is closed, all child issues are considered resolved.
-	childStatus := "open"
-	if status == "closed" {
-		childStatus = "closed"
-	}
-	var children []ui.BeadChild
-	for i, id := range state.ChildBeadIDs {
-		title := "review finding"
-		severity := "major"
-		cycle := 0
-		if i < len(state.AllFindings) {
-			title = firstLine(state.AllFindings[i].Description, 80)
-			severity = state.AllFindings[i].Severity
-			cycle = state.AllFindings[i].Cycle
-		}
-		children = append(children, ui.BeadChild{
-			ID:       id,
-			Title:    title,
-			Status:   childStatus,
-			Severity: severity,
-			Cycle:    cycle,
-		})
-	}
-	l.UI.BeadUpdate(state.TaskBeadID, state.TaskTitle, status, children)
-}
-
-// createFindingBeads delegates to hooks that implement FindingCreator to
-// create child beads for each review finding. Returns the IDs of
-// successfully created beads.
-func (l *Loop) createFindingBeads(ctx context.Context, state *CycleState) []string {
-	var ids []string
-	for _, h := range l.Hooks {
-		if fc, ok := h.(FindingCreator); ok {
-			ids = append(ids, fc.CreateFindingChildIDs(ctx, state.TaskBeadID, state.Findings)...)
-		}
-	}
-	return ids
-}

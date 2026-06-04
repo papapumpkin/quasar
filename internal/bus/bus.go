@@ -220,7 +220,7 @@ type ProgressPayload struct {
 
 // BeadTreePayload carries a bead hierarchy snapshot.
 type BeadTreePayload struct {
-	TaskBeadID string
+	TaskID string
 	Root       any // *tui.BeadInfo — kept as any to avoid import cycle
 }
 

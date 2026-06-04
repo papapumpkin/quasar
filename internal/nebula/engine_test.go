@@ -26,7 +26,7 @@ func collectBusEvents(b bus.Bus) <-chan []bus.Event {
 
 func TestEngine_Phase_InitialState(t *testing.T) {
 	t.Parallel()
-	e := NewEngine(EngineConfig{}, nil, nil, nil)
+	e := NewEngine(EngineConfig{}, nil, nil)
 	if got := e.Phase(); got != EngineIdle {
 		t.Errorf("initial phase = %v, want %v", got, EngineIdle)
 	}
@@ -34,7 +34,7 @@ func TestEngine_Phase_InitialState(t *testing.T) {
 
 func TestEngine_Transition_ThreadSafe(t *testing.T) {
 	t.Parallel()
-	e := NewEngine(EngineConfig{}, nil, nil, nil)
+	e := NewEngine(EngineConfig{}, nil, nil)
 
 	done := make(chan struct{})
 	go func() {
@@ -59,7 +59,7 @@ func TestEngine_Run_LoadError_ShortCircuits(t *testing.T) {
 
 	e := NewEngine(EngineConfig{
 		NebulaDir: "/nonexistent/path/to/nebula",
-	}, memBus, nil, nil)
+	}, memBus, nil)
 
 	result := e.Run(context.Background())
 
@@ -102,7 +102,7 @@ func TestEngine_Run_ValidationError_ShortCircuits(t *testing.T) {
 	// Use testdata/invalid-missing which has a phase missing required fields.
 	e := NewEngine(EngineConfig{
 		NebulaDir: "testdata/invalid-missing",
-	}, nil, nil, nil)
+	}, nil, nil)
 
 	result := e.Run(context.Background())
 
@@ -129,7 +129,7 @@ func TestEngine_Run_BranchError_ShortCircuits(t *testing.T) {
 	e := NewEngine(EngineConfig{
 		NebulaDir: "testdata/valid",
 		WorkDir:   t.TempDir(), // temp dir is not a git repo
-	}, nil, nil, nil)
+	}, nil, nil)
 
 	result := e.Run(context.Background())
 
@@ -150,7 +150,7 @@ func TestEngine_Run_NilBus_NoPanic(t *testing.T) {
 	// A nil bus should not cause a panic at any lifecycle point.
 	e := NewEngine(EngineConfig{
 		NebulaDir: "/nonexistent",
-	}, nil, nil, nil)
+	}, nil, nil)
 
 	// This should not panic even with nil bus.
 	result := e.Run(context.Background())
@@ -170,7 +170,7 @@ func TestEngine_Run_ContextCancelled(t *testing.T) {
 
 	e := NewEngine(EngineConfig{
 		NebulaDir: "/nonexistent",
-	}, nil, nil, nil)
+	}, nil, nil)
 
 	result := e.Run(ctx)
 	// Should still complete (load will fail with file error, not context error).
@@ -191,7 +191,7 @@ func TestEngine_Run_LifecycleEvents_Ordered(t *testing.T) {
 	// This will fail at load, but we can verify the events that were published.
 	e := NewEngine(EngineConfig{
 		NebulaDir: "/nonexistent",
-	}, memBus, nil, nil)
+	}, memBus, nil)
 
 	_ = e.Run(context.Background())
 
@@ -223,7 +223,7 @@ func TestEngine_Run_LifecycleEvents_Ordered(t *testing.T) {
 func TestEngine_PublishLifecycle_NilBus(t *testing.T) {
 	t.Parallel()
 
-	e := NewEngine(EngineConfig{}, nil, nil, nil)
+	e := NewEngine(EngineConfig{}, nil, nil)
 
 	// Should not panic.
 	e.publishLifecycle(context.Background(), bus.KindEngineLoading)
@@ -243,16 +243,16 @@ func TestEngine_BuildWorkerOptions(t *testing.T) {
 		Model:           "claude-sonnet",
 		Resume:          true,
 		NebulaDir:       "/tmp/test-nebula",
-	}, memBus, nil, nil)
+	}, memBus, nil)
 
 	opts := e.buildWorkerOptions()
 
 	// We should have the base options plus resume options.
-	// Base: MaxWorkers, BeadsClient, GlobalCycles, GlobalBudget, GlobalModel, Bus, Invoker, Committer, CheckpointDir = 9
+	// Base: MaxWorkers, GlobalCycles, GlobalBudget, GlobalModel, Bus, Invoker, Committer, CheckpointDir = 8
 	// Resume: ResumeEnabled = 1
-	// Total = 10
-	if len(opts) != 10 {
-		t.Errorf("got %d options, want 10", len(opts))
+	// Total = 9
+	if len(opts) != 9 {
+		t.Errorf("got %d options, want 9", len(opts))
 	}
 }
 
@@ -263,13 +263,13 @@ func TestEngine_BuildWorkerOptions_NoResume(t *testing.T) {
 		MaxWorkers:      2,
 		MaxReviewCycles: 5,
 		MaxBudgetUSD:    10.0,
-	}, nil, nil, nil)
+	}, nil, nil)
 
 	opts := e.buildWorkerOptions()
 
-	// Base options only: MaxWorkers, BeadsClient, GlobalCycles, GlobalBudget, GlobalModel, Bus, Invoker, Committer, CheckpointDir = 9
-	if len(opts) != 9 {
-		t.Errorf("got %d options, want 9", len(opts))
+	// Base options only: MaxWorkers, GlobalCycles, GlobalBudget, GlobalModel, Bus, Invoker, Committer, CheckpointDir = 8
+	if len(opts) != 8 {
+		t.Errorf("got %d options, want 8", len(opts))
 	}
 }
 
@@ -280,7 +280,7 @@ func TestEngine_BuildWorkerOptions_WithFabric(t *testing.T) {
 		MaxWorkers:      2,
 		MaxReviewCycles: 5,
 		MaxBudgetUSD:    10.0,
-	}, nil, nil, nil)
+	}, nil, nil)
 
 	e.SetFabric(&mockFabricCloser{
 		options: []Option{
@@ -290,16 +290,16 @@ func TestEngine_BuildWorkerOptions_WithFabric(t *testing.T) {
 
 	opts := e.buildWorkerOptions()
 
-	// 9 base + 1 from fabric
-	if len(opts) != 10 {
-		t.Errorf("got %d options, want 10", len(opts))
+	// 8 base + 1 from fabric
+	if len(opts) != 9 {
+		t.Errorf("got %d options, want 9", len(opts))
 	}
 }
 
 func TestEngine_SetFabric(t *testing.T) {
 	t.Parallel()
 
-	e := NewEngine(EngineConfig{}, nil, nil, nil)
+	e := NewEngine(EngineConfig{}, nil, nil)
 	if e.fabric != nil {
 		t.Error("fabric should be nil initially")
 	}
@@ -368,7 +368,7 @@ func TestEngine_PlanOnlyMode(t *testing.T) {
 	e := NewEngine(EngineConfig{
 		NebulaDir: "/nonexistent",
 		Auto:      false,
-	}, memBus, nil, nil)
+	}, memBus, nil)
 
 	result := e.Run(context.Background())
 	if result.Err == nil {

@@ -98,7 +98,7 @@ func TestBuildCoderPrompt_Refactored(t *testing.T) {
 	t.Parallel()
 	l := &Loop{}
 	state := &CycleState{
-		TaskBeadID:          "bead-123",
+		TaskID:          "bead-123",
 		TaskTitle:           "updated task",
 		Cycle:               2,
 		Refactored:          true,
@@ -150,7 +150,7 @@ func TestBuildCoderPrompt_NotRefactored(t *testing.T) {
 	t.Parallel()
 	l := &Loop{}
 	state := &CycleState{
-		TaskBeadID: "bead-456",
+		TaskID: "bead-456",
 		TaskTitle:  "normal task",
 		Cycle:      1,
 		Refactored: false,
@@ -174,7 +174,7 @@ func TestBuildCoderPrompt_RefactorClearsAfterOneCycle(t *testing.T) {
 	t.Parallel()
 	l := &Loop{}
 	state := &CycleState{
-		TaskBeadID:          "bead-789",
+		TaskID:          "bead-789",
 		TaskTitle:           "v2 task",
 		Cycle:               3,
 		Refactored:          true,
@@ -207,7 +207,7 @@ func TestBuildRefactorPrompt_NoPreviousWork(t *testing.T) {
 	t.Parallel()
 	l := &Loop{}
 	state := &CycleState{
-		TaskBeadID:          "bead-abc",
+		TaskID:          "bead-abc",
 		TaskTitle:           "new task",
 		Cycle:               1,
 		Refactored:          true,
