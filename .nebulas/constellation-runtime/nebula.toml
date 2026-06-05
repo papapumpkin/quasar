@@ -1,0 +1,46 @@
+[nebula]
+name = "constellation-runtime"
+description = "The autonomous-substrate revamp. After this nebula, Quasar can be deployed as a persistent service on a host managing many git repos — each repo ingesting work from registered sensors (GitHub Issues to start), each running it through user-customizable agent workflows declared as constellations of stars. Introduces: multi-repo registry, sensor/star/constellation/skill abstractions with TOML+Markdown configs, SQLite-canonical nebula state with content-addressed blob storage, garbage collection with audit trail, and per-repo configuration layering. Pre-commit hooks (already shipped with ticket-ingest) flow uniformly into every constellation's commits without any constellation knowing they exist. See docs/superpowers/specs/2026-06-03-quasar-autonomous-issue-to-pr-design.md for the broader design context."
+
+[defaults]
+type = "task"
+priority = 1
+labels = ["quasar", "foundation", "constellations", "sensors", "multi-repo"]
+
+[execution]
+max_workers = 1
+max_review_cycles = 7
+max_budget_usd = 60.0
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Multi-repo deployment: one persistent Quasar process manages N registered git repos, each with its own .quasar.yaml and per-repo overrides for constellations/stars/skills/sensors",
+    "Nebula becomes the universal artifact: sensors create seed nebulas in SQLite, architect refines them with phases, coder-reviewer executes per phase, master-review decides ship/fix, open-pr ships — same nebula row flows through the entire lifecycle",
+    "Sensor / Star / Constellation / Skill abstractions: sensors are Go-implemented (vendor-specific external integrations), stars are Markdown with TOML frontmatter (Claude Code SKILL.md compatible), skills are Markdown with TOML frontmatter, constellations are TOML (DAG + edge conditions with a small expression mini-language)",
+    "SQLite is canonical for nebula state; blob store at ~/.quasar/blobs/ holds large LLM outputs and diffs (zstd, sha256, mark-and-sweep GC)",
+    "Per-repo configuration layering: a file at <repo>/constellations/<name>.toml overrides the embedded built-in of the same name; same pattern for stars and skills",
+    "Sensors are configured per-repo as TOML files in <repo>/sensors/; each references a Go-registered sensor type and provides its config block",
+    "Garbage collection: completed nebulas + their blobs + worktree dirs purged via SQL after configurable TTL with grace window and JSONL audit log",
+    "Pre-commit safety: the [pre_commit] block in <repo>/.quasar.yaml is loaded by the constellation runtime and passed to every gitops.Commit call so per-repo quality gates run uniformly — no constellation needs to know",
+    "TUI dashboard groups nebulas by registered repo and surfaces sensor-generated drafts as awaiting_approval items with one-keypress approve",
+    "End-state validation: `quasar repo register <path>`, sensor polls a configured GitHub repo, seed nebula appears in the TUI, user approves, coder-reviewer runs, master-review opens a PR — all from a single persistent process on a single SQLite database",
+]
+constraints = [
+    "All git WRITE operations MUST go through internal/gitops/ — the existing safety perimeter (vanilla-git only, quasar/* push allowlist, no merge, no force-push to base) applies unchanged.",
+    "Tokens MUST NOT appear inline in any TOML or YAML file. Only token_env and token_file references are accepted; inline `token = \"...\"` is a config-load error.",
+    "The Forge interface stub (Name() only) shipped with ticket-ingest stays as-is. Full forge methods (CreatePR, GetPRComments, SyncStatus) are out of scope for this nebula — they land in a follow-up.",
+    "The deleted edit/refactor/intervention machinery (Watcher, HotReloader, RefactorCh, PAUSE/STOP/RETRY files) MUST NOT come back. Multi-repo control is via CLI (`quasar kill`, `quasar pause`) only.",
+    "Existing nebula manifest TOML format on disk stays backward-compatible. Pre-existing .nebulas/<id>/ directories are imported into SQLite on first run; the file form remains a valid authoring surface for hand-written nebulas via `quasar nebula apply <path>`.",
+    "Existing pre-commit infrastructure (internal/gitops/precommit.go from ticket-ingest) stays unchanged in its API shape. The constellation runtime threads the existing PreCommitConfig into every Commit call.",
+    "SQLite is the only persistent state store. No Redis, no Postgres. WAL mode is required for concurrent sensor schedulers.",
+    "Blob storage is content-addressed via SHA-256 with git-style fanout (two-char prefix directory). zstd compression at default level. Files are written via tmp + rename for atomicity.",
+    "Constellation TOML uses the existing expression mini-language (dot access, comparisons, &&/||/!, ternary, string interpolation, no function calls except a tiny stdlib of len/has/empty). No custom DSL parser is built in this nebula.",
+    "Per-repo file lookup order: <repo>/constellations/<name>.toml first, then //go:embed fallback. Same for stars and skills. Sensors have no embedded defaults — only types are built-in.",
+    "Architect star receives the active [pre_commit] commands rendered into its prompt as repo context so generated phases anticipate which checks will be enforced.",
+]
+
+[dependencies]
+requires_nebulae = []
