@@ -37,10 +37,10 @@ const ghInstallURL = "https://cli.github.com/"
 // Source is safe for concurrent use once Configure has run: all fields are set
 // during Configure and the runGH hook is expected to be reentrant.
 type Source struct {
-	repo           string   // "owner/repo" used to scope issue lists and qualify ids
-	token          string   // resolved in Configure; "" -> defer to gh's own auth
-	labelFilter    []string // when set, an issue must carry every label to qualify
-	assigneeFilter string   // when set, restrict to this assignee ("@me"/"@none" deferred to gh)
+	repo           string    // "owner/repo" used to scope issue lists and qualify ids
+	token          string    // resolved in Configure; "" -> defer to gh's own auth
+	labelFilter    []string  // when set, an issue must carry every label to qualify
+	assigneeFilter string    // when set, restrict to this assignee ("@me"/"@none" deferred to gh)
 	runGH          runGHFunc // injectable for tests; defaults to the real gh binary
 	deps           sourceDeps
 }

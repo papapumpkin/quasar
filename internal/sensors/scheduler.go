@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/papapumpkin/quasar/internal/artifacts"
-	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
 // SeedStatus is the lifecycle status a sensor-seeded nebula is written with.
@@ -48,9 +47,24 @@ type EventStore interface {
 	MarkProcessed(ctx context.Context, id int64, nebulaID string) error
 }
 
+// SeedNebula is the payload the scheduler hands a NebulaInserter for a newly
+// observed event. It is package-local — mirroring only the persistable fields a
+// sensor produces — so the sensors package owns its consumer interface's
+// parameter type and stays off the fabric dependency (layering). The
+// fabric-backed implementation maps it onto its own row type.
+type SeedNebula struct {
+	RepoPath    string
+	Name        string
+	Description string
+	SourceName  string
+	SourceID    string
+	SourceURL   string
+	Status      string
+}
+
 // NebulaInserter writes a seed nebula row and returns its generated id.
 type NebulaInserter interface {
-	Insert(ctx context.Context, n fabric.NebulaRow) (string, error)
+	Insert(ctx context.Context, n SeedNebula) (string, error)
 }
 
 // SchedulerOpts configures a Scheduler. RepoPath, Instance, Sensor, Cursors,
@@ -252,7 +266,7 @@ func (s *Scheduler) seed(ctx context.Context, ev Event) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("sensors: seed nebula for %q: %w", ev.ExternalID, err)
 	}
-	id, err := s.nebulas.Insert(ctx, fabric.NebulaRow{
+	id, err := s.nebulas.Insert(ctx, SeedNebula{
 		RepoPath:    s.repoPath,
 		Name:        content.Name,
 		Description: content.Description,
