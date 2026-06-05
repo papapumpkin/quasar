@@ -13,6 +13,7 @@ var nebulaCmd = &cobra.Command{
 type nebulaSubcmd struct {
 	use   string
 	short string
+	long  string // extended help; empty falls back to short
 	args  cobra.PositionalArgs
 	flags func(cmd *cobra.Command) // registers command-specific flags; nil if none
 	run   func(cmd *cobra.Command, args []string) error
@@ -35,7 +36,15 @@ var nebulaSubcmds = []nebulaSubcmd{
 	},
 	{
 		use:   "apply <path>",
-		short: "Create/update beads from a nebula blueprint",
+		short: "Import a nebula blueprint into SQLite and execute its phases",
+		long: "Parse a nebula directory (nebula.toml + *.md phase files) and import it " +
+			"into the SQLite-canonical store, then execute its phases.\n\n" +
+			"PREREQUISITE: the nebula is recorded under the registered repo that owns " +
+			"the current working directory, so the CWD must be inside a repo registered " +
+			"with `quasar repo register <path>`. If no repo is registered for the CWD, " +
+			"apply exits with an error before doing any work. The on-disk files are left " +
+			"untouched — they remain a valid authoring surface, but SQLite is the source " +
+			"of execution.",
 		args:  cobra.ExactArgs(1),
 		flags: addNebulaApplyFlags,
 		run:   runNebulaApply,
@@ -67,6 +76,7 @@ func init() {
 		cmd := &cobra.Command{
 			Use:   sc.use,
 			Short: sc.short,
+			Long:  sc.long,
 			Args:  sc.args,
 			RunE:  sc.run,
 		}
