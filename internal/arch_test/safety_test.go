@@ -155,9 +155,9 @@ func forbiddenSubcommandSmell(lit string) string {
 		return "unconditional force; use --force-with-lease"
 	}
 	patterns := map[string]string{
-		"reset --hard": "hard reset",
-		"rebase -i":    "interactive rebase",
-		"branch -D":    "force branch delete",
+		"reset --hard":  "hard reset",
+		"rebase -i":     "interactive rebase",
+		"branch -D":     "force branch delete",
 		"push origin :": "ref deletion",
 	}
 	for p, desc := range patterns {
