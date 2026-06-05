@@ -105,9 +105,9 @@ func TestKeymapReject(t *testing.T) {
 	tm := teatest.NewTestModel(t, newKeymapModel(t, db), teatest.WithInitialTermSize(120, 40))
 	waitForOutput(t, tm, "retry")
 
-	tm.Send(keyRunes("r"))         // open reject-reason prompt
+	tm.Send(keyRunes("r")) // open reject-reason prompt
 	waitForOutput(t, tm, "reject reason:")
-	tm.Send(keyRunes("not now"))   // type a reason
+	tm.Send(keyRunes("not now")) // type a reason
 	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
 
 	waitForScalar(t, db, "SELECT status FROM nebulas WHERE id='neb-1'", "rejected")
