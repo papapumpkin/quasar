@@ -706,7 +706,6 @@ func TestBeadUpdate_NoOp(t *testing.T) {
 	}
 }
 
-
 // --- Task lifecycle tests ---
 
 func TestTaskStarted(t *testing.T) {

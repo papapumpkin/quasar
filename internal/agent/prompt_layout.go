@@ -64,12 +64,12 @@ const (
 	LabelFabricProtocol = "fabric-protocol"
 
 	// Volatile suffix labels.
-	LabelTaskDescription      = "task-description"
-	LabelReviewerFindings     = "reviewer-findings"
-	LabelCoderOutput          = "coder-output"
-	LabelLintOutput           = "lint-output"
-	LabelFilterOutput         = "filter-output"
-	LabelFabricSnapshot       = "fabric-snapshot"
+	LabelTaskDescription  = "task-description"
+	LabelReviewerFindings = "reviewer-findings"
+	LabelCoderOutput      = "coder-output"
+	LabelLintOutput       = "lint-output"
+	LabelFilterOutput     = "filter-output"
+	LabelFabricSnapshot   = "fabric-snapshot"
 )
 
 // ContentZone maps well-known content labels to their designated zone.
@@ -81,12 +81,12 @@ var ContentZone = map[string]PromptZone{
 	LabelFabricProtocol: ZoneStablePrefix,
 
 	// Volatile suffix — user prompt.
-	LabelTaskDescription:      ZoneVolatileSuffix,
-	LabelReviewerFindings:     ZoneVolatileSuffix,
-	LabelCoderOutput:          ZoneVolatileSuffix,
-	LabelLintOutput:           ZoneVolatileSuffix,
-	LabelFilterOutput:         ZoneVolatileSuffix,
-	LabelFabricSnapshot:       ZoneVolatileSuffix,
+	LabelTaskDescription:  ZoneVolatileSuffix,
+	LabelReviewerFindings: ZoneVolatileSuffix,
+	LabelCoderOutput:      ZoneVolatileSuffix,
+	LabelLintOutput:       ZoneVolatileSuffix,
+	LabelFilterOutput:     ZoneVolatileSuffix,
+	LabelFabricSnapshot:   ZoneVolatileSuffix,
 }
 
 // PromptManifest records the content placement for a single agent invocation.

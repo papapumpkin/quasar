@@ -3,8 +3,6 @@ package nebula
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/papapumpkin/quasar/internal/fabric"
@@ -190,67 +188,6 @@ func (wg *WorkerGroup) recordFailure(phaseID string) {
 		Err:     fmt.Errorf("no bead ID for phase %q", phaseID),
 	})
 	wg.mu.Unlock()
-}
-
-// handleStop saves state, cleans up the STOP file, and prints a message.
-func (wg *WorkerGroup) handleStop() {
-	wg.mu.Lock()
-	wg.progress.SaveState()
-	wg.mu.Unlock()
-
-	stopPath := filepath.Join(wg.Nebula.Dir, "STOP")
-	if err := os.Remove(stopPath); err != nil {
-		fmt.Fprintf(wg.logger(), "warning: failed to remove STOP file: %v\n", err)
-	}
-
-	fmt.Fprintf(wg.logger(), "\n── Nebula stopped by user ─────────────────────────\n")
-	fmt.Fprintf(wg.logger(), "   State saved. Resume with: quasar nebula apply\n")
-	fmt.Fprintf(wg.logger(), "───────────────────────────────────────────────────\n\n")
-}
-
-// handleRetry reads the RETRY file, resets the phase, and removes the file.
-func (wg *WorkerGroup) handleRetry() {
-	retryPath := filepath.Join(wg.Nebula.Dir, "RETRY")
-	content, err := os.ReadFile(retryPath)
-	if err != nil {
-		fmt.Fprintf(wg.logger(), "warning: failed to read RETRY file: %v\n", err)
-		return
-	}
-
-	phaseID := strings.TrimSpace(string(content))
-	if phaseID == "" {
-		fmt.Fprintf(wg.logger(), "warning: RETRY file is empty\n")
-		_ = os.Remove(retryPath)
-		return
-	}
-
-	if err := os.Remove(retryPath); err != nil {
-		fmt.Fprintf(wg.logger(), "warning: failed to remove RETRY file: %v\n", err)
-	}
-
-	done := wg.tracker.Done()
-	failed := wg.tracker.Failed()
-	inFlight := wg.tracker.InFlight()
-
-	wg.mu.Lock()
-	defer wg.mu.Unlock()
-
-	if !failed[phaseID] {
-		fmt.Fprintf(wg.logger(), "warning: phase %q is not failed, ignoring retry\n", phaseID)
-		return
-	}
-
-	delete(failed, phaseID)
-	delete(done, phaseID)
-	delete(inFlight, phaseID)
-
-	ps := wg.State.Phases[phaseID]
-	if ps != nil {
-		wg.State.SetPhaseState(phaseID, ps.BeadID, PhaseStatusInProgress)
-		wg.progress.SaveState()
-	}
-
-	fmt.Fprintf(wg.logger(), "\n── Retrying phase %q ──────────────────────────────\n\n", phaseID)
 }
 
 // processGateSignals handles pending gate signals after a batch completes.

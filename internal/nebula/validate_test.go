@@ -129,4 +129,3 @@ func TestRollbackHotAdd(t *testing.T) {
 		t.Error("expected b→c edge to be removed after rollback")
 	}
 }
-
