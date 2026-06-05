@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'ticket-ingest'
-total_cost_usd = 18.07511525
+total_cost_usd = 23.2374215
 
 [phases]
 [phases.architect-ticket-adapter]
@@ -29,9 +29,15 @@ summary = 'A clean, well-tested, constraint-compliant GitHub Issues TicketSource
 
 [phases.gitops-and-pre-commit]
 bead_id = 'gitops-and-pre-commit'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-04T15:19:11.067601-04:00
-updated_at = 2026-06-04T21:12:38.31699-04:00
+updated_at = 2026-06-04T21:24:35.22029-04:00
+
+[phases.gitops-and-pre-commit.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A correct, well-tested vanilla-git safety perimeter with pre-commit runner, config schema, and AST-based arch tests; all acceptance criteria met and the full suite is green, with only two minor (deferred-by-design) observations around swallowed pre-commit results and intentionally-unreachable defense-in-depth code.'
 
 [phases.init-doctor-docs-arch]
 bead_id = 'init-doctor-docs-arch'
