@@ -153,13 +153,13 @@ func (wg *WorkerGroup) attemptHealing(ctx context.Context, phaseID string, err e
 		"title":          remSpec.Title,
 	})
 
-	// Insert into live DAG under lock.
+	// Insert into DAG under lock. Build from phases since hot-reload is gone.
 	wg.mu.Lock()
-	var liveGraph = wg.hotReload.liveGraph
-	var livePhasesMap = wg.hotReload.livePhasesByID
+	liveGraph, _ := phasesToDAG(wg.Nebula.Phases)
+	livePhasesMap := PhasesByID(wg.Nebula.Phases)
 	if liveGraph == nil {
 		wg.mu.Unlock()
-		fmt.Fprintf(wg.logger(), "healing: live DAG not initialized, aborting remediation for %q\n", phaseID)
+		fmt.Fprintf(wg.logger(), "healing: failed to build DAG, aborting remediation for %q\n", phaseID)
 		return
 	}
 
@@ -203,11 +203,6 @@ func (wg *WorkerGroup) attemptHealing(ctx context.Context, phaseID string, err e
 	wg.State.SetPhaseState(remSpec.ID, remSpec.ID, PhaseStatusPending)
 	wg.progress.SaveState()
 	wg.progress.ReportProgress()
-
-	// Signal hot-added readiness.
-	if wg.hotReload != nil {
-		wg.hotReload.CheckHotAddedReady()
-	}
 
 	// Set fabric state for remediation phase.
 	if wg.Fabric != nil {

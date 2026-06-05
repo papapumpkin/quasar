@@ -161,24 +161,6 @@ func TestMapEvent_PhaseLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name:  "PhaseRefactorPending",
-			event: bus.Event{Kind: bus.KindPhaseRefactorPending, PhaseID: "p1"},
-			check: func(t *testing.T, msg tea.Msg) {
-				if _, ok := msg.(MsgPhaseRefactorPending); !ok {
-					t.Fatalf("expected MsgPhaseRefactorPending, got %T", msg)
-				}
-			},
-		},
-		{
-			name:  "PhaseRefactorApplied",
-			event: bus.Event{Kind: bus.KindPhaseRefactorApplied, PhaseID: "p1"},
-			check: func(t *testing.T, msg tea.Msg) {
-				if _, ok := msg.(MsgPhaseRefactorApplied); !ok {
-					t.Fatalf("expected MsgPhaseRefactorApplied, got %T", msg)
-				}
-			},
-		},
-		{
 			name:  "PhaseScanning",
 			event: bus.Event{Kind: bus.KindPhaseScanning, PhaseID: "p1"},
 			check: func(t *testing.T, msg tea.Msg) {

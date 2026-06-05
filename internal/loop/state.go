@@ -94,9 +94,6 @@ type CycleState struct {
 	Findings               []ReviewFinding       // current cycle's findings (reset each cycle)
 	Verifications          []FindingVerification // current cycle's verification results
 	AllFindings            []ReviewFinding       // accumulated findings across all cycles
-	Refactored             bool                  // true when a mid-run phase edit was applied
-	OriginalDescription    string                // task description before the refactor
-	RefactorDescription    string                // the new description from the user edit
 	BaseCommitSHA          string                // HEAD before first cycle (captured at task start)
 	FilterHistory          []string              // accumulated FilterCheckName per cycle (index = cycle-1)
 	CycleCommits           []string              // commit SHA per cycle (index = cycle-1)

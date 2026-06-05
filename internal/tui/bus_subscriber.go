@@ -93,10 +93,6 @@ func (s *BusSubscriber) mapEvent(ev bus.Event) tea.Msg {
 		return MsgPhaseInfo{PhaseID: ev.PhaseID, Msg: ev.Message}
 	case bus.KindPhaseBeadUpdate:
 		return mapPhaseBeadUpdate(ev)
-	case bus.KindPhaseRefactorPending:
-		return MsgPhaseRefactorPending{PhaseID: ev.PhaseID}
-	case bus.KindPhaseRefactorApplied:
-		return MsgPhaseRefactorApplied{PhaseID: ev.PhaseID}
 	case bus.KindPhaseHotAdded:
 		if ev.HotAdd == nil {
 			return nil

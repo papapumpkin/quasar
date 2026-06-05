@@ -1,9 +1,7 @@
 package nebula
 
 import (
-	"bytes"
 	"errors"
-	"sync"
 	"testing"
 )
 
@@ -132,58 +130,3 @@ func TestRollbackHotAdd(t *testing.T) {
 	}
 }
 
-func TestCheckHotAddedReady(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	neb := &Nebula{
-		Dir:      dir,
-		Manifest: Manifest{},
-		Phases: []PhaseSpec{
-			{ID: "a", Title: "A"},
-			{ID: "b", Title: "B", DependsOn: []string{"a"}},
-		},
-	}
-	state := &State{
-		Version: 1,
-		Phases: map[string]*PhaseState{
-			"a": {Status: PhaseStatusDone},
-			"b": {Status: PhaseStatusPending},
-		},
-	}
-	d, _ := phasesToDAG(neb.Phases)
-	phasesByID := map[string]*PhaseSpec{"a": &neb.Phases[0], "b": &neb.Phases[1]}
-	done := map[string]bool{"a": true}
-	failed := map[string]bool{}
-	inFlight := map[string]bool{}
-
-	var buf bytes.Buffer
-	var mu sync.Mutex
-	tracker := &PhaseTracker{
-		phasesByID: phasesByID,
-		done:       done,
-		failed:     failed,
-		inFlight:   inFlight,
-	}
-	progress := NewProgressReporter(neb, state, nil, nil, &buf)
-	hr := NewHotReloader(HotReloaderConfig{
-		Nebula:   neb,
-		State:    state,
-		Tracker:  tracker,
-		Progress: progress,
-		Logger:   &buf,
-		Mu:       &mu,
-	})
-	hr.InitLiveState(d, phasesByID)
-
-	// b has deps satisfied and is pending — should be signaled.
-	hr.CheckHotAddedReady()
-
-	select {
-	case id := <-hr.HotAdded():
-		if id != "b" {
-			t.Errorf("expected b on hotAdded, got %q", id)
-		}
-	default:
-		t.Error("expected b to be signaled as ready")
-	}
-}

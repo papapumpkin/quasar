@@ -333,25 +333,6 @@ func TestBusUIBridgeAgentOutput(t *testing.T) {
 	}
 }
 
-func TestBusUIBridgeRefactorApplied(t *testing.T) {
-	t.Parallel()
-	b := bus.NewMemoryBus()
-	defer b.Close()
-	sub := b.Subscribe("test", 16)
-	defer sub.Unsubscribe()
-
-	bridge := NewBusUIBridge(b, "phase-14", "/tmp/work")
-	bridge.RefactorApplied("phase-14")
-
-	ev := mustDrain(t, sub)
-	if ev.Kind != bus.KindPhaseRefactorApplied {
-		t.Errorf("Kind = %q, want %q", ev.Kind, bus.KindPhaseRefactorApplied)
-	}
-	if ev.PhaseID != "phase-14" {
-		t.Errorf("PhaseID = %q, want %q", ev.PhaseID, "phase-14")
-	}
-}
-
 func TestBusUIBridgeBeadUpdate(t *testing.T) {
 	t.Parallel()
 	b := bus.NewMemoryBus()

@@ -70,7 +70,6 @@ func TestFromCycleStateToCycleStateRoundTrip(t *testing.T) {
 				BaseCommitSHA: "abc123",
 				CycleCommits:  []string{"commit1"},
 				FilterHistory: []string{"check-lint"},
-				Refactored:    true,
 			},
 			phaseID:    "phase-1",
 			nebulaName: "my-nebula",
@@ -109,7 +108,6 @@ func TestFromCycleStateToCycleStateRoundTrip(t *testing.T) {
 						Status:      loop.FindingStatusStillPresent,
 					},
 				},
-				Refactored: false,
 			},
 			phaseID:    "phase-2",
 			nebulaName: "bugfix-nebula",
@@ -184,7 +182,6 @@ func TestTOMLRoundTrip(t *testing.T) {
 				Status:      loop.FindingStatusFound,
 			},
 		},
-		Refactored: false,
 	}
 
 	cp := FromCycleState(cs, "toml-phase", "toml-nebula", "toml-sha")
@@ -360,9 +357,6 @@ func assertCycleStateEqual(t *testing.T, want, got *loop.CycleState) {
 	}
 	if got.BaseCommitSHA != want.BaseCommitSHA {
 		t.Errorf("BaseCommitSHA = %q, want %q", got.BaseCommitSHA, want.BaseCommitSHA)
-	}
-	if got.Refactored != want.Refactored {
-		t.Errorf("Refactored = %v, want %v", got.Refactored, want.Refactored)
 	}
 
 	// Compare slices.

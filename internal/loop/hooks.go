@@ -20,8 +20,6 @@ const (
 	EventTaskSuccess
 	// EventTaskFailed is emitted when the loop terminates without approval.
 	EventTaskFailed
-	// EventRefactored is emitted when a mid-run phase edit is applied.
-	EventRefactored
 	// EventStruggleDetected is emitted when the struggle detector triggers,
 	// signaling that the phase should be decomposed.
 	EventStruggleDetected

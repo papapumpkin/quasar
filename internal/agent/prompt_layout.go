@@ -41,7 +41,6 @@ const (
 	//   4. Lint output from lint pass
 	//   5. Filter output from pre-reviewer checks
 	//   6. Fabric snapshot (fabric.RenderSnapshot) — claims, pulses, phase states
-	//   7. Refactor instructions — injected mid-run when user edits task
 	ZoneVolatileSuffix
 )
 
@@ -71,7 +70,6 @@ const (
 	LabelLintOutput           = "lint-output"
 	LabelFilterOutput         = "filter-output"
 	LabelFabricSnapshot       = "fabric-snapshot"
-	LabelRefactorInstructions = "refactor-instructions"
 )
 
 // ContentZone maps well-known content labels to their designated zone.
@@ -89,7 +87,6 @@ var ContentZone = map[string]PromptZone{
 	LabelLintOutput:           ZoneVolatileSuffix,
 	LabelFilterOutput:         ZoneVolatileSuffix,
 	LabelFabricSnapshot:       ZoneVolatileSuffix,
-	LabelRefactorInstructions: ZoneVolatileSuffix,
 }
 
 // PromptManifest records the content placement for a single agent invocation.

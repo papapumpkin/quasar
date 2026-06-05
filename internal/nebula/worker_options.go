@@ -44,12 +44,6 @@ type gateSignal struct {
 	reason  string // optional context for error messages (e.g. "fabric escalation")
 }
 
-// phaseLoopHandle tracks a running phase's refactor channel so that mid-run
-// edits can be signaled to the loop without interrupting the current cycle.
-type phaseLoopHandle struct {
-	RefactorCh chan<- string
-}
-
 // HotAddFunc is called after a new phase is dynamically inserted into the DAG.
 // Parameters: phaseID, title, dependsOn.
 type HotAddFunc func(phaseID, title string, dependsOn []string)
@@ -66,11 +60,6 @@ func WithRunner(r PhaseRunner) Option {
 // WithMaxWorkers sets the maximum number of concurrent phase workers.
 func WithMaxWorkers(n int) Option {
 	return func(wg *WorkerGroup) { wg.MaxWorkers = n }
-}
-
-// WithWatcher enables in-flight file watching for live edits.
-func WithWatcher(w *Watcher) Option {
-	return func(wg *WorkerGroup) { wg.Watcher = w }
 }
 
 // WithCommitter enables phase-boundary git commits.
@@ -113,11 +102,6 @@ func WithGlobalModel(m string) Option {
 // WithOnProgress sets a callback invoked after each phase status change.
 func WithOnProgress(f ProgressFunc) Option {
 	return func(wg *WorkerGroup) { wg.OnProgress = f }
-}
-
-// WithOnRefactor sets a callback invoked when a refactor is pending or dispatched.
-func WithOnRefactor(f func(phaseID string, pending bool)) Option {
-	return func(wg *WorkerGroup) { wg.OnRefactor = f }
 }
 
 // WithOnHotAdd sets a callback invoked after a phase is dynamically inserted.
@@ -205,7 +189,7 @@ func WithGitSHAFunc(fn func(ctx context.Context) (string, error)) Option {
 }
 
 // WithBus sets the event bus for publishing lifecycle events. When non-nil,
-// the WorkerGroup publishes progress, refactor, hot-add, and scanning
+// the WorkerGroup publishes progress, hot-add, and scanning
 // events to the bus alongside existing callback invocations. This enables
 // bus-mediated delivery to the TUI via BusSubscriber.
 func WithBus(b bus.Bus) Option {

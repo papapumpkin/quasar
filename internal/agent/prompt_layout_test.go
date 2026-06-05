@@ -40,7 +40,6 @@ func TestPromptZoneClassification(t *testing.T) {
 			{"lint output", "## Lint Output"},
 			{"filter output", "## Filter Output"},
 			{"fabric snapshot", "## Fabric State"},
-			{"refactor instructions", "## Refactor"},
 			{"task description", "## Task"},
 		}
 		for _, vm := range volatileMarkers {
@@ -146,7 +145,6 @@ func TestContentZoneClassification(t *testing.T) {
 		LabelLintOutput,
 		LabelFilterOutput,
 		LabelFabricSnapshot,
-		LabelRefactorInstructions,
 	}
 
 	t.Run("stable labels map to ZoneStablePrefix", func(t *testing.T) {

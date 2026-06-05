@@ -180,12 +180,6 @@ func (b *BusUIBridge) AgentOutput(role string, cycle int, output string) {
 	b.publish(ev)
 }
 
-// RefactorApplied publishes KindPhaseRefactorApplied.
-func (b *BusUIBridge) RefactorApplied(phaseID string) {
-	ev := bus.NewPhase(bus.KindPhaseRefactorApplied, b.phaseID)
-	b.publish(ev)
-}
-
 // BeadUpdate publishes KindPhaseBeadUpdate with the bead hierarchy.
 func (b *BusUIBridge) BeadUpdate(taskBeadID, title, status string, children []ui.BeadChild) {
 	root := buildBeadInfoTree(taskBeadID, title, status, children)

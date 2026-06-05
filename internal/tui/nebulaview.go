@@ -54,7 +54,6 @@ type PhaseEntry struct {
 	StartedAt   time.Time
 	CompletedAt time.Time // set when phase reaches a terminal state
 	PlanBody    string    // markdown content from the phase file
-	Refactored  bool      // true when a mid-run refactor was applied this cycle
 }
 
 // NebulaView renders the phase table for multi-task orchestration.
@@ -221,16 +220,6 @@ func (nv *NebulaView) SetPhaseCycles(phaseID string, cycles, maxCycles int) {
 	}
 }
 
-// SetPhaseRefactored marks a phase as having received a mid-run refactor.
-func (nv *NebulaView) SetPhaseRefactored(phaseID string, refactored bool) {
-	for i := range nv.Phases {
-		if nv.Phases[i].ID == phaseID {
-			nv.Phases[i].Refactored = refactored
-			return
-		}
-	}
-}
-
 // View renders the phase table with wave separators and aligned columns.
 func (nv NebulaView) View() string {
 	var b strings.Builder
@@ -338,9 +327,6 @@ func (nv NebulaView) phaseDetail(p PhaseEntry) string {
 			cycleProgress = fmt.Sprintf("cycle %d", p.Cycles)
 		}
 		parts := []string{}
-		if p.Refactored {
-			parts = append(parts, "⟳ refactored")
-		}
 		if cycleProgress != "" {
 			parts = append(parts, cycleProgress)
 		}

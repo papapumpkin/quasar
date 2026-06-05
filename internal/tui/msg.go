@@ -222,20 +222,6 @@ type MsgGateResolved struct {
 	Action  nebula.GateAction
 }
 
-// Phase refactor messages — sent when a phase file is edited during execution.
-
-// MsgPhaseRefactorPending signals that a running phase's file was modified
-// and the updated description is waiting to be applied after the current cycle.
-type MsgPhaseRefactorPending struct {
-	PhaseID string
-}
-
-// MsgPhaseRefactorApplied signals that the pending refactor was picked up by
-// the loop and the new description is now in use.
-type MsgPhaseRefactorApplied struct {
-	PhaseID string
-}
-
 // MsgHealingAttempt is sent when the auto-healing pipeline activates for a
 // failed phase. It provides context for the TUI to render a distinct
 // warning-colored line (e.g., "⚕ Healing phase-2 (max_cycles) → heal-phase-2").
