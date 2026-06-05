@@ -687,3 +687,25 @@ func (m Model) detailView() string {
 	}
 	return b.String()
 }
+
+// nebulaDetailView renders the read-only inspection projection of a nebula card
+// (seed prompt and provenance) shown when the operator opens a draft or recent
+// nebula with `d`.
+func (m Model) nebulaDetailView() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s (%s)\n", m.nebDetail.Title, m.nebDetail.Status)
+	source := m.nebDetail.SourceLabel
+	if m.nebDetail.SourceURL != "" {
+		source += " — " + m.nebDetail.SourceURL
+	}
+	fmt.Fprintf(&b, "source: %s\n\n", source)
+	if m.nebDetail.Description != "" {
+		b.WriteString(m.nebDetail.Description)
+		b.WriteString("\n\n")
+	}
+	b.WriteString("[b] back  [q] quit\n")
+	if m.err != nil {
+		b.WriteString("error: " + m.err.Error() + "\n")
+	}
+	return b.String()
+}
