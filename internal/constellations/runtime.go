@@ -113,7 +113,7 @@ func (r *Runtime) Fire(ctx context.Context, constellationName, nebulaID, parentR
 	}
 
 	now := time.Now()
-	st := NewState(SnapshotNebula(neb), now.Unix(), now.Unix())
+	st := NewState(SnapshotNebula(neb), now.Unix())
 	dagState, err := MarshalState(st)
 	if err != nil {
 		return "", err
@@ -321,7 +321,9 @@ func (r *Runtime) terminate(ctx context.Context, run *fabric.RunRow, st *State, 
 	if dag, err := MarshalState(st); err == nil {
 		run.DAGStateTOML = dag
 		run.CurrentNode = target
-		_ = r.runStore.SaveProgress(ctx, run)
+		if err := r.runStore.SaveProgress(ctx, run); err != nil {
+			fmt.Fprintf(os.Stderr, "constellations: save final state (run %s): %v\n", run.ID, err)
+		}
 	}
 	if err := r.runStore.Complete(ctx, run.ID, state); err != nil {
 		return "", err
@@ -340,7 +342,9 @@ func (r *Runtime) fail(ctx context.Context, run *fabric.RunRow, st *State, cause
 	st.RecordNode("_error", map[string]any{"message": cause.Error(), "node": run.CurrentNode})
 	if dag, err := MarshalState(st); err == nil {
 		run.DAGStateTOML = dag
-		_ = r.runStore.SaveProgress(ctx, run)
+		if err := r.runStore.SaveProgress(ctx, run); err != nil {
+			fmt.Fprintf(os.Stderr, "constellations: save failure state (run %s): %v\n", run.ID, err)
+		}
 	}
 	if err := r.runStore.Complete(ctx, run.ID, StateFailed); err != nil {
 		return "", err

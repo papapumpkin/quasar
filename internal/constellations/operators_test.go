@@ -12,7 +12,7 @@ func TestOpRenderSeedPrompt(t *testing.T) {
 		Source:  "github",
 		Context: "the truncate helper drops multibyte runes",
 		Phases:  []PhaseSnapshot{{ID: "p1", Title: "Add tests", Status: "pending"}},
-	}, 1, 1)
+	}, 1)
 	out, err := opRenderSeedPrompt(context.Background(), nil, st, nil)
 	if err != nil {
 		t.Fatalf("opRenderSeedPrompt: %v", err)
@@ -28,7 +28,7 @@ func TestOpRenderSeedPrompt(t *testing.T) {
 func TestOpPersistPhases(t *testing.T) {
 	ctx := context.Background()
 	rt, nebID := newTestRuntime(t, &fakeLoader{}, nil)
-	st := NewState(NebulaSnapshot{ID: nebID}, 1, 1)
+	st := NewState(NebulaSnapshot{ID: nebID}, 1)
 
 	t.Run("inserts phases", func(t *testing.T) {
 		args := map[string]any{"phases_toml": `
@@ -99,7 +99,7 @@ func TestOpVerify(t *testing.T) {
 
 func TestOperatorNamesRegistered(t *testing.T) {
 	got := OperatorNames()
-	want := []string{"notify_human", "persist_phases", "render_seed_prompt", "verify_build", "verify_lint", "verify_test"}
+	want := []string{"commit", "notify_human", "persist_phases", "render_seed_prompt", "verify_build", "verify_lint", "verify_test"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("OperatorNames() = %v, want %v", got, want)
 	}

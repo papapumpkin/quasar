@@ -2,6 +2,7 @@ package constellations
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -76,6 +77,24 @@ func opPersistPhases(ctx context.Context, rt *Runtime, st *State, args map[strin
 	return map[string]any{"count": len(spec.Phases)}, nil
 }
 
+// opCommit commits the working tree through the runtime's git seam. The runtime
+// always threads the repo's [pre_commit] config into the commit (the operator
+// never passes it), so a `commit` node placed after a coder star runs the
+// repo's quality gate uniformly. A pre-commit failure with fail_on_error=true
+// surfaces here as an error; an empty index (nothing to commit) is a normal
+// outcome. Output: {"sha": <hash>, "committed": bool}.
+func opCommit(ctx context.Context, rt *Runtime, _ *State, args map[string]any) (map[string]any, error) {
+	message, _ := args["message"].(string)
+	if strings.TrimSpace(message) == "" {
+		message = "quasar: automated change"
+	}
+	sha, err := rt.commitWork(ctx, message)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"sha": sha, "committed": sha != ""}, nil
+}
+
 // opNotifyHuman flips the nebula to awaiting_human so it surfaces in the TUI as
 // an approval item. Output: {"notified": true}.
 func opNotifyHuman(ctx context.Context, rt *Runtime, st *State, _ map[string]any) (map[string]any, error) {
@@ -108,9 +127,11 @@ func opVerify(kind string) Operator {
 		}
 		// An ExitError means the command ran and failed its checks — that is a
 		// verification outcome, not a runtime error. Any other error (command
-		// not found, context canceled) is a real failure.
+		// not found, context canceled) is a real failure. errors.As is used so
+		// a wrapped ExitError is still recognized.
 		if err != nil {
-			if _, isExit := err.(*exec.ExitError); !isExit {
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) {
 				return nil, fmt.Errorf("verify_%s: run command: %w", kind, err)
 			}
 		}

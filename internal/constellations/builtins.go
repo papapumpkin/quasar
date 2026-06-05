@@ -46,6 +46,7 @@ func OperatorNames() []string {
 func init() {
 	registerOperator("render_seed_prompt", opRenderSeedPrompt)
 	registerOperator("persist_phases", opPersistPhases)
+	registerOperator("commit", opCommit)
 	registerOperator("notify_human", opNotifyHuman)
 	registerOperator("verify_test", opVerify("test"))
 	registerOperator("verify_lint", opVerify("lint"))

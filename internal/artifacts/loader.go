@@ -1,18 +1,11 @@
 package artifacts
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"strings"
 	"time"
-
-	toml "github.com/pelletier/go-toml/v2"
-
-	"github.com/papapumpkin/quasar/internal/repos"
 )
 
 // Embedded artifact directory names. They double as the per-repo override
@@ -35,7 +28,7 @@ const (
 // receives a flat, fully-composed Star. Constellation expressions are compiled
 // once here, not on every evaluation.
 type Loader struct {
-	resolver *repos.Resolver
+	resolver PathResolver
 	builtins fs.FS
 
 	// Strict, when true, rejects TOML documents that carry keys absent from the
@@ -46,7 +39,7 @@ type Loader struct {
 }
 
 // New returns a Loader backed by the given resolver and the embedded defaults.
-func New(r *repos.Resolver) *Loader {
+func New(r PathResolver) *Loader {
 	return &Loader{resolver: r, builtins: DefaultsFS}
 }
 
@@ -268,66 +261,6 @@ func (l *Loader) parseSensor(src string) (*SensorInstance, error) {
 		inst.Triggers = append(inst.Triggers, SensorTrigger{Constellation: t.Constellation, When: t.When})
 	}
 	return inst, nil
-}
-
-// read returns a file's bytes and a display source path. When resolverPath is
-// the EmbeddedPath sentinel it reads from the embedded defaults; otherwise it
-// reads the per-repo override from disk.
-func (l *Loader) read(resolverPath, dir, name, ext string) ([]byte, string, error) {
-	if resolverPath == repos.EmbeddedPath {
-		p := path.Join(embeddedRoot, dir, name+ext)
-		data, err := fs.ReadFile(l.builtins, p)
-		if err != nil {
-			return nil, "", fmt.Errorf("artifacts: no %s named %q (no per-repo override and no embedded default)", dir, name)
-		}
-		return data, repos.EmbeddedPath + p, nil
-	}
-	data, err := os.ReadFile(resolverPath)
-	if err != nil {
-		return nil, "", fmt.Errorf("artifacts: read %q: %w", resolverPath, err)
-	}
-	return data, resolverPath, nil
-}
-
-// decodeTOML unmarshals data into v, honoring the loader's Strict setting, and
-// rewrites any go-toml decode error into a file:line:col diagnostic. lineOffset
-// shifts reported rows for TOML embedded in Markdown frontmatter.
-func (l *Loader) decodeTOML(data []byte, src string, lineOffset int, v any) error {
-	dec := toml.NewDecoder(bytes.NewReader(data))
-	if l.Strict {
-		dec.DisallowUnknownFields()
-	}
-	if err := dec.Decode(v); err != nil {
-		return positionedError(err, src, lineOffset)
-	}
-	return nil
-}
-
-// positionedError converts a go-toml decode/strict error into an error string
-// carrying file:line:col. The frontmatter line offset maps a position within an
-// extracted frontmatter block back to its line in the original Markdown file.
-func positionedError(err error, src string, lineOffset int) error {
-	var de *toml.DecodeError
-	if errors.As(err, &de) {
-		row, col := de.Position()
-		return fmt.Errorf("%s:%d:%d: %s", src, row+offsetRows(lineOffset), col, de.Error())
-	}
-	var sme *toml.StrictMissingError
-	if errors.As(err, &sme) && len(sme.Errors) > 0 {
-		first := sme.Errors[0]
-		row, col := first.Position()
-		return fmt.Errorf("%s:%d:%d: unknown field %q", src, row+offsetRows(lineOffset), col, first.Error())
-	}
-	return fmt.Errorf("%s: %w", src, err)
-}
-
-// offsetRows converts a 1-based frontmatter start line into the row delta to add
-// to a position reported relative to the frontmatter block.
-func offsetRows(fmStartLine int) int {
-	if fmStartLine <= 0 {
-		return 0
-	}
-	return fmStartLine - 1
 }
 
 // nodeTypeOf resolves a node's declared type, inferring it from whichever of

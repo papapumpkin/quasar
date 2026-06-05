@@ -8,7 +8,7 @@ func TestStateRoundTrip(t *testing.T) {
 		Name:   "demo",
 		Status: "running",
 		Phases: []PhaseSnapshot{{ID: "p1", Seq: 0, Title: "First", Status: "pending"}},
-	}, 42, 1000)
+	}, 1000)
 	st.RecordNode("review", map[string]any{"approved": true, "risk": "low"})
 	st.Meta.TotalCostUSD = 1.25
 	st.Cycle = 2
@@ -33,7 +33,7 @@ func TestStateRoundTrip(t *testing.T) {
 }
 
 func TestExprStateLookups(t *testing.T) {
-	st := NewState(NebulaSnapshot{ID: "n", Name: "demo", Status: "awaiting_approval"}, 1, 1)
+	st := NewState(NebulaSnapshot{ID: "n", Name: "demo", Status: "awaiting_approval"}, 1)
 	st.RecordNode("review", map[string]any{"approved": false})
 
 	es := st.ExprState()

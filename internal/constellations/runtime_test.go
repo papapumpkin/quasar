@@ -2,6 +2,7 @@ package constellations
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -259,6 +260,106 @@ func TestUnsupportedNodeTypeFailsRun(t *testing.T) {
 	}
 	if err == nil {
 		t.Fatalf("expected an error describing the unsupported node type")
+	}
+}
+
+// fakeCommitter records the CommitOpts it was handed so a test can assert the
+// runtime threaded the repo's [pre_commit] config, and can be made to fail to
+// simulate a pre-commit failure blocking the commit.
+type fakeCommitter struct {
+	gotOpts gitops.CommitOpts
+	sha     string
+	err     error
+	calls   int
+}
+
+func (f *fakeCommitter) Commit(_ context.Context, _ string, opts gitops.CommitOpts) (string, error) {
+	f.calls++
+	f.gotOpts = opts
+	return f.sha, f.err
+}
+
+// newRuntimeWithCommitter builds a runtime wired to a committer and pre-commit
+// config, with a single-node "commit" constellation.
+func newRuntimeWithCommitter(t *testing.T, c Committer, pc gitops.PreCommitConfig) (*Runtime, string) {
+	t.Helper()
+	con := &artifacts.Constellation{
+		Name:  "ship",
+		Nodes: []artifacts.ConstellationNode{builtinNode("commit", "commit")},
+		Edges: []artifacts.ConstellationEdge{{From: "commit", To: artifacts.TermDone}},
+	}
+	loader := &fakeLoader{cons: map[string]*artifacts.Constellation{"ship": con}}
+	rt, nebID := newTestRuntime(t, loader, nil)
+	rt.committer = c
+	rt.preCommit = pc
+	return rt, nebID
+}
+
+func TestCommitOperatorThreadsPreCommit(t *testing.T) {
+	ctx := context.Background()
+	pc := gitops.PreCommitConfig{Commands: []string{"gofmt -l ."}, FailOnError: true}
+	committer := &fakeCommitter{sha: "abc123"}
+	rt, nebID := newRuntimeWithCommitter(t, committer, pc)
+
+	runID, err := rt.Fire(ctx, "ship", nebID, "")
+	if err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	state, err := rt.Step(ctx, runID)
+	if err != nil {
+		t.Fatalf("Step: %v", err)
+	}
+	if state != StateDone {
+		t.Fatalf("state = %q, want done", state)
+	}
+	if committer.calls != 1 {
+		t.Fatalf("committer called %d times, want 1", committer.calls)
+	}
+	// The runtime must thread the repo's pre-commit config into the commit;
+	// the operator never sets it.
+	if len(committer.gotOpts.PreCommit.Commands) != 1 || !committer.gotOpts.PreCommit.FailOnError {
+		t.Errorf("pre-commit not threaded into commit: %+v", committer.gotOpts.PreCommit)
+	}
+	run, _ := rt.runStore.GetRun(ctx, runID)
+	st, _ := UnmarshalState(run.DAGStateTOML)
+	if st.Nodes["commit"]["sha"] != "abc123" {
+		t.Errorf("commit sha not recorded: %+v", st.Nodes["commit"])
+	}
+}
+
+func TestCommitFailureBlocksRun(t *testing.T) {
+	ctx := context.Background()
+	pc := gitops.PreCommitConfig{Commands: []string{"false"}, FailOnError: true}
+	committer := &fakeCommitter{err: errors.New("pre-commit hook \"false\" failed")}
+	rt, nebID := newRuntimeWithCommitter(t, committer, pc)
+
+	runID, _ := rt.Fire(ctx, "ship", nebID, "")
+	state, err := rt.Step(ctx, runID)
+	if state != StateFailed {
+		t.Fatalf("state = %q, want failed", state)
+	}
+	if err == nil {
+		t.Fatal("expected the pre-commit failure to surface as a step error")
+	}
+}
+
+func TestCommitNothingToCommitIsNotAFailure(t *testing.T) {
+	ctx := context.Background()
+	committer := &fakeCommitter{err: gitops.ErrNothingToCommit}
+	rt, nebID := newRuntimeWithCommitter(t, committer, gitops.PreCommitConfig{})
+
+	runID, _ := rt.Fire(ctx, "ship", nebID, "")
+	state, err := rt.Step(ctx, runID)
+	if err != nil {
+		t.Fatalf("Step: %v", err)
+	}
+	if state != StateDone {
+		t.Fatalf("state = %q, want done", state)
+	}
+	run, _ := rt.runStore.GetRun(ctx, runID)
+	st, _ := UnmarshalState(run.DAGStateTOML)
+	if st.Nodes["commit"]["committed"] != false {
+		t.Errorf("expected committed=false for empty index, got %+v", st.Nodes["commit"])
 	}
 }
 

@@ -63,21 +63,22 @@ type PhaseSnapshot struct {
 }
 
 // MetaSnapshot is run-wide bookkeeping. TotalCostUSD accumulates across every
-// star invocation; expressions can gate on it (e.g. budget guards).
+// star invocation; expressions can gate on it (e.g. budget guards). The
+// canonical run ID lives on the constellation_runs row (a string), so it is not
+// duplicated here.
 type MetaSnapshot struct {
-	RunID        int64   `toml:"run_id"`
 	TotalCostUSD float64 `toml:"total_cost_usd"`
 	RunStartedAt int64   `toml:"run_started_at"`
 }
 
 // NewState builds the initial run State from a nebula snapshot. Nodes starts
 // empty and is populated as the DAG walk progresses.
-func NewState(neb NebulaSnapshot, runID, startedAt int64) *State {
+func NewState(neb NebulaSnapshot, startedAt int64) *State {
 	return &State{
 		Inputs: map[string]any{},
 		Nodes:  map[string]map[string]any{},
 		Nebula: neb,
-		Meta:   MetaSnapshot{RunID: runID, RunStartedAt: startedAt},
+		Meta:   MetaSnapshot{RunStartedAt: startedAt},
 	}
 }
 
@@ -148,7 +149,6 @@ func (s *State) ExprState() artifacts.State {
 		},
 		"cycle": s.Cycle,
 		"meta": map[string]any{
-			"run_id":         s.Meta.RunID,
 			"total_cost_usd": s.Meta.TotalCostUSD,
 			"run_started_at": s.Meta.RunStartedAt,
 		},
