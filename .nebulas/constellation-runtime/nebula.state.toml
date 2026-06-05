@@ -7,37 +7,37 @@ total_cost_usd = 7.80180755
 bead_id = 'arch-tests-and-docs'
 status = 'created'
 created_at = 2026-06-04T22:58:28.639359-04:00
-updated_at = 2026-06-04T22:58:28.639359-04:00
+updated_at = 2026-06-05T09:24:37.980851-04:00
 
 [phases.builtin-constellations-and-stars]
 bead_id = 'builtin-constellations-and-stars'
-status = 'failed'
+status = 'created'
 created_at = 2026-06-04T22:58:28.63881-04:00
-updated_at = 2026-06-05T03:32:26.68007-04:00
+updated_at = 2026-06-05T09:24:37.980281-04:00
 
 [phases.constellation-runtime]
 bead_id = 'constellation-runtime'
 status = 'created'
 created_at = 2026-06-04T22:58:28.638603-04:00
-updated_at = 2026-06-04T22:58:28.638603-04:00
+updated_at = 2026-06-05T09:24:37.980053-04:00
 
 [phases.file-loader-and-discrimination]
 bead_id = 'file-loader-and-discrimination'
 status = 'created'
 created_at = 2026-06-04T22:58:28.637944-04:00
-updated_at = 2026-06-04T22:58:28.637944-04:00
+updated_at = 2026-06-05T09:24:37.979132-04:00
 
 [phases.gc-engine]
 bead_id = 'gc-engine'
 status = 'created'
 created_at = 2026-06-04T22:58:28.638987-04:00
-updated_at = 2026-06-04T22:58:28.638987-04:00
+updated_at = 2026-06-05T09:24:37.980479-04:00
 
 [phases.github-sensor-produces-nebula]
 bead_id = 'github-sensor-produces-nebula'
 status = 'created'
 created_at = 2026-06-04T22:58:28.638382-04:00
-updated_at = 2026-06-04T22:58:28.638382-04:00
+updated_at = 2026-06-05T09:24:37.979718-04:00
 
 [phases.multi-repo-foundation]
 bead_id = 'multi-repo-foundation'
@@ -53,18 +53,18 @@ summary = 'A clean, well-tested multi-repo foundation (registry + resolver + CLI
 
 [phases.nebula-to-sqlite-migration]
 bead_id = 'nebula-to-sqlite-migration'
-status = 'failed'
+status = 'in_progress'
 created_at = 2026-06-04T22:58:28.638161-04:00
-updated_at = 2026-06-04T23:23:39.132001-04:00
+updated_at = 2026-06-05T09:24:38.493007-04:00
 
 [phases.rename-integrations-to-sensors]
 bead_id = 'rename-integrations-to-sensors'
-status = 'failed'
+status = 'created'
 created_at = 2026-06-04T22:58:28.637709-04:00
-updated_at = 2026-06-04T23:44:49.290762-04:00
+updated_at = 2026-06-05T09:24:37.978181-04:00
 
 [phases.tui-multi-repo-fleet-lane]
 bead_id = 'tui-multi-repo-fleet-lane'
-status = 'failed'
+status = 'created'
 created_at = 2026-06-04T22:58:28.639171-04:00
-updated_at = 2026-06-04T23:55:43.710277-04:00
+updated_at = 2026-06-05T09:24:37.980673-04:00
