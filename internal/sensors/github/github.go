@@ -37,10 +37,12 @@ const ghInstallURL = "https://cli.github.com/"
 // Source is safe for concurrent use once Configure has run: all fields are set
 // during Configure and the runGH hook is expected to be reentrant.
 type Source struct {
-	repo  string    // "owner/repo" used to scope issue lists and qualify ids
-	token string    // resolved in Configure; "" -> defer to gh's own auth
-	runGH runGHFunc // injectable for tests; defaults to the real gh binary
-	deps  sourceDeps
+	repo           string   // "owner/repo" used to scope issue lists and qualify ids
+	token          string   // resolved in Configure; "" -> defer to gh's own auth
+	labelFilter    []string // when set, an issue must carry every label to qualify
+	assigneeFilter string   // when set, restrict to this assignee ("@me"/"@none" deferred to gh)
+	runGH          runGHFunc // injectable for tests; defaults to the real gh binary
+	deps           sourceDeps
 }
 
 // Compile-time assertion that Source satisfies the poll-driven sensor.
@@ -103,6 +105,8 @@ func (s *Source) Configure(raw map[string]any, secrets sensors.SecretResolver) e
 
 	s.repo = repo
 	s.token = token
+	s.labelFilter = stringsFromCfg(raw, "labels")
+	s.assigneeFilter = stringFromCfg(raw, "assignee")
 	s.runGH = s.deps.newRunGH(token)
 	return nil
 }
@@ -130,11 +134,7 @@ func (s *Source) Poll(ctx context.Context, cursor json.RawMessage) ([]sensors.Ev
 		return nil, cursor, err
 	}
 
-	out, err := s.runGH(ctx, "issue", "list",
-		"--repo", s.repo,
-		"--state", "open",
-		"--limit", strconv.Itoa(pollLimit),
-		"--json", "number,title,body,state,labels,assignees,url")
+	out, err := s.runGH(ctx, s.listArgs()...)
 	if err != nil {
 		return nil, cursor, classifyGHError(s.repo, 0, err)
 	}
@@ -148,6 +148,9 @@ func (s *Source) Poll(ctx context.Context, cursor json.RawMessage) ([]sensors.Ev
 	highest := last
 	for _, v := range views {
 		if v.Number <= last {
+			continue
+		}
+		if !s.matchesFilters(v) {
 			continue
 		}
 		if v.Number > highest {
@@ -198,6 +201,65 @@ func (s *Source) SeedNebula(event sensors.Event) (*sensors.SeedNebulaContent, er
 		Labels:      rawStrings(event.Raw, "labels"),
 		Assignee:    rawString(event.Raw, "assignee"),
 	}, nil
+}
+
+// listArgs builds the `gh issue list` argv, narrowing server-side by label and
+// assignee when configured. Server-side narrowing keeps the response small and
+// lets gh resolve special assignee tokens like "@me"; matchesFilters re-checks
+// the returned issues so the cursor logic never depends on gh honoring a flag.
+func (s *Source) listArgs() []string {
+	args := []string{"issue", "list",
+		"--repo", s.repo,
+		"--state", "open",
+		"--limit", strconv.Itoa(pollLimit),
+		"--json", "number,title,body,state,labels,assignees,url",
+	}
+	for _, label := range s.labelFilter {
+		args = append(args, "--label", label)
+	}
+	if s.assigneeFilter != "" {
+		args = append(args, "--assignee", s.assigneeFilter)
+	}
+	return args
+}
+
+// matchesFilters reports whether an issue satisfies the configured label and
+// assignee filters. Labels are ANDed (an issue must carry every configured
+// label), mirroring gh's `--label a --label b` semantics. A "@"-prefixed
+// assignee filter (e.g. "@me", "@none") is a gh-resolved token that cannot be
+// matched against a login client-side, so it is deferred to gh and treated as a
+// pass here.
+func (s *Source) matchesFilters(v issueView) bool {
+	if !hasAllLabels(v.LabelNames(), s.labelFilter) {
+		return false
+	}
+	if s.assigneeFilter == "" || strings.HasPrefix(s.assigneeFilter, "@") {
+		return true
+	}
+	for _, login := range v.assigneeLogins() {
+		if login == s.assigneeFilter {
+			return true
+		}
+	}
+	return false
+}
+
+// hasAllLabels reports whether have contains every label in want. An empty want
+// matches everything.
+func hasAllLabels(have, want []string) bool {
+	if len(want) == 0 {
+		return true
+	}
+	set := make(map[string]bool, len(have))
+	for _, l := range have {
+		set[l] = true
+	}
+	for _, w := range want {
+		if !set[w] {
+			return false
+		}
+	}
+	return true
 }
 
 // decodeCursor parses the opaque cursor into a last-issue-number. An empty or
@@ -304,6 +366,29 @@ func stringFromCfg(cfg map[string]any, key string) string {
 		return v
 	}
 	return ""
+}
+
+// stringsFromCfg reads a []string from a config map. TOML decodes a string
+// array as []any of strings, so both []string and []any are accepted; non-string
+// elements and absent/foreign keys yield nil.
+func stringsFromCfg(cfg map[string]any, key string) []string {
+	if cfg == nil {
+		return nil
+	}
+	switch v := cfg[key].(type) {
+	case []string:
+		return v
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 // detectRepoFromGitConfig reads ./.git/config and parses the origin remote into

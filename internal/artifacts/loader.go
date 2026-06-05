@@ -254,6 +254,7 @@ func (l *Loader) parseSensor(src string) (*SensorInstance, error) {
 		Name:         sf.Name,
 		Type:         sf.Type,
 		PollInterval: interval,
+		MaxInflight:  sf.MaxInflight,
 		Config:       sf.Config,
 		SourcePath:   src,
 	}
@@ -362,6 +363,7 @@ type sensorFile struct {
 	Name         string         `toml:"name"`
 	Type         string         `toml:"type"`
 	PollInterval string         `toml:"poll_interval"`
+	MaxInflight  int            `toml:"max_inflight"`
 	Config       map[string]any `toml:"config"`
 	Triggers     []struct {
 		Constellation string `toml:"constellation"`

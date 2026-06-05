@@ -127,6 +127,20 @@ func (v issueView) PrimaryAssignee() string {
 	return v.Assignees[0].Login
 }
 
+// assigneeLogins returns every assignee's login in source order; nil when the
+// issue is unassigned. The assignee filter matches against the full set, not
+// just the primary, so an issue assigned to several people still qualifies.
+func (v issueView) assigneeLogins() []string {
+	if len(v.Assignees) == 0 {
+		return nil
+	}
+	logins := make([]string, 0, len(v.Assignees))
+	for _, a := range v.Assignees {
+		logins = append(logins, a.Login)
+	}
+	return logins
+}
+
 // parseIssueView decodes the metadata JSON object from `gh issue view`.
 func parseIssueView(data []byte) (issueView, error) {
 	var v issueView

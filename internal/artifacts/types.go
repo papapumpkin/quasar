@@ -115,6 +115,7 @@ type SensorInstance struct {
 	Name         string
 	Type         string
 	PollInterval time.Duration
+	MaxInflight  int // cap on concurrent in-flight constellation triggers; 0 = scheduler default
 	Config       map[string]any
 	Triggers     []SensorTrigger
 	SourcePath   string

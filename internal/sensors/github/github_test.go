@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/papapumpkin/quasar/internal/sensors"
@@ -148,6 +149,111 @@ func TestPollCursorFiltersAlreadySeen(t *testing.T) {
 	}
 	if last, _ := decodeCursor(held); last != 42 {
 		t.Errorf("cursor = %d, want 42 (unchanged)", last)
+	}
+}
+
+func TestPollFiltersByLabel(t *testing.T) {
+	t.Parallel()
+
+	list := readFixture(t, "gh-issue-list.json")
+
+	t.Run("single label keeps only matching issues", func(t *testing.T) {
+		t.Parallel()
+		s := configured(t, testDeps(fakeListGH(list, nil)), map[string]any{
+			"repo":   "papapumpkin/quasar",
+			"labels": []any{"bug"},
+		})
+		events, _, err := s.Poll(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("Poll: %v", err)
+		}
+		if len(events) != 1 || events[0].ExternalID != "papapumpkin/quasar#42" {
+			t.Fatalf("events = %+v, want only issue 42 (labeled bug)", events)
+		}
+	})
+
+	t.Run("labels are ANDed", func(t *testing.T) {
+		t.Parallel()
+		s := configured(t, testDeps(fakeListGH(list, nil)), map[string]any{
+			"repo":   "papapumpkin/quasar",
+			"labels": []any{"bug", "not-present"},
+		})
+		events, _, err := s.Poll(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("Poll: %v", err)
+		}
+		if len(events) != 0 {
+			t.Fatalf("events = %+v, want none (AND of labels)", events)
+		}
+	})
+}
+
+func TestPollFiltersByAssignee(t *testing.T) {
+	t.Parallel()
+
+	list := readFixture(t, "gh-issue-list.json")
+
+	t.Run("literal login keeps only matching issues", func(t *testing.T) {
+		t.Parallel()
+		s := configured(t, testDeps(fakeListGH(list, nil)), map[string]any{
+			"repo":     "papapumpkin/quasar",
+			"assignee": "octocat",
+		})
+		events, _, err := s.Poll(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("Poll: %v", err)
+		}
+		if len(events) != 1 || events[0].ExternalID != "papapumpkin/quasar#42" {
+			t.Fatalf("events = %+v, want only issue 42 (assigned octocat)", events)
+		}
+	})
+
+	t.Run("@me token is deferred to gh, not matched client-side", func(t *testing.T) {
+		t.Parallel()
+		s := configured(t, testDeps(fakeListGH(list, nil)), map[string]any{
+			"repo":     "papapumpkin/quasar",
+			"assignee": "@me",
+		})
+		events, _, err := s.Poll(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("Poll: %v", err)
+		}
+		// @me cannot be resolved against a login locally, so the client-side
+		// filter passes everything and relies on gh's server-side narrowing.
+		if len(events) != 3 {
+			t.Fatalf("got %d events, want all 3 (@me deferred to gh)", len(events))
+		}
+	})
+}
+
+func TestListArgsIncludesFilterFlags(t *testing.T) {
+	t.Parallel()
+
+	var gotArgs []string
+	deps := sourceDeps{
+		lookPath:   func(string) (string, error) { return "/usr/bin/gh", nil },
+		detectRepo: func() (string, error) { return "", errors.New("no git") },
+		newRunGH: func(string) runGHFunc {
+			return func(_ context.Context, args ...string) ([]byte, error) {
+				gotArgs = args
+				return []byte("[]"), nil
+			}
+		},
+	}
+	s := configured(t, deps, map[string]any{
+		"repo":     "papapumpkin/quasar",
+		"labels":   []any{"needs-quasar"},
+		"assignee": "@me",
+	})
+	if _, _, err := s.Poll(context.Background(), nil); err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+
+	joined := strings.Join(gotArgs, " ")
+	for _, want := range []string{"--label needs-quasar", "--assignee @me"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("gh args %q missing %q", joined, want)
+		}
 	}
 }
 
