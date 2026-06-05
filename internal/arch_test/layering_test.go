@@ -19,7 +19,7 @@ var layers = map[string]int{
 	"dag":          0,
 	"filter":       0,
 	"gitops":       0,
-	"integrations": 0,
+	"sensors":      0,
 	"snapshot":     0,
 	"telemetry":    0,
 

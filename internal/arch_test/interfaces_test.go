@@ -64,11 +64,11 @@ var allowedColocations = map[string]map[string]bool{
 	"ui": {
 		"UI": true,
 	},
-	// Integrations defines SecretResolver alongside OSSecretResolver, the
-	// canonical filesystem/env-backed implementation. The interface exists so
-	// adapters and tests can inject a fake resolver without touching the real
-	// environment; OSSecretResolver is the production default.
-	"integrations": {
+	// Sensors defines SecretResolver alongside OSSecretResolver, the canonical
+	// filesystem/env-backed implementation. The interface exists so adapters and
+	// tests can inject a fake resolver without touching the real environment;
+	// OSSecretResolver is the production default.
+	"sensors": {
 		"SecretResolver": true,
 	},
 }

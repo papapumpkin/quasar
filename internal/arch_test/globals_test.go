@@ -26,11 +26,11 @@ var allowedGlobals = map[string][]string{
 	"fabric": {
 		"migrationsFS",
 	},
-	// integrations: the process-wide adapter registry. Adapters register
-	// into it from their package init(); it is the single intentional global
-	// the integration design mandates (a sync-protected Registry value). Tests
-	// that need isolation construct their own via NewRegistry().
-	"integrations": {
+	// sensors: the process-wide adapter registry. Adapters register into it
+	// from their package init(); it is the single intentional global the sensor
+	// design mandates (a sync-protected Registry value). Tests that need
+	// isolation construct their own via NewRegistry().
+	"sensors": {
 		"defaultRegistry",
 	},
 	// nebula: the ticket architect prompt template. nebulaPromptSource is the
