@@ -1,0 +1,36 @@
+[nebula]
+name = "master-reviewer-loop-hardening"
+description = "Move master-reviewer, cycle limits, and budget propagation out of internal/loop into the constellation runtime as proper nodes. Enforce the 3-cycle master-review cap declaratively. Make budgets a first-class run attribute that propagates through every star_invocation."
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["quasar", "runtime", "review"]
+assignee = ""
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 35.0
+model = ""
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Master-reviewer logic lives in the runtime as a constellation node, not in internal/loop",
+    "Cycle limit (default 3) is enforced by the constellation, not the loop, and is a TOML attribute on the master-review constellation",
+    "Budget is a first-class column on constellation_runs that decrements per star_invocation cost; over-budget triggers a defined failure mode",
+    "Loop/coder-reviewer becomes a thin inner constellation called from master-review, not a top-level state machine",
+    "All existing tests in internal/loop keep passing; new behavior is covered by runtime-level tests",
+]
+constraints = [
+    "No new abstractions for budget tracking — reuse star_invocation cost columns from Phase 5",
+    "Cycle counting is per-run, not global",
+    "When the master reviewer fails the 3rd cycle, the run terminates with state='failed' and a structured failure reason; PR is NOT opened",
+    "internal/loop continues to exist for in-process invocation (cmd line, tests) but is no longer the master-review owner",
+]
+
+[dependencies]
+requires_nebulae = ["constellation-runtime"]

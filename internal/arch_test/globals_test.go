@@ -13,6 +13,13 @@ import (
 // but don't match the automated detection heuristics. Each entry documents why
 // it is acceptable.
 var allowedGlobals = map[string][]string{
+	// fabric: migrationsFS is the //go:embed target for the ordered SQL
+	// migrations applied after the base schema (embed requires a package-level
+	// var). It is read-only after package init — the embedded FS is never
+	// reassigned.
+	"fabric": {
+		"migrationsFS",
+	},
 	// integrations: the process-wide adapter registry. Adapters register
 	// into it from their package init(); it is the single intentional global
 	// the integration design mandates (a sync-protected Registry value). Tests

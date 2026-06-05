@@ -1,0 +1,41 @@
+[nebula]
+name = "react-cockpit"
+description = "Browser-based multi-operator cockpit for the Quasar fleet. React + Vite frontend; a thin Go HTTP+WebSocket server exposes the same SQLite/runtime data the TUI consumes. The TUI stays for SSH/headless ops; the cockpit is what you open on a real machine. GitHub-linked: PR badges, issue links, sensor source URLs are all hot."
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["quasar", "ui", "cockpit"]
+assignee = ""
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 50.0
+model = ""
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "React + Vite cockpit at quasar serve --cockpit, served from the same process as the supervisor (single binary, no separate frontend dev server in production)",
+    "Same data model as the TUI fleet view: awaiting-approval lane, in-flight lane, recent lane, all grouped by repo",
+    "Live updates via a single WebSocket subscription; the server pushes delta events (no polling)",
+    "One-click approve/reject for sensor-draft nebulas",
+    "PR badges with status pulled from GitHub (open/draft/merged/closed), issue links resolve to GitHub directly",
+    "Run detail page shows the full constellation_run trace, scrollable step-by-step, with live tailing of the active star's stdout",
+    "Multi-user safe: an action by one operator updates everyone else's view in <1s",
+    "TUI remains the canonical headless interface; cockpit is purely additive",
+]
+constraints = [
+    "Backend in Go (same module), frontend builds to a static bundle embedded via //go:embed",
+    "No separate auth service in v1 — bearer token from a config file, like the existing CLI",
+    "No write APIs beyond what the TUI already supports (approve, reject, pause, resume, kill)",
+    "No HTML rendering on the server; backend serves JSON + the embedded bundle only",
+    "Frontend has zero direct DB access; all state goes through the JSON+WS API",
+    "If the cockpit feature flag is off (default for now), no bundle is embedded and the routes 404",
+]
+
+[dependencies]
+requires_nebulae = ["constellation-runtime"]

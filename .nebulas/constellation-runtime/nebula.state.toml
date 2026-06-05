@@ -4,60 +4,60 @@ nebula_name = 'constellation-runtime'
 [phases]
 [phases.arch-tests-and-docs]
 bead_id = 'arch-tests-and-docs'
-status = 'skipped'
-created_at = 2026-06-04T22:39:05.95435-04:00
-updated_at = 2026-06-04T22:55:46.490801-04:00
+status = 'created'
+created_at = 2026-06-04T22:58:28.639359-04:00
+updated_at = 2026-06-04T22:58:28.639359-04:00
 
 [phases.builtin-constellations-and-stars]
 bead_id = 'builtin-constellations-and-stars'
-status = 'skipped'
-created_at = 2026-06-04T22:39:05.953767-04:00
-updated_at = 2026-06-04T22:55:46.490164-04:00
+status = 'created'
+created_at = 2026-06-04T22:58:28.63881-04:00
+updated_at = 2026-06-04T22:58:28.63881-04:00
 
 [phases.constellation-runtime]
 bead_id = 'constellation-runtime'
 status = 'created'
-created_at = 2026-06-04T22:39:05.953586-04:00
-updated_at = 2026-06-04T22:55:46.489965-04:00
+created_at = 2026-06-04T22:58:28.638603-04:00
+updated_at = 2026-06-04T22:58:28.638603-04:00
 
 [phases.file-loader-and-discrimination]
 bead_id = 'file-loader-and-discrimination'
 status = 'created'
-created_at = 2026-06-04T22:39:05.953004-04:00
-updated_at = 2026-06-04T22:55:46.489338-04:00
+created_at = 2026-06-04T22:58:28.637944-04:00
+updated_at = 2026-06-04T22:58:28.637944-04:00
 
 [phases.gc-engine]
 bead_id = 'gc-engine'
-status = 'skipped'
-created_at = 2026-06-04T22:39:05.953948-04:00
-updated_at = 2026-06-04T22:55:46.49035-04:00
+status = 'created'
+created_at = 2026-06-04T22:58:28.638987-04:00
+updated_at = 2026-06-04T22:58:28.638987-04:00
 
 [phases.github-sensor-produces-nebula]
 bead_id = 'github-sensor-produces-nebula'
 status = 'created'
-created_at = 2026-06-04T22:39:05.953393-04:00
-updated_at = 2026-06-04T22:55:46.489769-04:00
+created_at = 2026-06-04T22:58:28.638382-04:00
+updated_at = 2026-06-04T22:58:28.638382-04:00
 
 [phases.multi-repo-foundation]
 bead_id = 'multi-repo-foundation'
-status = 'failed'
-created_at = 2026-06-04T22:39:05.952424-04:00
-updated_at = 2026-06-04T22:56:32.442482-04:00
+status = 'in_progress'
+created_at = 2026-06-04T22:58:28.637317-04:00
+updated_at = 2026-06-04T22:58:29.057645-04:00
 
 [phases.nebula-to-sqlite-migration]
 bead_id = 'nebula-to-sqlite-migration'
-status = 'skipped'
-created_at = 2026-06-04T22:39:05.953212-04:00
-updated_at = 2026-06-04T22:55:46.489564-04:00
+status = 'created'
+created_at = 2026-06-04T22:58:28.638161-04:00
+updated_at = 2026-06-04T22:58:28.638161-04:00
 
 [phases.rename-integrations-to-sensors]
 bead_id = 'rename-integrations-to-sensors'
-status = 'skipped'
-created_at = 2026-06-04T22:39:05.952763-04:00
-updated_at = 2026-06-04T22:55:46.489118-04:00
+status = 'created'
+created_at = 2026-06-04T22:58:28.637709-04:00
+updated_at = 2026-06-04T22:58:28.637709-04:00
 
 [phases.tui-multi-repo-fleet-lane]
 bead_id = 'tui-multi-repo-fleet-lane'
-status = 'skipped'
-created_at = 2026-06-04T22:39:05.954143-04:00
-updated_at = 2026-06-04T22:55:46.490557-04:00
+status = 'created'
+created_at = 2026-06-04T22:58:28.639171-04:00
+updated_at = 2026-06-04T22:58:28.639171-04:00

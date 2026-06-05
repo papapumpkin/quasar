@@ -23,6 +23,7 @@ var layers = map[string]int{
 
 	"claude": 1,
 	"fabric": 1,
+	"repos":  1,
 
 	"neutron": 2,
 	"tycho":   2,

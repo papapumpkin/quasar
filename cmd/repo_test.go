@@ -57,7 +57,7 @@ func TestRepoRegisterAndList(t *testing.T) {
 func TestRepoListJSON(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "fabric.db")
 	repo := gitRepoDir(t)
-	if _, _, err := runRepo(t, dbPath, "register", repo, ""); err != nil {
+	if _, _, err := runRepo(t, dbPath, "register", repo); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 
@@ -81,7 +81,7 @@ func TestRepoListJSON(t *testing.T) {
 func TestRepoPauseResume(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "fabric.db")
 	repo := gitRepoDir(t)
-	if _, _, err := runRepo(t, dbPath, "register", repo, ""); err != nil {
+	if _, _, err := runRepo(t, dbPath, "register", repo); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 
@@ -112,7 +112,7 @@ func TestRepoRegisterInvalidExitCode(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "fabric.db")
 	bad := t.TempDir() // no .git
 
-	_, _, err := runRepo(t, dbPath, "register", bad, "")
+	_, _, err := runRepo(t, dbPath, "register", bad)
 	if err == nil {
 		t.Fatal("expected error registering non-git dir")
 	}
