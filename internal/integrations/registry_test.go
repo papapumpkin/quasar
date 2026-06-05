@@ -127,10 +127,11 @@ func TestRegistry_DuplicateForgePanics(t *testing.T) {
 func TestDefaultRegistryIsStable(t *testing.T) {
 	t.Parallel()
 
-	if Default() == nil {
+	first := Default()
+	if first == nil {
 		t.Fatal("Default() returned nil")
 	}
-	if Default() != Default() {
+	if second := Default(); first != second {
 		t.Error("Default() returned different instances across calls")
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/config"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/integrations"
+
 	// Blank import for its side effect only: the github adapter registers
 	// itself with the integration registry from package init(). The command
 	// dispatches through integrations.Default() and never references github
@@ -31,7 +32,7 @@ const defaultNebulaDir = ".nebulas"
 // the cmd layer depends on so tests substitute a fake architect without an LLM.
 // The production implementation wraps nebula.FromTicketInto.
 type ticketArchitect interface {
-	FromTicket(ctx context.Context, t *integrations.Ticket, targetDir string) (*nebula.NebulaInfo, error)
+	FromTicket(ctx context.Context, t *integrations.Ticket, targetDir string) (*nebula.Generated, error)
 }
 
 // nebulaRecorder persists a draft nebula's provenance row. *fabric.SQLiteFabric
@@ -114,7 +115,7 @@ type claudeArchitect struct {
 }
 
 // FromTicket generates the nebula into targetDir via the architect agent.
-func (a claudeArchitect) FromTicket(ctx context.Context, t *integrations.Ticket, targetDir string) (*nebula.NebulaInfo, error) {
+func (a claudeArchitect) FromTicket(ctx context.Context, t *integrations.Ticket, targetDir string) (*nebula.Generated, error) {
 	return nebula.FromTicketInto(ctx, a.invoker, t, targetDir)
 }
 

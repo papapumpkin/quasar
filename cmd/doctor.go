@@ -14,6 +14,7 @@ import (
 
 	"github.com/papapumpkin/quasar/internal/config"
 	"github.com/papapumpkin/quasar/internal/integrations"
+
 	// Blank import for its side effect only: the github adapter registers
 	// itself with the integration registry from package init(). doctor reaches
 	// it through integrations.Default(), never via a direct type reference.

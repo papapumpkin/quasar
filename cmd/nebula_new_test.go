@@ -31,18 +31,18 @@ func (f *fakeTicketSource) Fetch(_ context.Context, sourceID string) (*integrati
 }
 
 // fakeArchitect records the target directory it was asked to write into and
-// returns a NebulaInfo whose name mirrors that directory's basename.
+// returns a Generated whose name mirrors that directory's basename.
 type fakeArchitect struct {
 	gotTarget string
 	err       error
 }
 
-func (f *fakeArchitect) FromTicket(_ context.Context, _ *integrations.Ticket, targetDir string) (*nebula.NebulaInfo, error) {
+func (f *fakeArchitect) FromTicket(_ context.Context, _ *integrations.Ticket, targetDir string) (*nebula.Generated, error) {
 	f.gotTarget = targetDir
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &nebula.NebulaInfo{Name: filepath.Base(targetDir), Path: targetDir}, nil
+	return &nebula.Generated{Name: filepath.Base(targetDir), Path: targetDir}, nil
 }
 
 // fakeRecorder captures inserted rows.

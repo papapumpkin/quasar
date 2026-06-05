@@ -36,8 +36,8 @@ var ticketPromptTmpl = template.Must(
 		Parse(ticketPromptSource),
 )
 
-// NebulaInfo identifies a nebula generated from a ticket and written to disk.
-type NebulaInfo struct {
+// Generated identifies a nebula generated from a ticket and written to disk.
+type Generated struct {
 	Name   string          // generated directory name (e.g. "nebula-42-fix-truncate")
 	Path   string          // path to the written nebula directory
 	Result *GenerateResult // full generation result for callers needing detail
@@ -49,12 +49,12 @@ type NebulaInfo struct {
 // nebula directory under outDir.
 //
 // The directory name is derived from the ticket (see slugifyTicket); the
-// returned NebulaInfo carries that name and the on-disk path. The generated
+// returned Generated carries that name and the on-disk path. The generated
 // manifest records the ticket's SourceName and SourceID so provenance is
 // preserved. Collision handling against existing directories is the caller's
 // responsibility: WriteNebula refuses to overwrite, so a re-pulled ticket
 // surfaces ErrDirExists.
-func FromTicket(ctx context.Context, invoker agent.Invoker, t *integrations.Ticket, outDir string) (*NebulaInfo, error) {
+func FromTicket(ctx context.Context, invoker agent.Invoker, t *integrations.Ticket, outDir string) (*Generated, error) {
 	if t == nil {
 		return nil, fmt.Errorf("cannot generate nebula from nil ticket")
 	}
@@ -72,7 +72,7 @@ func FromTicket(ctx context.Context, invoker agent.Invoker, t *integrations.Tick
 // clobbering an existing draft, so it calls this variant instead).
 //
 // WriteNebula refuses to overwrite, so targetDir must not already exist.
-func FromTicketInto(ctx context.Context, invoker agent.Invoker, t *integrations.Ticket, targetDir string) (*NebulaInfo, error) {
+func FromTicketInto(ctx context.Context, invoker agent.Invoker, t *integrations.Ticket, targetDir string) (*Generated, error) {
 	if t == nil {
 		return nil, fmt.Errorf("cannot generate nebula from nil ticket")
 	}
@@ -116,7 +116,7 @@ func FromTicketInto(ctx context.Context, invoker agent.Invoker, t *integrations.
 		return nil, fmt.Errorf("writing nebula %q: %w", name, err)
 	}
 
-	return &NebulaInfo{Name: name, Path: targetDir, Result: result}, nil
+	return &Generated{Name: name, Path: targetDir, Result: result}, nil
 }
 
 // SlugifyTicket returns the default nebula directory name for a ticket

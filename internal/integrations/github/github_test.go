@@ -28,11 +28,10 @@ func (c *captureSecrets) Resolve(spec integrations.SecretSpec) (string, error) {
 // the metadata call to simulate gh failures.
 func fakeGH(meta, comments, timeline []byte, failOn error) runGHFunc {
 	return func(_ context.Context, args ...string) ([]byte, error) {
-		field := jsonField(args)
-		switch {
-		case field == "comments":
+		switch jsonField(args) {
+		case "comments":
 			return comments, nil
-		case field == "timelineItems":
+		case "timelineItems":
 			return timeline, nil
 		default: // metadata call (number,title,...)
 			if failOn != nil {
