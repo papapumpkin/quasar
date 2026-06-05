@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'constellation-runtime'
-total_cost_usd = 38.6065943
+total_cost_usd = 52.660680299999996
 
 [phases]
 [phases.arch-tests-and-docs]
@@ -17,9 +17,15 @@ updated_at = 2026-06-05T12:29:26.024965-04:00
 
 [phases.constellation-runtime]
 bead_id = 'constellation-runtime'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-04T22:58:28.638603-04:00
-updated_at = 2026-06-05T12:48:02.591454-04:00
+updated_at = 2026-06-05T13:22:24.155355-04:00
+
+[phases.constellation-runtime.report]
+satisfaction = 'high'
+risk = 'medium'
+needs_human_review = false
+summary = 'A clean, accurate, documentation-only cycle that closes both prior findings and ships a green, well-tested runtime slice; the delivered code is correct, but the scope-acceptance decision and the not-yet-mechanical safety invariant warrant a human sign-off.'
 
 [phases.file-loader-and-discrimination]
 bead_id = 'file-loader-and-discrimination'
@@ -77,6 +83,6 @@ summary = 'A clean, well-tested rename of `internal/integrations`→`internal/se
 
 [phases.tui-multi-repo-fleet-lane]
 bead_id = 'tui-multi-repo-fleet-lane'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-04T22:58:28.639171-04:00
-updated_at = 2026-06-05T12:29:26.025366-04:00
+updated_at = 2026-06-05T13:22:24.191077-04:00
