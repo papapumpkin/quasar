@@ -131,6 +131,71 @@ func TestApproveJumpShowsStartingPlaceholder(t *testing.T) {
 	}
 }
 
+// TestNebulaDetailViewRendersProjection verifies the read-only nebula
+// inspection view renders the title, status, and source, always shows the
+// footer, and gates the optional SourceURL separator and Description block on
+// their fields being non-empty (the only branching logic in the method).
+func TestNebulaDetailViewRendersProjection(t *testing.T) {
+	tests := []struct {
+		name    string
+		detail  NebulaDetail
+		want    []string
+		notWant []string
+	}{
+		{
+			name: "populated source url and description",
+			detail: NebulaDetail{
+				Title:       "retry flaky uploads",
+				Status:      "awaiting_approval",
+				SourceLabel: "#142",
+				SourceURL:   "https://github.com/papapumpkin/quasar/issues/142",
+				Description: "Uploads intermittently fail under load.",
+			},
+			want: []string{
+				"retry flaky uploads",
+				"awaiting_approval",
+				"#142",
+				"https://github.com/papapumpkin/quasar/issues/142",
+				"Uploads intermittently fail under load.",
+				"[b] back  [q] quit",
+			},
+		},
+		{
+			name: "empty source url and description",
+			detail: NebulaDetail{
+				Title:       "manual draft",
+				Status:      "draft",
+				SourceLabel: "manual",
+			},
+			want: []string{
+				"manual draft",
+				"draft",
+				"manual",
+				"[b] back  [q] quit",
+			},
+			notWant: []string{"—", "https://"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			m := Model{mode: modeNebulaDetail, nebDetail: tt.detail}
+			view := m.View()
+			for _, want := range tt.want {
+				if !strings.Contains(view, want) {
+					t.Errorf("view missing %q:\n%s", want, view)
+				}
+			}
+			for _, notWant := range tt.notWant {
+				if strings.Contains(view, notWant) {
+					t.Errorf("view should omit %q:\n%s", notWant, view)
+				}
+			}
+		})
+	}
+}
+
 // TestSelectionMatchesCursor verifies selection() resolves the cursor to the
 // same slot the navigation/action helpers act on (Issue #1): the render
 // highlight must point at exactly the card approve/reject will target, and a
