@@ -1,0 +1,34 @@
+name        = "coder-reviewer"
+description = "The canonical implement-then-review loop. Runs per nebula phase."
+
+[[nodes]]
+id     = "implement"
+type   = "star"
+star   = "coder"
+inputs = { phase_body = "${nebula.current_phase.body}", phase_title = "${nebula.current_phase.title}" }
+
+[[nodes]]
+id     = "review"
+type   = "star"
+star   = "reviewer"
+inputs = { diff = "${nodes.implement.diff}", phase_body = "${nebula.current_phase.body}" }
+
+[[edges]]
+from = "implement"
+to   = "review"
+when = "implement.committed"
+
+[[edges]]
+from = "review"
+to   = "implement"
+when = "review.findings_count > 0 && cycle < nebula.execution.max_review_cycles"
+
+[[edges]]
+from = "review"
+to   = "_done"
+when = "review.approved"
+
+[[edges]]
+from = "review"
+to   = "_failed"
+when = "cycle >= nebula.execution.max_review_cycles"

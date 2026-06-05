@@ -11,6 +11,7 @@ import (
 var layers = map[string]int{
 	"agent":        0,
 	"ansi":         0,
+	"artifacts":    0,
 	"beads":        0,
 	"blobstore":    0,
 	"bus":          0,

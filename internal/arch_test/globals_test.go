@@ -13,6 +13,12 @@ import (
 // but don't match the automated detection heuristics. Each entry documents why
 // it is acceptable.
 var allowedGlobals = map[string][]string{
+	// artifacts: DefaultsFS is the //go:embed target for the built-in default
+	// constellations, stars, and skills (embed requires a package-level var).
+	// It is read-only after package init — the embedded FS is never reassigned.
+	"artifacts": {
+		"DefaultsFS",
+	},
 	// fabric: migrationsFS is the //go:embed target for the ordered SQL
 	// migrations applied after the base schema (embed requires a package-level
 	// var). It is read-only after package init — the embedded FS is never
@@ -27,13 +33,13 @@ var allowedGlobals = map[string][]string{
 	"integrations": {
 		"defaultRegistry",
 	},
-	// nebula: the ticket architect prompt template. ticketPromptSource is the
-	// //go:embed target (embed requires a package-level var) and ticketPromptTmpl
+	// nebula: the ticket architect prompt template. nebulaPromptSource is the
+	// //go:embed target (embed requires a package-level var) and nebulaPromptTmpl
 	// is the once-parsed template built from it. Both are immutable after package
 	// init — the embed is read-only and the template is never reassigned.
 	"nebula": {
-		"ticketPromptSource",
-		"ticketPromptTmpl",
+		"nebulaPromptSource",
+		"nebulaPromptTmpl",
 	},
 	// tui: vars that don't match prefix or heuristic patterns.
 	"tui": {

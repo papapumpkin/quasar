@@ -1,0 +1,87 @@
+package fleet
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"os/exec"
+	"strings"
+	"time"
+)
+
+// gitStatusTimeout bounds the per-repo git status probe so a slow repo cannot
+// stall the UI.
+const gitStatusTimeout = 2 * time.Second
+
+// RenderTrace renders a run's star-invocation trace as a deterministic,
+// ANSI-free block for the detail view. An empty trace yields a placeholder.
+func RenderTrace(trace []Invocation) string {
+	if len(trace) == 0 {
+		return "(no steps recorded yet)"
+	}
+	var b strings.Builder
+	for _, inv := range trace {
+		fmt.Fprintf(&b, "  %2d. %-10s %-16s %s%s\n",
+			inv.Seq, inv.Node, inv.StarName, traceGlyph(inv.State), traceDuration(inv))
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// traceGlyph maps an invocation state to a compact status marker.
+func traceGlyph(state string) string {
+	switch state {
+	case "done":
+		return "✓ done"
+	case "failed":
+		return "✗ failed"
+	case "running":
+		return "↻ running"
+	default:
+		return state
+	}
+}
+
+// traceDuration formats an invocation's elapsed time when both ends are known.
+func traceDuration(inv Invocation) string {
+	if inv.Started.IsZero() || inv.Ended.IsZero() {
+		return ""
+	}
+	return fmt.Sprintf(" (%s)", inv.Ended.Sub(inv.Started).Round(time.Second))
+}
+
+// gitSummary returns a one-line porcelain summary (modified/untracked counts
+// and branch ahead/behind) for a repo. It is informational only and never
+// mutates the repo. Failures yield a short, non-fatal note.
+func gitSummary(path string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), gitStatusTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", "-C", path, "status", "--porcelain=v2", "--branch")
+	out, err := cmd.Output()
+	if err != nil {
+		return "unavailable"
+	}
+	return summarizePorcelain(string(out))
+}
+
+// summarizePorcelain reduces `git status --porcelain=v2 --branch` output to a
+// compact summary string.
+func summarizePorcelain(out string) string {
+	var modified, untracked, ahead, behind int
+	branch := "?"
+	sc := bufio.NewScanner(strings.NewReader(out))
+	for sc.Scan() {
+		line := sc.Text()
+		switch {
+		case strings.HasPrefix(line, "# branch.head "):
+			branch = strings.TrimPrefix(line, "# branch.head ")
+		case strings.HasPrefix(line, "# branch.ab "):
+			fmt.Sscanf(strings.TrimPrefix(line, "# branch.ab "), "+%d -%d", &ahead, &behind)
+		case strings.HasPrefix(line, "? "):
+			untracked++
+		case strings.HasPrefix(line, "1 "), strings.HasPrefix(line, "2 "):
+			modified++
+		}
+	}
+	return fmt.Sprintf("%s  ~%d  ?%d  ↑%d ↓%d", branch, modified, untracked, ahead, behind)
+}

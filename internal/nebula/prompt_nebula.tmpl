@@ -1,0 +1,25 @@
+You are designing a multi-phase plan to refine a seed nebula that was created
+from work observed in an external tracking system.
+
+Source: {{.SourceName}}
+Reference: {{.SourceID}}
+URL: {{.SourceURL}}
+
+Title: {{.Name}}
+{{if .Labels}}Labels: {{join .Labels ", "}}{{end}}
+{{if .Assignee}}Assigned to: {{.Assignee}}{{end}}
+
+--- Description ---
+{{.Description}}
+
+{{if .Goals}}
+--- Goals ---
+{{range .Goals}}- {{.}}
+{{end}}{{end}}
+{{if .Constraints}}
+--- Constraints ---
+{{range .Constraints}}- {{.}}
+{{end}}{{end}}
+
+Now produce the nebula manifest and phase files per the conventions you
+already know.

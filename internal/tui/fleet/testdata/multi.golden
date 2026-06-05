@@ -1,0 +1,8 @@
+Awaiting Approval                 │ In Flight                         │ Recent                           
+───────────────────────────────── │ ───────────────────────────────── │ ─────────────────────────────────
+▾ papapumpkin/quasar              │ ▾ papapumpkin/quasar              │ ▾ papapumpkin/quasar             
+  #142 add gh-rate-limit retry    │   run-7c2a ▸ coder-reviewer       │   ✓ earlier work (PR #441 merged)
+  #143 fix flaky scheduler test   │     ↻ step 3/5 — reviewer running │   ✗ budget overflow              
+
+▾ papapumpkin/relativity          │ ▾ papapumpkin/relativity          │ ▾ papapumpkin/relativity         
+  #88 split coordinator state mg… │   (idle)                          │   ✓ done earlier (PR #12 merged) 

@@ -193,8 +193,8 @@ func (s *Store) Walk(ctx context.Context) (iter.Seq[BlobInfo], error) {
 		defer rows.Close() //nolint:errcheck // iteration cleanup
 		for rows.Next() {
 			var (
-				info               BlobInfo
-				created, lastSeen  int64
+				info              BlobInfo
+				created, lastSeen int64
 			)
 			if err := rows.Scan(&info.Hash, &info.SizeBytes, &created, &lastSeen); err != nil {
 				return

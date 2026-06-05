@@ -113,10 +113,10 @@ func (s *NebulaStore) Get(ctx context.Context, id string) (*Nebula, error) {
 		       defaults_toml, execution_toml, context_toml, created_at, updated_at
 		FROM nebulas WHERE id = ?`
 	var (
-		n                    Nebula
-		desc, srcName, srcID sql.NullString
+		n                     Nebula
+		desc, srcName, srcID  sql.NullString
 		srcURL, def, exe, ctk sql.NullString
-		created, updated     int64
+		created, updated      int64
 	)
 	err := s.db.QueryRowContext(ctx, q, id).Scan(
 		&n.ID, &n.RepoPath, &n.Name, &desc, &n.Status, &srcName, &srcID, &srcURL,

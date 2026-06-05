@@ -1,0 +1,32 @@
+name        = "architect-fix"
+description = "Refines master-review fix feedback into additional phases appended to the nebula. The phase iterator picks them up automatically."
+
+[[nodes]]
+id     = "render_fix"
+type   = "builtin"
+op     = "render_fix_prompt"
+inputs = { fix_feedback = "${nebula.master_review.fix_feedback}" }
+
+[[nodes]]
+id     = "plan"
+type   = "star"
+star   = "architect-star"
+inputs = { prompt = "${nodes.render_fix.output}" }
+
+[[nodes]]
+id     = "persist"
+type   = "builtin"
+op     = "persist_phases"
+inputs = { architect_output = "${nodes.plan.output}" }
+
+[[edges]]
+from = "render_fix"
+to   = "plan"
+
+[[edges]]
+from = "plan"
+to   = "persist"
+
+[[edges]]
+from = "persist"
+to   = "_done"

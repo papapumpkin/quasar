@@ -11,9 +11,9 @@ updated_at = 2026-06-04T22:58:28.639359-04:00
 
 [phases.builtin-constellations-and-stars]
 bead_id = 'builtin-constellations-and-stars'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-04T22:58:28.63881-04:00
-updated_at = 2026-06-04T22:58:28.63881-04:00
+updated_at = 2026-06-04T23:55:43.710824-04:00
 
 [phases.constellation-runtime]
 bead_id = 'constellation-runtime'
@@ -59,12 +59,12 @@ updated_at = 2026-06-04T23:23:39.132001-04:00
 
 [phases.rename-integrations-to-sensors]
 bead_id = 'rename-integrations-to-sensors'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-06-04T22:58:28.637709-04:00
-updated_at = 2026-06-04T23:23:39.133661-04:00
+updated_at = 2026-06-04T23:44:49.290762-04:00
 
 [phases.tui-multi-repo-fleet-lane]
 bead_id = 'tui-multi-repo-fleet-lane'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-04T22:58:28.639171-04:00
-updated_at = 2026-06-04T22:58:28.639171-04:00
+updated_at = 2026-06-04T23:55:43.710277-04:00
