@@ -167,3 +167,37 @@ func TestImportNebulaEmptyRepoPath(t *testing.T) {
 		t.Fatal("ImportNebula with empty repoPath: want error, got nil")
 	}
 }
+
+func TestImportNebulaNilNebula(t *testing.T) {
+	ctx := context.Background()
+	store, repo := newImportStore(t)
+
+	if _, err := ImportNebula(ctx, store, nil, repo); err == nil {
+		t.Fatal("ImportNebula with nil nebula: want error, got nil")
+	}
+}
+
+func TestImportNebulaSourceIsAtomic(t *testing.T) {
+	ctx := context.Background()
+	store, repo := newImportStore(t)
+
+	// Top-level name set but id empty; manifest carries a different id. The pair
+	// must come from the top-level origin only — never a mixed name/id.
+	n := sampleNebula()
+	n.SourceName = "github"
+	n.SourceID = ""
+	n.Manifest.Nebula.SourceName = "jira"
+	n.Manifest.Nebula.SourceID = "PROJ-9"
+
+	id, err := ImportNebula(ctx, store, n, repo)
+	if err != nil {
+		t.Fatalf("ImportNebula: %v", err)
+	}
+	got, err := store.Get(ctx, id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.SourceName != "github" || got.SourceID != "" {
+		t.Errorf("source = %q/%q, want github/<empty> (no mixing)", got.SourceName, got.SourceID)
+	}
+}

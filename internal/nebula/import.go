@@ -29,6 +29,9 @@ type NebulaInserter interface {
 // are not touched; this only writes to the database and blobstore. It returns
 // the generated nebula id.
 func ImportNebula(ctx context.Context, store NebulaInserter, n *Nebula, repoPath string) (string, error) {
+	if n == nil {
+		return "", fmt.Errorf("nebula: import: nil nebula")
+	}
 	if repoPath == "" {
 		return "", ErrNoRepoPath
 	}
@@ -96,17 +99,15 @@ func nebulaToRows(n *Nebula, repoPath string) (fabric.NebulaRow, []fabric.PhaseR
 	return row, phases, nil
 }
 
-// resolveSource prefers the top-level Nebula source fields and falls back to the
-// manifest's [nebula] source fields when they are empty.
+// resolveSource selects the source attribution as an atomic (name, id) pair:
+// the top-level Nebula fields win when a top-level SourceName is set, otherwise
+// the manifest's [nebula] source fields are used together. Name and id are never
+// mixed across the two origins, since they always travel as a unit.
 func resolveSource(n *Nebula) (name, id string) {
-	name, id = n.SourceName, n.SourceID
-	if name == "" {
-		name = n.Manifest.Nebula.SourceName
+	if n.SourceName != "" {
+		return n.SourceName, n.SourceID
 	}
-	if id == "" {
-		id = n.Manifest.Nebula.SourceID
-	}
-	return name, id
+	return n.Manifest.Nebula.SourceName, n.Manifest.Nebula.SourceID
 }
 
 // marshalTOML renders v to a TOML string.
@@ -119,23 +120,9 @@ func marshalTOML(v any) (string, error) {
 }
 
 // marshalPhaseFrontmatter renders a phase's frontmatter (the serialization-only
-// subset, excluding Body and SourceFile) to a TOML string.
+// subset, excluding Body and SourceFile) to a TOML string. It shares
+// newPhaseSpecFrontmatter with MarshalPhaseFile so both paths serialize the
+// same fields.
 func marshalPhaseFrontmatter(spec PhaseSpec) (string, error) {
-	fm := phaseSpecFrontmatter{
-		ID:                spec.ID,
-		Title:             spec.Title,
-		Type:              spec.Type,
-		Priority:          spec.Priority,
-		DependsOn:         spec.DependsOn,
-		Labels:            spec.Labels,
-		Assignee:          spec.Assignee,
-		MaxReviewCycles:   spec.MaxReviewCycles,
-		MaxBudgetUSD:      spec.MaxBudgetUSD,
-		Model:             spec.Model,
-		Gate:              spec.Gate,
-		Blocks:            spec.Blocks,
-		Scope:             spec.Scope,
-		AllowScopeOverlap: spec.AllowScopeOverlap,
-	}
-	return marshalTOML(fm)
+	return marshalTOML(newPhaseSpecFrontmatter(spec))
 }
