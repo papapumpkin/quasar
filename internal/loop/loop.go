@@ -34,7 +34,6 @@ type Loop struct {
 	ReviewPrompt      string
 	WorkDir           string
 	MCP               *agent.MCPConfig // Optional MCP server config passed to agents.
-	RefactorCh        <-chan string    // Optional channel carrying updated task descriptions from phase edits.
 	CommitSummary     string           // Short label for cycle commit messages. If empty, derived from task title.
 	PhaseType         string           // Phase type for conventional commit prefixes (bug→fix, feature→feat, default→ref).
 	Fabric            fabric.Fabric    // Optional; when set and FabricEnabled, auto-inject fabric state into prompts.
@@ -204,7 +203,6 @@ func (l *Loop) resumeLoop(ctx context.Context, cs *CycleState) (*TaskResult, err
 				if !fixed {
 					cs.FilterHistory = append(cs.FilterHistory, cs.FilterCheckName)
 					l.sealCycleSHA(cs)
-					l.drainRefactor(cs)
 					l.emit(ctx, Event{Kind: EventCycleStart, TaskID: cs.TaskID, Cycle: cycle})
 					continue
 				}
@@ -225,7 +223,6 @@ func (l *Loop) resumeLoop(ctx context.Context, cs *CycleState) (*TaskResult, err
 					cs.FilterCheckName = revalFail.Name
 					cs.FilterHistory = append(cs.FilterHistory, cs.FilterCheckName)
 					l.sealCycleSHA(cs)
-					l.drainRefactor(cs)
 					l.emit(ctx, Event{Kind: EventCycleStart, TaskID: cs.TaskID, Cycle: cycle})
 					continue
 				}
@@ -261,7 +258,6 @@ func (l *Loop) resumeLoop(ctx context.Context, cs *CycleState) (*TaskResult, err
 
 		cs.FilterHistory = append(cs.FilterHistory, cs.FilterCheckName)
 		l.sealCycleSHA(cs)
-		l.drainRefactor(cs)
 
 		l.UI.IssuesFound(len(cs.Findings))
 		cs.Phase = PhaseResolvingIssues
@@ -414,7 +410,6 @@ func (l *Loop) runLoop(ctx context.Context, taskID, taskDescription string) (*Ta
 					// Inner loop exhausted — fall through to outer cycle bounce.
 					state.FilterHistory = append(state.FilterHistory, state.FilterCheckName)
 					l.sealCycleSHA(state)
-					l.drainRefactor(state)
 					l.emit(ctx, Event{Kind: EventCycleStart, TaskID: taskID, Cycle: cycle})
 					continue
 				}
@@ -439,7 +434,6 @@ func (l *Loop) runLoop(ctx context.Context, taskID, taskDescription string) (*Ta
 					state.FilterCheckName = revalFail.Name
 					state.FilterHistory = append(state.FilterHistory, state.FilterCheckName)
 					l.sealCycleSHA(state)
-					l.drainRefactor(state)
 					l.emit(ctx, Event{Kind: EventCycleStart, TaskID: taskID, Cycle: cycle})
 					continue
 				}
@@ -487,7 +481,6 @@ func (l *Loop) runLoop(ctx context.Context, taskID, taskDescription string) (*Ta
 		l.sealCycleSHA(state)
 
 		// Check for a mid-run refactor signal before starting the next cycle.
-		l.drainRefactor(state)
 
 		l.UI.IssuesFound(len(state.Findings))
 		state.Phase = PhaseResolvingIssues
@@ -840,30 +833,6 @@ func (l *Loop) runFilterFixLoop(ctx context.Context, state *CycleState, checkNam
 	return false, nil
 }
 
-// drainRefactor checks the RefactorCh for a pending phase edit and applies it
-// to the cycle state. The current cycle always completes before the new
-// description takes effect. Only the most recent value on the channel wins.
-func (l *Loop) drainRefactor(state *CycleState) {
-	if l.RefactorCh == nil {
-		return
-	}
-	var latest string
-	for {
-		select {
-		case body := <-l.RefactorCh:
-			latest = body
-		default:
-			if latest != "" {
-				state.OriginalDescription = state.TaskTitle
-				state.RefactorDescription = latest
-				state.TaskTitle = latest
-				state.Refactored = true
-			}
-			return
-		}
-	}
-}
-
 // perAgentBudget computes the per-invocation budget by splitting the total
 // evenly between coder and reviewer across all cycles.
 func (l *Loop) perAgentBudget() float64 {
@@ -969,16 +938,10 @@ func (l *Loop) reviewerAgent(budget float64) agent.Agent {
 }
 
 // runCoderPhase invokes the coder agent, updates state and UI, and emits
-// lifecycle events. When a refactor is pending, it emits a refactor event
-// before building the prompt (which clears the refactor flag).
+// lifecycle events.
 func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBudget float64) error {
 	state.Phase = PhaseCoding
 	l.UI.AgentStart("coder")
-
-	// Capture refactor state before buildCoderPrompt clears the flag.
-	wasRefactored := state.Refactored
-	origDesc := state.OriginalDescription
-	refactorDesc := state.RefactorDescription
 
 	prompt := l.buildCoderPrompt(state)
 	prompt = l.composeVolatilePrefix(ctx, prompt)
@@ -1023,12 +986,6 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 		}
 	}
 
-	if wasRefactored {
-		comment := fmt.Sprintf("[refactor cycle %d] User updated task description mid-execution.\nOriginal: %s\nUpdated: %s",
-			state.Cycle, truncate(origDesc, 500), truncate(refactorDesc, 500))
-		l.emit(ctx, Event{Kind: EventRefactored, TaskID: state.TaskID, Cycle: state.Cycle, Message: comment})
-		l.UI.RefactorApplied(state.TaskID)
-	}
 	l.emit(ctx, Event{
 		Kind:    EventAgentDone,
 		TaskID:  state.TaskID,

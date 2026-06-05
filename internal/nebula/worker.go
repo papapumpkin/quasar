@@ -33,13 +33,12 @@ func NewWorkerGroup(n *Nebula, state *State, opts ...Option) *WorkerGroup {
 
 // WorkerGroup executes phases in dependency order using a pool of workers.
 // It delegates phase state tracking to PhaseTracker, progress/metrics to
-// ProgressReporter, and hot-reload concerns to HotReloader.
+// and ProgressReporter.
 type WorkerGroup struct {
 	Runner              PhaseRunner
 	Nebula              *Nebula
 	State               *State
 	MaxWorkers          int
-	Watcher             *Watcher          // nil = no in-flight editing
 	Committer           GitCommitter      // nil = no phase-boundary commits
 	Gater               Gater             // nil = built from Prompter + manifest at Run time
 	Prompter            GatePrompter      // used to build Gater if Gater is nil
@@ -51,7 +50,6 @@ type WorkerGroup struct {
 	GlobalBudget        float64
 	GlobalModel         string
 	OnProgress          ProgressFunc                              // optional progress callback
-	OnRefactor          func(phaseID string, pending bool)        // optional callback for refactor notifications
 	OnHotAdd            HotAddFunc                                // optional callback for hot-added phases
 	OnScanning          func(phaseID string)                      // optional callback for fabric scanning notifications
 	Bus                 bus.Bus                                   // optional event bus; when non-nil, callbacks also publish to the bus
@@ -77,7 +75,6 @@ type WorkerGroup struct {
 	// Collaborators — constructed during Run.
 	tracker         *PhaseTracker
 	progress        *ProgressReporter
-	hotReload       *HotReloader
 	blockedTracker  *fabric.BlockedTracker  // nil when Fabric is nil
 	pushbackHandler *fabric.PushbackHandler // nil when Fabric is nil
 	tychoScheduler  *tycho.Scheduler        // nil when Fabric is nil
@@ -92,7 +89,7 @@ func (wg *WorkerGroup) logger() io.Writer {
 	return os.Stderr
 }
 
-// wrapCallbacksForBus augments the existing OnProgress, OnRefactor, OnHotAdd,
+// wrapCallbacksForBus augments the existing OnProgress, OnHotAdd,
 // and OnScanning callbacks to also publish the corresponding bus event.
 // The original callback (if non-nil) is called first, then the bus event is
 // published. This preserves stderr-path behavior while adding bus-mediated
@@ -115,18 +112,6 @@ func (wg *WorkerGroup) wrapCallbacksForBus() {
 			TotalCostUSD: totalCostUSD,
 		}
 		_ = b.Publish(context.Background(), ev)
-	}
-
-	// Wrap OnRefactor to also publish KindPhaseRefactorPending.
-	origRefactor := wg.OnRefactor
-	wg.OnRefactor = func(phaseID string, pending bool) {
-		if origRefactor != nil {
-			origRefactor(phaseID, pending)
-		}
-		if pending {
-			ev := bus.NewPhase(bus.KindPhaseRefactorPending, phaseID)
-			_ = b.Publish(context.Background(), ev)
-		}
 	}
 
 	// Wrap OnHotAdd to also publish KindPhaseHotAdded.
@@ -160,21 +145,6 @@ func (wg *WorkerGroup) SnapshotNebula() *Nebula {
 	wg.mu.Lock()
 	defer wg.mu.Unlock()
 	return wg.Nebula.Snapshot()
-}
-
-// RegisterPhaseLoop records a running phase's refactor channel so that
-// handlePhaseModified can forward updated descriptions to the loop.
-func (wg *WorkerGroup) RegisterPhaseLoop(phaseID string, refactorCh chan<- string) {
-	if wg.hotReload != nil {
-		wg.hotReload.RegisterPhaseLoop(phaseID, refactorCh)
-	}
-}
-
-// UnregisterPhaseLoop removes a phase's loop handle after completion.
-func (wg *WorkerGroup) UnregisterPhaseLoop(phaseID string) {
-	if wg.hotReload != nil {
-		wg.hotReload.UnregisterPhaseLoop(phaseID)
-	}
 }
 
 // buildPhasePrompt prepends nebula context (goals, constraints) to the phase body.
@@ -298,7 +268,7 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	// When the bus is available, wrap each callback to also publish the
 	// corresponding bus event. This is additive — the original callback
 	// still fires for the stderr path. We mutate the struct fields so
-	// that all downstream consumers (ProgressReporter, HotReloader,
+	// that all downstream consumers (ProgressReporter,
 	// tycho.Scheduler, worker_exec, worker_healing) automatically get
 	// bus-publishing behavior without individual modifications.
 	if wg.Bus != nil {
@@ -315,22 +285,6 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	// Construct collaborators.
 	wg.tracker = NewPhaseTracker(wg.Nebula.Phases, wg.State)
 	wg.progress = NewProgressReporter(wg.Nebula, wg.State, wg.OnProgress, wg.Metrics, wg.logger())
-	wg.hotReload = NewHotReloader(HotReloaderConfig{
-		Watcher:    wg.Watcher,
-		Nebula:     wg.Nebula,
-		State:      wg.State,
-		Tracker:    wg.tracker,
-		Progress:   wg.progress,
-		OnRefactor: wg.OnRefactor,
-		OnHotAdd:   wg.OnHotAdd,
-		Logger:     wg.logger(),
-		Mu:         &wg.mu,
-		OutputMu:   &wg.outputMu,
-	})
-
-	if wg.Watcher != nil {
-		go wg.hotReload.ConsumeChanges(ctx)
-	}
 
 	// Build impact-aware scheduler from phases using the DAG engine.
 	scheduler, err := NewScheduler(wg.Nebula.Phases)
@@ -393,10 +347,6 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		}
 	}
 
-	wg.mu.Lock()
-	wg.hotReload.InitLiveState(scheduler.Analyzer().DAG(), wg.tracker.PhasesByIDMap())
-	wg.mu.Unlock()
-
 	if err := wg.gatePlan(ctx, scheduler.Analyzer().DAG()); err != nil {
 		return nil, err
 	}
@@ -438,20 +388,6 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	// dependencies complete. When any goroutine finishes, the loop
 	// immediately re-evaluates for newly-ready tasks — no wave barriers.
 	for ctx.Err() == nil {
-		switch wg.checkInterventions() {
-		case InterventionStop:
-			wg.handleStop()
-			wg.drainActive(completionCh, &activeCount)
-			return wg.collectResults(), ErrManualStop
-		case InterventionPause:
-			wg.handlePause()
-			if wg.checkInterventions() == InterventionStop {
-				wg.handleStop()
-				wg.drainActive(completionCh, &activeCount)
-				return wg.collectResults(), ErrManualStop
-			}
-		}
-
 		// Delegate DAG resolution and tracker filtering to Tycho.
 		wg.mu.Lock()
 		eligible, _ := wg.tychoScheduler.Eligible(ctx)
@@ -552,16 +488,6 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 	// compatibility. The wave number is 0, effective parallelism is the
 	// track-based worker count, and peak is the observed peak concurrency.
 	wg.progress.RecordWaveComplete(0, workerCount, int(atomic.LoadInt64(&peakConcurrent)))
-
-	var wgSync sync.WaitGroup
-	wg.hotReload.DrainHotAdded(ctx, &wgSync, func(c context.Context, phaseID string, waveNumber int) {
-		wg.executePhase(c, phaseID, waveNumber)
-	})
-
-	wg.hotReload.WaitHotAddWg()
-	wg.hotReload.DrainHotAdded(ctx, &wgSync, func(c context.Context, phaseID string, waveNumber int) {
-		wg.executePhase(c, phaseID, waveNumber)
-	})
 
 	// Purge fulfilled entanglements now that the nebula is complete.
 	// Disputed/pending entanglements are preserved for human review.

@@ -41,7 +41,6 @@ const (
 	//   4. Lint output from lint pass
 	//   5. Filter output from pre-reviewer checks
 	//   6. Fabric snapshot (fabric.RenderSnapshot) — claims, pulses, phase states
-	//   7. Refactor instructions — injected mid-run when user edits task
 	ZoneVolatileSuffix
 )
 
@@ -65,13 +64,12 @@ const (
 	LabelFabricProtocol = "fabric-protocol"
 
 	// Volatile suffix labels.
-	LabelTaskDescription      = "task-description"
-	LabelReviewerFindings     = "reviewer-findings"
-	LabelCoderOutput          = "coder-output"
-	LabelLintOutput           = "lint-output"
-	LabelFilterOutput         = "filter-output"
-	LabelFabricSnapshot       = "fabric-snapshot"
-	LabelRefactorInstructions = "refactor-instructions"
+	LabelTaskDescription  = "task-description"
+	LabelReviewerFindings = "reviewer-findings"
+	LabelCoderOutput      = "coder-output"
+	LabelLintOutput       = "lint-output"
+	LabelFilterOutput     = "filter-output"
+	LabelFabricSnapshot   = "fabric-snapshot"
 )
 
 // ContentZone maps well-known content labels to their designated zone.
@@ -83,13 +81,12 @@ var ContentZone = map[string]PromptZone{
 	LabelFabricProtocol: ZoneStablePrefix,
 
 	// Volatile suffix — user prompt.
-	LabelTaskDescription:      ZoneVolatileSuffix,
-	LabelReviewerFindings:     ZoneVolatileSuffix,
-	LabelCoderOutput:          ZoneVolatileSuffix,
-	LabelLintOutput:           ZoneVolatileSuffix,
-	LabelFilterOutput:         ZoneVolatileSuffix,
-	LabelFabricSnapshot:       ZoneVolatileSuffix,
-	LabelRefactorInstructions: ZoneVolatileSuffix,
+	LabelTaskDescription:  ZoneVolatileSuffix,
+	LabelReviewerFindings: ZoneVolatileSuffix,
+	LabelCoderOutput:      ZoneVolatileSuffix,
+	LabelLintOutput:       ZoneVolatileSuffix,
+	LabelFilterOutput:     ZoneVolatileSuffix,
+	LabelFabricSnapshot:   ZoneVolatileSuffix,
 }
 
 // PromptManifest records the content placement for a single agent invocation.

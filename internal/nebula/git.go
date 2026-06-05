@@ -39,7 +39,7 @@ type gitCommitter struct {
 // NewGitCommitter creates a GitCommitter for the given directory.
 // If git is not available or the directory is not a git repository,
 // it returns nil (not an error). The caller should skip committing
-// when the committer is nil, following the same pattern as Watcher.
+// when the committer is nil.
 func NewGitCommitter(ctx context.Context, dir string) GitCommitter {
 	// Check that git is available.
 	if _, err := exec.LookPath("git"); err != nil {
@@ -226,26 +226,6 @@ func (g *gitCommitter) ensureBranch(ctx context.Context) error {
 		return fmt.Errorf("branch mismatch: expected %q, on %q", g.branch, current)
 	}
 	return nil
-}
-
-// InterventionFileNames returns the filenames that should be excluded from
-// git commits in a nebula directory. These are the PAUSE and STOP intervention
-// files used for human control of nebula execution.
-func InterventionFileNames() []string {
-	names := make([]string, 0, len(interventionFiles))
-	for name := range interventionFiles {
-		names = append(names, name)
-	}
-	return names
-}
-
-// GitExcludePatterns returns gitignore-style patterns for intervention files.
-// Callers can use these patterns with git add --exclude or .gitignore entries.
-func GitExcludePatterns() []string {
-	names := InterventionFileNames()
-	patterns := make([]string, len(names))
-	copy(patterns, names)
-	return patterns
 }
 
 // PostCompletionResult holds the outcomes of the post-completion git workflow

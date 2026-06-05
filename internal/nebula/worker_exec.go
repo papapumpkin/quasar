@@ -3,11 +3,8 @@ package nebula
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/papapumpkin/quasar/internal/dag"
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
@@ -71,12 +68,6 @@ func (wg *WorkerGroup) executePhase(ctx context.Context, phaseID string, waveNum
 			wg.progress.SaveState()
 			wg.progress.ReportProgress()
 			wg.mu.Unlock()
-			// Signal hot-added phases to the scheduler.
-			if wg.hotReload != nil {
-				wg.mu.Lock()
-				wg.hotReload.CheckHotAddedReady()
-				wg.mu.Unlock()
-			}
 			return
 		}
 		// The loop exited early due to a struggle signal, but decomposition
@@ -183,10 +174,6 @@ func (wg *WorkerGroup) recordResult(
 	}
 	wg.progress.SaveState()
 	wg.progress.ReportProgress()
-
-	if wg.hotReload != nil {
-		wg.hotReload.CheckHotAddedReady()
-	}
 }
 
 // recordFailure marks a phase as failed when it has no valid bead ID.
@@ -201,116 +188,6 @@ func (wg *WorkerGroup) recordFailure(phaseID string) {
 		Err:     fmt.Errorf("no bead ID for phase %q", phaseID),
 	})
 	wg.mu.Unlock()
-}
-
-// checkInterventions drains the intervention channel and returns the most
-// significant pending intervention (stop > retry > pause > none).
-func (wg *WorkerGroup) checkInterventions() InterventionKind {
-	if wg.Watcher == nil {
-		return ""
-	}
-	var latest InterventionKind
-	for {
-		select {
-		case kind := <-wg.Watcher.Interventions:
-			if kind == InterventionStop {
-				return InterventionStop
-			}
-			if kind == InterventionRetry {
-				wg.handleRetry()
-				continue
-			}
-			if kind == InterventionPause {
-				latest = InterventionPause
-			}
-		default:
-			return latest
-		}
-	}
-}
-
-// handlePause blocks until the PAUSE file is removed from the nebula directory.
-func (wg *WorkerGroup) handlePause() {
-	pausePath := filepath.Join(wg.Nebula.Dir, "PAUSE")
-	fmt.Fprintf(wg.logger(), "\n── Nebula paused ──────────────────────────────────\n")
-	fmt.Fprintf(wg.logger(), "   Remove the PAUSE file to continue:\n")
-	fmt.Fprintf(wg.logger(), "   rm %s\n", pausePath)
-	fmt.Fprintf(wg.logger(), "───────────────────────────────────────────────────\n\n")
-
-	if _, err := os.Stat(pausePath); os.IsNotExist(err) {
-		return
-	}
-
-	for kind := range wg.Watcher.Interventions {
-		if kind == InterventionResume {
-			return
-		}
-		if kind == InterventionStop {
-			wg.Watcher.SendIntervention(InterventionStop)
-			return
-		}
-	}
-}
-
-// handleStop saves state, cleans up the STOP file, and prints a message.
-func (wg *WorkerGroup) handleStop() {
-	wg.mu.Lock()
-	wg.progress.SaveState()
-	wg.mu.Unlock()
-
-	stopPath := filepath.Join(wg.Nebula.Dir, "STOP")
-	if err := os.Remove(stopPath); err != nil {
-		fmt.Fprintf(wg.logger(), "warning: failed to remove STOP file: %v\n", err)
-	}
-
-	fmt.Fprintf(wg.logger(), "\n── Nebula stopped by user ─────────────────────────\n")
-	fmt.Fprintf(wg.logger(), "   State saved. Resume with: quasar nebula apply\n")
-	fmt.Fprintf(wg.logger(), "───────────────────────────────────────────────────\n\n")
-}
-
-// handleRetry reads the RETRY file, resets the phase, and removes the file.
-func (wg *WorkerGroup) handleRetry() {
-	retryPath := filepath.Join(wg.Nebula.Dir, "RETRY")
-	content, err := os.ReadFile(retryPath)
-	if err != nil {
-		fmt.Fprintf(wg.logger(), "warning: failed to read RETRY file: %v\n", err)
-		return
-	}
-
-	phaseID := strings.TrimSpace(string(content))
-	if phaseID == "" {
-		fmt.Fprintf(wg.logger(), "warning: RETRY file is empty\n")
-		_ = os.Remove(retryPath)
-		return
-	}
-
-	if err := os.Remove(retryPath); err != nil {
-		fmt.Fprintf(wg.logger(), "warning: failed to remove RETRY file: %v\n", err)
-	}
-
-	done := wg.tracker.Done()
-	failed := wg.tracker.Failed()
-	inFlight := wg.tracker.InFlight()
-
-	wg.mu.Lock()
-	defer wg.mu.Unlock()
-
-	if !failed[phaseID] {
-		fmt.Fprintf(wg.logger(), "warning: phase %q is not failed, ignoring retry\n", phaseID)
-		return
-	}
-
-	delete(failed, phaseID)
-	delete(done, phaseID)
-	delete(inFlight, phaseID)
-
-	ps := wg.State.Phases[phaseID]
-	if ps != nil {
-		wg.State.SetPhaseState(phaseID, ps.BeadID, PhaseStatusInProgress)
-		wg.progress.SaveState()
-	}
-
-	fmt.Fprintf(wg.logger(), "\n── Retrying phase %q ──────────────────────────────\n\n", phaseID)
 }
 
 // processGateSignals handles pending gate signals after a batch completes.
@@ -412,19 +289,10 @@ func (wg *WorkerGroup) decomposePhase(ctx context.Context, phaseID string, resul
 	// Apply decomposition under lock.
 	wg.mu.Lock()
 
-	// Build live graph if hot-reload state is available, otherwise build from phases.
-	var liveGraph *dag.DAG
-	var livePhasesMap map[string]*PhaseSpec
-	if wg.hotReload != nil && wg.hotReload.liveGraph != nil {
-		liveGraph = wg.hotReload.liveGraph
-		livePhasesMap = wg.hotReload.livePhasesByID
-	}
-	if liveGraph == nil {
-		// Fallback: build from phases.
-		g, _ := phasesToDAG(wg.Nebula.Phases)
-		liveGraph = g
-		livePhasesMap = PhasesByID(wg.Nebula.Phases)
-	}
+	// Build graph from phases.
+	g, _ := phasesToDAG(wg.Nebula.Phases)
+	liveGraph := g
+	livePhasesMap := PhasesByID(wg.Nebula.Phases)
 
 	subIDs, err := ApplyDecompositionToNebula(wg.Nebula, liveGraph, op, livePhasesMap)
 	if err != nil {

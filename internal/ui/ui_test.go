@@ -706,17 +706,6 @@ func TestBeadUpdate_NoOp(t *testing.T) {
 	}
 }
 
-func TestRefactorApplied_NoOp(t *testing.T) {
-	p := New()
-	output := captureStderr(func() {
-		p.RefactorApplied("phase-1")
-	})
-
-	if len(output) != 0 {
-		t.Errorf("expected RefactorApplied to be a no-op (no output), got: %q", output)
-	}
-}
-
 // --- Task lifecycle tests ---
 
 func TestTaskStarted(t *testing.T) {

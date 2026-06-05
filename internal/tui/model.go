@@ -340,8 +340,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lv := m.ensurePhaseLoop(msg.PhaseID)
 		lv.StartCycle(msg.Cycle)
 		m.NebulaView.SetPhaseCycles(msg.PhaseID, msg.Cycle, msg.MaxCycles)
-		// Clear refactored indicator from previous cycle.
-		m.NebulaView.SetPhaseRefactored(msg.PhaseID, false)
 		// Update worker card cycle info.
 		if wc := m.WorkerCards[msg.PhaseID]; wc != nil {
 			wc.Cycle = msg.Cycle
@@ -410,20 +408,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseDone)
 		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseDone)
-		// Clear refactored indicator on completion.
-		m.NebulaView.SetPhaseRefactored(msg.PhaseID, false)
 		// Remove worker card on approval.
 		delete(m.WorkerCards, msg.PhaseID)
-	case MsgPhaseRefactorPending:
-		m.addMessage("[%s] refactor pending — will apply after current cycle", msg.PhaseID)
-		toast, cmd := NewToast(fmt.Sprintf("[%s] refactor pending", msg.PhaseID), false)
-		m.Toasts = append(m.Toasts, toast)
-		cmds = append(cmds, cmd)
-	case MsgPhaseRefactorApplied:
-		m.NebulaView.SetPhaseRefactored(msg.PhaseID, true)
-		toast, cmd := NewToast(fmt.Sprintf("[%s] refactor applied", msg.PhaseID), false)
-		m.Toasts = append(m.Toasts, toast)
-		cmds = append(cmds, cmd)
 	case MsgPhaseError:
 		m.NebulaView.SetPhaseStatus(msg.PhaseID, PhaseFailed)
 		m.Graph.SetPhaseStatus(msg.PhaseID, PhaseFailed)

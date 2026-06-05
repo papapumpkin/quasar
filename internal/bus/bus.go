@@ -62,8 +62,6 @@ const (
 	KindPhaseError            Kind = "phase.error"
 	KindPhaseInfo             Kind = "phase.info"
 	KindPhaseBeadUpdate       Kind = "phase.bead.update"
-	KindPhaseRefactorPending  Kind = "phase.refactor.pending"
-	KindPhaseRefactorApplied  Kind = "phase.refactor.applied"
 	KindPhaseHotAdded         Kind = "phase.hot.added"
 	KindPhaseScanning         Kind = "phase.scanning"
 	KindPhaseFindingLifecycle Kind = "phase.finding.lifecycle"

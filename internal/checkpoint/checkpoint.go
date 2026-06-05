@@ -58,7 +58,6 @@ type Checkpoint struct {
 	CycleCommits  []string `toml:"cycle_commits"`
 	FilterHistory []string `toml:"filter_history"` // accumulated FilterCheckName per cycle (index = cycle-1)
 	ChildBeadIDs  []string `toml:"child_bead_ids"`
-	Refactored    bool     `toml:"refactored"`
 
 	Findings    []Finding `toml:"findings"`
 	AllFindings []Finding `toml:"all_findings"`
@@ -94,7 +93,6 @@ func FromCycleState(cs *loop.CycleState, phaseID, nebulaName, gitSHA string) *Ch
 		ReviewOutput:  cs.ReviewOutput,
 		LintOutput:    cs.LintOutput,
 		BaseCommitSHA: cs.BaseCommitSHA,
-		Refactored:    cs.Refactored,
 	}
 
 	// Copy slices to avoid aliasing the original.
@@ -128,7 +126,6 @@ func (c *Checkpoint) ToCycleState() *loop.CycleState {
 		ReviewOutput:  c.ReviewOutput,
 		LintOutput:    c.LintOutput,
 		BaseCommitSHA: c.BaseCommitSHA,
-		Refactored:    c.Refactored,
 	}
 
 	// Copy slices to avoid aliasing.
