@@ -9,34 +9,33 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/papapumpkin/quasar/internal/integrations"
+	"github.com/papapumpkin/quasar/internal/sensors"
 )
 
-// githubAdapterPkg is the import path of the GitHub adapter. Only its own
+// githubAdapterPkg is the import path of the GitHub sensor adapter. Only its own
 // package and the cmd layer (via a blank side-effect import for registry init)
-// may reference it; everything else must go through the integrations registry.
-const githubAdapterPkg = modulePath + "/internal/integrations/github"
+// may reference it; everything else must go through the sensor registry.
+const githubAdapterPkg = modulePath + "/internal/sensors/github"
 
-// TestIntegrationsLayering enforces that no internal package outside the github
+// TestSensorsLayering enforces that no internal package outside the github
 // adapter itself imports the github adapter package. Concrete adapters are an
-// implementation detail behind the integrations registry; importing one
-// directly would couple a caller to a specific tracker and defeat the
-// forge-agnostic boundary. The cmd layer is permitted (blank side-effect import
-// to trigger registry init) and is not under internal/, so it is not scanned
-// here.
-func TestIntegrationsLayering(t *testing.T) {
+// implementation detail behind the sensor registry; importing one directly
+// would couple a caller to a specific tracker and defeat the forge-agnostic
+// boundary. The cmd layer is permitted (blank side-effect import to trigger
+// registry init) and is not under internal/, so it is not scanned here.
+func TestSensorsLayering(t *testing.T) {
 	t.Parallel()
 
 	dir := internalDirPath(t)
 	for _, pkg := range internalPackages(t) {
-		if pkg == "integrations" {
-			// The integrations parent package and its github subpackage are
-			// allowed to reference github internally.
+		if pkg == "sensors" {
+			// The sensors parent package and its github subpackage are allowed
+			// to reference github internally.
 			continue
 		}
 		for _, imp := range fullImportsOf(t, filepath.Join(dir, pkg)) {
 			if imp == githubAdapterPkg {
-				t.Errorf("layering violation: internal/%s imports the github adapter directly; depend on internal/integrations and the registry instead", pkg)
+				t.Errorf("layering violation: internal/%s imports the github adapter directly; depend on internal/sensors and the registry instead", pkg)
 			}
 		}
 	}
@@ -88,7 +87,7 @@ func TestForgeStubMinimal(t *testing.T) {
 	t.Parallel()
 
 	const expectedMethods = 1
-	forgeType := reflect.TypeOf((*integrations.Forge)(nil)).Elem()
+	forgeType := reflect.TypeOf((*sensors.Forge)(nil)).Elem()
 	if got := forgeType.NumMethod(); got != expectedMethods {
 		t.Errorf("Forge interface has %d methods, want %d; if expanding the forge surface, do the full rollout (see the test doc and docs/safety.md)", got, expectedMethods)
 	}

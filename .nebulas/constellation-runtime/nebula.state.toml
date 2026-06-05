@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'constellation-runtime'
-total_cost_usd = 7.80180755
+total_cost_usd = 16.98892055
 
 [phases]
 [phases.arch-tests-and-docs]
@@ -53,15 +53,21 @@ summary = 'A clean, well-tested multi-repo foundation (registry + resolver + CLI
 
 [phases.nebula-to-sqlite-migration]
 bead_id = 'nebula-to-sqlite-migration'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-04T22:58:28.638161-04:00
-updated_at = 2026-06-05T09:24:38.493007-04:00
+updated_at = 2026-06-05T10:26:18.069529-04:00
+
+[phases.nebula-to-sqlite-migration.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A docs-only update adds a PREREQUISITE help note (and fixes a stale description) for `quasar nebula apply` to surface the registered-repo requirement before the spec-required hard error; all four prior findings are verified fixed and the change is correct and minimal.'
 
 [phases.rename-integrations-to-sensors]
 bead_id = 'rename-integrations-to-sensors'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-04T22:58:28.637709-04:00
-updated_at = 2026-06-05T09:24:37.978181-04:00
+updated_at = 2026-06-05T10:26:18.094057-04:00
 
 [phases.tui-multi-repo-fleet-lane]
 bead_id = 'tui-multi-repo-fleet-lane'

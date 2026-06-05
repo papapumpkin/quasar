@@ -13,12 +13,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/papapumpkin/quasar/internal/config"
-	"github.com/papapumpkin/quasar/internal/integrations"
+	"github.com/papapumpkin/quasar/internal/sensors"
 
-	// Blank import for its side effect only: the github adapter registers
-	// itself with the integration registry from package init(). doctor reaches
-	// it through integrations.Default(), never via a direct type reference.
-	_ "github.com/papapumpkin/quasar/internal/integrations/github"
+	// Blank import for its side effect only: the github sensor registers itself
+	// with the sensor registry from package init(). doctor reaches it through
+	// sensors.Default(), never via a direct type reference.
+	_ "github.com/papapumpkin/quasar/internal/sensors/github"
 )
 
 // checkStatus is the outcome of a single doctor check.
@@ -39,7 +39,7 @@ type checkResult struct {
 }
 
 // doctorDeps bundles doctor's collaborators so gatherChecks is unit-testable
-// with fakes for config loading, git detection, PATH lookups, the integration
+// with fakes for config loading, git detection, PATH lookups, the sensor
 // registry, and secret resolution.
 type doctorDeps struct {
 	workDir       string
@@ -47,11 +47,13 @@ type doctorDeps struct {
 	findGitRoot   func(dir string) (string, bool)
 	originURL     func(dir string) string
 	lookPath      func(file string) (string, error)
-	buildSource   func(name string, section map[string]any) (integrations.TicketSource, error)
-	resolveSecret func(spec integrations.SecretSpec) (string, error)
+	buildSource   func(name string, section map[string]any) (sensors.Sensor, error)
+	resolveSecret func(spec sensors.SecretSpec) (string, error)
 }
 
-// productionDoctorDeps wires the real collaborators.
+// productionDoctorDeps wires the real collaborators. buildSource instantiates
+// the named sensor from the registry and runs its Configure step so that
+// missing binaries or unreadable credentials surface as a failed check.
 func productionDoctorDeps(workDir string) doctorDeps {
 	return doctorDeps{
 		workDir:     workDir,
@@ -59,10 +61,17 @@ func productionDoctorDeps(workDir string) doctorDeps {
 		findGitRoot: findGitRoot,
 		originURL:   detectOriginURL,
 		lookPath:    exec.LookPath,
-		buildSource: func(name string, section map[string]any) (integrations.TicketSource, error) {
-			return integrations.Default().BuildTicketSource(name, section, integrations.OSSecretResolver{})
+		buildSource: func(name string, section map[string]any) (sensors.Sensor, error) {
+			s, err := sensors.Default().BuildSensor(name)
+			if err != nil {
+				return nil, err
+			}
+			if err := s.Configure(section, sensors.OSSecretResolver{}); err != nil {
+				return nil, err
+			}
+			return s, nil
 		},
-		resolveSecret: integrations.ResolveSecret,
+		resolveSecret: sensors.ResolveSecret,
 	}
 }
 
@@ -174,7 +183,7 @@ func checkIntegrations(deps doctorDeps, cfg config.Config) []checkResult {
 // warning since adapters like GitHub fall back to their own auth chain.
 func checkCredentials(deps doctorDeps, name string, section map[string]any) checkResult {
 	label := "integrations." + name + ".credentials"
-	spec := integrations.SecretSpec{
+	spec := sensors.SecretSpec{
 		Env:  stringFromSection(section, "token_env"),
 		File: stringFromSection(section, "token_file"),
 	}
@@ -193,7 +202,7 @@ func checkCredentials(deps doctorDeps, name string, section map[string]any) chec
 
 // credentialSource describes which source supplied a resolved credential,
 // without revealing the value. File takes precedence (matching ResolveSecret).
-func credentialSource(spec integrations.SecretSpec) string {
+func credentialSource(spec sensors.SecretSpec) string {
 	if spec.File != "" {
 		return fmt.Sprintf("resolved from token_file %s", spec.File)
 	}

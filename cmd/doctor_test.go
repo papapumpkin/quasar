@@ -9,14 +9,20 @@ import (
 	"testing"
 
 	"github.com/papapumpkin/quasar/internal/config"
-	"github.com/papapumpkin/quasar/internal/integrations"
+	"github.com/papapumpkin/quasar/internal/sensors"
 )
 
-// fakeSource is a no-op TicketSource used to satisfy buildSource in tests.
+// fakeSource is a no-op Sensor used to satisfy buildSource in tests.
 type fakeSource struct{ name string }
 
 func (f fakeSource) Name() string { return f.name }
-func (f fakeSource) Fetch(context.Context, string) (*integrations.Ticket, error) {
+func (f fakeSource) Configure(map[string]any, sensors.SecretResolver) error {
+	return nil
+}
+func (f fakeSource) Poll(context.Context, json.RawMessage) ([]sensors.Event, json.RawMessage, error) {
+	return nil, nil, errors.New("not implemented")
+}
+func (f fakeSource) SeedNebula(sensors.Event) (*sensors.SeedNebulaContent, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -28,10 +34,10 @@ func baseDoctorDeps() doctorDeps {
 		findGitRoot: func(string) (string, bool) { return "/repo", true },
 		originURL:   func(string) string { return "https://github.com/owner/repo.git" },
 		lookPath:    func(file string) (string, error) { return "/usr/bin/" + file, nil },
-		buildSource: func(name string, _ map[string]any) (integrations.TicketSource, error) {
+		buildSource: func(name string, _ map[string]any) (sensors.Sensor, error) {
 			return fakeSource{name: name}, nil
 		},
-		resolveSecret: func(integrations.SecretSpec) (string, error) { return "tok", nil },
+		resolveSecret: func(sensors.SecretSpec) (string, error) { return "tok", nil },
 	}
 }
 
@@ -117,7 +123,7 @@ func TestGatherChecks(t *testing.T) {
 				"github": {"token_file": "/run/secrets/github_token"},
 			}}, nil
 		}
-		deps.resolveSecret = func(integrations.SecretSpec) (string, error) {
+		deps.resolveSecret = func(sensors.SecretSpec) (string, error) {
 			return "", errors.New("insecure permissions")
 		}
 		results := gatherChecks(deps)
@@ -137,8 +143,8 @@ func TestGatherChecks(t *testing.T) {
 				"jira": {"project": "ABC"},
 			}}, nil
 		}
-		deps.buildSource = func(string, map[string]any) (integrations.TicketSource, error) {
-			return nil, errors.New("no TicketSource registered for \"jira\"")
+		deps.buildSource = func(string, map[string]any) (sensors.Sensor, error) {
+			return nil, errors.New("no Sensor registered for \"jira\"")
 		}
 		results := gatherChecks(deps)
 		if statusOf(results, "integrations.jira") != statusFail {

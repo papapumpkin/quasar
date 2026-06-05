@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"sort"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -89,10 +91,13 @@ type Config struct {
 	FallbackModel string `mapstructure:"fallback_model"`
 
 	// IntegrationSections holds the parsed [integrations.*] blocks keyed by
-	// adapter name (e.g. "github"). Each section is stored opaquely as a
-	// map so adding a new adapter requires no parser change — strong-typing
-	// happens inside each adapter's constructor. Empty when no integrations
-	// are configured.
+	// adapter name (e.g. "github"). This block is a legacy surface from the
+	// on-demand ticket-source model that the sensor-driven model replaced: no
+	// new code path acts on it, and sensors are now configured as TOML files
+	// under <repo>/sensors/. Load() retains the field so legacy files still
+	// parse and emits a deprecation warning when a block is present (see
+	// warnDeprecatedIntegrations); `quasar doctor` still surfaces it as a
+	// diagnostic. Empty when no integrations are configured.
 	IntegrationSections map[string]map[string]any `mapstructure:"integrations"`
 
 	// ForgeSections holds the parsed [forge.*] blocks keyed by forge name.
@@ -187,7 +192,28 @@ func loadFrom(v *viper.Viper) (Config, error) {
 		return Config{}, err
 	}
 
+	warnDeprecatedIntegrations(cfg)
+
 	return cfg, nil
+}
+
+// warnDeprecatedIntegrations emits a deprecation notice to stderr when a legacy
+// [integrations.*] block is present. The sensor-driven model configures sensors
+// via per-repo TOML files under <repo>/sensors/; the old block is ignored by
+// all new code paths but tolerated (not a load error) so pre-existing
+// .quasar.yaml files keep loading.
+func warnDeprecatedIntegrations(cfg Config) {
+	if len(cfg.IntegrationSections) == 0 {
+		return
+	}
+	names := make([]string, 0, len(cfg.IntegrationSections))
+	for name := range cfg.IntegrationSections {
+		names = append(names, name)
+	}
+	sort.Strings(names) // deterministic warning text
+	fmt.Fprintf(os.Stderr,
+		"warning: deprecated [integrations.*] block(s) found (%s); they are ignored. Configure sensors as TOML files under <repo>/sensors/ instead.\n",
+		strings.Join(names, ", "))
 }
 
 // checkInlineTokens recursively walks the decoded settings and returns
