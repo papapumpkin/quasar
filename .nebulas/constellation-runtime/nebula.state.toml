@@ -1,5 +1,6 @@
 version = 1
 nebula_name = 'constellation-runtime'
+total_cost_usd = 7.80180755
 
 [phases]
 [phases.arch-tests-and-docs]
@@ -40,21 +41,27 @@ updated_at = 2026-06-04T22:58:28.638382-04:00
 
 [phases.multi-repo-foundation]
 bead_id = 'multi-repo-foundation'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-04T22:58:28.637317-04:00
-updated_at = 2026-06-04T22:58:29.057645-04:00
+updated_at = 2026-06-04T23:13:26.7846-04:00
+
+[phases.multi-repo-foundation.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A clean, well-tested multi-repo foundation (registry + resolver + CLI + migration) that fixes both prior findings; approved with two optional minor notes.'
 
 [phases.nebula-to-sqlite-migration]
 bead_id = 'nebula-to-sqlite-migration'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-04T22:58:28.638161-04:00
-updated_at = 2026-06-04T22:58:28.638161-04:00
+updated_at = 2026-06-04T23:23:39.132001-04:00
 
 [phases.rename-integrations-to-sensors]
 bead_id = 'rename-integrations-to-sensors'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-04T22:58:28.637709-04:00
-updated_at = 2026-06-04T22:58:28.637709-04:00
+updated_at = 2026-06-04T23:23:39.133661-04:00
 
 [phases.tui-multi-repo-fleet-lane]
 bead_id = 'tui-multi-repo-fleet-lane'
