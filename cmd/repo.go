@@ -19,16 +19,19 @@ import (
 	"github.com/papapumpkin/quasar/internal/repos"
 )
 
-var repoCmd = &cobra.Command{
-	Use:   "repo",
-	Short: "Register and manage the repositories Quasar operates on",
-	Long: `The repo command group manages the set of git repositories a persistent
+// newRepoCmd builds a fresh `quasar repo` command tree. A constructor (rather
+// than a package-global) gives every invocation — production and each test —
+// its own flag state, so parsed flags never leak between Execute() calls.
+func newRepoCmd() *cobra.Command {
+	repoCmd := &cobra.Command{
+		Use:   "repo",
+		Short: "Register and manage the repositories Quasar operates on",
+		Long: `The repo command group manages the set of git repositories a persistent
 Quasar process is willing to operate on. Repos are registered explicitly
 (no auto-discovery); each carries its own .quasar.yaml, sensors, and
 pre-commit rules.`,
-}
+	}
 
-func init() {
 	repoCmd.PersistentFlags().String("db", "", "fabric database path (default .quasar/fabric.db)")
 
 	registerCmd := &cobra.Command{
@@ -78,7 +81,11 @@ func init() {
 	}
 
 	repoCmd.AddCommand(registerCmd, unregisterCmd, listCmd, pauseCmd, resumeCmd, showCmd)
-	rootCmd.AddCommand(repoCmd)
+	return repoCmd
+}
+
+func init() {
+	rootCmd.AddCommand(newRepoCmd())
 }
 
 // openRegistry opens (creating if necessary) the fabric database and returns a

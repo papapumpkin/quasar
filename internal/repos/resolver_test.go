@@ -128,16 +128,22 @@ func TestResolver_Config(t *testing.T) {
 	}
 }
 
-func TestResolver_MissingConfigIsNotError(t *testing.T) {
+func TestResolver_MissingConfigAppliesDefaults(t *testing.T) {
 	res, err := NewResolver(&Repo{Path: t.TempDir()})
 	if err != nil {
 		t.Fatalf("NewResolver should tolerate missing .quasar.yaml: %v", err)
 	}
-	// Defaults apply when the file is absent.
-	if res.Config().MaxReviewCycles != 0 {
-		// Note: a missing file means zero-valued config (no defaults applied),
-		// which is the documented behavior.
-		t.Logf("MaxReviewCycles = %d (zero-valued config)", res.Config().MaxReviewCycles)
+	// A repo without a .quasar.yaml must fall back to the same built-in
+	// defaults an empty config file would produce — not a zero-valued Config.
+	cfg := res.Config()
+	if cfg.MaxReviewCycles != 3 {
+		t.Errorf("MaxReviewCycles = %d, want default 3", cfg.MaxReviewCycles)
+	}
+	if cfg.MaxBudgetUSD != 5.0 {
+		t.Errorf("MaxBudgetUSD = %v, want default 5.0", cfg.MaxBudgetUSD)
+	}
+	if !cfg.PreCommit.FailOnError {
+		t.Error("PreCommit.FailOnError = false, want default true")
 	}
 }
 

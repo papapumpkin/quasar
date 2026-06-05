@@ -130,6 +130,37 @@ func writeConfig(t *testing.T, body string) string {
 	return path
 }
 
+func TestDefault_MatchesEmptyConfigFile(t *testing.T) {
+	// Default() must produce exactly the built-in defaults a caller would get
+	// from LoadFromPath against an empty .quasar.yaml — the resolver relies on
+	// this so a config-less repo and an empty-config repo converge.
+	def, err := Default()
+	if err != nil {
+		t.Fatalf("Default returned unexpected error: %v", err)
+	}
+
+	empty := writeConfig(t, "")
+	fromFile, err := LoadFromPath(empty)
+	if err != nil {
+		t.Fatalf("LoadFromPath(empty) returned unexpected error: %v", err)
+	}
+
+	if def.MaxReviewCycles != 3 {
+		t.Errorf("Default().MaxReviewCycles = %d, want 3", def.MaxReviewCycles)
+	}
+	if def.MaxBudgetUSD != 5.0 {
+		t.Errorf("Default().MaxBudgetUSD = %v, want 5.0", def.MaxBudgetUSD)
+	}
+	if !def.PreCommit.FailOnError {
+		t.Error("Default().PreCommit.FailOnError = false, want true")
+	}
+	if def.MaxReviewCycles != fromFile.MaxReviewCycles ||
+		def.MaxBudgetUSD != fromFile.MaxBudgetUSD ||
+		def.PreCommit.FailOnError != fromFile.PreCommit.FailOnError {
+		t.Errorf("Default() = %+v diverges from empty-file config %+v", def, fromFile)
+	}
+}
+
 func TestLoadFromPath_RoundTrip(t *testing.T) {
 	const yaml = `
 github:

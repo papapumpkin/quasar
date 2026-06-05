@@ -41,8 +41,9 @@ type Resolver struct {
 }
 
 // NewResolver loads the repo's .quasar.yaml (if present) and returns a resolver.
-// A missing .quasar.yaml is not an error — the resolver falls back to default
-// config so a repo can rely entirely on built-ins. A malformed config is an
+// A missing .quasar.yaml is not an error — the resolver falls back to the
+// built-in defaults (config.Default), identical to what an empty config file
+// produces, so a repo can rely entirely on built-ins. A malformed config is an
 // error.
 func NewResolver(repo *Repo) (*Resolver, error) {
 	if repo == nil {
@@ -52,21 +53,30 @@ func NewResolver(repo *Repo) (*Resolver, error) {
 	r := &Resolver{repo: *repo}
 
 	cfgPath := filepath.Join(repo.Path, ".quasar.yaml")
-	if _, err := os.Stat(cfgPath); err == nil {
+	switch _, statErr := os.Stat(cfgPath); {
+	case statErr == nil:
 		cfg, loadErr := config.LoadFromPath(cfgPath)
 		if loadErr != nil {
 			return nil, fmt.Errorf("repos: load config for %q: %w", repo.Path, loadErr)
 		}
 		r.cfg = cfg
-	} else if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("repos: stat config for %q: %w", repo.Path, err)
+	case os.IsNotExist(statErr):
+		// No per-repo config: converge on the same built-in defaults an empty
+		// .quasar.yaml would yield, not a zero-valued Config.
+		cfg, defErr := config.Default()
+		if defErr != nil {
+			return nil, fmt.Errorf("repos: load default config for %q: %w", repo.Path, defErr)
+		}
+		r.cfg = cfg
+	default:
+		return nil, fmt.Errorf("repos: stat config for %q: %w", repo.Path, statErr)
 	}
 
 	return r, nil
 }
 
-// Config returns the parsed .quasar.yaml for this repo (zero-valued defaults
-// when the file is absent).
+// Config returns the parsed .quasar.yaml for this repo, or the built-in
+// defaults (config.Default) when the file is absent.
 func (r *Resolver) Config() RepoConfig {
 	return r.cfg
 }

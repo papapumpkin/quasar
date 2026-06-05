@@ -9,17 +9,17 @@ import (
 	"testing"
 )
 
-// runRepo executes the repo command with args against a temp DB, capturing
-// stdout and stderr. The --db flag is injected so each test is isolated.
+// runRepo executes a fresh repo command tree with args against a temp DB,
+// capturing stdout and stderr. Building a new tree per call (via newRepoCmd)
+// gives each invocation clean flag state, so flags never leak between tests.
 func runRepo(t *testing.T, dbPath string, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
 	var out, errBuf bytes.Buffer
-	rootCmd.SetOut(&out)
-	rootCmd.SetErr(&errBuf)
-	full := append([]string{"repo"}, args...)
-	full = append(full, "--db", dbPath)
-	rootCmd.SetArgs(full)
-	err = rootCmd.Execute()
+	cmd := newRepoCmd()
+	cmd.SetOut(&out)
+	cmd.SetErr(&errBuf)
+	cmd.SetArgs(append(args, "--db", dbPath))
+	err = cmd.Execute()
 	return out.String(), errBuf.String(), err
 }
 
@@ -105,6 +105,35 @@ func TestRepoPauseResume(t *testing.T) {
 	}
 	if !strings.Contains(stdout, repo) {
 		t.Errorf("active list = %q, want repo present after resume", stdout)
+	}
+}
+
+// TestRepoListFlagsDoNotLeak guards against flag state bleeding between command
+// invocations: a prior `list --json` must not turn a later plain `list` into
+// JSON. Each runRepo call must execute against a fresh command tree.
+func TestRepoListFlagsDoNotLeak(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "fabric.db")
+	repo := gitRepoDir(t)
+	if _, _, err := runRepo(t, dbPath, "register", repo); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	// First call sets --json on its command instance.
+	if _, _, err := runRepo(t, dbPath, "list", "--json"); err != nil {
+		t.Fatalf("list --json: %v", err)
+	}
+
+	// Second call omits --json: it must print the human table to stderr and
+	// leave stdout empty. If the flag leaked, stdout would contain JSON.
+	stdout, stderr, err := runRepo(t, dbPath, "list")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Errorf("plain list wrote to stdout = %q, want empty (json flag leaked)", stdout)
+	}
+	if !strings.Contains(stderr, repo) {
+		t.Errorf("plain list stderr = %q, want repo path in human table", stderr)
 	}
 }
 

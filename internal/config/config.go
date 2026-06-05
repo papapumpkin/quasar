@@ -126,6 +126,15 @@ func Load() (Config, error) {
 	return loadFrom(viper.GetViper())
 }
 
+// Default returns the configuration with only built-in defaults applied — the
+// same values LoadFromPath produces for an empty .quasar.yaml. Callers that may
+// not have a config file (e.g. the repos resolver for a repo without a
+// .quasar.yaml) use it so "no file" and "empty file" converge on identical
+// built-in defaults rather than a zero-valued Config.
+func Default() (Config, error) {
+	return loadFrom(viper.New())
+}
+
 // LoadFromPath reads configuration from an explicit .quasar.yaml file, isolated
 // from the global viper instance. The resolver uses it to load a registered
 // repo's config without disturbing the process-wide single-repo config that
