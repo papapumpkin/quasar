@@ -75,6 +75,22 @@ Optionally install to your `$GOPATH/bin`:
 go install .
 ```
 
+## Deployment
+
+Quasar can run as a one-shot CLI (above) or as a persistent multi-repo service
+that polls registered repositories and turns sensor-detected work into PRs. For
+production deployments, start with these three docs:
+
+- **[docs/deployment.md](docs/deployment.md)** — running Quasar as an always-on
+  service (EC2/Linux): system requirements, directory layout, `quasar repo
+  register`, a `systemd` unit, upgrades, and backups.
+- **[docs/per-repo-config.md](docs/per-repo-config.md)** — authoring a repo's
+  `.quasar.yaml`, plus the per-repo `sensors/`, `stars/`, `skills/`, and
+  `constellations/` override directories, with a worked GitHub-issue example.
+- **[docs/safety.md](docs/safety.md)** — the git output safety perimeter: what
+  Quasar can and cannot do, sandboxing, pre-commit enforcement, token scopes,
+  and what to do if it misbehaves.
+
 ## Quick Start
 
 First, scaffold a config and check your setup:
