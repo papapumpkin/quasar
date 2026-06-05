@@ -27,8 +27,9 @@ var layers = map[string]int{
 	"fabric": 1,
 	"repos":  1,
 
-	"neutron": 2,
-	"tycho":   2,
+	"constellations": 2,
+	"neutron":        2,
+	"tycho":          2,
 
 	"loop": 3,
 

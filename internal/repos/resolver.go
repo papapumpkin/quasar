@@ -81,6 +81,12 @@ func (r *Resolver) Config() RepoConfig {
 	return r.cfg
 }
 
+// RepoPath returns the repo's root filesystem path. The artifact loader uses it
+// to enumerate per-repo override files (e.g. for `quasar lint`).
+func (r *Resolver) RepoPath() string {
+	return r.repo.Path
+}
+
 // ConstellationPath returns the per-repo override path for the named
 // constellation if <repo>/constellations/<name>.toml exists, otherwise
 // EmbeddedPath.

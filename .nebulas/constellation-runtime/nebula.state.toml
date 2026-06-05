@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'constellation-runtime'
-total_cost_usd = 36.61752105
+total_cost_usd = 38.6065943
 
 [phases]
 [phases.arch-tests-and-docs]
@@ -17,15 +17,15 @@ updated_at = 2026-06-05T12:29:26.024965-04:00
 
 [phases.constellation-runtime]
 bead_id = 'constellation-runtime'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-04T22:58:28.638603-04:00
-updated_at = 2026-06-05T12:29:26.024748-04:00
+updated_at = 2026-06-05T12:48:02.591454-04:00
 
 [phases.file-loader-and-discrimination]
 bead_id = 'file-loader-and-discrimination'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-04T22:58:28.637944-04:00
-updated_at = 2026-06-05T12:29:26.024286-04:00
+updated_at = 2026-06-05T12:48:02.590491-04:00
 
 [phases.gc-engine]
 bead_id = 'gc-engine'
@@ -65,9 +65,15 @@ summary = 'A docs-only update adds a PREREQUISITE help note (and fixes a stale d
 
 [phases.rename-integrations-to-sensors]
 bead_id = 'rename-integrations-to-sensors'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-04T22:58:28.637709-04:00
-updated_at = 2026-06-05T12:29:26.401582-04:00
+updated_at = 2026-06-05T12:37:45.902616-04:00
+
+[phases.rename-integrations-to-sensors.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A clean, well-tested rename of `internal/integrations`→`internal/sensors` with a pull-to-poll interface shift; all criteria met and the build is green, with only a stray out-of-scope test-formatting change to reconcile before commit.'
 
 [phases.tui-multi-repo-fleet-lane]
 bead_id = 'tui-multi-repo-fleet-lane'

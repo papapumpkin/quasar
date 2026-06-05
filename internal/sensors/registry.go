@@ -81,6 +81,16 @@ func (r *Registry) BuildSensor(name string) (Sensor, error) {
 	return s, nil
 }
 
+// HasSensor reports whether a Sensor constructor is registered under name. It is
+// a read-only lookup used by `quasar lint` to validate that a sensor instance's
+// type references a built-in sensor, without constructing the sensor.
+func (r *Registry) HasSensor(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, ok := r.sensors[name]
+	return ok
+}
+
 // BuildForge mirrors BuildSensor for forges. A nil cfg is treated as empty.
 func (r *Registry) BuildForge(name string, cfg map[string]any, secrets SecretResolver) (Forge, error) {
 	r.mu.RLock()
