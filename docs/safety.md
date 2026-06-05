@@ -87,6 +87,32 @@ runs, so one run can never see another's uncommitted state. Pre-commit hooks run
 inside that worktree, against exactly the changes the run produced. When the run
 completes (or is garbage-collected), its worktree directory is removed.
 
+## Stars and git writes
+
+The constellation runtime keeps git writes on a single rail by **separating
+editing from committing**:
+
+- A **star** node invokes the LLM to edit the worktree. It produces a diff; it
+  does **not** commit.
+- A **`commit` builtin** node is the *only* place a commit is created. It is the
+  sole call site that threads the repo's `[pre_commit]` config into
+  `gitops.Commit`, so every commit runs the configured quality gate uniformly —
+  no star, and no constellation author, has to know about pre-commit.
+
+This yields a hard invariant:
+
+> **Stars must never be granted git-write tools.** A star's allowed-tools list
+> must not include direct git access (e.g. a shell tool used to run
+> `git commit`/`git push`). If it did, the LLM could commit inside the worktree
+> itself, bypassing both the `internal/gitops` perimeter and the pre-commit
+> gate.
+
+Today this invariant is an **authoring rule**, documented on `dispatchStar` in
+`internal/constellations/runtime.go`. A loader-side rejection of git-write tools
+in a star's allowed-tools list will enforce it mechanically once the star tool
+model firms up; until then, keep stars to edit/read tools and route all commits
+through the `commit` builtin.
+
 ## Token scopes
 
 The bot user's GitHub PAT should be scoped as narrowly as the work allows:

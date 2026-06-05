@@ -224,6 +224,16 @@ func (r *Runtime) dispatchBuiltin(ctx context.Context, st *State, node *artifact
 
 // dispatchStar resolves the star, invokes the LLM with the node's rendered
 // inputs, accumulates cost, and records a star_invocation row.
+//
+// SAFETY INVARIANT — stars must never be granted git-write tools. A star edits
+// the worktree; the *commit* happens only in the `commit` builtin node, which
+// is the sole place the runtime threads the repo's [pre_commit] config into
+// gitops.Commit. If a star's allowed-tools (star.Tools.Allowed, passed below)
+// included direct git access, the LLM could commit inside the worktree itself,
+// bypassing both the internal/gitops perimeter and the pre-commit gate. This
+// runtime does not yet enforce the invariant (a loader-side rejection of
+// git-write tools lands when the star tool model firms up); until then it is an
+// authoring rule. See docs/safety.md ("Stars and git writes").
 func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *State, node *artifacts.ConstellationNode) (map[string]any, error) {
 	if r.invoker == nil {
 		return nil, fmt.Errorf("constellations: star node %q requires an Invoker", node.ID)
