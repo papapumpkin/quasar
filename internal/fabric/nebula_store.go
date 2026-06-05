@@ -19,10 +19,9 @@ const previewLen = 500
 var ErrNebulaNotFound = errors.New("fabric: nebula not found")
 
 // NebulaRecord is one row in the nebulas table: the provenance and status of a
-// nebula known to this fabric database. Ticket-seeded drafts created by
-// `quasar nebula new` record their originating source here so a later review
-// surface (web UI) can list and act on them. Manually authored nebulas are not
-// persisted here.
+// nebula known to this fabric database. Sensor-seeded drafts record their
+// originating source here so a later review surface (TUI / web UI) can list and
+// act on them. Manually authored nebulas are not persisted here.
 type NebulaRecord struct {
 	ID         string // nebula directory name; primary key
 	SourceType string // e.g. "ticket"; distinguishes from future origins

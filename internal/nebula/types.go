@@ -67,7 +67,7 @@ type Info struct {
 
 	// SourceName and SourceID record the external tracker a nebula was
 	// generated from (e.g. "github" / "papapumpkin/quasar#42"). They are
-	// populated by the ticket-driven `nebula new <source>:<id>` flow and
+	// populated when a sensor renders a seed nebula from a polled event and
 	// omitted from the manifest for manually authored or freeform-generated
 	// nebulas.
 	SourceName string `toml:"source_name,omitempty"`
@@ -112,8 +112,8 @@ type Nebula struct {
 
 	// SourceName and SourceID record the external tracker this nebula was
 	// generated from (e.g. "github" / "papapumpkin/quasar#42"). Both are
-	// empty for manually authored nebulas. They are populated by the
-	// `nebula new <source>:<id>` flow in a later phase.
+	// empty for manually authored nebulas. They are populated when a sensor
+	// renders a seed nebula from a polled event.
 	SourceName string
 	SourceID   string
 }
