@@ -61,14 +61,31 @@ func FromTicket(ctx context.Context, invoker agent.Invoker, t *integrations.Tick
 	if outDir == "" {
 		return nil, fmt.Errorf("from ticket requires a non-empty output directory")
 	}
+	return FromTicketInto(ctx, invoker, t, filepath.Join(outDir, slugifyTicket(t)))
+}
+
+// FromTicketInto is FromTicket with caller-chosen placement: it writes the
+// generated nebula into targetDir exactly, using filepath.Base(targetDir) as
+// the nebula name. The caller owns name selection and collision resolution
+// (FromTicket derives the name and joins it onto a parent dir; the `nebula new`
+// command needs to honor a --name override and append numeric suffixes to avoid
+// clobbering an existing draft, so it calls this variant instead).
+//
+// WriteNebula refuses to overwrite, so targetDir must not already exist.
+func FromTicketInto(ctx context.Context, invoker agent.Invoker, t *integrations.Ticket, targetDir string) (*NebulaInfo, error) {
+	if t == nil {
+		return nil, fmt.Errorf("cannot generate nebula from nil ticket")
+	}
+	if targetDir == "" {
+		return nil, fmt.Errorf("from ticket requires a non-empty target directory")
+	}
 
 	prompt, err := RenderTicketPrompt(t)
 	if err != nil {
 		return nil, fmt.Errorf("rendering ticket prompt: %w", err)
 	}
 
-	name := slugifyTicket(t)
-	targetDir := filepath.Join(outDir, name)
+	name := filepath.Base(targetDir)
 
 	// The UserPrompt here feeds only the manifest description and goals; the
 	// actual architect prompt is the rendered ticket above.
@@ -100,6 +117,13 @@ func FromTicket(ctx context.Context, invoker agent.Invoker, t *integrations.Tick
 	}
 
 	return &NebulaInfo{Name: name, Path: targetDir, Result: result}, nil
+}
+
+// SlugifyTicket returns the default nebula directory name for a ticket
+// ("nebula-<number>-<title-slug>"). The `nebula new` command uses it to derive
+// a base name before resolving on-disk collisions.
+func SlugifyTicket(t *integrations.Ticket) string {
+	return slugifyTicket(t)
 }
 
 // RenderTicketPrompt produces the architect's user prompt for a ticket-driven

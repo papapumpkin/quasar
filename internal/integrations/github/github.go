@@ -233,6 +233,14 @@ func (e *TicketNotFoundError) Error() string {
 // Unwrap exposes the underlying gh error for errors.Is/As traversal.
 func (e *TicketNotFoundError) Unwrap() error { return e.err }
 
+// Is reports whether target is the source-agnostic
+// integrations.ErrTicketNotFound sentinel. This lets forge-neutral callers
+// (e.g. `quasar nebula new`) detect a missing ticket via errors.Is without
+// importing this adapter package.
+func (e *TicketNotFoundError) Is(target error) bool {
+	return target == integrations.ErrTicketNotFound
+}
+
 // AuthFailedError reports that gh is not authenticated for the requested repo.
 type AuthFailedError struct {
 	Repo string

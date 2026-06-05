@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'ticket-ingest'
-total_cost_usd = 7.964806499999999
+total_cost_usd = 12.468239999999998
 
 [phases]
 [phases.architect-ticket-adapter]
@@ -17,9 +17,15 @@ summary = "The architect gains a ticket-driven input path that renders an `integ
 
 [phases.github-ticket-source]
 bead_id = 'github-ticket-source'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-04T15:19:11.067316-04:00
-updated_at = 2026-06-04T19:49:37.889565-04:00
+updated_at = 2026-06-04T20:01:55.782553-04:00
+
+[phases.github-ticket-source.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A clean, well-tested, constraint-compliant GitHub Issues TicketSource adapter that meets all acceptance criteria; approved with three optional minor polish notes.'
 
 [phases.gitops-and-pre-commit]
 bead_id = 'gitops-and-pre-commit'
@@ -29,9 +35,9 @@ updated_at = 2026-06-04T19:28:47.478085-04:00
 
 [phases.init-doctor-docs-arch]
 bead_id = 'init-doctor-docs-arch'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-04T15:19:11.068171-04:00
-updated_at = 2026-06-04T19:28:47.478765-04:00
+updated_at = 2026-06-04T20:58:37.152316-04:00
 
 [phases.integration-layer]
 bead_id = 'integration-layer'
@@ -47,6 +53,6 @@ summary = 'Doc-only fixes that resolve both prior findings (clarified `ResolveSe
 
 [phases.nebula-new-from-source]
 bead_id = 'nebula-new-from-source'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-04T15:19:11.067977-04:00
-updated_at = 2026-06-04T19:28:47.478535-04:00
+updated_at = 2026-06-04T20:58:37.151409-04:00

@@ -16,6 +16,21 @@ var DefaultLintCommands = []string{"go vet ./...", "go fmt ./..."}
 type PreCommitConfig struct {
 	// Commands run with the worktree as CWD, in order, before each commit.
 	Commands []string `mapstructure:"commands"`
+
+	// FailOnError aborts the commit when any pre-commit command exits non-zero.
+	// Defaults to true; reserved here for the later consumption phase.
+	FailOnError bool `mapstructure:"fail_on_error"`
+}
+
+// VerifyConfig holds the project's verification gate commands. Each field is a
+// single shell command (e.g. "go test ./..."). Empty fields disable that gate.
+// The schema is reserved here; enforcement of the gates lands in a later nebula
+// (the master review/PR loop). `quasar init` populates it from the detected
+// language and `quasar doctor` reports which gates are configured.
+type VerifyConfig struct {
+	Test  string `mapstructure:"test"`
+	Lint  string `mapstructure:"lint"`
+	Build string `mapstructure:"build"`
 }
 
 // Config holds all runtime configuration for a quasar session.
@@ -80,6 +95,11 @@ type Config struct {
 	// PreCommit holds the [pre_commit] section. Reserved here; consumption
 	// (running the commands before each commit) lands in a later phase.
 	PreCommit PreCommitConfig `mapstructure:"pre_commit"`
+
+	// Verify holds the [verify] section: per-project test/lint/build gate
+	// commands. Reserved here; enforcement lands in a later nebula. Empty
+	// fields (the default) mean the corresponding gate is not configured.
+	Verify VerifyConfig `mapstructure:"verify"`
 }
 
 // ErrInlineToken indicates an integration or forge section stored a secret

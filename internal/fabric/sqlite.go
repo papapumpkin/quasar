@@ -61,6 +61,19 @@ CREATE TABLE IF NOT EXISTS pulses (
     kind       TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS nebulas (
+    id          TEXT PRIMARY KEY,
+    source_type TEXT NOT NULL DEFAULT '',
+    source_name TEXT NOT NULL DEFAULT '',
+    source_id   TEXT NOT NULL DEFAULT '',
+    path        TEXT NOT NULL DEFAULT '',
+    status      TEXT NOT NULL DEFAULT 'draft',
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS nebulas_source ON nebulas (source_name, source_id);
 `
 
 // SQLiteFabric implements Fabric using a local SQLite database in WAL mode.

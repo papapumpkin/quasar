@@ -60,6 +60,13 @@ var nebulaSubcmds = []nebulaSubcmd{
 		flags: addNebulaGenerateFlags,
 		run:   runNebulaGenerate,
 	},
+	{
+		use:   "new <source>:<id>",
+		short: "Create a draft nebula from a ticket reference (e.g. github:42)",
+		args:  cobra.ExactArgs(1),
+		flags: addNebulaNewFlags,
+		run:   runNebulaNew,
+	},
 }
 
 func init() {

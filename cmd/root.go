@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,26 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
+
+// exitCodeError carries a process exit code alongside an underlying error so a
+// command can request a non-default exit status (e.g. exit 2 for "ticket not
+// found") while still surfacing its message. Execute inspects it via
+// errors.As; any error that is not an *exitCodeError exits 1.
+type exitCodeError struct {
+	code int
+	err  error
+}
+
+// Error returns the underlying error's message unchanged.
+func (e *exitCodeError) Error() string { return e.err.Error() }
+
+// Unwrap exposes the underlying error for errors.Is/As traversal.
+func (e *exitCodeError) Unwrap() error { return e.err }
+
+// newExitError wraps err so Execute terminates with the given exit code.
+func newExitError(code int, err error) error {
+	return &exitCodeError{code: code, err: err}
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "quasar",
@@ -19,7 +40,12 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		code := 1
+		var ec *exitCodeError
+		if errors.As(err, &ec) {
+			code = ec.code
+		}
+		os.Exit(code)
 	}
 }
 
