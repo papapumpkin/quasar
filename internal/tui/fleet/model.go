@@ -473,6 +473,30 @@ func (m Model) repoForCursor() string {
 	return ""
 }
 
+// selection resolves the cursor to a render Selection so the active lane's
+// selected card (or a folded repo's header) is visibly marked. It shares the
+// repoSlots accounting with the cursor-navigation helpers, so the highlight
+// always matches what approve/reject/detail will act on. Active is false when
+// the lane has no selectable slots.
+func (m Model) selection() Selection {
+	idx := 0
+	for ri, r := range m.view.Repos {
+		n := m.repoSlots(r)
+		if n == 0 {
+			continue
+		}
+		if m.cursor < idx+n {
+			cardIdx := headerCard // folded repo → its header is the slot
+			if !r.Folded {
+				cardIdx = m.cursor - idx
+			}
+			return Selection{Lane: m.lane, RepoIdx: ri, CardIdx: cardIdx, Active: true}
+		}
+		idx += n
+	}
+	return Selection{Lane: m.lane}
+}
+
 // View renders the active mode.
 func (m Model) View() string {
 	if m.quitting {
@@ -493,7 +517,7 @@ func (m Model) fleetView() string {
 		width = 110
 	}
 	var b strings.Builder
-	b.WriteString(RenderFleet(m.view, width))
+	b.WriteString(RenderFleet(m.view, width, m.selection()))
 	b.WriteString("\n\n")
 	if m.gitStrip {
 		b.WriteString(m.gitStripView())
@@ -516,10 +540,19 @@ func (m Model) fleetView() string {
 	return b.String()
 }
 
-// footer renders the keybinding hint line, marking the active lane.
+// footer renders the keybinding hint line, marking the active lane. Lane-
+// specific actions are shown only where they apply so no hint advertises a
+// dead keybinding: approve/reject on the awaiting lane, details on in-flight.
 func (m Model) footer() string {
-	return fmt.Sprintf("[lane %d/3] [a] approve  [r] reject  [d] details  [tab] switch  [/] filter  [f] fold  [g] git  [R] refresh  [q] quit",
-		m.lane+1)
+	var actions string
+	switch m.lane {
+	case 0:
+		actions = "[a] approve  [r] reject  "
+	case 1:
+		actions = "[d] details  "
+	}
+	return fmt.Sprintf("[lane %d/3] %s[tab] switch  [/] filter  [f] fold  [g] git  [R] refresh  [q] quit",
+		m.lane+1, actions)
 }
 
 // gitStripView renders the informational per-repo git-status strip.

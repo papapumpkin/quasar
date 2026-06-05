@@ -11,11 +11,39 @@ var laneTitles = [3]string{"Awaiting Approval", "In Flight", "Recent"}
 // minColWidth is the floor for a single lane column.
 const minColWidth = 24
 
+// selectGutter prefixes the selected card line; unselGutter prefixes the rest.
+// Both are the same display width so card text stays column-aligned, and an
+// inactive Selection renders every card with unselGutter — byte-identical to a
+// cursorless render, which keeps the existing golden fixtures valid.
+const (
+	selectGutter = "▌ "
+	unselGutter  = "  "
+)
+
+// noCard is the markCard sentinel meaning "no slot in this block is selected".
+// headerCard means the repo header itself (e.g. a folded repo) is selected.
+const (
+	noCard     = -2
+	headerCard = -1
+)
+
+// Selection identifies the highlighted slot for RenderFleet: the active lane,
+// the index of the repo within the fleet, and the index of the card within that
+// repo's active-lane list (headerCard marks the repo header, e.g. a folded
+// repo). Active is false when nothing should be highlighted — an empty fleet or
+// a non-fleet interaction mode — in which case no marker is drawn.
+type Selection struct {
+	Lane    int
+	RepoIdx int
+	CardIdx int
+	Active  bool
+}
+
 // RenderFleet renders the fleet to a deterministic, ANSI-free string laid out as
-// three repo-aligned columns. It is a pure function of (fleet, width) so it can
-// be golden-tested. Repos are grouped row-wise so a repo's three lanes line up
-// horizontally.
-func RenderFleet(f Fleet, width int) string {
+// three repo-aligned columns, marking the selected slot per sel. It is a pure
+// function of (fleet, width, sel) so it can be golden-tested. Repos are grouped
+// row-wise so a repo's three lanes line up horizontally.
+func RenderFleet(f Fleet, width int, sel Selection) string {
 	col := colWidth(width)
 	var b strings.Builder
 
@@ -30,10 +58,18 @@ func RenderFleet(f Fleet, width int) string {
 	}
 
 	for i, lane := range f.Repos {
+		// mark returns the selected card index for a given lane column of this
+		// repo, or noCard when the selection is elsewhere.
+		mark := func(laneNum int) int {
+			if sel.Active && sel.Lane == laneNum && sel.RepoIdx == i {
+				return sel.CardIdx
+			}
+			return noCard
+		}
 		blocks := [3][]string{
-			awaitingBlock(lane, col),
-			inflightBlock(lane, col),
-			recentBlock(lane, col),
+			awaitingBlock(lane, col, mark(0)),
+			inflightBlock(lane, col, mark(1)),
+			recentBlock(lane, col, mark(2)),
 		}
 		b.WriteString(joinBlocks(blocks, col))
 		if i < len(f.Repos)-1 {
@@ -41,6 +77,14 @@ func RenderFleet(f Fleet, width int) string {
 		}
 	}
 	return b.String()
+}
+
+// gutter returns the 2-column line prefix marking selection state.
+func gutter(selected bool) string {
+	if selected {
+		return selectGutter
+	}
+	return unselGutter
 }
 
 // colWidth divides the terminal width across three columns plus separators.
@@ -67,59 +111,67 @@ func dividerRow(col int) string {
 	return strings.Join([]string{rule, rule, rule}, sep)
 }
 
-// awaitingBlock renders a repo's awaiting-approval lane block.
-func awaitingBlock(lane RepoLane, col int) []string {
-	lines := []string{repoHeader(lane, col)}
+// awaitingBlock renders a repo's awaiting-approval lane block. markCard is the
+// selected card index within this block (noCard/headerCard otherwise).
+func awaitingBlock(lane RepoLane, col, markCard int) []string {
+	lines := []string{repoHeader(lane, col, markCard == headerCard)}
 	if lane.Folded {
 		return lines
 	}
 	if len(lane.AwaitingApproval) == 0 {
 		return append(lines, pad("  (none)", col))
 	}
-	for _, c := range lane.AwaitingApproval {
-		lines = append(lines, pad(fmt.Sprintf("  %s %s", c.SourceLabel, c.Title), col))
+	for i, c := range lane.AwaitingApproval {
+		lines = append(lines, pad(gutter(i == markCard)+fmt.Sprintf("%s %s", c.SourceLabel, c.Title), col))
 	}
 	return lines
 }
 
-// inflightBlock renders a repo's in-flight lane block.
-func inflightBlock(lane RepoLane, col int) []string {
-	lines := []string{repoHeader(lane, col)}
+// inflightBlock renders a repo's in-flight lane block. The run's primary line
+// carries the selection marker; its step sub-line stays indented.
+func inflightBlock(lane RepoLane, col, markCard int) []string {
+	lines := []string{repoHeader(lane, col, markCard == headerCard)}
 	if lane.Folded {
 		return lines
 	}
 	if len(lane.InFlight) == 0 {
 		return append(lines, pad("  (idle)", col))
 	}
-	for _, r := range lane.InFlight {
-		lines = append(lines, pad(fmt.Sprintf("  %s ▸ %s", shortRunID(r.RunID), r.ConstellationName), col))
+	for i, r := range lane.InFlight {
+		lines = append(lines, pad(gutter(i == markCard)+fmt.Sprintf("%s ▸ %s", shortRunID(r.RunID), r.ConstellationName), col))
 		lines = append(lines, pad(fmt.Sprintf("    ↻ step %d/%d — %s", r.StepIndex, r.StepCount, runDetail(r)), col))
 	}
 	return lines
 }
 
 // recentBlock renders a repo's recent (terminal) lane block.
-func recentBlock(lane RepoLane, col int) []string {
-	lines := []string{repoHeader(lane, col)}
+func recentBlock(lane RepoLane, col, markCard int) []string {
+	lines := []string{repoHeader(lane, col, markCard == headerCard)}
 	if lane.Folded {
 		return lines
 	}
 	if len(lane.Recent) == 0 {
 		return append(lines, pad("  (none)", col))
 	}
-	for _, c := range lane.Recent {
-		lines = append(lines, pad(fmt.Sprintf("  %s %s%s", statusGlyph(c.Status), c.Title, prSuffix(c)), col))
+	for i, c := range lane.Recent {
+		lines = append(lines, pad(gutter(i == markCard)+fmt.Sprintf("%s %s%s", statusGlyph(c.Status), c.Title, prSuffix(c)), col))
 	}
 	return lines
 }
 
-// repoHeader renders a repo's group header, prefixed with a fold marker.
-func repoHeader(lane RepoLane, col int) string {
+// repoHeader renders a repo's group header, prefixed with a fold marker. When
+// selected (a folded repo under the cursor), it carries the selection gutter so
+// the operator can see which repo a fold/unfold will act on.
+func repoHeader(lane RepoLane, col int, selected bool) string {
 	marker := "▾"
 	if lane.Folded {
 		marker = "▸"
 	}
-	return pad(fmt.Sprintf("%s %s", marker, lane.DisplayName), col)
+	body := fmt.Sprintf("%s %s", marker, lane.DisplayName)
+	if selected {
+		return pad(selectGutter+body, col)
+	}
+	return pad(body, col)
 }
 
 // joinBlocks stacks three equal-width blocks side by side, padding shorter

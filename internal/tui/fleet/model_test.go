@@ -95,3 +95,40 @@ func TestRepoForCursorAccountsForFoldedRepos(t *testing.T) {
 		t.Errorf("cursor 3 should select c1, got %+v", c)
 	}
 }
+
+// TestSelectionMatchesCursor verifies selection() resolves the cursor to the
+// same slot the navigation/action helpers act on (Issue #1): the render
+// highlight must point at exactly the card approve/reject will target, and a
+// folded repo's header resolves to the headerCard slot.
+func TestSelectionMatchesCursor(t *testing.T) {
+	m := Model{lane: 0}
+	m.view = Fleet{Repos: []RepoLane{
+		{DisplayName: "org/a", AwaitingApproval: []NebulaCard{{ID: "a1"}, {ID: "a2"}}},
+		{DisplayName: "org/b", Folded: true, AwaitingApproval: []NebulaCard{{ID: "b1"}}},
+		{DisplayName: "org/c", AwaitingApproval: []NebulaCard{{ID: "c1"}}},
+	}}
+
+	cases := []struct {
+		cursor  int
+		repoIdx int
+		cardIdx int
+	}{
+		{0, 0, 0},          // org/a first card
+		{1, 0, 1},          // org/a second card
+		{2, 1, headerCard}, // org/b folded header
+		{3, 2, 0},          // org/c first card
+	}
+	for _, c := range cases {
+		m.cursor = c.cursor
+		sel := m.selection()
+		if !sel.Active || sel.Lane != 0 || sel.RepoIdx != c.repoIdx || sel.CardIdx != c.cardIdx {
+			t.Errorf("cursor %d: selection = %+v, want repo %d card %d", c.cursor, sel, c.repoIdx, c.cardIdx)
+		}
+	}
+
+	// Empty lane → inactive selection (no highlight drawn).
+	empty := Model{lane: 0, view: Fleet{Repos: []RepoLane{{DisplayName: "org/x"}}}}
+	if sel := empty.selection(); sel.Active {
+		t.Errorf("empty lane should yield inactive selection, got %+v", sel)
+	}
+}

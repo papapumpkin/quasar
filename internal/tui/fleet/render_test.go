@@ -53,7 +53,7 @@ func TestRenderFleetGolden(t *testing.T) {
 	for name, f := range sampleFleets() {
 		name, f := name, f
 		t.Run(name, func(t *testing.T) {
-			got := RenderFleet(f, 110)
+			got := RenderFleet(f, 110, Selection{})
 			path := filepath.Join("testdata", name)
 			if *updateGolden {
 				if err := os.MkdirAll("testdata", 0o755); err != nil {
@@ -82,8 +82,39 @@ func TestRenderFoldedRepoHidesCards(t *testing.T) {
 		Folded:           true,
 		AwaitingApproval: []NebulaCard{{Title: "hidden", SourceLabel: "#1"}},
 	}}}
-	out := RenderFleet(f, 90)
+	out := RenderFleet(f, 90, Selection{})
 	if strings.Contains(out, "hidden") {
 		t.Error("folded repo should not render its cards")
+	}
+}
+
+// TestRenderFleetCursorGolden covers a non-zero cursor: the second awaiting
+// card of the first repo is selected and must carry the selection marker, while
+// every other card stays unmarked.
+func TestRenderFleetCursorGolden(t *testing.T) {
+	f := sampleFleets()["multi.golden"]
+	sel := Selection{Lane: 0, RepoIdx: 0, CardIdx: 1, Active: true}
+	got := RenderFleet(f, 110, sel)
+
+	if !strings.Contains(got, selectGutter+"#143 fix flaky scheduler test") {
+		t.Errorf("selected card should carry the %q marker:\n%s", selectGutter, got)
+	}
+	if strings.Contains(got, selectGutter+"#142 add gh-rate-limit retry") {
+		t.Errorf("unselected card must not carry the marker:\n%s", got)
+	}
+
+	path := filepath.Join("testdata", "multi_cursor.golden")
+	if *updateGolden {
+		if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read golden (run with -update-golden): %v", err)
+	}
+	if got != string(want) {
+		t.Errorf("cursor render mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, want)
 	}
 }
