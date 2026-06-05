@@ -17,9 +17,15 @@ import (
 )
 
 // cockpitCmd launches the TUI home screen for browsing and running nebulas.
+//
+// LEGACY (single-repo): this is the pre-multi-repo browser, backed by the
+// single-repo internal/tui package. The fleet view (`quasar tui`/`quasar
+// fleet`, cmd/fleet.go) is the multi-repo successor. cockpit is retained as a
+// working fallback for the nebula-launch workflow during the transition and is
+// slated for retirement once the fleet view covers it — tracked as a follow-up.
 var cockpitCmd = &cobra.Command{
 	Use:   "cockpit",
-	Short: "Launch the interactive cockpit home screen",
+	Short: "Launch the interactive cockpit home screen (legacy single-repo browser)",
 	Long: `Launch the Quasar cockpit home screen that auto-discovers nebulas in
 the .nebulas/ directory of the current (or specified) directory. From the
 landing page you can browse nebulas, see their status, and select one to

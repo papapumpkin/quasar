@@ -139,6 +139,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tickMsg:
 		if m.mode == modeDetail {
+			// Skip the trace poll for the transient post-approve placeholder
+			// (empty RunID): the architect run does not exist until the Phase-5
+			// supervisor creates it, so there is nothing to query yet.
+			if m.detail.RunID == "" {
+				return m, tickCmd()
+			}
 			return m, tea.Batch(m.traceCmd(m.detail.RunID), tickCmd())
 		}
 		return m, tea.Batch(m.inflightCmd(), tickCmd())
@@ -289,6 +295,11 @@ func (m Model) approve(jump bool) (tea.Model, tea.Cmd) {
 	}
 	m.status = "approved " + card.Title
 	if jump {
+		// Transient placeholder: the architect run does not exist yet — the
+		// Phase-5 supervisor creates it asynchronously from the trigger_queue
+		// row. RunID is empty until then, so the detail view shows "starting"
+		// and skips the trace poll (see the tickMsg handler). Resolving the
+		// view to the real run by NebulaID lands with the runtime in Phase 5.
 		m.mode = modeDetail
 		m.detail = RunCard{NebulaID: card.ID, NebulaTitle: card.Title, ConstellationName: "architect", State: "starting"}
 		m.trace = nil
@@ -566,8 +577,17 @@ func (m Model) gitStripView() string {
 }
 
 // detailView renders the run detail view: header, controls, and step trace.
+// When RunID is empty the run has just been approved but not yet created by the
+// supervisor, so it renders an explicit "starting" placeholder instead of a
+// half-empty run header.
 func (m Model) detailView() string {
 	var b strings.Builder
+	if m.detail.RunID == "" {
+		fmt.Fprintf(&b, "%s — %s\n", m.detail.NebulaTitle, m.detail.ConstellationName)
+		b.WriteString("architect starting — run not yet created\n\n")
+		b.WriteString("[b] back  [q] quit\n")
+		return b.String()
+	}
 	fmt.Fprintf(&b, "Run %s — %s (%s)\n", shortRunID(m.detail.RunID), m.detail.NebulaTitle, m.detail.State)
 	fmt.Fprintf(&b, "constellation: %s   node: %s   step %d/%d\n\n",
 		m.detail.ConstellationName, m.detail.CurrentNode, m.detail.StepIndex, m.detail.StepCount)

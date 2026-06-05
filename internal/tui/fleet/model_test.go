@@ -96,6 +96,41 @@ func TestRepoForCursorAccountsForFoldedRepos(t *testing.T) {
 	}
 }
 
+// TestApproveJumpShowsStartingPlaceholder verifies that A (approve + jump)
+// opens the detail view on a transient placeholder: the architect run has no
+// RunID yet (the Phase-5 supervisor creates it), so the view shows an explicit
+// "starting" message rather than a half-empty run header.
+func TestApproveJumpShowsStartingPlaceholder(t *testing.T) {
+	db := newTestDB(t)
+	const repo = "/src/papapumpkin/quasar"
+	seedRepo(t, db, repo, "quasar")
+	seedNebula(t, db, "neb-1", repo, "retry", "awaiting_approval")
+
+	statePath := filepath.Join(t.TempDir(), "tui-state.json")
+	m := NewModel(context.Background(), NewStore(db), statePath)
+	loaded := m.loadCmd()()
+	updated, _ := m.Update(loaded)
+	m = updated.(Model)
+
+	updated, _ = m.Update(keyRunes("A"))
+	m = updated.(Model)
+
+	if m.mode != modeDetail {
+		t.Fatalf("A should open the detail view, mode = %v", m.mode)
+	}
+	if m.detail.RunID != "" {
+		t.Errorf("placeholder run should have an empty RunID, got %q", m.detail.RunID)
+	}
+	if view := m.View(); !strings.Contains(view, "architect starting") {
+		t.Errorf("detail view should show the starting placeholder:\n%s", view)
+	}
+
+	// The transient-placeholder tick reschedules itself without a trace poll.
+	if _, cmd := m.Update(tickMsg{}); cmd == nil {
+		t.Error("tick should still reschedule while on the placeholder")
+	}
+}
+
 // TestSelectionMatchesCursor verifies selection() resolves the cursor to the
 // same slot the navigation/action helpers act on (Issue #1): the render
 // highlight must point at exactly the card approve/reject will target, and a
