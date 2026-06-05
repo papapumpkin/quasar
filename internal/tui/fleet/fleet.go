@@ -72,6 +72,18 @@ type Invocation struct {
 	Ended    time.Time
 }
 
+// NebulaDetail is the read-only inspection projection of a nebula row, shown
+// when the operator opens a draft (or recent) card with `d` to read its seed
+// prompt and provenance before approving or rejecting it.
+type NebulaDetail struct {
+	ID          string
+	Title       string
+	SourceLabel string // "#142", "manual", "scheduled"
+	SourceURL   string
+	Status      string
+	Description string // the seed prompt / nebula description
+}
+
 // Store is the read/command layer over the fabric database for the fleet view.
 type Store struct {
 	db *sql.DB
@@ -313,6 +325,29 @@ func (s *Store) Trace(ctx context.Context, runID string) ([]Invocation, error) {
 		out = append(out, inv)
 	}
 	return out, rows.Err()
+}
+
+// NebulaDetail loads a single nebula's inspection projection (title, source
+// provenance, status, seed prompt) for the read-only draft-detail view.
+func (s *Store) NebulaDetail(ctx context.Context, id string) (NebulaDetail, error) {
+	const q = `SELECT name, source_name, source_id, source_url, status, description
+		FROM nebulas WHERE id = ?`
+	var (
+		name, srcName, srcID, srcURL, descr sql.NullString
+		status                              string
+	)
+	if err := s.db.QueryRowContext(ctx, q, id).Scan(
+		&name, &srcName, &srcID, &srcURL, &status, &descr); err != nil {
+		return NebulaDetail{}, fmt.Errorf("fleet: nebula detail %q: %w", id, err)
+	}
+	return NebulaDetail{
+		ID:          id,
+		Title:       name.String,
+		SourceLabel: sourceLabel(srcName.String, srcID.String),
+		SourceURL:   srcURL.String,
+		Status:      status,
+		Description: descr.String,
+	}, nil
 }
 
 // displayName reduces an absolute repo path to its last two components.

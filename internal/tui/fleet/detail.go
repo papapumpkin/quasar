@@ -50,11 +50,13 @@ func traceDuration(inv Invocation) string {
 	return fmt.Sprintf(" (%s)", inv.Ended.Sub(inv.Started).Round(time.Second))
 }
 
-// gitSummary returns a one-line porcelain summary (modified/untracked counts
-// and branch ahead/behind) for a repo. It is informational only and never
-// mutates the repo. Failures yield a short, non-fatal note.
-func gitSummary(path string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), gitStatusTimeout)
+// gitSummaryContext returns a one-line porcelain summary (modified/untracked
+// counts and branch ahead/behind) for a repo. It is informational only and
+// never mutates the repo. Failures yield a short, non-fatal note. The per-repo
+// timeout is derived from parent, so a quit cancels an in-flight probe. This
+// MUST be called from a tea.Cmd, never from View() — it shells out to git.
+func gitSummaryContext(parent context.Context, path string) string {
+	ctx, cancel := context.WithTimeout(parent, gitStatusTimeout)
 	defer cancel()
 
 	out, err := gitops.New(path).Porcelain(ctx, true)

@@ -21,7 +21,8 @@ const (
 	modeFleet viewMode = iota
 	modeFilter
 	modeReject
-	modeDetail
+	modeDetail       // in-flight run detail (trace + pause/resume/kill)
+	modeNebulaDetail // read-only draft/recent nebula inspection
 )
 
 // Model is the top-level fleet dashboard tea.Model. It owns the loaded fleet,
@@ -43,8 +44,13 @@ type Model struct {
 	input    string // filter / reject text entry buffer
 	gitStrip bool
 
-	detail RunCard
-	trace  []Invocation
+	detail    RunCard
+	trace     []Invocation
+	nebDetail NebulaDetail
+
+	// gitSummaries caches per-repo git-status strings (keyed by repo path),
+	// populated off the render path by gitCmd. View() must never shell out.
+	gitSummaries map[string]string
 
 	width, height int
 	status        string // transient status line
@@ -71,6 +77,8 @@ func NewModel(ctx context.Context, store *Store, statePath string) Model {
 type fleetLoadedMsg struct{ fleet Fleet }
 type inflightLoadedMsg struct{ fleet Fleet }
 type traceLoadedMsg struct{ trace []Invocation }
+type nebulaDetailLoadedMsg struct{ detail NebulaDetail }
+type gitLoadedMsg struct{ summaries map[string]string }
 type errMsg struct{ err error }
 type tickMsg struct{}
 
@@ -112,6 +120,32 @@ func (m Model) traceCmd(runID string) tea.Cmd {
 	}
 }
 
+// nebulaDetailCmd loads a nebula's read-only inspection projection.
+func (m Model) nebulaDetailCmd(id string) tea.Cmd {
+	return func() tea.Msg {
+		d, err := m.store.NebulaDetail(m.ctx, id)
+		if err != nil {
+			return errMsg{err}
+		}
+		return nebulaDetailLoadedMsg{d}
+	}
+}
+
+// gitCmd probes git status for every repo OFF the render path and returns the
+// summaries for caching. View() reads only the cached map, so the subprocess
+// I/O never blocks the UI goroutine. It uses m.ctx so it cancels on quit.
+func (m Model) gitCmd() tea.Cmd {
+	repos := m.full.Repos
+	ctx := m.ctx
+	return func() tea.Msg {
+		out := make(map[string]string, len(repos))
+		for _, r := range repos {
+			out[r.Path] = gitSummaryContext(ctx, r.Path)
+		}
+		return gitLoadedMsg{out}
+	}
+}
+
 // tickCmd schedules the next in-flight refresh tick.
 func tickCmd() tea.Cmd {
 	return tea.Tick(inFlightTick, func(time.Time) tea.Msg { return tickMsg{} })
@@ -133,6 +167,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case traceLoadedMsg:
 		m.trace = msg.trace
+		return m, nil
+	case nebulaDetailLoadedMsg:
+		m.nebDetail = msg.detail
+		return m, nil
+	case gitLoadedMsg:
+		m.gitSummaries = msg.summaries
 		return m, nil
 	case errMsg:
 		m.err = msg.err
@@ -163,6 +203,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleTextEntry(msg, m.applyReject)
 	case modeDetail:
 		return m.handleDetailKey(msg)
+	case modeNebulaDetail:
+		return m.handleNebulaDetailKey(msg)
 	default:
 		return m.handleFleetKey(msg)
 	}
@@ -188,9 +230,17 @@ func (m Model) handleFleetKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "R":
 		m.status = "refreshing…"
+		if m.gitStrip {
+			// Refresh the git strip alongside the full re-query.
+			return m, tea.Batch(m.loadCmd(), m.gitCmd())
+		}
 		return m, m.loadCmd()
 	case "g":
 		m.gitStrip = !m.gitStrip
+		if m.gitStrip {
+			// Probe git off the render path when the strip is turned on.
+			return m, m.gitCmd()
+		}
 	case "/":
 		m.mode = modeFilter
 		m.input = m.ui.Filter
@@ -206,7 +256,10 @@ func (m Model) handleFleetKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.input = ""
 		}
 	case "d":
-		return m.openDetail()
+		if m.lane == 1 {
+			return m.openDetail()
+		}
+		return m.openNebulaDetail()
 	}
 	return m, nil
 }
@@ -305,6 +358,34 @@ func (m Model) approve(jump bool) (tea.Model, tea.Cmd) {
 		m.trace = nil
 	}
 	return m, m.loadCmd()
+}
+
+// handleNebulaDetailKey handles keys in the read-only nebula-detail view.
+func (m Model) handleNebulaDetailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "b", "esc":
+		m.mode = modeFleet
+		return m, nil
+	case "q", "ctrl+c":
+		m.quitting = true
+		m.persist()
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+// openNebulaDetail opens the read-only detail view for the selected awaiting or
+// recent nebula card so the operator can read its seed prompt and provenance
+// before approving/rejecting. It seeds the view from the card so it is not blank
+// while the full row loads.
+func (m Model) openNebulaDetail() (tea.Model, tea.Cmd) {
+	card := m.selectedNebula()
+	if card == nil {
+		return m, nil
+	}
+	m.mode = modeNebulaDetail
+	m.nebDetail = NebulaDetail{ID: card.ID, Title: card.Title, SourceLabel: card.SourceLabel, Status: card.Status}
+	return m, m.nebulaDetailCmd(card.ID)
 }
 
 // openDetail opens the detail view for the selected in-flight run.
@@ -516,6 +597,8 @@ func (m Model) View() string {
 	switch m.mode {
 	case modeDetail:
 		return m.detailView()
+	case modeNebulaDetail:
+		return m.nebulaDetailView()
 	default:
 		return m.fleetView()
 	}
@@ -566,12 +649,18 @@ func (m Model) footer() string {
 		m.lane+1, actions)
 }
 
-// gitStripView renders the informational per-repo git-status strip.
+// gitStripView renders the informational per-repo git-status strip from the
+// cached summaries only — it never shells out. Repos without a cached entry yet
+// show "loading…" until gitCmd's result arrives.
 func (m Model) gitStripView() string {
 	var b strings.Builder
 	b.WriteString("── git ──\n")
 	for _, r := range m.full.Repos {
-		b.WriteString(fmt.Sprintf("  %s: %s\n", r.DisplayName, gitSummary(r.Path)))
+		summary, ok := m.gitSummaries[r.Path]
+		if !ok {
+			summary = "loading…"
+		}
+		b.WriteString(fmt.Sprintf("  %s: %s\n", r.DisplayName, summary))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
