@@ -76,7 +76,10 @@ func summarizePorcelain(out string) string {
 		case strings.HasPrefix(line, "# branch.head "):
 			branch = strings.TrimPrefix(line, "# branch.head ")
 		case strings.HasPrefix(line, "# branch.ab "):
-			fmt.Sscanf(strings.TrimPrefix(line, "# branch.ab "), "+%d -%d", &ahead, &behind)
+			// Format is "+N -M"; on a malformed line report no divergence.
+			if _, err := fmt.Sscanf(strings.TrimPrefix(line, "# branch.ab "), "+%d -%d", &ahead, &behind); err != nil {
+				ahead, behind = 0, 0
+			}
 		case strings.HasPrefix(line, "? "):
 			untracked++
 		case strings.HasPrefix(line, "1 "), strings.HasPrefix(line, "2 "):

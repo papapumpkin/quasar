@@ -83,6 +83,46 @@ func NewStore(db *sql.DB) *Store { return &Store{db: db} }
 // Load builds the full Fleet by querying every non-removed repo and populating
 // its three lanes. Ages are computed relative to now.
 func (s *Store) Load(ctx context.Context) (Fleet, error) {
+	f, err := s.listRepos(ctx)
+	if err != nil {
+		return Fleet{}, err
+	}
+	now := time.Now()
+	for i := range f.Repos {
+		lane := &f.Repos[i]
+		if lane.AwaitingApproval, err = s.awaiting(ctx, lane.Path, now); err != nil {
+			return Fleet{}, err
+		}
+		if lane.InFlight, err = s.inFlight(ctx, lane.Path); err != nil {
+			return Fleet{}, err
+		}
+		if lane.Recent, err = s.recent(ctx, lane.Path, now); err != nil {
+			return Fleet{}, err
+		}
+	}
+	return f, nil
+}
+
+// LoadInFlight builds a Fleet with only the in-flight lane populated per repo.
+// The background 2s tick uses this so it touches just the constellation_runs
+// query, never the awaiting/recent queries — keeping idle churn minimal as the
+// registered-repo count grows.
+func (s *Store) LoadInFlight(ctx context.Context) (Fleet, error) {
+	f, err := s.listRepos(ctx)
+	if err != nil {
+		return Fleet{}, err
+	}
+	for i := range f.Repos {
+		if f.Repos[i].InFlight, err = s.inFlight(ctx, f.Repos[i].Path); err != nil {
+			return Fleet{}, err
+		}
+	}
+	return f, nil
+}
+
+// listRepos returns a Fleet whose RepoLanes carry only path/display name (no
+// lane cards). It is the shared repo-enumeration step for Load/LoadInFlight.
+func (s *Store) listRepos(ctx context.Context) (Fleet, error) {
 	const q = `SELECT path, name FROM repos WHERE status != 'removed' ORDER BY path`
 	rows, err := s.db.QueryContext(ctx, q)
 	if err != nil {
@@ -100,20 +140,6 @@ func (s *Store) Load(ctx context.Context) (Fleet, error) {
 	}
 	if err := rows.Err(); err != nil {
 		return Fleet{}, fmt.Errorf("fleet: iterate repos: %w", err)
-	}
-
-	now := time.Now()
-	for i := range f.Repos {
-		lane := &f.Repos[i]
-		if lane.AwaitingApproval, err = s.awaiting(ctx, lane.Path, now); err != nil {
-			return Fleet{}, err
-		}
-		if lane.InFlight, err = s.inFlight(ctx, lane.Path); err != nil {
-			return Fleet{}, err
-		}
-		if lane.Recent, err = s.recent(ctx, lane.Path, now); err != nil {
-			return Fleet{}, err
-		}
 	}
 	return f, nil
 }
@@ -222,9 +248,12 @@ func (s *Store) Approve(ctx context.Context, nebulaID string) error {
 		"UPDATE nebulas SET status = 'approved', updated_at = ? WHERE id = ?", now, nebulaID); err != nil {
 		return fmt.Errorf("fleet: approve %q: %w", nebulaID, err)
 	}
+	// Carry the nebula's repo_path onto the trigger so the runtime supervisor
+	// (later phase) can route/filter by repo without a join back to nebulas.
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO trigger_queue (nebula_id, constellation_name, state, created_at)
-		 VALUES (?, 'architect', 'pending', ?)`, nebulaID, now); err != nil {
+		`INSERT INTO trigger_queue (nebula_id, constellation_name, state, created_at, repo_path)
+		 SELECT id, 'architect', 'pending', ?, repo_path FROM nebulas WHERE id = ?`,
+		now, nebulaID); err != nil {
 		return fmt.Errorf("fleet: enqueue trigger %q: %w", nebulaID, err)
 	}
 	if err := tx.Commit(); err != nil {

@@ -90,10 +90,10 @@ func (m Model) loadCmd() tea.Cmd {
 	}
 }
 
-// inflightCmd re-queries only the in-flight lane.
+// inflightCmd re-queries only the in-flight lane (the sole auto-refreshed lane).
 func (m Model) inflightCmd() tea.Cmd {
 	return func() tea.Msg {
-		f, err := m.store.Load(m.ctx)
+		f, err := m.store.LoadInFlight(m.ctx)
 		if err != nil {
 			return errMsg{err}
 		}
@@ -321,8 +321,11 @@ func (m Model) setRunState(state string) (tea.Model, tea.Cmd) {
 	return m, m.loadCmd()
 }
 
-// toggleFold folds/unfolds the repo owning the selected card.
-func (m Model) toggleFold() {
+// toggleFold folds/unfolds the repo under the cursor. It uses a pointer
+// receiver so the mutated ui/view/cursor propagate back to the caller's model
+// (handleFleetKey holds an addressable local, so m.toggleFold() auto-takes &m).
+// A folded repo keeps one selectable header slot, so unfold is always reachable.
+func (m *Model) toggleFold() {
 	if len(m.view.Repos) == 0 {
 		return
 	}
@@ -377,38 +380,51 @@ func applyFold(in Fleet, ui UIState) Fleet {
 
 // --- selection helpers ---
 
-// laneLen returns the number of selectable cards in the active lane.
+// repoSlots returns how many selectable cursor positions a repo contributes in
+// the active lane: a folded repo keeps one slot (its header, so unfold stays
+// reachable), an unfolded repo contributes one slot per card. All cursor
+// accounting (laneLen, selectedNebula, selectedRun, repoForCursor) shares this
+// so selection and clamping never diverge across folded repos.
+func (m Model) repoSlots(r RepoLane) int {
+	if r.Folded {
+		return 1
+	}
+	switch m.lane {
+	case 0:
+		return len(r.AwaitingApproval)
+	case 1:
+		return len(r.InFlight)
+	default:
+		return len(r.Recent)
+	}
+}
+
+// laneLen returns the number of selectable cursor positions in the active lane.
 func (m Model) laneLen() int {
 	n := 0
 	for _, r := range m.view.Repos {
-		if r.Folded {
-			continue
-		}
-		switch m.lane {
-		case 0:
-			n += len(r.AwaitingApproval)
-		case 1:
-			n += len(r.InFlight)
-		case 2:
-			n += len(r.Recent)
-		}
+		n += m.repoSlots(r)
 	}
 	return n
 }
 
-// selectedNebula returns the nebula card under the cursor (awaiting/recent lanes).
+// selectedNebula returns the nebula card under the cursor (awaiting/recent
+// lanes). It returns nil on the in-flight lane and when the cursor rests on a
+// folded repo's header slot (which carries no card).
 func (m Model) selectedNebula() *NebulaCard {
+	if m.lane == 1 {
+		return nil
+	}
 	idx := 0
 	for ri := range m.view.Repos {
 		r := m.view.Repos[ri]
 		if r.Folded {
+			idx++ // header slot — not a card
 			continue
 		}
 		cards := r.AwaitingApproval
 		if m.lane == 2 {
 			cards = r.Recent
-		} else if m.lane != 0 {
-			return nil
 		}
 		for ci := range cards {
 			if idx == m.cursor {
@@ -420,7 +436,8 @@ func (m Model) selectedNebula() *NebulaCard {
 	return nil
 }
 
-// selectedRun returns the run card under the cursor (in-flight lane).
+// selectedRun returns the run card under the cursor (in-flight lane). It returns
+// nil when the cursor rests on a folded repo's header slot.
 func (m Model) selectedRun() *RunCard {
 	if m.lane != 1 {
 		return nil
@@ -429,6 +446,7 @@ func (m Model) selectedRun() *RunCard {
 	for ri := range m.view.Repos {
 		r := m.view.Repos[ri]
 		if r.Folded {
+			idx++ // header slot — not a run
 			continue
 		}
 		for ci := range r.InFlight {
@@ -441,25 +459,12 @@ func (m Model) selectedRun() *RunCard {
 	return nil
 }
 
-// repoForCursor returns the display name of the repo owning the selected card.
+// repoForCursor returns the display name of the repo owning the cursor's slot,
+// whether that slot is a card or a folded repo's header.
 func (m Model) repoForCursor() string {
 	idx := 0
 	for _, r := range m.view.Repos {
-		if r.Folded {
-			if idx == m.cursor {
-				return r.DisplayName
-			}
-			continue
-		}
-		var n int
-		switch m.lane {
-		case 0:
-			n = len(r.AwaitingApproval)
-		case 1:
-			n = len(r.InFlight)
-		case 2:
-			n = len(r.Recent)
-		}
+		n := m.repoSlots(r)
 		if m.cursor < idx+n {
 			return r.DisplayName
 		}
