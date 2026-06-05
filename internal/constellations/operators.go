@@ -10,12 +10,15 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/papapumpkin/quasar/internal/fabric"
+	"github.com/papapumpkin/quasar/internal/gitops"
 )
 
 // opRenderSeedPrompt renders a seed nebula into a Markdown brief the architect
 // star consumes. It reads the nebula snapshot already in State, so it makes no
-// database call. Output: {"prompt": <markdown>}.
-func opRenderSeedPrompt(_ context.Context, _ *Runtime, st *State, _ map[string]any) (map[string]any, error) {
+// database call. The repo's [pre_commit] commands are appended so the architect
+// plans phases that anticipate the quality bar the coder will be measured
+// against. Output: {"prompt": <markdown>}.
+func opRenderSeedPrompt(_ context.Context, rt *Runtime, st *State, _ map[string]any) (map[string]any, error) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# %s\n\n", st.Nebula.Name)
 	if st.Nebula.Source != "" {
@@ -32,7 +35,27 @@ func opRenderSeedPrompt(_ context.Context, _ *Runtime, st *State, _ map[string]a
 			fmt.Fprintf(&b, "- [%s] %s (%s)\n", p.ID, p.Title, p.Status)
 		}
 	}
+	if rt != nil {
+		b.WriteString(renderPreCommitSection(rt.preCommit))
+	}
 	return map[string]any{"prompt": b.String()}, nil
+}
+
+// renderPreCommitSection formats the repo's pre-commit commands as a Markdown
+// section for the architect prompt. It returns the empty string when no commands
+// are configured, so an unconfigured repo produces no extra block at all.
+func renderPreCommitSection(pre gitops.PreCommitConfig) string {
+	if len(pre.Commands) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n\n## Repository Pre-Commit Checks\n\n")
+	b.WriteString("This repository enforces the following checks before every commit. ")
+	b.WriteString("Your plan must produce code that passes all of them:\n\n")
+	for _, c := range pre.Commands {
+		fmt.Fprintf(&b, "- `%s`\n", c)
+	}
+	return b.String()
 }
 
 // phaseSpec is the structure the architect emits and persist_phases consumes.

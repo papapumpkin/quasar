@@ -54,6 +54,9 @@ func TestLoadStar(t *testing.T) {
 		if !strings.Contains(star.Prompt, "You have git access") {
 			t.Error("prompt missing git-aware skill fragment")
 		}
+		if !strings.Contains(star.Prompt, "stable cache prefix") {
+			t.Error("prompt missing prompt-cache-aware skill fragment")
+		}
 		// Tools.Allowed is the union of base + each skill's tools_add.
 		if !containsStr(star.Tools.Allowed, "Bash(git log *)") {
 			t.Errorf("allowed missing skill-added tool: %v", star.Tools.Allowed)
@@ -89,6 +92,23 @@ func TestLoadStar(t *testing.T) {
 			t.Fatal("expected error for unknown skill")
 		}
 	})
+}
+
+// TestArchitectStarPreCommitPlaceholder pins the contract that the architect
+// star template keeps the literal ${pre_commit_commands} marker. The
+// render_seed_prompt operator renders the repo's pre-commit checks into the
+// architect's brief; removing the marker would silently break that feature.
+func TestArchitectStarPreCommitPlaceholder(t *testing.T) {
+	t.Parallel()
+	l, _ := newTestLoader(t)
+
+	star, err := l.LoadStar("architect-star")
+	if err != nil {
+		t.Fatalf("LoadStar: %v", err)
+	}
+	if !strings.Contains(star.Prompt, "${pre_commit_commands}") {
+		t.Errorf("architect star prompt missing ${pre_commit_commands} placeholder:\n%s", star.Prompt)
+	}
 }
 
 func TestLoadConstellation(t *testing.T) {

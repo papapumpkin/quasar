@@ -1,19 +1,25 @@
 version = 1
 nebula_name = 'constellation-runtime'
-total_cost_usd = 63.11575929999999
+total_cost_usd = 66.0615673
 
 [phases]
 [phases.arch-tests-and-docs]
 bead_id = 'arch-tests-and-docs'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-04T22:58:28.639359-04:00
-updated_at = 2026-06-05T15:11:22.750257-04:00
+updated_at = 2026-06-05T15:29:14.551744-04:00
+
+[phases.arch-tests-and-docs.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A complete, well-engineered arch-test suite plus three deployment docs that correctly adapt the spec to the actual package tree, with genuine enforcement teeth and all gates green — approved.'
 
 [phases.builtin-constellations-and-stars]
 bead_id = 'builtin-constellations-and-stars'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-04T22:58:28.63881-04:00
-updated_at = 2026-06-05T14:31:34.271934-04:00
+updated_at = 2026-06-05T15:29:14.591118-04:00
 
 [phases.constellation-runtime]
 bead_id = 'constellation-runtime'
