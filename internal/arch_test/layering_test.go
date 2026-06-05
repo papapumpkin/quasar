@@ -28,6 +28,7 @@ var layers = map[string]int{
 	"repos":  1,
 
 	"constellations": 2,
+	"gc":             2,
 	"neutron":        2,
 	"tycho":          2,
 

@@ -94,23 +94,6 @@ func TestLoadStar(t *testing.T) {
 	})
 }
 
-// TestArchitectStarPreCommitPlaceholder pins the contract that the architect
-// star template keeps the literal ${pre_commit_commands} marker. The
-// render_seed_prompt operator renders the repo's pre-commit checks into the
-// architect's brief; removing the marker would silently break that feature.
-func TestArchitectStarPreCommitPlaceholder(t *testing.T) {
-	t.Parallel()
-	l, _ := newTestLoader(t)
-
-	star, err := l.LoadStar("architect-star")
-	if err != nil {
-		t.Fatalf("LoadStar: %v", err)
-	}
-	if !strings.Contains(star.Prompt, "${pre_commit_commands}") {
-		t.Errorf("architect star prompt missing ${pre_commit_commands} placeholder:\n%s", star.Prompt)
-	}
-}
-
 func TestLoadConstellation(t *testing.T) {
 	t.Parallel()
 	l, _ := newTestLoader(t)

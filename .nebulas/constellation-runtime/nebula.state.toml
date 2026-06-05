@@ -17,9 +17,9 @@ summary = 'A complete, well-engineered arch-test suite plus three deployment doc
 
 [phases.builtin-constellations-and-stars]
 bead_id = 'builtin-constellations-and-stars'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-06-04T22:58:28.63881-04:00
-updated_at = 2026-06-05T15:29:14.591118-04:00
+updated_at = 2026-06-05T15:50:46.271916-04:00
 
 [phases.constellation-runtime]
 bead_id = 'constellation-runtime'
@@ -47,9 +47,9 @@ summary = 'A focused table-driven test for `nebulaDetailView()` that guards both
 
 [phases.gc-engine]
 bead_id = 'gc-engine'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-04T22:58:28.638987-04:00
-updated_at = 2026-06-05T14:31:34.27223-04:00
+updated_at = 2026-06-05T16:01:34.039218-04:00
 
 [phases.github-sensor-produces-nebula]
 bead_id = 'github-sensor-produces-nebula'

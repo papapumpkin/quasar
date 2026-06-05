@@ -11,13 +11,13 @@ inputs = { fix_feedback = "${nebula.master_review.fix_feedback}" }
 id     = "plan"
 type   = "star"
 star   = "architect-star"
-inputs = { prompt = "${nodes.render_fix.output}" }
+inputs = { prompt = "${nodes.render_fix.prompt}" }
 
 [[nodes]]
 id     = "persist"
 type   = "builtin"
 op     = "persist_phases"
-inputs = { architect_output = "${nodes.plan.output}" }
+inputs = { phases_toml = "${nodes.plan.result}" }
 
 [[edges]]
 from = "render_fix"

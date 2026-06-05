@@ -117,6 +117,10 @@ type Config struct {
 	// GitHub holds the [github] section: top-level repo settings such as the
 	// base branch. Empty fields fall back to the consumer's own defaults.
 	GitHub GitHubConfig `mapstructure:"github"`
+
+	// GC holds the [gc] section: garbage-collection TTLs and grace window for
+	// the global SQLite store. Defaults are conservative (see DefaultGCConfig).
+	GC GCConfig `mapstructure:"gc"`
 }
 
 // ErrInlineToken indicates an integration or forge section stored a secret
@@ -173,6 +177,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("fix_effort", "low")
 	v.SetDefault("fallback_model", "")
 	v.SetDefault("pre_commit.fail_on_error", true)
+	setGCDefaults(v)
 }
 
 // loadFrom applies defaults, unmarshals, and enforces the inline-token
@@ -189,6 +194,10 @@ func loadFrom(v *viper.Viper) (Config, error) {
 	// (case-insensitive) anywhere in the document — top-level or nested under
 	// any section.
 	if err := checkInlineTokens("", v.AllSettings()); err != nil {
+		return Config{}, err
+	}
+
+	if err := cfg.GC.Validate(); err != nil {
 		return Config{}, err
 	}
 

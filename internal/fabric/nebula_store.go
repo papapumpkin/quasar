@@ -239,6 +239,35 @@ func (s *NebulaStore) SetStatus(ctx context.Context, id, newStatus string) error
 	return notFoundIfZero(res, id)
 }
 
+// ErrNotDeleted is returned by Undelete when the target nebula is not currently
+// soft-deleted (deleted_at IS NULL) — it was never marked, or it was already
+// hard-deleted by the GC and is unrecoverable.
+var ErrNotDeleted = errors.New("fabric: nebula is not soft-deleted")
+
+// Undelete clears a nebula's deleted_at, rescuing it from the GC while it is
+// still within its grace window. It returns ErrNebulaNotFound when no such row
+// exists and ErrNotDeleted when the row exists but was not soft-deleted (so the
+// caller can distinguish "already swept" from "never marked").
+func (s *NebulaStore) Undelete(ctx context.Context, id string) error {
+	var deletedAt sql.NullInt64
+	err := s.db.QueryRowContext(ctx, "SELECT deleted_at FROM nebulas WHERE id = ?", id).Scan(&deletedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: %s", ErrNebulaNotFound, id)
+	}
+	if err != nil {
+		return fmt.Errorf("fabric: look up nebula %q: %w", id, err)
+	}
+	if !deletedAt.Valid {
+		return fmt.Errorf("%w: %s", ErrNotDeleted, id)
+	}
+	if _, err := s.db.ExecContext(ctx,
+		"UPDATE nebulas SET deleted_at = NULL, updated_at = ? WHERE id = ?",
+		time.Now().Unix(), id); err != nil {
+		return fmt.Errorf("fabric: undelete nebula %q: %w", id, err)
+	}
+	return nil
+}
+
 // UpdatePhaseResult records a phase's completion outcome. A non-empty Diff is
 // written to the blobstore and its hash stored on the row.
 func (s *NebulaStore) UpdatePhaseResult(ctx context.Context, nebulaID, phaseID string, result PhaseResult) error {

@@ -39,14 +39,16 @@ type errNotFound string
 
 func (e errNotFound) Error() string { return "not found: " + string(e) }
 
-// fakeInvoker returns a canned result and records the prompt it saw.
+// fakeInvoker returns a canned result and records the agent and user prompt it saw.
 type fakeInvoker struct {
-	result   agent.InvocationResult
-	gotAgent agent.Agent
+	result    agent.InvocationResult
+	gotAgent  agent.Agent
+	gotPrompt string
 }
 
-func (f *fakeInvoker) Invoke(_ context.Context, a agent.Agent, _ string, _ string) (agent.InvocationResult, error) {
+func (f *fakeInvoker) Invoke(_ context.Context, a agent.Agent, prompt string, _ string) (agent.InvocationResult, error) {
 	f.gotAgent = a
+	f.gotPrompt = prompt
 	return f.result, nil
 }
 func (f *fakeInvoker) Validate() error { return nil }

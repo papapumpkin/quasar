@@ -69,6 +69,12 @@ var nebulaSubcmds = []nebulaSubcmd{
 		flags: addNebulaGenerateFlags,
 		run:   runNebulaGenerate,
 	},
+	{
+		use:   "undelete <id>",
+		short: "Restore a nebula the GC soft-deleted, within its grace window",
+		args:  cobra.ExactArgs(1),
+		run:   runNebulaUndelete,
+	},
 }
 
 func init() {

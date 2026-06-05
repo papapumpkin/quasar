@@ -30,9 +30,9 @@ Plan phases small enough to validate independently. Each phase should be
 self-contained: a coder agent reads its body and implements it without
 needing to look at other phases.
 
-This repository enforces the following pre-commit checks. Generated phases
-must produce code that passes all of them:
-${pre_commit_commands}
+The task brief you receive lists the repository's enforced pre-commit checks
+under a "Repository Pre-Commit Checks" heading. Generated phases must produce
+code that passes every one of them.
 
 Plan accordingly: include test additions in phases that change behavior;
 include build validation if the language requires it; include lint

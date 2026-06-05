@@ -41,6 +41,31 @@ func opRenderSeedPrompt(_ context.Context, rt *Runtime, st *State, _ map[string]
 	return map[string]any{"prompt": b.String()}, nil
 }
 
+// opRenderFixPrompt renders a fix brief for the architect from master-review's
+// fix feedback (args["fix_feedback"]) plus the nebula's original context, so the
+// architect plans corrective phases. Like render_seed it appends the repo's
+// pre-commit commands so fix phases anticipate the same quality bar. Output:
+// {"prompt": <markdown>}.
+func opRenderFixPrompt(_ context.Context, rt *Runtime, st *State, args map[string]any) (map[string]any, error) {
+	feedback, _ := args["fix_feedback"].(string)
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Fix: %s\n\n", st.Nebula.Name)
+	if fb := strings.TrimSpace(feedback); fb != "" {
+		b.WriteString("## Master review feedback\n\n")
+		b.WriteString(fb)
+		b.WriteString("\n\n")
+	}
+	if ctx := strings.TrimSpace(st.Nebula.Context); ctx != "" {
+		b.WriteString("## Original context\n\n")
+		b.WriteString(ctx)
+		b.WriteString("\n\n")
+	}
+	if rt != nil {
+		b.WriteString(renderPreCommitSection(rt.preCommit))
+	}
+	return map[string]any{"prompt": b.String()}, nil
+}
+
 // renderPreCommitSection formats the repo's pre-commit commands as a Markdown
 // section for the architect prompt. It returns the empty string when no commands
 // are configured, so an unconfigured repo produces no extra block at all.
