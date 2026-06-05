@@ -1,19 +1,19 @@
 version = 1
 nebula_name = 'constellation-runtime'
-total_cost_usd = 16.98892055
+total_cost_usd = 36.61752105
 
 [phases]
 [phases.arch-tests-and-docs]
 bead_id = 'arch-tests-and-docs'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-04T22:58:28.639359-04:00
-updated_at = 2026-06-05T09:24:37.980851-04:00
+updated_at = 2026-06-05T11:46:46.261436-04:00
 
 [phases.builtin-constellations-and-stars]
 bead_id = 'builtin-constellations-and-stars'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-04T22:58:28.63881-04:00
-updated_at = 2026-06-05T09:24:37.980281-04:00
+updated_at = 2026-06-05T11:48:25.502226-04:00
 
 [phases.constellation-runtime]
 bead_id = 'constellation-runtime'
@@ -23,15 +23,15 @@ updated_at = 2026-06-05T09:24:37.980053-04:00
 
 [phases.file-loader-and-discrimination]
 bead_id = 'file-loader-and-discrimination'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-04T22:58:28.637944-04:00
-updated_at = 2026-06-05T09:24:37.979132-04:00
+updated_at = 2026-06-05T11:24:32.833029-04:00
 
 [phases.gc-engine]
 bead_id = 'gc-engine'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-04T22:58:28.638987-04:00
-updated_at = 2026-06-05T09:24:37.980479-04:00
+updated_at = 2026-06-05T11:48:27.507679-04:00
 
 [phases.github-sensor-produces-nebula]
 bead_id = 'github-sensor-produces-nebula'
@@ -65,12 +65,12 @@ summary = 'A docs-only update adds a PREREQUISITE help note (and fixes a stale d
 
 [phases.rename-integrations-to-sensors]
 bead_id = 'rename-integrations-to-sensors'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-06-04T22:58:28.637709-04:00
-updated_at = 2026-06-05T10:26:18.094057-04:00
+updated_at = 2026-06-05T11:10:05.721613-04:00
 
 [phases.tui-multi-repo-fleet-lane]
 bead_id = 'tui-multi-repo-fleet-lane'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-04T22:58:28.639171-04:00
-updated_at = 2026-06-05T09:24:37.980673-04:00
+updated_at = 2026-06-05T11:35:40.573379-04:00

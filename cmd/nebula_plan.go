@@ -78,6 +78,7 @@ func runNebulaPlan(cmd *cobra.Command, args []string) error {
 
 	// Handle --json: emit structured JSON to stdout.
 	if jsonFlag {
+		// arch-test: stdout-allowed — structured JSON for machine consumption.
 		if err := writePlanJSON(os.Stdout, ep); err != nil {
 			return err
 		}

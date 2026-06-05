@@ -4,9 +4,10 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/papapumpkin/quasar/internal/gitops"
 )
 
 // gitStatusTimeout bounds the per-repo git status probe so a slow repo cannot
@@ -56,12 +57,11 @@ func gitSummary(path string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), gitStatusTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "-C", path, "status", "--porcelain=v2", "--branch")
-	out, err := cmd.Output()
+	out, err := gitops.New(path).Porcelain(ctx, true)
 	if err != nil {
 		return "unavailable"
 	}
-	return summarizePorcelain(string(out))
+	return summarizePorcelain(out)
 }
 
 // summarizePorcelain reduces `git status --porcelain=v2 --branch` output to a

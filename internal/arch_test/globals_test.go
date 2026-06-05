@@ -33,6 +33,14 @@ var allowedGlobals = map[string][]string{
 	"sensors": {
 		"defaultRegistry",
 	},
+	// blobstore: the process-wide set of registered blob-hash references. The
+	// columns that hold live blob hashes are declared from owning packages'
+	// init() functions (e.g. fabric/blobrefs.go); the GC reads this set to build
+	// its live set. Mutated only during package init, read-only thereafter — the
+	// same intentional-registry pattern as sensors.defaultRegistry.
+	"blobstore": {
+		"registeredReferences",
+	},
 	// nebula: the ticket architect prompt template. nebulaPromptSource is the
 	// //go:embed target (embed requires a package-level var) and nebulaPromptTmpl
 	// is the once-parsed template built from it. Both are immutable after package

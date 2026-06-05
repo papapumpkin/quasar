@@ -89,6 +89,18 @@ func (c *Client) Status(ctx context.Context) (clean bool, err error) {
 	return out == "", nil
 }
 
+// Porcelain returns the raw `git status --porcelain=v2` output for the
+// worktree. When withBranch is true, --branch is added so the output
+// includes the `# branch.head` and `# branch.ab` header lines. Read-only;
+// intended for informational summaries (e.g. the TUI's repo-status strip).
+func (c *Client) Porcelain(ctx context.Context, withBranch bool) (string, error) {
+	args := []string{"status", "--porcelain=v2"}
+	if withBranch {
+		args = append(args, "--branch")
+	}
+	return c.run(ctx, args...)
+}
+
 // HeadSHA returns the full commit SHA of HEAD.
 func (c *Client) HeadSHA(ctx context.Context) (string, error) {
 	return c.run(ctx, "rev-parse", "HEAD")

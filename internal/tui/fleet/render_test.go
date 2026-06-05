@@ -9,8 +9,10 @@ import (
 	"time"
 )
 
-// update regenerates the golden files when set: go test ./... -update.
-var update = flag.Bool("update", false, "update golden files")
+// updateGolden regenerates the golden files when set: go test ./... -update-golden.
+// The flag is named -update-golden rather than -update because the teatest
+// package (used by the keymap tests) registers a global -update flag of its own.
+var updateGolden = flag.Bool("update-golden", false, "update golden files")
 
 // sampleFleets returns deterministic fixture fleets keyed by golden-file name.
 func sampleFleets() map[string]Fleet {
@@ -53,7 +55,7 @@ func TestRenderFleetGolden(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := RenderFleet(f, 110)
 			path := filepath.Join("testdata", name)
-			if *update {
+			if *updateGolden {
 				if err := os.MkdirAll("testdata", 0o755); err != nil {
 					t.Fatal(err)
 				}
