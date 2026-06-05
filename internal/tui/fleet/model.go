@@ -31,16 +31,16 @@ type Model struct {
 	store     *Store
 	statePath string
 
-	full  Fleet // unfiltered, as loaded
-	view  Fleet // full with fold + filter applied
-	ui    UIState
-	filt  Filter
+	full Fleet // unfiltered, as loaded
+	view Fleet // full with fold + filter applied
+	ui   UIState
+	filt Filter
 
 	lane   int // 0=awaiting, 1=in-flight, 2=recent
 	cursor int // index within the active lane's flattened cards
 
-	mode    viewMode
-	input   string // filter / reject text entry buffer
+	mode     viewMode
+	input    string // filter / reject text entry buffer
 	gitStrip bool
 
 	detail RunCard

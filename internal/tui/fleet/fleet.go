@@ -269,8 +269,8 @@ func (s *Store) Trace(ctx context.Context, runID string) ([]Invocation, error) {
 	var out []Invocation
 	for rows.Next() {
 		var (
-			inv              Invocation
-			started, ended   sql.NullInt64
+			inv            Invocation
+			started, ended sql.NullInt64
 		)
 		if err := rows.Scan(&inv.Seq, &inv.Node, &inv.StarName, &inv.State, &started, &ended); err != nil {
 			return nil, fmt.Errorf("fleet: scan invocation: %w", err)
