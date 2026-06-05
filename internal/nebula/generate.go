@@ -42,10 +42,10 @@ func Generate(ctx context.Context, invoker agent.Invoker, req GenerateRequest) (
 		return nil, fmt.Errorf("generate request requires a non-empty nebula name")
 	}
 
-	// Step 1: Build scaffold manifest.
+	// Build scaffold manifest.
 	manifest := buildManifest(req)
 
-	// Step 2: Build the architect prompt with codebase context.
+	// Build the architect prompt with codebase context.
 	archReq := ArchitectRequest{
 		Mode:       ArchitectModeGenerate,
 		UserPrompt: req.UserPrompt,
@@ -60,14 +60,24 @@ func Generate(ctx context.Context, invoker agent.Invoker, req GenerateRequest) (
 		return nil, fmt.Errorf("building generate prompt: %w", err)
 	}
 
-	// Step 3: Invoke the architect agent.
+	return runGenerate(ctx, invoker, req, manifest, prompt)
+}
+
+// runGenerate executes the architect back-half shared by both the freeform
+// Generate path and the ticket-driven FromTicket path. The caller builds the
+// manifest and the architect prompt; everything from the LLM invocation
+// onward — parse, dependency inference, assembly, validation, and
+// auto-correction — is identical for both entry points, so it lives here as
+// the single call site for architect invocation.
+func runGenerate(ctx context.Context, invoker agent.Invoker, req GenerateRequest, manifest Manifest, prompt string) (*GenerateResult, error) {
+	// Invoke the architect agent.
 	agnt := ArchitectAgent(req.MaxBudgetUSD, req.Model)
 	invResult, err := invoker.Invoke(ctx, agnt, prompt, req.WorkDir)
 	if err != nil {
 		return nil, fmt.Errorf("architect invocation failed: %w", err)
 	}
 
-	// Step 4: Parse multi-phase output.
+	// Parse multi-phase output.
 	results, err := parseMultiPhaseOutput(invResult.ResultText)
 	if err != nil {
 		return nil, fmt.Errorf("parsing multi-phase output: %w", err)
@@ -76,7 +86,7 @@ func Generate(ctx context.Context, invoker agent.Invoker, req GenerateRequest) (
 		return nil, fmt.Errorf("architect produced no phases")
 	}
 
-	// Step 5: Extract phases and apply defaults.
+	// Extract phases and apply defaults.
 	phases := make([]PhaseSpec, 0, len(results))
 	var warnings []string
 	for _, r := range results {
@@ -89,7 +99,7 @@ func Generate(ctx context.Context, invoker agent.Invoker, req GenerateRequest) (
 		phases = append(phases, r.PhaseSpec)
 	}
 
-	// Step 6: Run dependency inference to correct the DAG.
+	// Run dependency inference to correct the DAG.
 	inferrer := &DependencyInferrer{Phases: phases}
 	inferResult, err := inferrer.InferDependencies()
 	if err != nil {
@@ -98,7 +108,7 @@ func Generate(ctx context.Context, invoker agent.Invoker, req GenerateRequest) (
 	phases = inferResult.Phases
 	warnings = append(warnings, inferResult.Warnings...)
 
-	// Step 7: Assemble the complete nebula and validate.
+	// Assemble the complete nebula and validate.
 	neb := &Nebula{
 		Dir:      req.OutputDir,
 		Manifest: manifest,
@@ -116,7 +126,7 @@ func Generate(ctx context.Context, invoker agent.Invoker, req GenerateRequest) (
 		CostUSD:     invResult.CostUSD,
 	}
 
-	// Step 8: Auto-correct validation errors and retry if needed.
+	// Auto-correct validation errors and retry if needed.
 	if len(validationErrs) > 0 {
 		result, err = CorrectAndRetry(ctx, invoker, req, result, validationErrs)
 		if err != nil {

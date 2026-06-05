@@ -761,61 +761,30 @@ func TestPhaseComplete(t *testing.T) {
 	})
 }
 
-// --- OnHail callback tests ---
+// --- Escalation tests ---
 
-func TestEscalatePhase_OnHail(t *testing.T) {
+func TestEscalatePhase_PostsDiscovery(t *testing.T) {
 	t.Parallel()
+	s, mf, _, _ := newTestScheduler()
 
-	t.Run("OnHail fires on escalation", func(t *testing.T) {
-		t.Parallel()
-		s, mf, _, _ := newTestScheduler()
-
-		var hailPhaseID string
-		var hailDiscovery fabric.Discovery
-		s.OnHail = func(phaseID string, d fabric.Discovery) {
-			hailPhaseID = phaseID
-			hailDiscovery = d
-		}
-
-		s.Blocked.Block("stuck", fabric.PollResult{
-			Decision: fabric.PollNeedInfo,
-			Reason:   "missing everything",
-		})
-		bp := s.Blocked.Get("stuck")
-
-		s.escalatePhase(context.Background(), "stuck", bp, nil)
-
-		if hailPhaseID != "stuck" {
-			t.Errorf("expected OnHail called with phaseID 'stuck', got %q", hailPhaseID)
-		}
-		if hailDiscovery.Kind != fabric.DiscoveryRequirementsAmbiguity {
-			t.Errorf("expected discovery kind %q, got %q", fabric.DiscoveryRequirementsAmbiguity, hailDiscovery.Kind)
-		}
-		if !strings.Contains(hailDiscovery.Detail, "stuck") {
-			t.Errorf("expected discovery detail to mention 'stuck', got %q", hailDiscovery.Detail)
-		}
-
-		// Discovery should also be posted to the fabric.
-		discs, _ := mf.AllDiscoveries(context.Background())
-		if len(discs) != 1 {
-			t.Errorf("expected 1 discovery posted, got %d", len(discs))
-		}
+	s.Blocked.Block("stuck", fabric.PollResult{
+		Decision: fabric.PollNeedInfo,
+		Reason:   "missing everything",
 	})
+	bp := s.Blocked.Get("stuck")
 
-	t.Run("no OnHail does not panic", func(t *testing.T) {
-		t.Parallel()
-		s, _, _, _ := newTestScheduler()
-		s.OnHail = nil
+	s.escalatePhase(context.Background(), "stuck", bp, nil)
 
-		s.Blocked.Block("phase", fabric.PollResult{
-			Decision: fabric.PollNeedInfo,
-			Reason:   "test",
-		})
-		bp := s.Blocked.Get("phase")
-
-		// Should not panic.
-		s.escalatePhase(context.Background(), "phase", bp, nil)
-	})
+	discs, _ := mf.AllDiscoveries(context.Background())
+	if len(discs) != 1 {
+		t.Errorf("expected 1 discovery posted, got %d", len(discs))
+	}
+	if discs[0].Kind != fabric.DiscoveryRequirementsAmbiguity {
+		t.Errorf("expected discovery kind %q, got %q", fabric.DiscoveryRequirementsAmbiguity, discs[0].Kind)
+	}
+	if !strings.Contains(discs[0].Detail, "stuck") {
+		t.Errorf("expected discovery detail to mention 'stuck', got %q", discs[0].Detail)
+	}
 }
 
 // --- logger tests ---

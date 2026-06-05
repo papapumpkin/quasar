@@ -38,10 +38,28 @@ Dual-agent AI coding coordinator that cycles a coder and reviewer until the revi
 
 Quasar coordinates two AI agents — a **coder** and a **reviewer** — that iterate on a coding task in a loop. The coder implements the requested changes, then the reviewer reads the actual source files to verify correctness, security, and code quality. If the reviewer finds issues, they're sent back to the coder for another pass. Phase status is tracked in each nebula's `nebula.state.toml` and in SQLite.
 
+### External Trackers
+
+Quasar can ingest work straight from an external issue tracker. Today it reads
+**GitHub Issues** (via the `gh` CLI); the integration layer is forge-agnostic, so
+Jira, Linear, and others plug in the same way tomorrow. Configure an
+`[integrations.github]` block (run `quasar init` to scaffold one) and turn an
+issue into a draft nebula:
+
+```bash
+quasar nebula new github:42        # fetch issue #42, architect a nebula from it
+```
+
+Credentials are resolved Docker-friendly via `token_env` or `token_file` — never
+inlined in `.quasar.yaml`. See [docs/integrations.md](docs/integrations.md) for
+the integration pattern and how to add a new adapter, and
+[docs/safety.md](docs/safety.md) for the git output safety perimeter.
+
 ## Prerequisites
 
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude`) — must be installed and authenticated
 - [Go](https://go.dev/) 1.25+ — to build from source
+- [GitHub CLI](https://cli.github.com/) (`gh`) — **optional**, only required when an `[integrations.github]` block is configured (for `quasar nebula new github:<n>`)
 
 ## Install
 
@@ -59,10 +77,11 @@ go install .
 
 ## Quick Start
 
-First, verify that all dependencies are installed:
+First, scaffold a config and check your setup:
 
 ```bash
-quasar validate
+quasar init      # writes .quasar.yaml with auto-detected defaults
+quasar doctor    # verifies dependencies, config, integrations, and git setup
 ```
 
 ### Single Task (REPL Mode)
@@ -112,9 +131,11 @@ Running `quasar` with no subcommand in a directory containing `.nebulas/` auto-l
 
 | Command              | Description                                    |
 |----------------------|------------------------------------------------|
+| `init`               | Scaffold a `.quasar.yaml` (auto-detects language + GitHub remote) |
+| `doctor`             | Diagnose config, integrations, credentials, git, and pre-commit setup |
 | `run`                | Start the interactive coder-reviewer REPL      |
 | `cockpit`            | Launch the interactive TUI home screen         |
-| `validate`           | Check that the `claude` CLI is found            |
+| `validate`           | Deprecated alias for `doctor`                   |
 | `version`            | Print the version number                       |
 
 Running `quasar` with no subcommand auto-launches the cockpit when a `.nebulas/` directory exists in the working directory.
@@ -123,6 +144,7 @@ Running `quasar` with no subcommand auto-launches the cockpit when a `.nebulas/`
 
 | Command              | Description                                      |
 |----------------------|--------------------------------------------------|
+| `nebula new`         | Create a draft nebula from a ticket (`<source>:<id>`, e.g. `github:42`) |
 | `nebula validate`    | Validate a nebula blueprint directory             |
 | `nebula plan`        | Preview the execution plan for a nebula           |
 | `nebula apply`       | Record phase tracking state and optionally run workers    |

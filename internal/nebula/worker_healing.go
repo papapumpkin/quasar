@@ -222,14 +222,6 @@ func (wg *WorkerGroup) attemptHealing(ctx context.Context, phaseID string, err e
 		wg.OnHotAdd(remSpec.ID, remSpec.Title, remSpec.DependsOn)
 	}
 
-	// Send TUI healing attempt message.
-	if wg.OnHail != nil {
-		wg.OnHail(phaseID, fabric.Discovery{
-			Kind:   "healing",
-			Detail: fmt.Sprintf("Auto-healing activated for %s (%s). Remediation phase: %s — %s", phaseID, diag.Kind, remSpec.ID, remSpec.Title),
-		})
-	}
-
 	fmt.Fprintf(wg.logger(), "healing: remediation phase %q inserted for failed %q (rewired: %s)\n", remSpec.ID, phaseID, strings.Join(rewired, ", "))
 }
 

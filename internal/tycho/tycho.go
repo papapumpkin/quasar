@@ -45,7 +45,7 @@ type StaleItem struct {
 
 // Scheduler observes fabric state and resolves the DAG to determine
 // which tasks are eligible for execution. It encapsulates DAG resolution,
-// scanning gate logic, blocked-task re-polling, stale detection, and hail
+// scanning gate logic, blocked-task re-polling, stale detection, and
 // triggering. When fabric components (Fabric, Poller, etc.) are nil, fabric
 // operations are skipped, preserving legacy (no-fabric) behavior.
 type Scheduler struct {
@@ -68,10 +68,6 @@ type Scheduler struct {
 	// DAG provides the dependency graph for Descendants() lookups
 	// during wave pruning. Passed through to WaveScanner.
 	DAG *dag.DAG
-
-	// OnHail is called when a blocked task requires human intervention.
-	// If nil, escalations are logged but not surfaced.
-	OnHail func(phaseID string, discovery fabric.Discovery)
 }
 
 // Eligible returns task IDs that have all DAG dependencies satisfied and
@@ -354,7 +350,7 @@ func (s *Scheduler) HandleEscalation(ctx context.Context, phaseID string, bp *fa
 // escalatePhase transitions a blocked phase to HUMAN_DECISION_REQUIRED.
 // It unblocks the phase, updates the fabric state, logs the escalation
 // message, and optionally calls markFailed to update the phase tracker.
-// When OnHail is set, a discovery is posted and surfaced.
+// A discovery is also posted to the fabric for record-keeping.
 func (s *Scheduler) escalatePhase(ctx context.Context, phaseID string, bp *fabric.BlockedPhase, markFailed func(phaseID string)) {
 	s.Blocked.Unblock(phaseID)
 
@@ -370,17 +366,14 @@ func (s *Scheduler) escalatePhase(ctx context.Context, phaseID string, bp *fabri
 
 	fmt.Fprintf(s.logger(), "\n── Fabric Escalation ──────────────────────────────\n%s───────────────────────────────────────────────────\n\n", msg)
 
-	// Surface via OnHail callback if configured.
-	if s.OnHail != nil {
-		disc := fabric.Discovery{
-			SourceTask: phaseID,
-			Kind:       fabric.DiscoveryRequirementsAmbiguity,
-			Detail:     fmt.Sprintf("Phase %q escalated: %s", phaseID, bp.LastResult.Reason),
-		}
-		if _, postErr := s.Fabric.PostDiscovery(ctx, disc); postErr != nil {
-			fmt.Fprintf(s.logger(), "warning: failed to post escalation discovery for %q: %v\n", phaseID, postErr)
-		}
-		s.OnHail(phaseID, disc)
+	// Post an escalation discovery for fabric record-keeping.
+	disc := fabric.Discovery{
+		SourceTask: phaseID,
+		Kind:       fabric.DiscoveryRequirementsAmbiguity,
+		Detail:     fmt.Sprintf("Phase %q escalated: %s", phaseID, bp.LastResult.Reason),
+	}
+	if _, postErr := s.Fabric.PostDiscovery(ctx, disc); postErr != nil {
+		fmt.Fprintf(s.logger(), "warning: failed to post escalation discovery for %q: %v\n", phaseID, postErr)
 	}
 
 	if markFailed != nil {

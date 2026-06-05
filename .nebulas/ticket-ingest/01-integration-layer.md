@@ -187,12 +187,23 @@ SourceName string  // empty when the nebula was manually authored
 SourceID   string  // empty when the nebula was manually authored
 ```
 
-In the SQLite layer (`internal/fabric/sqlite.go` + new migration), extend the `nebulas` table:
-```sql
-ALTER TABLE nebulas ADD COLUMN source_name TEXT NOT NULL DEFAULT '';
-ALTER TABLE nebulas ADD COLUMN source_id   TEXT NOT NULL DEFAULT '';
-CREATE INDEX nebulas_source ON nebulas (source_name, source_id);
-```
+> **DEFERRED — precondition missing in current codebase (see review note below).**
+> The original intent was to extend a `nebulas` table in the SQLite layer:
+> ```sql
+> ALTER TABLE nebulas ADD COLUMN source_name TEXT NOT NULL DEFAULT '';
+> ALTER TABLE nebulas ADD COLUMN source_id   TEXT NOT NULL DEFAULT '';
+> CREATE INDEX nebulas_source ON nebulas (source_name, source_id);
+> ```
+> However, `internal/fabric/sqlite.go` has **no `nebulas` table** (only `fabric`,
+> `entanglements`, `file_claims`, `discoveries`, `pulses`) and **no migration
+> framework** — its schema is a single inline `CREATE TABLE IF NOT EXISTS` DDL
+> string. Nebula state today is persisted as TOML (`nebula.state.toml`), not DB
+> rows. Building a `nebulas` table plus a migration runner now would be
+> speculative schema with no caller, contradicting this nebula's own
+> "don't add on speculation" philosophy. The consumable part — the
+> `SourceName`/`SourceID` fields on the in-memory `Nebula` struct — is done.
+> Persistence is deferred to the phase that actually writes nebulas to the DB
+> (phase 5, `nebula new`), where the table shape is known.
 
 Existing rows get empty strings (which means "manual"). No cache table for tickets — that is explicitly out of scope.
 
@@ -222,8 +233,8 @@ Existing rows get empty strings (which means "manual"). No cache table for ticke
 - `internal/config/config.go` — add IntegrationSections + ForgeSections fields (each is `map[string]map[string]any`), parse `[pre_commit]` placeholder (no consumption yet), inline-token guardrail
 - `internal/config/config_test.go` — yaml round-trips, inline-token error
 - `internal/nebula/types.go` — add SourceName + SourceID to the Nebula struct
-- `internal/fabric/sqlite.go` — wire the new migration into the migrations list
-- `internal/fabric/migrations/NNN_nebulas_source.sql` (new) — ALTER TABLE statements above
+- ~~`internal/fabric/sqlite.go` — wire the new migration into the migrations list~~ — **DEFERRED to phase 5** (no `nebulas` table or migration framework exists; see SQLite note above)
+- ~~`internal/fabric/migrations/NNN_nebulas_source.sql` (new) — ALTER TABLE statements above~~ — **DEFERRED to phase 5** (precondition missing)
 
 ## Acceptance Criteria
 
@@ -235,7 +246,7 @@ Existing rows get empty strings (which means "manual"). No cache table for ticke
 - [ ] `ResolveSecret` returns the file content (trimmed) when `File` is set with mode 0600 or 0400; returns an error for mode 0644 with a message naming the file path
 - [ ] `ResolveSecret` returns the env value when only `Env` is set and the env var exists; returns an empty string with no error when neither is set
 - [ ] Loading a `.quasar.yaml` with `[integrations.github] token: "ghp_xxx"` returns an error mentioning `token_env`/`token_file`
-- [ ] `Nebula` struct has `SourceName` and `SourceID` string fields
-- [ ] SQLite migration adds `source_name`, `source_id` columns to `nebulas` with NOT NULL DEFAULT '' and creates an index on the pair
-- [ ] Existing nebulas in `.nebulas/*/nebula.toml` continue to load (no schema change to the TOML manifest in this phase — only the Go struct and DB row gain fields, which are populated by phase 5 when the source is known)
+- [x] `Nebula` struct has `SourceName` and `SourceID` string fields
+- [~] ~~SQLite migration adds `source_name`, `source_id` columns to `nebulas` with NOT NULL DEFAULT '' and creates an index on the pair~~ — **DEFERRED to phase 5**: there is no `nebulas` table and no migration framework in this codebase (nebula state is TOML-persisted). Fabricating both on speculation contradicts this nebula's "no cache table / don't add on speculation" philosophy. The Go struct fields — the part consumable now — are present; persistence lands with the phase that writes nebulas to the DB.
+- [x] Existing nebulas in `.nebulas/*/nebula.toml` continue to load (no schema change to the TOML manifest in this phase — only the Go struct gains fields, which are populated by phase 5 when the source is known)
 - [ ] `go build ./...`, `go vet ./...`, `go test ./...` all exit 0

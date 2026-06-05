@@ -107,13 +107,6 @@ func (s *BusSubscriber) mapEvent(ev bus.Event) tea.Msg {
 	case bus.KindPhaseFindingLifecycle:
 		// Finding lifecycle is currently a no-op in the bridge; drop silently.
 		return nil
-	case bus.KindPhaseHailReceived:
-		return mapHailReceived(ev)
-	case bus.KindPhaseHailResolved:
-		if ev.HailResolved == nil {
-			return nil
-		}
-		return MsgHailResolved{PhaseID: ev.PhaseID, ID: ev.HailResolved.ID, Resolution: ev.HailResolved.Resolution}
 
 	// ── Single-task lifecycle (loop mode) ─────────────────────────────
 	case bus.KindTaskStarted:
@@ -149,13 +142,6 @@ func (s *BusSubscriber) mapEvent(ev bus.Event) tea.Msg {
 		return MsgInfo{Msg: ev.Message}
 	case bus.KindBeadUpdate:
 		return mapBeadUpdate(ev)
-	case bus.KindHailReceived:
-		return mapHailReceived(ev)
-	case bus.KindHailResolved:
-		if ev.HailResolved == nil {
-			return nil
-		}
-		return MsgHailResolved{ID: ev.HailResolved.ID, Resolution: ev.HailResolved.Resolution}
 
 	// ── Nebula control ────────────────────────────────────────────────
 	case bus.KindNebulaProgress:
@@ -203,10 +189,6 @@ func (s *BusSubscriber) mapEvent(ev bus.Event) tea.Msg {
 			PhaseID:   ev.PhaseID,
 			Text:      ev.Message,
 		}
-
-	// ── Hail (request-response) ───────────────────────────────────────
-	case bus.KindHail:
-		return s.mapHail(ev)
 
 	// ── Stale warning ─────────────────────────────────────────────────
 	case bus.KindStaleWarning:
@@ -392,63 +374,6 @@ func mapGateResolved(ev bus.Event) tea.Msg {
 	return MsgGateResolved{
 		PhaseID: ev.PhaseID,
 		Action:  nebula.GateAction(ev.GateResolved.Action),
-	}
-}
-
-// mapHail converts a KindHail bus event to MsgHail (the interactive hail
-// overlay). The bus stores Discovery and ResponseCh as any to avoid import
-// cycles. For the response channel, we create a typed adapter when present.
-func (s *BusSubscriber) mapHail(ev bus.Event) tea.Msg {
-	if ev.Hail == nil {
-		return nil
-	}
-	discovery, ok := ev.Hail.Discovery.(fabric.Discovery)
-	if !ok {
-		return nil
-	}
-
-	var responseCh chan<- string
-	if ev.Hail.ResponseCh != nil {
-		typedCh := make(chan string, 1)
-		go forwardHailResponse(typedCh, ev.Hail.ResponseCh, s.done)
-		responseCh = typedCh
-	}
-
-	return MsgHail{
-		PhaseID:    ev.PhaseID,
-		Discovery:  discovery,
-		ResponseCh: responseCh,
-	}
-}
-
-// mapHailReceived converts a KindHailReceived or KindPhaseHailReceived bus
-// event to MsgHailReceived (notification for the pending hails badge/list).
-// The bus stores the HailInfo as any in HailPayload.Discovery.
-func mapHailReceived(ev bus.Event) tea.Msg {
-	if ev.Hail == nil {
-		return nil
-	}
-	hailInfo, ok := ev.Hail.Discovery.(ui.HailInfo)
-	if !ok {
-		return nil
-	}
-	return MsgHailReceived{
-		PhaseID: ev.PhaseID,
-		Hail:    hailInfo,
-	}
-}
-
-// forwardHailResponse reads a single string response from the typed channel
-// and forwards it to the bus's untyped response channel. The done channel
-// allows the goroutine to exit if the subscriber stops before a response
-// is received, preventing goroutine leaks.
-func forwardHailResponse(from <-chan string, to chan<- any, done <-chan struct{}) {
-	select {
-	case resp, ok := <-from:
-		if ok && to != nil {
-			to <- resp
-		}
-	case <-done:
 	}
 }
 

@@ -30,3 +30,39 @@ lint_commands:
 
 # Verbose output
 verbose: false
+
+# --- Optional sections (empty by default) -----------------------------------
+# A freshly-installed Quasar ships with no integrations, forge, pre-commit, or
+# verify configuration. Run `quasar init` in a project to generate a populated
+# .quasar.yaml, or uncomment and edit the templates below.
+
+# External ticket sources. Tokens are NEVER stored here: set token_env (an env
+# var name) or token_file (a Docker secret path). An inline `token:` value is a
+# config-load error.
+# integrations:
+#   github:
+#     repo: "owner/repo"
+#     token_env: "GITHUB_TOKEN"
+#     # token_file: "/run/secrets/github_token"
+
+# Forge (PR creation) — reserved for a later release; schema documented here.
+# forge:
+#   github:
+#     repo: "owner/repo"
+#     token_env: "GITHUB_TOKEN"
+
+# Commands run in the worktree before every Quasar commit (formatters/linters).
+# pre_commit:
+#   commands:
+#     - "gofmt -w ."
+#     - "tofu fmt"
+#     - "prettier --write ."
+#     - "ruff format ."
+#     - "cargo fmt"
+#   fail_on_error: true
+
+# Verification gates (reserved; enforced in a later release).
+# verify:
+#   test: "go test ./..."
+#   lint: "go vet ./..."
+#   build: "go build ./..."

@@ -14,10 +14,7 @@ var discoveryCmd = &cobra.Command{
 	Short: "Post an agent discovery to the fabric",
 	Long: `Posts a discovery to the fabric database. Discoveries surface issues found
 during execution — entanglement disputes, missing dependencies, file conflicts,
-requirements ambiguities, and budget alerts.
-
-Discoveries that qualify as hails (all kinds except budget_alert) pause the
-affected tasks and surface for human attention in the cockpit.`,
+requirements ambiguities, and budget alerts.`,
 	RunE: runDiscovery,
 }
 

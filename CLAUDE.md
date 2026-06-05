@@ -7,20 +7,42 @@ go build -o quasar .          # build binary
 go test ./...                  # run all tests
 go test ./internal/loop/...    # run loop tests only
 go vet ./...                   # static analysis
+quasar init                    # scaffold a .quasar.yaml (auto-detects language + GitHub remote)
+quasar doctor                  # diagnose config, integrations, credentials, git, pre-commit
 ```
+
+`[pre_commit]` in `.quasar.yaml` lists formatter/linter commands (gofmt, prettier,
+ruff format, cargo fmt, …) run in the worktree before every Quasar commit.
 
 ## Project Structure
 
 ```
 cmd/          CLI commands (Cobra). Each file = one command.
 internal/
-  agent/      Agent types, roles, and the Invoker interface
-  claude/     Claude CLI invoker (satisfies agent.Invoker)
-  config/     Viper-based config loading (.quasar.yaml / env QUASAR_*)
-  loop/       Core coder-reviewer loop and state machine
-  nebula/     Multi-task orchestration (parse, validate, plan, apply)
-  ui/         Stderr-based UI printer (ANSI colors)
+  agent/         Agent types, roles, and the Invoker interface
+  claude/        Claude CLI invoker (satisfies agent.Invoker)
+  config/        Viper-based config loading (.quasar.yaml / env QUASAR_*)
+  integrations/  Forge-agnostic ticket sources + Forge stub + registry + secrets
+                 (github/ adapter; reach adapters only via integrations.Default())
+  gitops/        Vanilla-git output safety perimeter (reserved; lands in a later nebula)
+  loop/          Core coder-reviewer loop and state machine
+  nebula/        Multi-task orchestration (parse, validate, plan, apply)
+  ui/            Stderr-based UI printer (ANSI colors)
 ```
+
+## Integrations & Safety
+
+- **`TicketSource`** (read) and **`Forge`** (write, reserved) interfaces live in
+  `internal/integrations/`. Adapters register from `init()` and are looked up by
+  name via `integrations.Default()` — never imported directly by the cmd layer.
+- **Output safety perimeter**: all git *writes* are confined to the
+  `internal/gitops/` wrapper (vanilla git), which only permits pushes to
+  `quasar/*` refs and rejects destructive ops. `gh` is confined to the GitHub
+  adapter for ticket reading only. See [docs/safety.md](docs/safety.md).
+- **Adding an adapter** (e.g. Jira, Linear): follow the walkthrough in
+  [docs/integrations.md](docs/integrations.md).
+- **Secrets** are never inlined in `.quasar.yaml`: use `token_env` or
+  `token_file`. An inline `token:` is a config-load error.
 
 ## Go Conventions
 

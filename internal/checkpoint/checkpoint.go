@@ -114,7 +114,7 @@ func FromCycleState(cs *loop.CycleState, phaseID, nebulaName, gitSHA string) *Ch
 }
 
 // ToCycleState reconstructs a CycleState from a checkpoint. Transient fields
-// (lastCycleSHA, bridgedDiscoveryIDs, cache stats, etc.) are zeroed.
+// (lastCycleSHA, cache stats, etc.) are zeroed.
 func (c *Checkpoint) ToCycleState() *loop.CycleState {
 	cs := &loop.CycleState{
 		TaskID:        c.TaskID,

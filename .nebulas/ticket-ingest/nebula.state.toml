@@ -1,0 +1,70 @@
+version = 1
+nebula_name = 'ticket-ingest'
+total_cost_usd = 23.2374215
+
+[phases]
+[phases.architect-ticket-adapter]
+bead_id = 'architect-ticket-adapter'
+status = 'done'
+created_at = 2026-06-04T15:19:11.067795-04:00
+updated_at = 2026-06-04T19:49:37.873107-04:00
+
+[phases.architect-ticket-adapter.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = "The architect gains a ticket-driven input path that renders an `integrations.Ticket` into the spec's template and reuses the shared `runGenerate` back-half; correct, well-tested, and all of `go build`/`go vet`/`go test ./...` pass — approved with only minor non-blocking notes."
+
+[phases.github-ticket-source]
+bead_id = 'github-ticket-source'
+status = 'done'
+created_at = 2026-06-04T15:19:11.067316-04:00
+updated_at = 2026-06-04T20:01:55.782553-04:00
+
+[phases.github-ticket-source.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A clean, well-tested, constraint-compliant GitHub Issues TicketSource adapter that meets all acceptance criteria; approved with three optional minor polish notes.'
+
+[phases.gitops-and-pre-commit]
+bead_id = 'gitops-and-pre-commit'
+status = 'done'
+created_at = 2026-06-04T15:19:11.067601-04:00
+updated_at = 2026-06-04T21:24:35.22029-04:00
+
+[phases.gitops-and-pre-commit.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A correct, well-tested vanilla-git safety perimeter with pre-commit runner, config schema, and AST-based arch tests; all acceptance criteria met and the full suite is green, with only two minor (deferred-by-design) observations around swallowed pre-commit results and intentionally-unreachable defense-in-depth code.'
+
+[phases.init-doctor-docs-arch]
+bead_id = 'init-doctor-docs-arch'
+status = 'done'
+created_at = 2026-06-04T15:19:11.068171-04:00
+updated_at = 2026-06-04T21:12:38.285523-04:00
+
+[phases.init-doctor-docs-arch.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Adds `quasar init`/`quasar doctor`, the safety/integrations docs, config schema extensions, and final layering arch tests — a well-tested, convention-adherent, security-conscious implementation that adapts honestly to dependencies the phase prose over-assumed.'
+
+[phases.integration-layer]
+bead_id = 'integration-layer'
+status = 'done'
+created_at = 2026-06-04T15:19:11.066738-04:00
+updated_at = 2026-06-04T19:38:27.962073-04:00
+
+[phases.integration-layer.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Doc-only fixes that resolve both prior findings (clarified `ResolveSecret` no-fallback contract; honestly deferred an unsatisfiable SQLite criterion) atop a sound, well-tested integration-layer abstraction — approved with a flag that a deliverable was scoped down.'
+
+[phases.nebula-new-from-source]
+bead_id = 'nebula-new-from-source'
+status = 'failed'
+created_at = 2026-06-04T15:19:11.067977-04:00
+updated_at = 2026-06-04T20:58:37.151409-04:00

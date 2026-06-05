@@ -43,17 +43,11 @@ var allowedColocations = map[string]map[string]bool{
 	},
 	// Loop defines several small internal-use interfaces with their default
 	// implementations: Linter/CommandLinter, CycleCommitter/gitCycleCommitter,
-	// Hook/HookFunc. TaskCreator and FindingCreator are consumed here and
-	// implemented by BeadHook, the default hook wiring beads integration.
-	// HailQueue is an internal-use interface with its in-memory default
-	// implementation (MemoryHailQueue); consumers don't exist yet.
+	// Hook/HookFunc.
 	"loop": {
 		"Linter":         true,
 		"CycleCommitter": true,
 		"Hook":           true,
-		"TaskCreator":    true,
-		"FindingCreator": true,
-		"HailQueue":      true,
 	},
 	// Nebula defines gate/committer interfaces alongside their implementations.
 	// GitCommitter wraps git operations; Gater/GatePrompter implement the
@@ -69,6 +63,13 @@ var allowedColocations = map[string]map[string]bool{
 	// implementation. Consumers import ui.UI for testability.
 	"ui": {
 		"UI": true,
+	},
+	// Integrations defines SecretResolver alongside OSSecretResolver, the
+	// canonical filesystem/env-backed implementation. The interface exists so
+	// adapters and tests can inject a fake resolver without touching the real
+	// environment; OSSecretResolver is the production default.
+	"integrations": {
+		"SecretResolver": true,
 	},
 }
 

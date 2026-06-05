@@ -53,7 +53,6 @@ type WorkerGroup struct {
 	OnProgress          ProgressFunc                              // optional progress callback
 	OnRefactor          func(phaseID string, pending bool)        // optional callback for refactor notifications
 	OnHotAdd            HotAddFunc                                // optional callback for hot-added phases
-	OnHail              func(phaseID string, d fabric.Discovery)  // optional callback for hail surfacing
 	OnScanning          func(phaseID string)                      // optional callback for fabric scanning notifications
 	Bus                 bus.Bus                                   // optional event bus; when non-nil, callbacks also publish to the bus
 	Invoker             agent.Invoker                             // optional; required for auto-decomposition
@@ -94,7 +93,7 @@ func (wg *WorkerGroup) logger() io.Writer {
 }
 
 // wrapCallbacksForBus augments the existing OnProgress, OnRefactor, OnHotAdd,
-// OnHail, and OnScanning callbacks to also publish the corresponding bus event.
+// and OnScanning callbacks to also publish the corresponding bus event.
 // The original callback (if non-nil) is called first, then the bus event is
 // published. This preserves stderr-path behavior while adding bus-mediated
 // delivery for the TUI path.
@@ -140,19 +139,6 @@ func (wg *WorkerGroup) wrapCallbacksForBus() {
 		ev.HotAdd = &bus.HotAddPayload{
 			Title:     title,
 			DependsOn: dependsOn,
-		}
-		_ = b.Publish(context.Background(), ev)
-	}
-
-	// Wrap OnHail to also publish KindHail.
-	origHail := wg.OnHail
-	wg.OnHail = func(phaseID string, d fabric.Discovery) {
-		if origHail != nil {
-			origHail(phaseID, d)
-		}
-		ev := bus.NewPhase(bus.KindHail, phaseID)
-		ev.Hail = &bus.HailPayload{
-			Discovery: d,
 		}
 		_ = b.Publish(context.Background(), ev)
 	}
@@ -389,9 +375,8 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 			wg:        wg,
 			scheduler: scheduler,
 		},
-		OnHail: wg.OnHail, // may be nil — surfaced via cockpit TUI when set
-		Waves:  waves,     // may be nil if ComputeWaves failed
-		DAG:    dagGraph,
+		Waves: waves, // may be nil if ComputeWaves failed
+		DAG:   dagGraph,
 	}
 
 	// Wire wave-aware scanner when fabric components are available and

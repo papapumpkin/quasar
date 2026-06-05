@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	toml "github.com/pelletier/go-toml/v2"
 )
@@ -24,13 +23,6 @@ func Load(dir string) (*Nebula, error) {
 	var manifest Manifest
 	if err := toml.Unmarshal(data, &manifest); err != nil {
 		return nil, fmt.Errorf("parsing nebula.toml: %w", err)
-	}
-
-	// Validate hail_timeout if present.
-	if ht := manifest.Execution.HailTimeout; ht != "" && ht != "0" {
-		if _, err := time.ParseDuration(ht); err != nil {
-			return nil, fmt.Errorf("parsing hail_timeout %q: %w", ht, err)
-		}
 	}
 
 	entries, err := os.ReadDir(dir)

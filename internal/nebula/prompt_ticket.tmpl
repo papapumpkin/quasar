@@ -1,0 +1,32 @@
+You are designing a multi-phase plan to address a ticket pulled from an
+external work-tracking system.
+
+Source: {{.SourceName}}
+Reference: {{.SourceID}}
+URL: {{.URL}}
+
+Title: {{.Title}}
+{{if .Labels}}Labels: {{join .Labels ", "}}{{end}}
+{{if .Assignee}}Assigned to: {{.Assignee}}{{end}}
+State: {{.State}}
+
+--- Ticket Body ---
+{{.Body}}
+
+{{if .Comments}}
+--- Comments ({{len .Comments}}) ---
+{{range .Comments}}
+[{{.Author}} @ {{.CreatedAt.Format "2006-01-02"}}]
+{{.Body}}
+
+{{end}}
+{{end}}
+
+{{if .LinkedWork}}
+--- Linked Work (for context, do not reopen) ---
+{{range .LinkedWork}}{{.}}
+{{end}}
+{{end}}
+
+Now produce the nebula manifest and phase files per the conventions you
+already know.

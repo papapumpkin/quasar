@@ -1,40 +1,24 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/spf13/cobra"
-
-	"github.com/papapumpkin/quasar/internal/claude"
-	"github.com/papapumpkin/quasar/internal/config"
 )
 
+// validateCmd is a back-compat alias for `quasar doctor`. It was the
+// dependency-check command before the integration/safety nebula folded those
+// checks into the richer doctor report. Kept so existing scripts and docs that
+// call `quasar validate` keep working, with a deprecation notice pointing users
+// at the new command.
 var validateCmd = &cobra.Command{
-	Use:   "validate",
-	Short: "Check that required dependencies are available",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Load()
-		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
-		}
-		ok := true
-
-		claudeInv := claude.NewInvoker(cfg.ClaudePath, cfg.Verbose)
-		if err := claudeInv.Validate(); err != nil {
-			fmt.Fprintf(os.Stderr, "✗ claude: %v\n", err)
-			ok = false
-		} else {
-			fmt.Fprintln(os.Stderr, "✓ claude CLI found")
-		}
-
-		if !ok {
-			os.Exit(1)
-		}
-		return nil
-	},
+	Use:           "validate",
+	Short:         "Alias for `quasar doctor`",
+	Deprecated:    "use `quasar doctor` instead.",
+	RunE:          runDoctor,
+	SilenceUsage:  true,
+	SilenceErrors: true,
 }
 
 func init() {
+	validateCmd.Flags().Bool("json", false, "Emit the report as JSON on stdout")
 	rootCmd.AddCommand(validateCmd)
 }
