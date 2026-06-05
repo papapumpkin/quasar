@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'ticket-ingest'
-total_cost_usd = 12.468239999999998
+total_cost_usd = 18.07511525
 
 [phases]
 [phases.architect-ticket-adapter]
@@ -29,15 +29,21 @@ summary = 'A clean, well-tested, constraint-compliant GitHub Issues TicketSource
 
 [phases.gitops-and-pre-commit]
 bead_id = 'gitops-and-pre-commit'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-04T15:19:11.067601-04:00
-updated_at = 2026-06-04T19:28:47.478085-04:00
+updated_at = 2026-06-04T21:12:38.31699-04:00
 
 [phases.init-doctor-docs-arch]
 bead_id = 'init-doctor-docs-arch'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-04T15:19:11.068171-04:00
-updated_at = 2026-06-04T20:58:37.152316-04:00
+updated_at = 2026-06-04T21:12:38.285523-04:00
+
+[phases.init-doctor-docs-arch.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Adds `quasar init`/`quasar doctor`, the safety/integrations docs, config schema extensions, and final layering arch tests — a well-tested, convention-adherent, security-conscious implementation that adapts honestly to dependencies the phase prose over-assumed.'
 
 [phases.integration-layer]
 bead_id = 'integration-layer'

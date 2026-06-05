@@ -126,6 +126,7 @@ func Load() (Config, error) {
 	viper.SetDefault("max_context_tokens", 10000)
 	viper.SetDefault("fix_effort", "low")
 	viper.SetDefault("fallback_model", "")
+	viper.SetDefault("pre_commit.fail_on_error", true)
 
 	var cfg Config
 	if err := viper.Unmarshal(&cfg); err != nil {

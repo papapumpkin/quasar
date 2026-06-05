@@ -16,6 +16,7 @@ var layers = map[string]int{
 	"config":       0,
 	"dag":          0,
 	"filter":       0,
+	"gitops":       0,
 	"integrations": 0,
 	"snapshot":     0,
 	"telemetry":    0,

@@ -80,6 +80,19 @@ func TestLoad_EmptySectionsDefaultEmpty(t *testing.T) {
 	if len(cfg.PreCommit.Commands) != 0 {
 		t.Errorf("PreCommit.Commands = %v, want empty", cfg.PreCommit.Commands)
 	}
+	if !cfg.PreCommit.FailOnError {
+		t.Error("PreCommit.FailOnError = false, want true (default)")
+	}
+}
+
+func TestLoad_PreCommitFailOnErrorOverride(t *testing.T) {
+	cfg, err := loadFromYAML(t, "pre_commit:\n  fail_on_error: false\n")
+	if err != nil {
+		t.Fatalf("Load() returned unexpected error: %v", err)
+	}
+	if cfg.PreCommit.FailOnError {
+		t.Error("PreCommit.FailOnError = true, want false when explicitly disabled")
+	}
 }
 
 func TestLoad_InlineTokenRejected(t *testing.T) {
