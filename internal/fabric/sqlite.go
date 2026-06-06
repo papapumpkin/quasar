@@ -113,7 +113,21 @@ func NewSQLiteFabric(ctx context.Context, dbPath string) (*SQLiteFabric, error) 
 		return nil, fmt.Errorf("fabric: create schema: %w", err)
 	}
 
+	// Apply ordered migrations layered on top of the base schema (e.g. the
+	// repos table and the nebulas.repo_path column).
+	if err := runMigrations(ctx, db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("fabric: run migrations: %w", err)
+	}
+
 	return &SQLiteFabric{db: db}, nil
+}
+
+// DB exposes the underlying database handle for sibling stores (e.g. the repo
+// registry) that operate on tables created by this fabric's migrations. The
+// connection's lifetime is owned by the SQLiteFabric; callers must not close it.
+func (f *SQLiteFabric) DB() *sql.DB {
+	return f.db
 }
 
 // SetPhaseState upserts the phase's state in the fabric table.

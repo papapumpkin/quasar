@@ -13,20 +13,41 @@ import (
 // but don't match the automated detection heuristics. Each entry documents why
 // it is acceptable.
 var allowedGlobals = map[string][]string{
-	// integrations: the process-wide adapter registry. Adapters register
-	// into it from their package init(); it is the single intentional global
-	// the integration design mandates (a sync-protected Registry value). Tests
-	// that need isolation construct their own via NewRegistry().
-	"integrations": {
+	// artifacts: DefaultsFS is the //go:embed target for the built-in default
+	// constellations, stars, and skills (embed requires a package-level var).
+	// It is read-only after package init — the embedded FS is never reassigned.
+	"artifacts": {
+		"DefaultsFS",
+	},
+	// fabric: migrationsFS is the //go:embed target for the ordered SQL
+	// migrations applied after the base schema (embed requires a package-level
+	// var). It is read-only after package init — the embedded FS is never
+	// reassigned.
+	"fabric": {
+		"migrationsFS",
+	},
+	// sensors: the process-wide adapter registry. Adapters register into it
+	// from their package init(); it is the single intentional global the sensor
+	// design mandates (a sync-protected Registry value). Tests that need
+	// isolation construct their own via NewRegistry().
+	"sensors": {
 		"defaultRegistry",
 	},
-	// nebula: the ticket architect prompt template. ticketPromptSource is the
-	// //go:embed target (embed requires a package-level var) and ticketPromptTmpl
+	// blobstore: the process-wide set of registered blob-hash references. The
+	// columns that hold live blob hashes are declared from owning packages'
+	// init() functions (e.g. fabric/blobrefs.go); the GC reads this set to build
+	// its live set. Mutated only during package init, read-only thereafter — the
+	// same intentional-registry pattern as sensors.defaultRegistry.
+	"blobstore": {
+		"registeredReferences",
+	},
+	// nebula: the ticket architect prompt template. nebulaPromptSource is the
+	// //go:embed target (embed requires a package-level var) and nebulaPromptTmpl
 	// is the once-parsed template built from it. Both are immutable after package
 	// init — the embed is read-only and the template is never reassigned.
 	"nebula": {
-		"ticketPromptSource",
-		"ticketPromptTmpl",
+		"nebulaPromptSource",
+		"nebulaPromptTmpl",
 	},
 	// tui: vars that don't match prefix or heuristic patterns.
 	"tui": {

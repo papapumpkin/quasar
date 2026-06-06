@@ -1,0 +1,22 @@
+name        = "open-pr"
+description = "Pushes the nebula's branch and opens a PR. Terminal step in the happy path."
+
+[[nodes]]
+id     = "push"
+type   = "builtin"
+op     = "gitops_push"
+inputs = { branch = "${nebula.branch}" }
+
+[[nodes]]
+id     = "create_pr"
+type   = "builtin"
+op     = "gh_open_pr"
+inputs = { base = "${nebula.execution.base_branch}", head = "${nebula.branch}", title = "${nebula.name}", body = "${nebula.pr_body}" }
+
+[[edges]]
+from = "push"
+to   = "create_pr"
+
+[[edges]]
+from = "create_pr"
+to   = "_done"

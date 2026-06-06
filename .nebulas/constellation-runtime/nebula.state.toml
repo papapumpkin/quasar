@@ -1,0 +1,124 @@
+version = 1
+nebula_name = 'constellation-runtime'
+total_cost_usd = 79.58002255
+
+[phases]
+[phases.arch-tests-and-docs]
+bead_id = 'arch-tests-and-docs'
+status = 'done'
+created_at = 2026-06-04T22:58:28.639359-04:00
+updated_at = 2026-06-05T15:29:14.551744-04:00
+
+[phases.arch-tests-and-docs.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A complete, well-engineered arch-test suite plus three deployment docs that correctly adapt the spec to the actual package tree, with genuine enforcement teeth and all gates green — approved.'
+
+[phases.builtin-constellations-and-stars]
+bead_id = 'builtin-constellations-and-stars'
+status = 'done'
+created_at = 2026-06-04T22:58:28.63881-04:00
+updated_at = 2026-06-06T10:50:18.243002-04:00
+
+[phases.builtin-constellations-and-stars.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'All four prior findings are resolved (three fully, one as a justified-and-documented deviation), the git-write safety perimeter is now enforced structurally via a runtime-owned `commit` node, and build/vet/tests pass — I approve pending a human nod on the safety-model and placeholder-criterion decisions plus a quick gofmt confirmation.'
+
+[phases.constellation-runtime]
+bead_id = 'constellation-runtime'
+status = 'done'
+created_at = 2026-06-04T22:58:28.638603-04:00
+updated_at = 2026-06-05T13:22:24.155355-04:00
+
+[phases.constellation-runtime.report]
+satisfaction = 'high'
+risk = 'medium'
+needs_human_review = false
+summary = 'A clean, accurate, documentation-only cycle that closes both prior findings and ships a green, well-tested runtime slice; the delivered code is correct, but the scope-acceptance decision and the not-yet-mechanical safety invariant warrant a human sign-off.'
+
+[phases.file-loader-and-discrimination]
+bead_id = 'file-loader-and-discrimination'
+status = 'done'
+created_at = 2026-06-04T22:58:28.637944-04:00
+updated_at = 2026-06-05T14:43:50.948718-04:00
+
+[phases.file-loader-and-discrimination.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A focused table-driven test for `nebulaDetailView()` that guards both render branches; assertions match the production code and the test passes — approved.'
+
+[phases.gc-engine]
+bead_id = 'gc-engine'
+status = 'done'
+created_at = 2026-06-04T22:58:28.638987-04:00
+updated_at = 2026-06-06T11:19:13.352132-04:00
+
+[phases.gc-engine.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A focused, correct fix that registers a previously-missed blob-reference column and repairs the arch test that was vacuously passing, eliminating a latent silent-data-loss path in the GC mark-and-sweep.'
+
+[phases.github-sensor-produces-nebula]
+bead_id = 'github-sensor-produces-nebula'
+status = 'done'
+created_at = 2026-06-04T22:58:28.638382-04:00
+updated_at = 2026-06-06T11:09:49.583419-04:00
+
+[phases.github-sensor-produces-nebula.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A clean extraction of the `inflightGate` concurrency primitive out of `scheduler.go` to satisfy the 400-line arch guardrail, leaving all behavior, tests, and acceptance criteria for the GitHub-sensor phase intact and passing.'
+
+[phases.multi-repo-foundation]
+bead_id = 'multi-repo-foundation'
+status = 'done'
+created_at = 2026-06-04T22:58:28.637317-04:00
+updated_at = 2026-06-04T23:13:26.7846-04:00
+
+[phases.multi-repo-foundation.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A clean, well-tested multi-repo foundation (registry + resolver + CLI + migration) that fixes both prior findings; approved with two optional minor notes.'
+
+[phases.nebula-to-sqlite-migration]
+bead_id = 'nebula-to-sqlite-migration'
+status = 'done'
+created_at = 2026-06-04T22:58:28.638161-04:00
+updated_at = 2026-06-05T10:26:18.069529-04:00
+
+[phases.nebula-to-sqlite-migration.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A docs-only update adds a PREREQUISITE help note (and fixes a stale description) for `quasar nebula apply` to surface the registered-repo requirement before the spec-required hard error; all four prior findings are verified fixed and the change is correct and minimal.'
+
+[phases.rename-integrations-to-sensors]
+bead_id = 'rename-integrations-to-sensors'
+status = 'done'
+created_at = 2026-06-04T22:58:28.637709-04:00
+updated_at = 2026-06-05T12:37:45.902616-04:00
+
+[phases.rename-integrations-to-sensors.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A clean, well-tested rename of `internal/integrations`→`internal/sensors` with a pull-to-poll interface shift; all criteria met and the build is green, with only a stray out-of-scope test-formatting change to reconcile before commit.'
+
+[phases.tui-multi-repo-fleet-lane]
+bead_id = 'tui-multi-repo-fleet-lane'
+status = 'done'
+created_at = 2026-06-04T22:58:28.639171-04:00
+updated_at = 2026-06-05T15:11:22.706872-04:00
+
+[phases.tui-multi-repo-fleet-lane.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A verification-only cycle that closes both remaining minor items — build/vet/test are green, the layering violation is genuinely fixed via interface inversion, the TUI is sensor-package-free, and the only open thread is an intentional, well-documented Phase-5 adapter to track.'

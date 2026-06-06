@@ -1,0 +1,31 @@
+name        = "architect"
+description = "Refines a seed nebula into executable phases. Triggered by sensors after user approval."
+
+[[nodes]]
+id   = "render_seed"
+type = "builtin"
+op   = "render_seed_prompt"
+
+[[nodes]]
+id     = "plan"
+type   = "star"
+star   = "architect-star"
+inputs = { prompt = "${nodes.render_seed.prompt}" }
+
+[[nodes]]
+id     = "persist"
+type   = "builtin"
+op     = "persist_phases"
+inputs = { phases_toml = "${nodes.plan.result}" }
+
+[[edges]]
+from = "render_seed"
+to   = "plan"
+
+[[edges]]
+from = "plan"
+to   = "persist"
+
+[[edges]]
+from = "persist"
+to   = "_done"

@@ -51,6 +51,16 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Import the nebula into the SQLite-canonical store under the registered repo
+	// that owns the CWD. SQLite is the source of execution; the on-disk files are
+	// the authoring surface and are left untouched.
+	importedID, err := applyImportToSQLite(ctx, ecfg.NebulaDir)
+	if err != nil {
+		printer.Error(err.Error())
+		return err
+	}
+	printer.Info(fmt.Sprintf("imported nebula into SQLite: %s", importedID))
+
 	// Load, validate, resolve workDir, create branch, load state.
 	if err := engine.Load(ctx); err != nil {
 		return handleLoadError(printer, err)

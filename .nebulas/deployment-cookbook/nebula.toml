@@ -1,0 +1,38 @@
+[nebula]
+name = "deployment-cookbook"
+description = "Production deployment artifacts: Packer AMI build, Terraform module for an EC2 + IAM + secrets, systemd unit with sd_notify heartbeat integration, runbooks. Targets a single-instance Quasar service; HA is out of scope for v1."
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["quasar", "deployment", "infra"]
+assignee = ""
+
+[execution]
+max_workers = 1
+max_review_cycles = 5
+max_budget_usd = 40.0
+model = ""
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "deploy/packer/quasar.pkr.hcl builds a deterministic Ubuntu LTS-based AMI with the quasar binary, gh, git, claude CLI baked in",
+    "deploy/terraform/ exposes a Module that takes a VPC + subnet + bot-user PAT secret ARN and creates the EC2 + IAM + SSM parameters",
+    "systemd unit invokes `quasar supervise`, with Restart=on-failure, WatchdogSec=120s heartbeat via sd_notify, hardening flags (ProtectSystem, ReadWritePaths)",
+    "Runbooks document day-2 ops: upgrades, rollback, log inspection, GC manual run, sensor cursor reset",
+    "Secrets pulled from AWS SSM Parameter Store at supervisor start; no env-var-in-systemd-file secrets",
+    "Single AZ, single instance for v1 — explicit non-goal: HA pair, autoscaling, blue/green",
+]
+constraints = [
+    "No CloudFormation — Terraform only",
+    "AMI is reproducible: same source tree → same AMI ID (modulo timestamp)",
+    "Terraform module is consumable from outside this repo (no path dependencies on the repo root)",
+    "SSM Parameter Store, not Secrets Manager (cheaper, sufficient for this volume of secrets)",
+    "The EC2's IAM role grants exactly the SSM:GetParameter scope it needs and nothing else",
+]
+
+[dependencies]
+requires_nebulae = ["constellation-runtime"]

@@ -79,6 +79,62 @@ wrapper refuses the operation; even if someone adds a raw `exec.Command("git",
 | `ErrPreCommitFailed` | A `[pre_commit]` command exited non-zero. | Run the command yourself to see its output; fix the formatting/lint issue it reported. |
 | `ErrNothingToCommit` | A commit was requested with no staged changes. | Usually benign — the agent produced no diff this cycle. |
 
+## Sandboxing model
+
+Each `constellation_run` executes in a **fresh git worktree** under
+`.git/worktrees/quasar/<run-id>/`. The runtime never reuses a worktree across
+runs, so one run can never see another's uncommitted state. Pre-commit hooks run
+inside that worktree, against exactly the changes the run produced. When the run
+completes (or is garbage-collected), its worktree directory is removed.
+
+## Stars and git writes
+
+The constellation runtime keeps git writes on a single rail by **separating
+editing from committing**:
+
+- A **star** node invokes the LLM to edit the worktree. It produces a diff; it
+  does **not** commit.
+- A **`commit` builtin** node is the *only* place a commit is created. It is the
+  sole call site that threads the repo's `[pre_commit]` config into
+  `gitops.Commit`, so every commit runs the configured quality gate uniformly —
+  no star, and no constellation author, has to know about pre-commit.
+
+This yields a hard invariant:
+
+> **Stars must never be granted git-write tools.** A star's allowed-tools list
+> must not include direct git access (e.g. a shell tool used to run
+> `git commit`/`git push`). If it did, the LLM could commit inside the worktree
+> itself, bypassing both the `internal/gitops` perimeter and the pre-commit
+> gate.
+
+Today this invariant is an **authoring rule**, documented on `dispatchStar` in
+`internal/constellations/runtime.go`. A loader-side rejection of git-write tools
+in a star's allowed-tools list will enforce it mechanically once the star tool
+model firms up; until then, keep stars to edit/read tools and route all commits
+through the `commit` builtin.
+
+## Token scopes
+
+The bot user's GitHub PAT should be scoped as narrowly as the work allows:
+
+- `public_repo` (public repos) or `repo` (private repos) — enough to read issues
+  and open PRs to `quasar/*` branches.
+- **No** `admin:*`, **no** `delete_repo`, **no** workflow-write scopes.
+
+The `gh_open_pr` builtin uses this token for PR creation only; it is never used
+for destructive forge operations.
+
+## What to do if Quasar misbehaves
+
+1. **Stop it.** Kill the supervisor (`quasar kill`, or `systemctl stop quasar`).
+   Multi-repo control is via CLI only — there is no hidden control channel.
+2. **Recover state.** Recently completed nebulas can be soft-undeleted within the
+   GC grace window before their blobs are swept.
+3. **Investigate.** Read `gc-audit.log` (JSONL) for what was reclaimed and the
+   `constellation_runs` table for what each run attempted. Because every git
+   write goes through `internal/gitops/`, the worst a runaway run can do is push
+   to a `quasar/*` branch — it cannot touch your base branch.
+
 ## For future contributors
 
 The wrappers are the perimeter. Keeping them airtight requires discipline:

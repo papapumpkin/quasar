@@ -41,6 +41,7 @@ func runNebulaStatus(cmd *cobra.Command, args []string) error {
 
 	jsonFlag, _ := cmd.Flags().GetBool("json")
 	if jsonFlag {
+		// arch-test: stdout-allowed — structured JSON for machine consumption.
 		return writeStatusJSON(os.Stdout, n, state, metrics, history)
 	}
 

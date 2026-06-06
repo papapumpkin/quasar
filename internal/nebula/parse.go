@@ -139,11 +139,12 @@ type phaseSpecFrontmatter struct {
 	AllowScopeOverlap bool     `toml:"allow_scope_overlap,omitempty"`
 }
 
-// MarshalPhaseFile serializes a PhaseSpec into the +++TOML+++ frontmatter
-// format expected by parsePhaseFile. The spec's Body field is appended after
-// the closing delimiter.
-func MarshalPhaseFile(spec PhaseSpec) ([]byte, error) {
-	fm := phaseSpecFrontmatter{
+// newPhaseSpecFrontmatter projects a PhaseSpec onto its serialization-only
+// subset (excluding Body and SourceFile). It is the single source of truth for
+// that mapping, shared by MarshalPhaseFile (on-disk authoring format) and the
+// SQLite import bridge so a new frontmatter field is never dropped from one path.
+func newPhaseSpecFrontmatter(spec PhaseSpec) phaseSpecFrontmatter {
+	return phaseSpecFrontmatter{
 		ID:                spec.ID,
 		Title:             spec.Title,
 		Type:              spec.Type,
@@ -159,6 +160,13 @@ func MarshalPhaseFile(spec PhaseSpec) ([]byte, error) {
 		Scope:             spec.Scope,
 		AllowScopeOverlap: spec.AllowScopeOverlap,
 	}
+}
+
+// MarshalPhaseFile serializes a PhaseSpec into the +++TOML+++ frontmatter
+// format expected by parsePhaseFile. The spec's Body field is appended after
+// the closing delimiter.
+func MarshalPhaseFile(spec PhaseSpec) ([]byte, error) {
+	fm := newPhaseSpecFrontmatter(spec)
 	tomlBytes, err := toml.Marshal(fm)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling phase frontmatter: %w", err)

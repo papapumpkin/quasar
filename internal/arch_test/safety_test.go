@@ -43,7 +43,7 @@ var gitExecExceptions = map[string]bool{
 // the Nebula 3 write side and added here ahead of time so it is a single-line
 // edit later.
 var ghExecAllowedPrefixes = []string{
-	"internal/integrations/github/",
+	"internal/sensors/github/",
 	"internal/forge/",
 }
 

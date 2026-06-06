@@ -1,0 +1,29 @@
+[
+  {
+    "number": 42,
+    "title": "truncate breaks on multibyte runes",
+    "body": "## Problem\n\nThe truncate helper drops one byte too many.\n\n## Goals\n\n- Fix the off-by-one in truncate\n- Add regression tests\n\n## Constraints\n\n- Do not add new dependencies\n- Keep the public API stable\n",
+    "state": "OPEN",
+    "url": "https://github.com/papapumpkin/quasar/issues/42",
+    "labels": [{ "name": "bug" }, { "name": "good first issue" }],
+    "assignees": [{ "login": "octocat" }]
+  },
+  {
+    "number": 41,
+    "title": "add config validation",
+    "body": "We need stricter config validation.",
+    "state": "OPEN",
+    "url": "https://github.com/papapumpkin/quasar/issues/41",
+    "labels": [],
+    "assignees": []
+  },
+  {
+    "number": 40,
+    "title": "investigate flaky test",
+    "body": "Flaky on CI.",
+    "state": "OPEN",
+    "url": "https://github.com/papapumpkin/quasar/issues/40",
+    "labels": [],
+    "assignees": []
+  }
+]

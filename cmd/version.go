@@ -12,6 +12,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version",
 	Run: func(cmd *cobra.Command, args []string) {
+		// arch-test: stdout-allowed — version is machine-readable output.
 		fmt.Printf("quasar %s\n", Version)
 	},
 }

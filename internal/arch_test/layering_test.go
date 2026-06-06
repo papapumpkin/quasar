@@ -9,23 +9,28 @@ import (
 // more foundational; higher layers may depend on lower ones but not vice versa.
 // A package at layer N may only import packages at layer N or below.
 var layers = map[string]int{
-	"agent":        0,
-	"ansi":         0,
-	"beads":        0,
-	"bus":          0,
-	"config":       0,
-	"dag":          0,
-	"filter":       0,
-	"gitops":       0,
-	"integrations": 0,
-	"snapshot":     0,
-	"telemetry":    0,
+	"agent":     0,
+	"ansi":      0,
+	"artifacts": 0,
+	"beads":     0,
+	"blobstore": 0,
+	"bus":       0,
+	"config":    0,
+	"dag":       0,
+	"filter":    0,
+	"gitops":    0,
+	"sensors":   0,
+	"snapshot":  0,
+	"telemetry": 0,
 
 	"claude": 1,
 	"fabric": 1,
+	"repos":  1,
 
-	"neutron": 2,
-	"tycho":   2,
+	"constellations": 2,
+	"gc":             2,
+	"neutron":        2,
+	"tycho":          2,
 
 	"loop": 3,
 

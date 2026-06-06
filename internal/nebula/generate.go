@@ -64,7 +64,7 @@ func Generate(ctx context.Context, invoker agent.Invoker, req GenerateRequest) (
 }
 
 // runGenerate executes the architect back-half shared by both the freeform
-// Generate path and the ticket-driven FromTicket path. The caller builds the
+// Generate path and the seed-driven FromNebula path. The caller builds the
 // manifest and the architect prompt; everything from the LLM invocation
 // onward — parse, dependency inference, assembly, validation, and
 // auto-correction — is identical for both entry points, so it lives here as

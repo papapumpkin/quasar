@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -114,6 +115,125 @@ func TestLoad_InlineTokenRejected(t *testing.T) {
 				t.Errorf("error %q should mention token_env/token_file", err.Error())
 			}
 		})
+	}
+}
+
+// writeConfig writes body to a .quasar.yaml inside a fresh temp dir and returns
+// the file path.
+func writeConfig(t *testing.T, body string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".quasar.yaml")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return path
+}
+
+func TestDefault_MatchesEmptyConfigFile(t *testing.T) {
+	// Default() must produce exactly the built-in defaults a caller would get
+	// from LoadFromPath against an empty .quasar.yaml — the resolver relies on
+	// this so a config-less repo and an empty-config repo converge.
+	def, err := Default()
+	if err != nil {
+		t.Fatalf("Default returned unexpected error: %v", err)
+	}
+
+	empty := writeConfig(t, "")
+	fromFile, err := LoadFromPath(empty)
+	if err != nil {
+		t.Fatalf("LoadFromPath(empty) returned unexpected error: %v", err)
+	}
+
+	if def.MaxReviewCycles != 3 {
+		t.Errorf("Default().MaxReviewCycles = %d, want 3", def.MaxReviewCycles)
+	}
+	if def.MaxBudgetUSD != 5.0 {
+		t.Errorf("Default().MaxBudgetUSD = %v, want 5.0", def.MaxBudgetUSD)
+	}
+	if !def.PreCommit.FailOnError {
+		t.Error("Default().PreCommit.FailOnError = false, want true")
+	}
+	if def.MaxReviewCycles != fromFile.MaxReviewCycles ||
+		def.MaxBudgetUSD != fromFile.MaxBudgetUSD ||
+		def.PreCommit.FailOnError != fromFile.PreCommit.FailOnError {
+		t.Errorf("Default() = %+v diverges from empty-file config %+v", def, fromFile)
+	}
+}
+
+func TestLoadFromPath_RoundTrip(t *testing.T) {
+	const yaml = `
+github:
+  base_branch: "develop"
+pre_commit:
+  commands:
+    - "gofmt -w ."
+    - "go vet ./..."
+  fail_on_error: true
+verify:
+  test: "go test ./..."
+  lint: "go vet ./..."
+  build: "go build ./..."
+`
+	path := writeConfig(t, yaml)
+
+	cfg, err := LoadFromPath(path)
+	if err != nil {
+		t.Fatalf("LoadFromPath returned unexpected error: %v", err)
+	}
+
+	if cfg.GitHub.BaseBranch != "develop" {
+		t.Errorf("GitHub.BaseBranch = %q, want develop", cfg.GitHub.BaseBranch)
+	}
+	if len(cfg.PreCommit.Commands) != 2 {
+		t.Fatalf("PreCommit.Commands = %v, want 2 entries", cfg.PreCommit.Commands)
+	}
+	if cfg.PreCommit.Commands[0] != "gofmt -w ." {
+		t.Errorf("PreCommit.Commands[0] = %q, want %q", cfg.PreCommit.Commands[0], "gofmt -w .")
+	}
+	if !cfg.PreCommit.FailOnError {
+		t.Error("PreCommit.FailOnError = false, want true")
+	}
+	if cfg.Verify.Test != "go test ./..." {
+		t.Errorf("Verify.Test = %q, want %q", cfg.Verify.Test, "go test ./...")
+	}
+	if cfg.Verify.Build != "go build ./..." {
+		t.Errorf("Verify.Build = %q, want %q", cfg.Verify.Build, "go build ./...")
+	}
+	// Defaults still apply for unset keys.
+	if cfg.MaxReviewCycles != 3 {
+		t.Errorf("MaxReviewCycles = %d, want default 3", cfg.MaxReviewCycles)
+	}
+}
+
+func TestLoadFromPath_InlineTokenRejected(t *testing.T) {
+	cases := map[string]string{
+		"top_level":   "token: \"ghp_xxx\"\n",
+		"nested":      "integrations:\n  github:\n    token: \"ghp_xxx\"\n",
+		"uppercase":   "forge:\n  github:\n    TOKEN: \"ghp_xxx\"\n",
+		"deep_nested": "github:\n  auth:\n    Token: \"ghp_xxx\"\n",
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			path := writeConfig(t, body)
+			_, err := LoadFromPath(path)
+			if err == nil {
+				t.Fatal("expected inline-token error, got nil")
+			}
+			if !errors.Is(err, ErrInlineToken) {
+				t.Errorf("error = %v, want wrap of ErrInlineToken", err)
+			}
+			if !strings.Contains(err.Error(), "token_env") {
+				t.Errorf("error %q should mention token_env/token_file", err.Error())
+			}
+		})
+	}
+}
+
+func TestLoadFromPath_MissingFile(t *testing.T) {
+	_, err := LoadFromPath(filepath.Join(t.TempDir(), "nope.yaml"))
+	if err == nil {
+		t.Fatal("expected error for missing file, got nil")
 	}
 }
 

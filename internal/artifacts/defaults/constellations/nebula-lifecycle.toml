@@ -1,0 +1,52 @@
+name        = "nebula-lifecycle"
+description = "Standard lifecycle: per-phase execution, then master review, then ship or fix."
+
+[[nodes]]
+id     = "execute_phases"
+type   = "phase_iterator"
+inputs = { sub_constellation = "coder-reviewer", parallel = "${nebula.execution.max_workers}" }
+
+[[nodes]]
+id   = "master_review"
+type = "constellation"
+ref  = "master-review"
+
+[[nodes]]
+id   = "ship"
+type = "constellation"
+ref  = "open-pr"
+
+[[nodes]]
+id   = "fix"
+type = "constellation"
+ref  = "architect-fix"
+
+[[edges]]
+from = "execute_phases"
+to   = "master_review"
+when = "execute_phases.all_phases_complete"
+
+[[edges]]
+from = "master_review"
+to   = "ship"
+when = "master_review.decision == 'ship'"
+
+[[edges]]
+from = "master_review"
+to   = "fix"
+when = "master_review.decision == 'fix' && fix_cycles < 3"
+
+[[edges]]
+from = "master_review"
+to   = "_awaiting_human"
+when = "master_review.decision == 'escalate' || fix_cycles >= 3"
+
+[[edges]]
+from = "fix"
+to   = "execute_phases"
+when = "fix.phases_appended"
+
+[[edges]]
+from = "ship"
+to   = "_done"
+when = "ship.pr_opened"

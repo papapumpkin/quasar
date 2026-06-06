@@ -12,6 +12,15 @@ import (
 // legitimately defined in the same package as their implementation.
 // Each entry should include a comment explaining why co-location is acceptable.
 var allowedColocations = map[string]map[string]bool{
+	// Artifacts hosts the expression mini-language used in constellation
+	// when/inputs/outputs strings. Expression is the AST root of an algebraic
+	// data type whose variants (literal, var, binary, unary, ternary, call,
+	// interpolation) are inseparable from the interface — classic interpreter
+	// pattern. Consumers (constellation runtime, future phases) import
+	// Expression as an opaque type.
+	"artifacts": {
+		"Expression": true,
+	},
 	// Beads defines Client alongside CLI, the canonical beads CLI wrapper.
 	// Consumers (loop, nebula, cmd) import the interface type.
 	"beads": {
@@ -64,11 +73,11 @@ var allowedColocations = map[string]map[string]bool{
 	"ui": {
 		"UI": true,
 	},
-	// Integrations defines SecretResolver alongside OSSecretResolver, the
-	// canonical filesystem/env-backed implementation. The interface exists so
-	// adapters and tests can inject a fake resolver without touching the real
-	// environment; OSSecretResolver is the production default.
-	"integrations": {
+	// Sensors defines SecretResolver alongside OSSecretResolver, the canonical
+	// filesystem/env-backed implementation. The interface exists so adapters and
+	// tests can inject a fake resolver without touching the real environment;
+	// OSSecretResolver is the production default.
+	"sensors": {
 		"SecretResolver": true,
 	},
 }

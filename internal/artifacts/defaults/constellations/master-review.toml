@@ -1,0 +1,28 @@
+name        = "master-review"
+description = "Reviews a completed nebula's full diff and decides ship vs spawn-fix vs escalate."
+
+[[nodes]]
+id     = "review"
+type   = "star"
+star   = "master-reviewer-star"
+inputs = { nebula_diff = "${nebula.full_diff}", verify_results = "${nebula.verify_results}" }
+
+[[edges]]
+from = "review"
+to   = "_done"
+when = "review.decision == 'ship'"
+
+[[edges]]
+from = "review"
+to   = "_awaiting_human"
+when = "review.decision == 'escalate'"
+
+[[edges]]
+from = "review"
+to   = "_done"
+when = "review.decision == 'fix' && cycle < 3"
+
+[[edges]]
+from = "review"
+to   = "_awaiting_human"
+when = "cycle >= 3"
