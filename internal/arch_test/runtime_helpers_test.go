@@ -91,6 +91,12 @@ func (b blobColumn) String() string { return b.table + "." + b.column }
 var (
 	createTableRe = regexp.MustCompile("(?i)^\\s*CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?[\"`]?([A-Za-z_][A-Za-z0-9_]*)")
 	columnRe      = regexp.MustCompile("^\\s*([A-Za-z_][A-Za-z0-9_]*)")
+	// alterTableRe captures the table and column of an `ALTER TABLE t ADD COLUMN c …`
+	// statement. Columns added this way live on a single self-contained line rather
+	// than inside a CREATE TABLE body, so the line-oriented scanner must match them
+	// directly — otherwise a *_blob_hash column added by ALTER is invisible to the
+	// registration check and its blobs could be reclaimed while still referenced.
+	alterTableRe = regexp.MustCompile("(?i)^\\s*ALTER\\s+TABLE\\s+[\"`]?([A-Za-z_][A-Za-z0-9_]*)[\"`]?\\s+ADD\\s+(?:COLUMN\\s+)?[\"`]?([A-Za-z_][A-Za-z0-9_]*)")
 )
 
 // blobHashColumnsInMigrations scans the SQL migrations and returns every column
@@ -138,6 +144,14 @@ func blobHashColumnsInFile(t *testing.T, path string) []blobColumn {
 		}
 		if m := createTableRe.FindStringSubmatch(line); m != nil {
 			current = strings.TrimSuffix(m[1], "_new") // CREATE TABLE x_new ... RENAME TO x
+			continue
+		}
+		// ALTER TABLE … ADD COLUMN is self-contained: the table and column are on
+		// the same line and do not change the current CREATE TABLE context.
+		if m := alterTableRe.FindStringSubmatch(line); m != nil {
+			if strings.HasSuffix(m[2], "_blob_hash") {
+				cols = append(cols, blobColumn{table: m[1], column: m[2]})
+			}
 			continue
 		}
 		if current == "" {

@@ -45,7 +45,9 @@ func keySet(cols []blobColumn) map[string]bool {
 }
 
 // TestBlobHashScannerSanity guards the scanner itself: it must find the known
-// phases.* blob columns. A scanner that silently matches nothing would make
+// blob columns declared both in CREATE TABLE bodies (phases.*) and via
+// ALTER TABLE … ADD COLUMN (star_invocations.rationale_blob_hash). A scanner
+// that silently matches nothing — or that misses the ALTER form — would make
 // TestBlobHashColumnsRegistered vacuously pass.
 func TestBlobHashScannerSanity(t *testing.T) {
 	t.Parallel()
@@ -57,7 +59,7 @@ func TestBlobHashScannerSanity(t *testing.T) {
 	}
 	sort.Strings(got)
 
-	for _, want := range []string{"phases.body_blob_hash", "phases.diff_blob_hash"} {
+	for _, want := range []string{"phases.body_blob_hash", "phases.diff_blob_hash", "star_invocations.rationale_blob_hash"} {
 		found := false
 		for _, g := range got {
 			if g == want {
