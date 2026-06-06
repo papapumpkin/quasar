@@ -48,6 +48,7 @@ func init() {
 	registerOperator("render_fix_prompt", opRenderFixPrompt)
 	registerOperator("persist_phases", opPersistPhases)
 	registerOperator("master_review_decision", opMasterReviewDecision)
+	registerOperator("reviewer_decision", opReviewerDecision)
 	registerOperator("commit", opCommit)
 	registerOperator("notify_human", opNotifyHuman)
 	registerOperator("fail_run", opFailRun)

@@ -54,13 +54,15 @@ type Committer interface {
 // Runtime executes constellation runs for a single repo. The supervisor owns
 // one Runtime per registered repo and drives Step in its dispatch loop.
 type Runtime struct {
-	runStore  *fabric.ConstellationRunStore
-	nebStore  *fabric.NebulaStore
-	loader    Loader
-	invoker   agent.Invoker
-	committer Committer
-	repoPath  string
-	preCommit gitops.PreCommitConfig
+	runStore         *fabric.ConstellationRunStore
+	nebStore         *fabric.NebulaStore
+	loader           Loader
+	invoker          agent.Invoker
+	committer        Committer
+	repoPath         string
+	preCommit        gitops.PreCommitConfig
+	budget           *Budget
+	defaultBudgetUSD float64
 }
 
 // RuntimeOpts configures New. RunStore, NebStore, and Loader are required;
@@ -74,6 +76,11 @@ type RuntimeOpts struct {
 	Committer Committer
 	RepoPath  string
 	PreCommit gitops.PreCommitConfig
+	// DefaultBudgetUSD is the operator-level fallback budget cap (from the repo's
+	// .quasar.yaml defaults.max_budget_usd) used at Fire time when neither an
+	// explicit override nor the nebula manifest sets a budget. Zero means no
+	// fallback cap.
+	DefaultBudgetUSD float64
 }
 
 // New constructs a Runtime. It panics on a nil required dependency, surfacing a
@@ -83,13 +90,15 @@ func New(opts RuntimeOpts) *Runtime {
 		panic("constellations: RunStore, NebStore, and Loader are required")
 	}
 	return &Runtime{
-		runStore:  opts.RunStore,
-		nebStore:  opts.NebStore,
-		loader:    opts.Loader,
-		invoker:   opts.Invoker,
-		committer: opts.Committer,
-		repoPath:  opts.RepoPath,
-		preCommit: opts.PreCommit,
+		runStore:         opts.RunStore,
+		nebStore:         opts.NebStore,
+		loader:           opts.Loader,
+		invoker:          opts.Invoker,
+		committer:        opts.Committer,
+		repoPath:         opts.RepoPath,
+		preCommit:        opts.PreCommit,
+		budget:           NewBudget(opts.RunStore),
+		defaultBudgetUSD: opts.DefaultBudgetUSD,
 	}
 }
 
@@ -97,7 +106,9 @@ func New(opts RuntimeOpts) *Runtime {
 // constellation source for versioning, builds the initial State from the
 // nebula, and inserts a run row positioned at the entry node. Execution is
 // asynchronous: the supervisor drives Step until the run is terminal.
-func (r *Runtime) Fire(ctx context.Context, constellationName, nebulaID, parentRunID string) (string, error) {
+// budgetOverride is the explicit per-run cap (CLI --budget-usd / API caller);
+// a non-positive value defers to the nebula manifest then the global default.
+func (r *Runtime) Fire(ctx context.Context, constellationName, nebulaID, parentRunID string, budgetOverride float64) (string, error) {
 	con, err := r.loader.LoadConstellation(constellationName)
 	if err != nil {
 		return "", fmt.Errorf("constellations: load %q: %w", constellationName, err)
@@ -133,6 +144,13 @@ func (r *Runtime) Fire(ctx context.Context, constellationName, nebulaID, parentR
 	if err != nil {
 		return "", err
 	}
+
+	// Resolve and seed the run's budget cap. An uncapped result (no override, no
+	// manifest budget, no global default) leaves the budget columns NULL so the
+	// CheckBefore gate is a no-op for this run.
+	if err := r.budget.Initialize(ctx, runID, resolveBudget(budgetOverride, neb, r.defaultBudgetUSD)); err != nil {
+		return "", err
+	}
 	return runID, nil
 }
 
@@ -164,6 +182,9 @@ func (r *Runtime) Step(ctx context.Context, runID string) (string, error) {
 
 	output, err := r.dispatch(ctx, run, st, node)
 	if err != nil {
+		if errors.Is(err, ErrBudgetExhausted) {
+			return r.failBudget(ctx, run, st, node)
+		}
 		return r.fail(ctx, run, st, err)
 	}
 	st.RecordNode(node.ID, output)
@@ -247,6 +268,11 @@ func (r *Runtime) dispatchBuiltin(ctx context.Context, st *State, node *artifact
 func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *State, node *artifacts.ConstellationNode) (map[string]any, error) {
 	if r.invoker == nil {
 		return nil, fmt.Errorf("constellations: star node %q requires an Invoker", node.ID)
+	}
+	// Pre-step budget gate: refuse to start this invocation if the run's cap is
+	// spent. The sentinel propagates up to Step, which routes to failBudget.
+	if err := r.budget.CheckBefore(ctx, run.ID); err != nil {
+		return nil, err
 	}
 	star, err := r.loader.LoadStar(node.Star)
 	if err != nil {
@@ -359,6 +385,29 @@ func (r *Runtime) terminate(ctx context.Context, run *fabric.RunRow, st *State, 
 		}
 	}
 	return state, nil
+}
+
+// failBudget marks a run failed because it exhausted its USD budget before the
+// given node's star invocation. It mirrors fail but records a structured
+// budget-exhaustion reason under _error, so the over-budget failure mode is a
+// defined terminal state distinguishable from an operational error.
+func (r *Runtime) failBudget(ctx context.Context, run *fabric.RunRow, st *State, node *artifacts.ConstellationNode) (string, error) {
+	cause := fmt.Errorf("%w: at node %q", ErrBudgetExhausted, node.ID)
+	st.RecordNode("_error", map[string]any{
+		"message": cause.Error(),
+		"node":    node.ID,
+		"reason":  "budget_exhausted",
+	})
+	if dag, err := MarshalState(st); err == nil {
+		run.DAGStateTOML = dag
+		if err := r.runStore.SaveProgress(ctx, run); err != nil {
+			fmt.Fprintf(os.Stderr, "constellations: save budget-failure state (run %s): %v\n", run.ID, err)
+		}
+	}
+	if err := r.runStore.Complete(ctx, run.ID, StateFailed); err != nil {
+		return "", err
+	}
+	return StateFailed, cause
 }
 
 // fail records the failure cause into State and marks the run failed.

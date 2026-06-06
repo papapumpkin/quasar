@@ -102,7 +102,7 @@ func TestBackEdgeIncrementsCycleUntilGiveUp(t *testing.T) {
 	inv := &fakeInvoker{result: agent.InvocationResult{ResultText: requestChangesJSON}}
 	rt, nebID := newTestRuntime(t, loader, inv)
 
-	runID, err := rt.Fire(ctx, "looping-master-review", nebID, "")
+	runID, err := rt.Fire(ctx, "looping-master-review", nebID, "", 0)
 	if err != nil {
 		t.Fatalf("Fire: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestPerRunOverrideChangesCycleCap(t *testing.T) {
 	inv := &fakeInvoker{result: agent.InvocationResult{ResultText: requestChangesJSON}}
 	rt, nebID := newTestRuntimeWithExecution(t, loader, inv, "max_review_cycles = 1\n")
 
-	runID, err := rt.Fire(ctx, "looping-master-review", nebID, "")
+	runID, err := rt.Fire(ctx, "looping-master-review", nebID, "", 0)
 	if err != nil {
 		t.Fatalf("Fire: %v", err)
 	}

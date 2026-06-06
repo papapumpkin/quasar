@@ -119,7 +119,7 @@ func TestRuntimeFireAndStepBuiltins(t *testing.T) {
 	loader := &fakeLoader{cons: map[string]*artifacts.Constellation{"seed-flow": con}}
 	rt, nebID := newTestRuntime(t, loader, nil)
 
-	runID, err := rt.Fire(ctx, "seed-flow", nebID, "")
+	runID, err := rt.Fire(ctx, "seed-flow", nebID, "", 0)
 	if err != nil {
 		t.Fatalf("Fire: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestRuntimeStarNode(t *testing.T) {
 	inv := &fakeInvoker{result: agent.InvocationResult{ResultText: "did it", CostUSD: 0.75}}
 	rt, nebID := newTestRuntime(t, loader, inv)
 
-	runID, err := rt.Fire(ctx, "code", nebID, "")
+	runID, err := rt.Fire(ctx, "code", nebID, "", 0)
 	if err != nil {
 		t.Fatalf("Fire: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestRuntimeResume(t *testing.T) {
 	loader := &fakeLoader{cons: map[string]*artifacts.Constellation{"flow": con}}
 	rt, nebID := newTestRuntime(t, loader, nil)
 
-	runID, _ := rt.Fire(ctx, "flow", nebID, "")
+	runID, _ := rt.Fire(ctx, "flow", nebID, "", 0)
 	if _, err := rt.Step(ctx, runID); err != nil { // render -> notify
 		t.Fatalf("Step: %v", err)
 	}
@@ -263,7 +263,7 @@ func TestUnsupportedNodeTypeFailsRun(t *testing.T) {
 	}
 	loader := &fakeLoader{cons: map[string]*artifacts.Constellation{"sub": con}}
 	rt, nebID := newTestRuntime(t, loader, nil)
-	runID, _ := rt.Fire(ctx, "sub", nebID, "")
+	runID, _ := rt.Fire(ctx, "sub", nebID, "", 0)
 	state, err := rt.Step(ctx, runID)
 	if state != StateFailed {
 		t.Fatalf("state = %q, want failed", state)
@@ -311,7 +311,7 @@ func TestCommitOperatorThreadsPreCommit(t *testing.T) {
 	committer := &fakeCommitter{sha: "abc123"}
 	rt, nebID := newRuntimeWithCommitter(t, committer, pc)
 
-	runID, err := rt.Fire(ctx, "ship", nebID, "")
+	runID, err := rt.Fire(ctx, "ship", nebID, "", 0)
 	if err != nil {
 		t.Fatalf("Fire: %v", err)
 	}
@@ -343,7 +343,7 @@ func TestCommitFailureBlocksRun(t *testing.T) {
 	committer := &fakeCommitter{err: errors.New("pre-commit hook \"false\" failed")}
 	rt, nebID := newRuntimeWithCommitter(t, committer, pc)
 
-	runID, _ := rt.Fire(ctx, "ship", nebID, "")
+	runID, _ := rt.Fire(ctx, "ship", nebID, "", 0)
 	state, err := rt.Step(ctx, runID)
 	if state != StateFailed {
 		t.Fatalf("state = %q, want failed", state)
@@ -358,7 +358,7 @@ func TestCommitNothingToCommitIsNotAFailure(t *testing.T) {
 	committer := &fakeCommitter{err: gitops.ErrNothingToCommit}
 	rt, nebID := newRuntimeWithCommitter(t, committer, gitops.PreCommitConfig{})
 
-	runID, _ := rt.Fire(ctx, "ship", nebID, "")
+	runID, _ := rt.Fire(ctx, "ship", nebID, "", 0)
 	state, err := rt.Step(ctx, runID)
 	if err != nil {
 		t.Fatalf("Step: %v", err)

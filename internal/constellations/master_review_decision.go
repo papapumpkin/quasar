@@ -124,10 +124,16 @@ func validateMasterReviewDecision(dec *masterReviewDecision) error {
 	return nil
 }
 
-// schemaErr builds a uniform field-path error against the schema name.
+// schemaErr builds a uniform field-path error against the master-review schema.
 func schemaErr(field, format string, args ...any) error {
-	return fmt.Errorf("master_review_decision: %s: field %q: %s",
-		masterReviewSchemaName, field, fmt.Sprintf(format, args...))
+	return fieldSchemaErr("master_review_decision", masterReviewSchemaName, field, format, args...)
+}
+
+// fieldSchemaErr formats the "<op>: <schema>: field "<field>": <msg>" error
+// shared by the decision operators (master_review_decision, reviewer_decision),
+// so their schema-violation messages stay uniform.
+func fieldSchemaErr(op, schema, field, format string, args ...any) error {
+	return fmt.Errorf("%s: %s: field %q: %s", op, schema, field, fmt.Sprintf(format, args...))
 }
 
 // derefOr returns *p, or def when p is nil.
