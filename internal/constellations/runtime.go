@@ -299,32 +299,19 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 	}
 
 	st.Meta.TotalCostUSD += res.CostUSD
-	r.recordInvocation(ctx, run, node, star.Name, "done", res.CostUSD, started)
+	// Charge the run's budget and persist the invocation trace atomically via
+	// RecordCost: a crash between the two writes can neither double-charge nor
+	// skip the cost. Unlike the failure-path trace, the charge is correctness-
+	// relevant, so a failure to record it fails the step rather than being
+	// logged and ignored.
+	if _, err := r.budget.RecordCost(ctx, r.invocationRow(run, node, star.Name, "done", res.CostUSD, started)); err != nil {
+		return nil, fmt.Errorf("constellations: record star invocation (run %s): %w", run.ID, err)
+	}
 	return map[string]any{
 		"result":     res.ResultText,
 		"cost_usd":   res.CostUSD,
 		"session_id": res.SessionID,
 	}, nil
-}
-
-// recordInvocation persists a star_invocation row. Failure to record is logged,
-// not fatal: the run's correctness does not depend on the trace.
-func (r *Runtime) recordInvocation(ctx context.Context, run *fabric.RunRow, node *artifacts.ConstellationNode, starName, state string, cost float64, started time.Time) {
-	_, err := r.runStore.InsertStarInvocation(ctx, fabric.StarInvocationRow{
-		RunID:      run.ID,
-		Seq:        run.StepIndex,
-		Node:       node.ID,
-		StarName:   starName,
-		State:      state,
-		Cycle:      run.Cycle,
-		CostUSD:    cost,
-		DurationMs: time.Since(started).Milliseconds(),
-		StartedAt:  started.Unix(),
-		EndedAt:    time.Now().Unix(),
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "constellations: record star invocation (run %s): %v\n", run.ID, err)
-	}
 }
 
 // commitWork is the single point where the runtime writes a commit. It always
@@ -385,29 +372,6 @@ func (r *Runtime) terminate(ctx context.Context, run *fabric.RunRow, st *State, 
 		}
 	}
 	return state, nil
-}
-
-// failBudget marks a run failed because it exhausted its USD budget before the
-// given node's star invocation. It mirrors fail but records a structured
-// budget-exhaustion reason under _error, so the over-budget failure mode is a
-// defined terminal state distinguishable from an operational error.
-func (r *Runtime) failBudget(ctx context.Context, run *fabric.RunRow, st *State, node *artifacts.ConstellationNode) (string, error) {
-	cause := fmt.Errorf("%w: at node %q", ErrBudgetExhausted, node.ID)
-	st.RecordNode("_error", map[string]any{
-		"message": cause.Error(),
-		"node":    node.ID,
-		"reason":  "budget_exhausted",
-	})
-	if dag, err := MarshalState(st); err == nil {
-		run.DAGStateTOML = dag
-		if err := r.runStore.SaveProgress(ctx, run); err != nil {
-			fmt.Fprintf(os.Stderr, "constellations: save budget-failure state (run %s): %v\n", run.ID, err)
-		}
-	}
-	if err := r.runStore.Complete(ctx, run.ID, StateFailed); err != nil {
-		return "", err
-	}
-	return StateFailed, cause
 }
 
 // fail records the failure cause into State and marks the run failed.
