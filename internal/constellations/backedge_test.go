@@ -60,8 +60,9 @@ const requestChangesJSON = `{"verdict":"request_changes","score":40,` +
 // loopingMasterReview builds an in-memory constellation shaped like the
 // master-review fix loop with a real back-edge (decide -> review) so the runtime
 // can exercise cycle counting end-to-end. The embedded master-review.toml routes
-// a within-cap fix to _done as a placeholder until the inner coder-reviewer
-// constellation node lands; this fixture stands in for that wired loop.
+// a within-cap fix to _awaiting_human as a safe placeholder until the inner
+// coder-reviewer constellation node lands; this fixture stands in for that wired
+// loop.
 func loopingMasterReview(t *testing.T, maxCycles int) *artifacts.Constellation {
 	t.Helper()
 	return &artifacts.Constellation{
