@@ -173,6 +173,15 @@ func (r *Runtime) Step(ctx context.Context, runID string) (string, error) {
 		return r.fail(ctx, run, st, err)
 	}
 
+	// A back-edge (a transition to an earlier-declared node) is one loop
+	// iteration. Incrementing here is what makes the declarative cycle cap bite:
+	// the next time the loop's routing node evaluates its `when` guards, `cycle`
+	// has advanced, so meta.max_cycles is eventually exceeded and the give-up
+	// fallback edge wins. The new count persists with the transition below.
+	if isBackEdge(con, node.ID, next) {
+		st.Cycle++
+	}
+
 	if artifacts.IsTerminal(next) {
 		return r.terminate(ctx, run, st, next)
 	}

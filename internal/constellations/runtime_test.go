@@ -66,6 +66,14 @@ func mustExpr(t *testing.T, src string) artifacts.Expression {
 // nebula, plus the provided loader and invoker.
 func newTestRuntime(t *testing.T, loader Loader, inv agent.Invoker) (*Runtime, string) {
 	t.Helper()
+	return newTestRuntimeWithExecution(t, loader, inv, "")
+}
+
+// newTestRuntimeWithExecution is newTestRuntime with control over the seeded
+// nebula's [execution] config blob, so a test can exercise per-run overrides
+// such as max_review_cycles.
+func newTestRuntimeWithExecution(t *testing.T, loader Loader, inv agent.Invoker, executionTOML string) (*Runtime, string) {
+	t.Helper()
 	dir := t.TempDir()
 	fab, err := fabric.NewSQLiteFabric(context.Background(), filepath.Join(dir, "test.db"))
 	if err != nil {
@@ -78,7 +86,7 @@ func newTestRuntime(t *testing.T, loader Loader, inv agent.Invoker) (*Runtime, s
 	}
 	nebStore := fabric.NewNebulaStore(fab.DB(), blobs)
 	nebID, err := nebStore.Insert(context.Background(), fabric.NebulaRow{
-		Name: "demo", Status: "running", ContextTOML: "do the thing",
+		Name: "demo", Status: "running", ContextTOML: "do the thing", ExecutionTOML: executionTOML,
 	})
 	if err != nil {
 		t.Fatalf("seed nebula: %v", err)

@@ -37,6 +37,38 @@ func findNode(con *artifacts.Constellation, id string) *artifacts.ConstellationN
 	return nil
 }
 
+// nodeIndex returns the declaration index of the node with the given ID, or -1
+// when no node has it (e.g. a reserved terminal target, which is not a node).
+func nodeIndex(con *artifacts.Constellation, id string) int {
+	for i := range con.Nodes {
+		if con.Nodes[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+// isBackEdge reports whether a transition from -> to re-enters the DAG at an
+// already-declared node — a loop iteration. A reserved terminal target (_done,
+// _failed, …) is not a node and is never a back-edge.
+//
+// Back-edges are the sole signal the runtime uses to advance a run's cycle
+// counter, so the declarative cycle cap (meta.max_cycles) is enforced without
+// any hardcoded Go constant: an author places a loop's entry node earlier than
+// the node that routes back to it, and each return trip counts as one cycle. A
+// self-loop (from == to) also counts. Unknown endpoints yield false rather than
+// silently miscounting.
+func isBackEdge(con *artifacts.Constellation, from, to string) bool {
+	if artifacts.IsTerminal(to) {
+		return false
+	}
+	fromIdx, toIdx := nodeIndex(con, from), nodeIndex(con, to)
+	if fromIdx < 0 || toIdx < 0 {
+		return false
+	}
+	return toIdx <= fromIdx
+}
+
 // nextTarget evaluates the outgoing edges of `from` in declaration order and
 // returns the `to` of the first whose `when` guard is truthy (a nil guard is
 // unconditional). A node with no outgoing edges terminates the run (_done). A
