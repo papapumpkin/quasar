@@ -136,6 +136,23 @@ func (s *SensorEventStore) MarkProcessed(ctx context.Context, id int64, nebulaID
 	return nil
 }
 
+// UnprocessedExternalIDs returns the external ids of events for (repoPath,
+// sensorName) not yet seeded into a nebula, oldest first. It is the projection
+// the scheduler needs for crash recovery: the external id is enough to decide
+// whether a re-polled event must be re-seeded, and returning only ids keeps the
+// fabric row type out of the sensors package's consumer interface.
+func (s *SensorEventStore) UnprocessedExternalIDs(ctx context.Context, repoPath, sensorName string) ([]string, error) {
+	rows, err := s.Unprocessed(ctx, repoPath, sensorName)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, len(rows))
+	for i, r := range rows {
+		ids[i] = r.ExternalID
+	}
+	return ids, nil
+}
+
 // Unprocessed returns events for (repoPath, sensorName) that have not yet been
 // seeded into a nebula, oldest first. The scheduler uses it to recover events an
 // earlier tick observed but crashed before processing.

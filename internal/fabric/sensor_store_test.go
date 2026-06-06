@@ -157,6 +157,39 @@ func TestSensorEventStoreMarkProcessedAndUnprocessed(t *testing.T) {
 	}
 }
 
+func TestSensorEventStoreUnprocessedExternalIDs(t *testing.T) {
+	ctx := context.Background()
+	_, events, repo := newSensorStores(t)
+	ts := time.Unix(1_700_000_000, 0)
+
+	id1, _, err := events.Insert(ctx, repo, "github_issues", "owner/repo#1", ts)
+	if err != nil {
+		t.Fatalf("Insert #1: %v", err)
+	}
+	if _, _, err := events.Insert(ctx, repo, "github_issues", "owner/repo#2", ts); err != nil {
+		t.Fatalf("Insert #2: %v", err)
+	}
+
+	ids, err := events.UnprocessedExternalIDs(ctx, repo, "github_issues")
+	if err != nil {
+		t.Fatalf("UnprocessedExternalIDs: %v", err)
+	}
+	if len(ids) != 2 || ids[0] != "owner/repo#1" || ids[1] != "owner/repo#2" {
+		t.Fatalf("ids = %v, want [owner/repo#1 owner/repo#2] in order", ids)
+	}
+
+	if err := events.MarkProcessed(ctx, id1, "nebula-1"); err != nil {
+		t.Fatalf("MarkProcessed: %v", err)
+	}
+	ids, err = events.UnprocessedExternalIDs(ctx, repo, "github_issues")
+	if err != nil {
+		t.Fatalf("UnprocessedExternalIDs after mark: %v", err)
+	}
+	if len(ids) != 1 || ids[0] != "owner/repo#2" {
+		t.Errorf("ids = %v, want only [owner/repo#2]", ids)
+	}
+}
+
 func TestSensorEventStoreMarkProcessedMissing(t *testing.T) {
 	ctx := context.Background()
 	_, events, _ := newSensorStores(t)

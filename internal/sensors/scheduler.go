@@ -45,6 +45,11 @@ type CursorStore interface {
 type EventStore interface {
 	Insert(ctx context.Context, repoPath, sensorName, externalID string, ts time.Time) (id int64, isNew bool, err error)
 	MarkProcessed(ctx context.Context, id int64, nebulaID string) error
+	// UnprocessedExternalIDs returns the external ids of events that were observed
+	// (a row exists) but never seeded into a nebula — orphans left by a tick that
+	// crashed between recording an event and marking it processed. The scheduler
+	// re-seeds them on the next poll (see PollOnce).
+	UnprocessedExternalIDs(ctx context.Context, repoPath, sensorName string) ([]string, error)
 }
 
 // SeedNebula is the payload the scheduler hands a NebulaInserter for a newly
@@ -60,6 +65,15 @@ type SeedNebula struct {
 	SourceID    string
 	SourceURL   string
 	Status      string
+	// Goals and Constraints are derived by the sensor from the source item. The
+	// inserter renders them into the nebula's context block so the architect that
+	// later refines the seed inherits them as repo context.
+	Goals       []string
+	Constraints []string
+	// Labels and Assignee carry the source item's triage metadata through to the
+	// seed row.
+	Labels   []string
+	Assignee string
 }
 
 // NebulaInserter writes a seed nebula row and returns its generated id.
@@ -196,13 +210,30 @@ func (s *Scheduler) tick(ctx context.Context) {
 		s.repoPath, s.sensorName, res.Observed, res.Seeded, res.Fired, res.Queued)
 }
 
-// PollOnce executes a single poll cycle: load cursor, poll, persist cursor,
-// dedup-and-seed new events, and fire triggers under the in-flight cap. It is
-// exported so the admin `quasar sensor poll` command can force one cycle.
+// PollOnce executes a single poll cycle: recover orphans from a prior crashed
+// tick, poll, dedup-and-seed events, persist the cursor, and fire triggers under
+// the in-flight cap. It is exported so the admin `quasar sensor poll` command can
+// force one cycle.
+//
+// Crash safety rests on two invariants: an event is recorded (Insert) before it
+// is seeded, and the cursor is advanced (cursors.Set) only after the whole batch
+// is seeded. So a crash anywhere mid-batch leaves the cursor unadvanced, the next
+// Poll re-fetches the same issues (with their Raw payload, which the event row
+// does not store), and the orphan set tells the scheduler which of those to
+// re-seed versus skip as already-done.
 func (s *Scheduler) PollOnce(ctx context.Context) (PollResult, error) {
 	cursor, err := s.cursors.Get(ctx, s.repoPath, s.sensorName)
 	if err != nil {
 		return PollResult{}, fmt.Errorf("sensors: load cursor: %w", err)
+	}
+
+	orphans, err := s.events.UnprocessedExternalIDs(ctx, s.repoPath, s.sensorName)
+	if err != nil {
+		return PollResult{}, fmt.Errorf("sensors: load unprocessed events: %w", err)
+	}
+	orphaned := make(map[string]bool, len(orphans))
+	for _, id := range orphans {
+		orphaned[id] = true
 	}
 
 	pollCtx, cancel := context.WithTimeout(ctx, s.pollTimeout)
@@ -214,14 +245,11 @@ func (s *Scheduler) PollOnce(ctx context.Context) (PollResult, error) {
 
 	res := PollResult{Observed: len(events)}
 
-	// Insert every observed event for dedup, collecting only the newly-seen ones
-	// to seed. Persist the cursor before seeding so a crash mid-seed re-observes
-	// the same events (still deduped) rather than losing forward progress.
-	type pending struct {
-		rowID int64
-		event Event
-	}
-	var fresh []pending
+	// Record every observed event (the row is the dedup key), seeding the ones not
+	// yet processed: brand-new events (isNew) and orphans re-fetched after a crash.
+	// A duplicate from a completed earlier tick is neither, so it is skipped.
+	type seeded struct{ nebulaID string }
+	var done []seeded
 	for _, ev := range events {
 		ts := ev.Timestamp
 		if ts.IsZero() {
@@ -231,27 +259,30 @@ func (s *Scheduler) PollOnce(ctx context.Context) (PollResult, error) {
 		if insErr != nil {
 			return res, fmt.Errorf("sensors: record event %q: %w", ev.ExternalID, insErr)
 		}
-		if isNew {
-			fresh = append(fresh, pending{rowID: id, event: ev})
+		if !isNew && !orphaned[ev.ExternalID] {
+			continue
 		}
+
+		nebulaID, seedErr := s.seed(ctx, ev)
+		if seedErr != nil {
+			return res, seedErr
+		}
+		if err := s.events.MarkProcessed(ctx, id, nebulaID); err != nil {
+			return res, fmt.Errorf("sensors: mark event %q processed: %w", ev.ExternalID, err)
+		}
+		res.Seeded++
+		res.NebulaIDs = append(res.NebulaIDs, nebulaID)
+		done = append(done, seeded{nebulaID: nebulaID})
 	}
 
+	// Advance the cursor only after the batch is durably seeded, so a crash before
+	// this point is recovered by re-polling rather than orphaning events.
 	if err := s.cursors.Set(ctx, s.repoPath, s.sensorName, newCursor); err != nil {
 		return res, fmt.Errorf("sensors: persist cursor: %w", err)
 	}
 
-	for _, p := range fresh {
-		nebulaID, seedErr := s.seed(ctx, p.event)
-		if seedErr != nil {
-			return res, seedErr
-		}
-		if err := s.events.MarkProcessed(ctx, p.rowID, nebulaID); err != nil {
-			return res, fmt.Errorf("sensors: mark event %q processed: %w", p.event.ExternalID, err)
-		}
-		res.Seeded++
-		res.NebulaIDs = append(res.NebulaIDs, nebulaID)
-
-		fired, queued := s.dispatch(ctx, nebulaID)
+	for _, d := range done {
+		fired, queued := s.dispatch(ctx, d.nebulaID)
 		res.Fired += fired
 		res.Queued += queued
 	}
@@ -274,6 +305,10 @@ func (s *Scheduler) seed(ctx context.Context, ev Event) (string, error) {
 		SourceID:    content.SourceID,
 		SourceURL:   content.SourceURL,
 		Status:      SeedStatus,
+		Goals:       content.Goals,
+		Constraints: content.Constraints,
+		Labels:      content.Labels,
+		Assignee:    content.Assignee,
 	})
 	if err != nil {
 		return "", fmt.Errorf("sensors: insert seed nebula for %q: %w", ev.ExternalID, err)
@@ -283,6 +318,14 @@ func (s *Scheduler) seed(ctx context.Context, ev Event) (string, error) {
 
 // dispatch fires every matching trigger for a seeded nebula through the
 // in-flight gate, returning how many fired immediately versus were queued.
+//
+// A queued trigger captures ctx and runs only when ReleaseInflight later frees a
+// slot — so callers MUST keep ctx alive until every queued trigger has drained.
+// In the long-running Run loop ctx is the scheduler's lifetime context, so this
+// holds. The one-shot CLI path injects a nil Trigger, so nothing is queued there.
+// When Phase 5 wires the real trigger, prefer giving the gate a
+// scheduler-lifetime context to fire queued work under, rather than the
+// per-poll context captured here.
 func (s *Scheduler) dispatch(ctx context.Context, nebulaID string) (fired, queued int) {
 	for _, t := range s.instance.Triggers {
 		if !triggerMatches(t.When) {
@@ -309,7 +352,9 @@ func (s *Scheduler) dispatch(ctx context.Context, nebulaID string) (fired, queue
 
 // ReleaseInflight frees one in-flight slot and fires the oldest queued trigger,
 // if any. Phase 5's runtime calls it when a constellation completes; tests call
-// it to observe FIFO draining.
+// it to observe FIFO draining. A drained trigger runs under the context captured
+// when it was queued (see dispatch), so callers must only release while that
+// originating context is still alive.
 func (s *Scheduler) ReleaseInflight() {
 	s.gate.release()
 }

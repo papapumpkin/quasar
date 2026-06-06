@@ -55,6 +55,46 @@ func TestSeedNebulaInserter(t *testing.T) {
 	}
 }
 
+// TestSeedNebulaInserterRendersContext verifies the adapter renders the
+// sensor-derived goals and constraints into the row's context TOML so the
+// architect inherits them, and omits the block entirely when both are empty.
+func TestSeedNebulaInserterRendersContext(t *testing.T) {
+	ctx := context.Background()
+	store, _, fab := newImportFixture(t)
+	repoDir := t.TempDir()
+	registerRepoRow(t, fab, repoDir)
+
+	inserter := &seedNebulaInserter{store: store}
+	id, err := inserter.Insert(ctx, sensors.SeedNebula{
+		RepoPath:    repoDir,
+		Name:        "n",
+		Status:      sensors.SeedStatus,
+		Goals:       []string{"ship it"},
+		Constraints: []string{"no breaking changes"},
+	})
+	if err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+	got, err := store.Get(ctx, id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	for _, want := range []string{"ship it", "no breaking changes", "goals", "constraints"} {
+		if !strings.Contains(got.ContextTOML, want) {
+			t.Errorf("context toml %q missing %q", got.ContextTOML, want)
+		}
+	}
+
+	// No goals/constraints → no context block.
+	emptyTOML, err := renderSeedContextTOML(nil, nil)
+	if err != nil {
+		t.Fatalf("renderSeedContextTOML: %v", err)
+	}
+	if emptyTOML != "" {
+		t.Errorf("empty context = %q, want \"\"", emptyTOML)
+	}
+}
+
 // TestPrintSensorPollResult verifies the summary renders to stderr (never
 // stdout) and lists each seeded nebula id.
 func TestPrintSensorPollResult(t *testing.T) {

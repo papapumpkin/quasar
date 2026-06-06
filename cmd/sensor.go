@@ -8,6 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	toml "github.com/pelletier/go-toml/v2"
+
 	"github.com/papapumpkin/quasar/internal/artifacts"
 	"github.com/papapumpkin/quasar/internal/blobstore"
 	"github.com/papapumpkin/quasar/internal/fabric"
@@ -138,8 +140,14 @@ func buildSensorScheduler(ctx context.Context, fab *fabric.SQLiteFabric, repo *r
 // scheduler declares its own narrow inserter interface).
 type seedNebulaInserter struct{ store *fabric.NebulaStore }
 
-// Insert maps a seed nebula onto a NebulaRow and writes it via the store.
+// Insert maps a seed nebula onto a NebulaRow and writes it via the store. The
+// sensor-derived goals and constraints are rendered into the row's context block
+// so the architect that later refines the seed inherits them.
 func (a *seedNebulaInserter) Insert(ctx context.Context, n sensors.SeedNebula) (string, error) {
+	contextTOML, err := renderSeedContextTOML(n.Goals, n.Constraints)
+	if err != nil {
+		return "", fmt.Errorf("sensor poll: render seed context: %w", err)
+	}
 	return a.store.Insert(ctx, fabric.NebulaRow{
 		RepoPath:    n.RepoPath,
 		Name:        n.Name,
@@ -147,8 +155,30 @@ func (a *seedNebulaInserter) Insert(ctx context.Context, n sensors.SeedNebula) (
 		SourceName:  n.SourceName,
 		SourceID:    n.SourceID,
 		SourceURL:   n.SourceURL,
+		ContextTOML: contextTOML,
 		Status:      n.Status,
 	})
+}
+
+// seedContext is the subset of a nebula's [context] block a sensor can fill from
+// the source item. The TOML keys match the nebula manifest's Context schema so
+// the architect reads them back unchanged.
+type seedContext struct {
+	Goals       []string `toml:"goals,omitempty"`
+	Constraints []string `toml:"constraints,omitempty"`
+}
+
+// renderSeedContextTOML marshals the derived goals and constraints into a context
+// TOML block, or returns "" when both are empty so the row carries no context.
+func renderSeedContextTOML(goals, constraints []string) (string, error) {
+	if len(goals) == 0 && len(constraints) == 0 {
+		return "", nil
+	}
+	b, err := toml.Marshal(seedContext{Goals: goals, Constraints: constraints})
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // printSensorPollResult writes the poll summary to stderr (human-readable
