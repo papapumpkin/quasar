@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'constellation-runtime'
-total_cost_usd = 75.9205503
+total_cost_usd = 79.58002255
 
 [phases]
 [phases.arch-tests-and-docs]
@@ -53,9 +53,15 @@ summary = 'A focused table-driven test for `nebulaDetailView()` that guards both
 
 [phases.gc-engine]
 bead_id = 'gc-engine'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-04T22:58:28.638987-04:00
-updated_at = 2026-06-06T11:09:49.613051-04:00
+updated_at = 2026-06-06T11:19:13.352132-04:00
+
+[phases.gc-engine.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A focused, correct fix that registers a previously-missed blob-reference column and repairs the arch test that was vacuously passing, eliminating a latent silent-data-loss path in the GC mark-and-sweep.'
 
 [phases.github-sensor-produces-nebula]
 bead_id = 'github-sensor-produces-nebula'
