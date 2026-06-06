@@ -51,7 +51,7 @@ func resolveRepoForCWD(ctx context.Context, reg *repos.Registry, cwd string) (*r
 // importNebulaToStore parses a nebula directory and inserts it (and its phases)
 // into the SQLite-backed store under repoPath. The on-disk files are untouched;
 // this only writes to the database and blobstore. It returns the new nebula id.
-func importNebulaToStore(ctx context.Context, store nebula.NebulaInserter, nebulaDir, repoPath string) (string, error) {
+func importNebulaToStore(ctx context.Context, store nebula.Inserter, nebulaDir, repoPath string) (string, error) {
 	n, err := nebula.Load(nebulaDir)
 	if err != nil {
 		return "", fmt.Errorf("load nebula %q: %w", nebulaDir, err)

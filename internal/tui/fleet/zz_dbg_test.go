@@ -11,7 +11,7 @@ import (
 
 // TestGutterWidthsMatch locks the invariant that the selected and unselected
 // line gutters have identical rune width. pad() aligns columns by rune count,
-// so unequal gutters would shift the selected card relative to its neighbours
+// so unequal gutters would shift the selected card relative to its neighbors
 // and would also break the "inactive selection renders byte-identically to a
 // cursorless render" property the golden fixtures depend on.
 func TestGutterWidthsMatch(t *testing.T) {

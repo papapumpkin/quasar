@@ -16,7 +16,7 @@ import (
 // nebula in a non-terminal status blocks unregistration (or is orphaned with
 // force). Kept here rather than in fabric to avoid a dependency cycle; the
 // authoritative status set lives with the nebula lifecycle.
-var terminalNebulaStatuses = []string{"merged", "done", "shipped", "cancelled", "orphaned", "failed"}
+var terminalNebulaStatuses = []string{"merged", "done", "shipped", "canceled", "orphaned", "failed"}
 
 // Registry manages the set of repos Quasar is willing to operate on. It owns
 // CRUD against the repos table and the orphaning of a removed repo's nebulas.

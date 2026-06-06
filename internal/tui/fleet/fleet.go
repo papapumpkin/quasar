@@ -18,7 +18,7 @@ import (
 
 // terminalStatuses are the nebula lifecycle statuses considered complete; the
 // Recent lane draws from these.
-var terminalStatuses = []string{"merged", "done", "shipped", "cancelled", "orphaned", "failed", "rejected"}
+var terminalStatuses = []string{"merged", "done", "shipped", "canceled", "orphaned", "failed", "rejected"}
 
 // recentLimit caps how many terminal nebulas the Recent lane shows per repo.
 const recentLimit = 10

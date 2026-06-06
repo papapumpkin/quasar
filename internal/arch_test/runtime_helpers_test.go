@@ -90,7 +90,7 @@ func (b blobColumn) String() string { return b.table + "." + b.column }
 
 var (
 	createTableRe = regexp.MustCompile("(?i)^\\s*CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?[\"`]?([A-Za-z_][A-Za-z0-9_]*)")
-	columnRe      = regexp.MustCompile("^\\s*([A-Za-z_][A-Za-z0-9_]*)")
+	columnRe      = regexp.MustCompile(`^\s*([A-Za-z_][A-Za-z0-9_]*)`)
 	// alterTableRe captures the table and column of an `ALTER TABLE t ADD COLUMN c …`
 	// statement. Columns added this way live on a single self-contained line rather
 	// than inside a CREATE TABLE body, so the line-oriented scanner must match them

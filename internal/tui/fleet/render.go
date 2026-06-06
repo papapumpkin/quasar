@@ -224,7 +224,7 @@ func statusGlyph(status string) string {
 	switch status {
 	case "merged", "done", "shipped":
 		return "✓"
-	case "failed", "cancelled", "rejected":
+	case "failed", "canceled", "rejected":
 		return "✗"
 	default:
 		return "•"

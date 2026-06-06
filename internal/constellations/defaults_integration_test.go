@@ -122,7 +122,7 @@ func TestArchitectConstellationWiresPreCommitAndPersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Fire: %v", err)
 	}
-	driveToTerminal(t, ctx, rt, runID)
+	driveToTerminal(ctx, t, rt, runID)
 
 	// The pre-commit bar rendered by render_seed must reach the architect star
 	// via the plan node's prompt input.
@@ -172,7 +172,7 @@ func TestOpRenderFixPrompt(t *testing.T) {
 
 // driveToTerminal steps a run until it reaches a terminal state or a step cap,
 // failing the test on a step error or a run that never terminates.
-func driveToTerminal(t *testing.T, ctx context.Context, rt *Runtime, runID string) {
+func driveToTerminal(ctx context.Context, t *testing.T, rt *Runtime, runID string) {
 	t.Helper()
 	for i := 0; i < 32; i++ {
 		state, err := rt.Step(ctx, runID)

@@ -9,8 +9,8 @@ import (
 )
 
 // runLintIn executes the lint command against repo with the given flags and
-// returns its error (an *exitCodeError on failure) plus captured stderr.
-func runLintIn(t *testing.T, repo string, args ...string) (error, string) {
+// returns captured stderr plus its error (an *exitCodeError on failure).
+func runLintIn(t *testing.T, repo string, args ...string) (string, error) {
 	t.Helper()
 	cmd := lintCmd
 	var errBuf bytes.Buffer
@@ -24,7 +24,7 @@ func runLintIn(t *testing.T, repo string, args ...string) (error, string) {
 		_ = cmd.Flags().Set("json", "false")
 		_ = cmd.Flags().Set("repo", "")
 	})
-	return err, errBuf.String()
+	return errBuf.String(), err
 }
 
 func TestLintCommandCleanRepo(t *testing.T) {
@@ -32,7 +32,7 @@ func TestLintCommandCleanRepo(t *testing.T) {
 	if err := lintCmd.Flags().Set("repo", repo); err != nil {
 		t.Fatal(err)
 	}
-	err, _ := runLintIn(t, repo)
+	_, err := runLintIn(t, repo)
 	if err != nil {
 		t.Fatalf("lint clean repo: %v", err)
 	}
@@ -52,7 +52,7 @@ to = "_done"
 	if err := lintCmd.Flags().Set("repo", repo); err != nil {
 		t.Fatal(err)
 	}
-	err, stderr := runLintIn(t, repo)
+	stderr, err := runLintIn(t, repo)
 	if err == nil {
 		t.Fatal("expected non-nil error for invalid artifacts")
 	}

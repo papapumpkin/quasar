@@ -660,7 +660,7 @@ func (m Model) gitStripView() string {
 		if !ok {
 			summary = "loading…"
 		}
-		b.WriteString(fmt.Sprintf("  %s: %s\n", r.DisplayName, summary))
+		fmt.Fprintf(&b, "  %s: %s\n", r.DisplayName, summary)
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

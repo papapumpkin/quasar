@@ -14,10 +14,10 @@ import (
 // Every SQLite-backed nebula must belong to a registered repo.
 var ErrNoRepoPath = errors.New("nebula: import requires a non-empty repo path")
 
-// NebulaInserter is the subset of *fabric.NebulaStore that ImportNebula needs.
+// Inserter is the subset of *fabric.NebulaStore that ImportNebula needs.
 // It is declared here, where it is consumed, so the importer can be tested
 // against a fake and the nebula package stays decoupled from the full store.
-type NebulaInserter interface {
+type Inserter interface {
 	Insert(ctx context.Context, n fabric.NebulaRow) (string, error)
 	InsertPhase(ctx context.Context, nebulaID string, phase fabric.PhaseRow) error
 }
@@ -28,7 +28,7 @@ type NebulaInserter interface {
 // import-on-first-run) to the canonical execution-time store. The on-disk files
 // are not touched; this only writes to the database and blobstore. It returns
 // the generated nebula id.
-func ImportNebula(ctx context.Context, store NebulaInserter, n *Nebula, repoPath string) (string, error) {
+func ImportNebula(ctx context.Context, store Inserter, n *Nebula, repoPath string) (string, error) {
 	if n == nil {
 		return "", fmt.Errorf("nebula: import: nil nebula")
 	}

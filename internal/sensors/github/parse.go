@@ -18,9 +18,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/papapumpkin/quasar/internal/sensors"
 )
 
 // ParseSourceID resolves a source-id string into an "owner/repo" slug and an
@@ -141,15 +138,6 @@ func (v issueView) assigneeLogins() []string {
 	return logins
 }
 
-// parseIssueView decodes the metadata JSON object from `gh issue view`.
-func parseIssueView(data []byte) (issueView, error) {
-	var v issueView
-	if err := json.Unmarshal(data, &v); err != nil {
-		return issueView{}, fmt.Errorf("decode issue metadata: %w", err)
-	}
-	return v, nil
-}
-
 // parseIssueList decodes the JSON array emitted by `gh issue list --json …`
 // into issueView values, preserving gh's source ordering. gh lists newest
 // issues first by default; the sensor sorts/filters by issue number.
@@ -159,83 +147,6 @@ func parseIssueList(data []byte) ([]issueView, error) {
 		return nil, fmt.Errorf("decode issue list: %w", err)
 	}
 	return views, nil
-}
-
-// commentEnvelope is the decoded shape of `gh issue view --json comments`.
-type commentEnvelope struct {
-	Comments []ghComment `json:"comments"`
-}
-
-// ghComment mirrors a single comment from gh JSON output. gh emits createdAt as
-// an RFC3339 timestamp, which time.Time unmarshals natively.
-type ghComment struct {
-	Author    ghUser    `json:"author"`
-	Body      string    `json:"body"`
-	CreatedAt time.Time `json:"createdAt"`
-}
-
-// parseComments decodes the comments JSON object into chronological
-// sensors.Comment values, preserving gh's source ordering.
-func parseComments(data []byte) ([]sensors.Comment, error) {
-	var env commentEnvelope
-	if err := json.Unmarshal(data, &env); err != nil {
-		return nil, fmt.Errorf("decode issue comments: %w", err)
-	}
-	if len(env.Comments) == 0 {
-		return nil, nil
-	}
-	out := make([]sensors.Comment, 0, len(env.Comments))
-	for _, c := range env.Comments {
-		out = append(out, sensors.Comment{
-			Author:    c.Author.Login,
-			Body:      c.Body,
-			CreatedAt: c.CreatedAt,
-		})
-	}
-	return out, nil
-}
-
-// timelineEnvelope is the decoded shape of `gh issue view --json timelineItems`.
-type timelineEnvelope struct {
-	TimelineItems []timelineItem `json:"timelineItems"`
-}
-
-// timelineItem captures the subset of a timeline entry we care about: cross- or
-// plain references whose source is a pull request.
-type timelineItem struct {
-	Typename string `json:"__typename"`
-	Source   struct {
-		Typename string `json:"__typename"`
-		URL      string `json:"url"`
-	} `json:"source"`
-}
-
-// parseLinkedPRs extracts pull-request URLs referenced from the issue timeline.
-// It is best-effort: unknown entry shapes are skipped rather than erroring, and
-// duplicate URLs are de-duplicated while preserving first-seen order.
-func parseLinkedPRs(data []byte) []string {
-	var env timelineEnvelope
-	if err := json.Unmarshal(data, &env); err != nil {
-		return nil
-	}
-	var (
-		urls []string
-		seen = map[string]bool{}
-	)
-	for _, item := range env.TimelineItems {
-		if item.Typename != "CrossReferencedEvent" && item.Typename != "ReferencedEvent" {
-			continue
-		}
-		if item.Source.Typename != "PullRequest" || item.Source.URL == "" {
-			continue
-		}
-		if seen[item.Source.URL] {
-			continue
-		}
-		seen[item.Source.URL] = true
-		urls = append(urls, item.Source.URL)
-	}
-	return urls
 }
 
 // normalizeState lowercases gh's "OPEN"/"CLOSED" into Quasar's "open"/"closed"
