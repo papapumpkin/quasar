@@ -82,7 +82,7 @@ func TestEmbeddedDefaultsParse(t *testing.T) {
 	if constellations != 6 {
 		t.Errorf("expected 6 embedded constellation TOML files, parsed %d", constellations)
 	}
-	if markdown != 6 {
-		t.Errorf("expected 6 embedded star+skill Markdown files, parsed %d", markdown)
+	if markdown != 7 {
+		t.Errorf("expected 7 embedded star+skill Markdown files, parsed %d", markdown)
 	}
 }
