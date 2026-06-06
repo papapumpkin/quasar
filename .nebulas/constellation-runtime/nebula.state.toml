@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'constellation-runtime'
-total_cost_usd = 66.0615673
+total_cost_usd = 73.5591448
 
 [phases]
 [phases.arch-tests-and-docs]
@@ -17,9 +17,15 @@ summary = 'A complete, well-engineered arch-test suite plus three deployment doc
 
 [phases.builtin-constellations-and-stars]
 bead_id = 'builtin-constellations-and-stars'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-04T22:58:28.63881-04:00
-updated_at = 2026-06-06T10:28:57.059816-04:00
+updated_at = 2026-06-06T10:50:18.243002-04:00
+
+[phases.builtin-constellations-and-stars.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'All four prior findings are resolved (three fully, one as a justified-and-documented deviation), the git-write safety perimeter is now enforced structurally via a runtime-owned `commit` node, and build/vet/tests pass — I approve pending a human nod on the safety-model and placeholder-criterion decisions plus a quick gofmt confirmation.'
 
 [phases.constellation-runtime]
 bead_id = 'constellation-runtime'
@@ -47,9 +53,9 @@ summary = 'A focused table-driven test for `nebulaDetailView()` that guards both
 
 [phases.gc-engine]
 bead_id = 'gc-engine'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-04T22:58:28.638987-04:00
-updated_at = 2026-06-06T10:10:50.823143-04:00
+updated_at = 2026-06-06T11:00:56.954033-04:00
 
 [phases.github-sensor-produces-nebula]
 bead_id = 'github-sensor-produces-nebula'
