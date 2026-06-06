@@ -341,6 +341,10 @@ func (r *Runtime) terminate(ctx context.Context, run *fabric.RunRow, st *State, 
 	if dag, err := MarshalState(st); err == nil {
 		run.DAGStateTOML = dag
 		run.CurrentNode = target
+		// Keep the cycle column authoritative, symmetric with persistTransition.
+		// Today a terminal target is never a back-edge so st.Cycle already matches
+		// the column, but syncing here removes the footgun if that ever changes.
+		run.Cycle = st.Cycle
 		if err := r.runStore.SaveProgress(ctx, run); err != nil {
 			fmt.Fprintf(os.Stderr, "constellations: save final state (run %s): %v\n", run.ID, err)
 		}

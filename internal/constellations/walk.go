@@ -58,6 +58,14 @@ func nodeIndex(con *artifacts.Constellation, id string) int {
 // the node that routes back to it, and each return trip counts as one cycle. A
 // self-loop (from == to) also counts. Unknown endpoints yield false rather than
 // silently miscounting.
+//
+// LIMITATION — this infers loop topology positionally (target declared at or
+// before the source). It is correct for the single master-review loop today, but
+// a legitimate forward edge into an earlier-declared join node (e.g. a shared
+// cleanup) would be miscounted as a back-edge and inflate the run's single
+// st.Cycle. TODO: when a second loop or a phase_iterator loop lands, make
+// back-edges explicit (an edge attribute such as `loop = true`, or a marked loop
+// head) so cycle counting is intentional rather than positional.
 func isBackEdge(con *artifacts.Constellation, from, to string) bool {
 	if artifacts.IsTerminal(to) {
 		return false

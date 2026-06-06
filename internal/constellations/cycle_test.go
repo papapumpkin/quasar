@@ -78,7 +78,10 @@ func TestOpFailRun(t *testing.T) {
 
 // TestMasterReviewCycleRouting drives the embedded master-review constellation's
 // decide-node edges directly, asserting that an exhausted cycle cap routes to
-// the give-up node (and onward to _failed) while a within-cap fix does not.
+// the give-up node (and onward to _failed). A within-cap fix routes to
+// _awaiting_human, not _done: until the inner coder-reviewer back-edge lands a
+// needs-changes verdict must escalate to a human rather than masquerade as a
+// successful run (which would let PR-open proceed). See master-review.toml.
 func TestMasterReviewCycleRouting(t *testing.T) {
 	t.Parallel()
 	loader := artifacts.New(embeddedResolver{})
@@ -104,10 +107,10 @@ func TestMasterReviewCycleRouting(t *testing.T) {
 		max   int
 		want  string
 	}{
-		{"within cap spawns fix", 1, 3, "_done"},
+		{"within cap escalates to human (placeholder, no inner loop yet)", 1, 3, artifacts.TermAwaitingHuman},
 		{"at cap gives up", 3, 3, "give-up"},
 		{"over cap gives up", 4, 3, "give-up"},
-		{"override raises cap", 4, 5, "_done"},
+		{"override raises cap, within cap escalates to human", 4, 5, artifacts.TermAwaitingHuman},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
