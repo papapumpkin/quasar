@@ -35,11 +35,11 @@ var verdictToDecision = map[string]string{
 // field that was supplied (even if empty) from one that was omitted, so missing
 // required fields are reported with their path.
 type masterReviewDecision struct {
-	Verdict     *string             `json:"verdict"`
-	Score       *int                `json:"score"`
+	Verdict     *string              `json:"verdict"`
+	Score       *int                 `json:"score"`
 	Reasons     []masterReviewReason `json:"reasons"`
-	Suggestions []string            `json:"suggestions"`
-	Blocker     *string             `json:"blocker"`
+	Suggestions []string             `json:"suggestions"`
+	Blocker     *string              `json:"blocker"`
 }
 
 // masterReviewReason is one scored observation in a decision.
