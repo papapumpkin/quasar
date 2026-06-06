@@ -114,6 +114,7 @@ func (r *Runtime) Fire(ctx context.Context, constellationName, nebulaID, parentR
 
 	now := time.Now()
 	st := NewState(SnapshotNebula(neb), now.Unix())
+	st.Meta.MaxCycles = resolveMaxCycles(con, neb)
 	dagState, err := MarshalState(st)
 	if err != nil {
 		return "", err

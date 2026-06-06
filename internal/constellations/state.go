@@ -69,6 +69,11 @@ type PhaseSnapshot struct {
 type MetaSnapshot struct {
 	TotalCostUSD float64 `toml:"total_cost_usd"`
 	RunStartedAt int64   `toml:"run_started_at"`
+	// MaxCycles is the effective master-review cycle cap for this run, resolved
+	// at Fire time from the constellation's [meta] max_cycles and any per-run
+	// override. Edge guards read it as meta.max_cycles; persisting it on State
+	// (and thus in the run's dag_state_toml) keeps the cap stable across resume.
+	MaxCycles int `toml:"max_cycles"`
 }
 
 // NewState builds the initial run State from a nebula snapshot. Nodes starts
@@ -151,6 +156,7 @@ func (s *State) ExprState() artifacts.State {
 		"meta": map[string]any{
 			"total_cost_usd": s.Meta.TotalCostUSD,
 			"run_started_at": s.Meta.RunStartedAt,
+			"max_cycles":     s.Meta.MaxCycles,
 		},
 	}
 }
