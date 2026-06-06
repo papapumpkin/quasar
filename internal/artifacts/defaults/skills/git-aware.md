@@ -4,18 +4,17 @@ tools_add = [
   "Bash(git diff *)",
   "Bash(git log *)",
   "Bash(git status)",
-  "Bash(git add *)",
-  "Bash(git commit *)",
   "Bash(git ls-files *)",
 ]
 +++
 
-You have git access. Inspect existing code with `git ls-files`, check
-diffs with `git diff`, commit changes with clear, imperative-mood messages
-under 72 chars. Prefer small commits over large ones — each commit should
-answer one question.
+You have git access for inspection. Use `git ls-files` to discover files,
+`git diff` to review changes, `git log` to trace history, and `git status`
+to see the working tree. Ground your work in what the repository already
+contains rather than assuming.
 
-The repository's pre-commit hooks run automatically when you commit.
-If a hook modifies files (e.g. a formatter), those changes are staged
-into your commit. If a hook fails, your commit aborts — address the
-failure and commit again.
+Do not commit, stage, or otherwise write to git. In Quasar the runtime owns
+the commit step — it is the only place the repository's pre-commit quality
+gate runs and the only path a git write is permitted to take (every write
+goes through the internal/gitops/ perimeter). Leave the worktree in the
+state you want captured; a dedicated commit node records it.

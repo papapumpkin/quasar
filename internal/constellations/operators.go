@@ -69,6 +69,16 @@ func opRenderFixPrompt(_ context.Context, rt *Runtime, st *State, args map[strin
 // renderPreCommitSection formats the repo's pre-commit commands as a Markdown
 // section for the architect prompt. It returns the empty string when no commands
 // are configured, so an unconfigured repo produces no extra block at all.
+//
+// DESIGN NOTE — this supersedes the spec's `${pre_commit_commands}` placeholder.
+// The original Phase 6 design put a literal `${pre_commit_commands}` token in the
+// architect star's template and string-replaced it here. That couples this
+// operator to one star's *system* prompt, which it cannot reach: the operator
+// builds the architect's *user*-prompt brief (the "prompt" output), while the
+// star's system prompt is loaded separately in dispatchStar. Appending the
+// section to the brief delivers the same pre-commit context without the
+// coupling, so the star template carries no placeholder. See the phase summary
+// for the recorded acceptance-criterion deviation.
 func renderPreCommitSection(pre gitops.PreCommitConfig) string {
 	if len(pre.Commands) == 0 {
 		return ""

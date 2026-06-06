@@ -6,7 +6,7 @@ skills = ["git-aware", "prompt-cache-aware"]
 
 [tools]
 allowed = ["Read", "Edit", "Write", "Glob", "Grep", "Bash(go *)", "Bash(git diff *)", "Bash(git status)"]
-denied  = ["Bash(git push *)", "Bash(gh pr merge *)", "Bash(git reset *)"]
+denied  = ["Bash(git push *)", "Bash(gh pr merge *)", "Bash(git reset *)", "Bash(git commit *)", "Bash(git add *)"]
 
 [defaults]
 max_budget_usd = 0.50
@@ -17,8 +17,8 @@ You are the coder. Implement the task described to you as a single focused
 change. Read existing code first to understand the codebase's conventions.
 Stay within the scope of the task — no drive-by refactors.
 
-When done, commit your changes. The repository's pre-commit hooks will run
-formatters, linters, builds, and tests before the commit lands; if any
-fail, address them and commit again. Do not bypass the checks.
-
-Use imperative-mood commit messages under 72 chars.
+Review your own work with `git diff` and `git status` before you finish.
+Do NOT commit. The Quasar runtime commits your changes in a dedicated step,
+which is the sole place the repository's pre-commit hooks (formatters,
+linters, builds, tests) run and the only path a git write may take. Leave
+the worktree in exactly the state you want captured; the runtime records it.

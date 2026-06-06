@@ -1,22 +1,48 @@
 name        = "coder-reviewer"
 description = "The canonical implement-then-review loop. Runs per nebula phase."
 
+# Runtime field contract. Some edge guards below reference fields the runtime
+# does not populate yet from a star's free-form output:
+#   - review.findings_count / review.approved are parsed from the reviewer
+#     star's result by a forthcoming phase (structured star output).
+#   - nebula.current_phase and nebula.execution are supplied by the
+#     phase_iterator node, which is also a later phase.
+# Until those land, the affected guards evaluate falsy. The commit node's
+# `committed` field, by contrast, is produced today by the commit operator, so
+# the implement -> commit -> review path is live. This wiring is faithful to the
+# spec; the missing pieces are explicitly a later phase's runtime contract.
+
 [[nodes]]
 id     = "implement"
 type   = "star"
 star   = "coder"
 inputs = { phase_body = "${nebula.current_phase.body}", phase_title = "${nebula.current_phase.title}" }
 
+# The runtime — never the coder star — owns the commit. This builtin is the sole
+# place the repo's [pre_commit] config is threaded into gitops.Commit, so every
+# git write stays inside the internal/gitops/ perimeter and the pre-commit gate
+# runs uniformly. Stars are never granted git-write tools (see dispatchStar's
+# SAFETY INVARIANT in runtime.go).
+[[nodes]]
+id     = "commit"
+type   = "builtin"
+op     = "commit"
+inputs = { message = "${nebula.current_phase.title}" }
+
 [[nodes]]
 id     = "review"
 type   = "star"
 star   = "reviewer"
-inputs = { diff = "${nodes.implement.diff}", phase_body = "${nebula.current_phase.body}" }
+inputs = { phase_body = "${nebula.current_phase.body}" }
 
 [[edges]]
 from = "implement"
+to   = "commit"
+
+[[edges]]
+from = "commit"
 to   = "review"
-when = "implement.committed"
+when = "commit.committed"
 
 [[edges]]
 from = "review"

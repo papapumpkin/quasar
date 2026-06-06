@@ -102,11 +102,19 @@ func TestLoadConstellation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConstellation: %v", err)
 	}
-	if len(c.Nodes) != 2 {
-		t.Fatalf("nodes = %d, want 2", len(c.Nodes))
+	if len(c.Nodes) != 3 {
+		t.Fatalf("nodes = %d, want 3", len(c.Nodes))
 	}
-	if len(c.Edges) != 4 {
-		t.Fatalf("edges = %d, want 4", len(c.Edges))
+	if len(c.Edges) != 5 {
+		t.Fatalf("edges = %d, want 5", len(c.Edges))
+	}
+
+	// Safety wiring: the commit is a runtime-owned builtin node, not the coder
+	// star, so the [pre_commit] gate runs and every git write stays inside the
+	// gitops perimeter. Guard against a regression that lets a star self-commit.
+	commit := findNodeByID(t, c, "commit")
+	if commit.Type != NodeBuiltin || commit.Op != "commit" {
+		t.Errorf("commit node = %+v, want builtin op=commit", commit)
 	}
 
 	// Expressions are pre-compiled: the unconditional check is that When is a
@@ -182,6 +190,17 @@ func findEdge(t *testing.T, c *Constellation, from, to string) ConstellationEdge
 	}
 	t.Fatalf("edge %s->%s not found", from, to)
 	return ConstellationEdge{}
+}
+
+func findNodeByID(t *testing.T, c *Constellation, id string) ConstellationNode {
+	t.Helper()
+	for _, n := range c.Nodes {
+		if n.ID == id {
+			return n
+		}
+	}
+	t.Fatalf("node %q not found", id)
+	return ConstellationNode{}
 }
 
 func containsStr(ss []string, want string) bool {
