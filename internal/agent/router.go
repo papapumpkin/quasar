@@ -6,16 +6,21 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/papapumpkin/quasar/internal/artifacts"
 	"github.com/papapumpkin/quasar/internal/telemetry"
 )
 
 // RouterModel is the cheap model every routed sub-question runs against. It is
 // the same claude binary as the coder uses, invoked with a different --model
 // flag, so a bounded factual lookup costs Haiku rates rather than Opus/Sonnet.
+// The Router forces this model regardless of how the sub-star is authored, so a
+// routed question can never escalate to the premium tier.
 const RouterModel = "claude-haiku-4-5-20251001"
 
 // defaultRouterLatency bounds a single routed call. A routed question is a
@@ -29,12 +34,24 @@ const defaultRouterLatency = 15 * time.Second
 // of the reuse while bounding memory.
 const routerCacheCapacity = 128
 
-// SubKind classifies a routed sub-question so the Router can hand Haiku the
-// right rubric (system prompt) and so telemetry can attribute savings by kind.
+// Router context-budget caps. A routed answer is a short structured result, so
+// the sub-agent needs only a tiny budget — far below the coder/reviewer
+// defaults it would otherwise inherit through BudgetForRole.
+const (
+	routerMaxReadsBeforeEdit = 4
+	routerMaxGrepsBeforeEdit = 4
+	routerMaxTotalReads      = 12
+	routerToolResultMaxBytes = 4 * 1024
+)
+
+// SubKind classifies a routed sub-question so the Router can load the right
+// sub-star (its rubric, tool allow/deny list, and budget) and so telemetry can
+// attribute savings by kind.
 type SubKind string
 
-// The bounded question kinds the router answers. Each maps to a tiny sub-star
-// prompt tuned for Haiku (internal/artifacts/defaults/stars/*.md).
+// The bounded question kinds the router answers. Each maps to a sub-star under
+// internal/artifacts/defaults/stars/ that carries the Haiku rubric and the
+// read-only tool/budget constraints (see starNameFor).
 const (
 	// SubKindFileFinder locates where a symbol is declared or implemented.
 	SubKindFileFinder SubKind = "file_finder"
@@ -49,7 +66,7 @@ const (
 // SubQuestion is a bounded factual question the coder delegates to the cheap
 // tier instead of paying for premium-model inference on its own.
 type SubQuestion struct {
-	Kind       SubKind       // selects the rubric and tags telemetry
+	Kind       SubKind       // selects the sub-star rubric and tags telemetry
 	Query      string        // free-text question, e.g. "Where is the Sensor interface declared?"
 	Workdir    string        // repo root the sub-agent runs in
 	Scope      []string      // optional file/dir scope to narrow the search
@@ -66,9 +83,15 @@ type Answer struct {
 	ModelUsed    string // the model that produced the answer (always RouterModel)
 }
 
+// StarLoader loads a resolved sub-star by name. *artifacts.Loader satisfies it.
+// The interface is declared here, where the Router consumes it, per project
+// convention (define interfaces at the consumer).
+type StarLoader interface {
+	LoadStar(name string) (*artifacts.Star, error)
+}
+
 // RouterMetricRecorder records router telemetry. *telemetry.RouterMetricStore
 // satisfies it; a nil recorder disables recording without the Router branching.
-// The interface is defined here, where it is consumed, per project convention.
 type RouterMetricRecorder interface {
 	RecordRouter(ctx context.Context, m telemetry.RouterMetric) error
 }
@@ -76,14 +99,19 @@ type RouterMetricRecorder interface {
 // Router executes a sub-prompt against a cheaper model and returns the
 // structured result. Coder/reviewer stars use it to delegate bounded questions
 // (file lookup, test mapping, symbol resolution) without paying for
-// premium-model inference. Results repeat within a phase, so identical
-// questions are served from an in-process LRU on every call after the first.
+// premium-model inference. Each kind's rubric and read-only tool/budget
+// constraints come from a declarative sub-star loaded at call time, so the
+// star files are the single source of truth. Results repeat within a phase, so
+// identical questions are served from an in-process LRU on every call after
+// the first.
 type Router struct {
 	invoker  Invoker
+	loader   StarLoader
 	model    string
 	cache    *resultCache
 	recorder RouterMetricRecorder
 	now      func() time.Time // injectable clock for latency measurement (tests)
+	seq      atomic.Uint64    // per-Router invocation counter for metric IDs
 
 	// NebulaID and PhaseID tag recorded RouterMetrics so `quasar cache report
 	// --router` can attribute savings to a phase. The wiring layer sets them
@@ -93,11 +121,12 @@ type Router struct {
 }
 
 // NewRouter returns a Router that delegates to inv (the same Claude invoker the
-// coder uses, run with the Haiku --model flag) and records every call to rec. A
-// nil rec disables recording.
-func NewRouter(inv Invoker, rec RouterMetricRecorder) *Router {
+// coder uses, run with the Haiku --model flag), loads sub-star rubrics via
+// loader, and records every call to rec. A nil rec disables recording.
+func NewRouter(inv Invoker, loader StarLoader, rec RouterMetricRecorder) *Router {
 	return &Router{
 		invoker:  inv,
+		loader:   loader,
 		model:    RouterModel,
 		cache:    newResultCache(routerCacheCapacity),
 		recorder: rec,
@@ -128,8 +157,22 @@ func (r *Router) Ask(ctx context.Context, q SubQuestion) (Answer, error) {
 	return ans, nil
 }
 
-// invoke runs Haiku for a cache miss, bounded by the question's MaxLatency.
+// invoke runs Haiku for a cache miss, bounded by the question's MaxLatency. The
+// sub-star supplies the rubric (SystemPrompt), the read-only tool allow-list,
+// the effort, and the budget cap; the Router forces the cheap model so a routed
+// question can never escalate, and pins a tight context budget so the sub-agent
+// does not inherit coder-grade limits. A missing/unloadable sub-star fails the
+// call closed rather than running an unrestricted fallback.
 func (r *Router) invoke(ctx context.Context, q SubQuestion) (Answer, error) {
+	starName, ok := starNameFor(q.Kind)
+	if !ok {
+		return Answer{}, fmt.Errorf("router: unknown sub-question kind %q", q.Kind)
+	}
+	star, err := r.loader.LoadStar(starName)
+	if err != nil {
+		return Answer{}, fmt.Errorf("router: load sub-star %q: %w", starName, err)
+	}
+
 	latency := q.MaxLatency
 	if latency <= 0 {
 		latency = defaultRouterLatency
@@ -137,11 +180,17 @@ func (r *Router) invoke(ctx context.Context, q SubQuestion) (Answer, error) {
 	callCtx, cancel := context.WithTimeout(ctx, latency)
 	defer cancel()
 
+	budget := routerContextBudget()
 	a := Agent{
-		Role:              RoleCoder,
-		SystemPrompt:      systemPromptFor(q.Kind),
+		Role:              RoleRouter,
+		SystemPrompt:      star.Prompt,
 		Model:             r.model,
+		FallbackModel:     star.FallbackModel,
+		MaxBudgetUSD:      star.Defaults.MaxBudgetUSD,
+		Effort:            star.Defaults.Effort,
+		AllowedTools:      star.Tools.Allowed,
 		CacheOptimization: true,
+		ContextBudget:     &budget,
 	}
 
 	res, err := r.invoker.Invoke(callCtx, a, q.userPrompt(), q.Workdir)
@@ -158,13 +207,14 @@ func (r *Router) invoke(ctx context.Context, q SubQuestion) (Answer, error) {
 }
 
 // record writes a RouterMetric for one Ask. A recording failure is telemetry
-// only — it is swallowed so a logging glitch never fails the routed question
-// (correctness over throughput).
+// only — the Ask still succeeds (correctness over throughput) — but the error
+// is logged to stderr rather than silently discarded, per project convention.
 func (r *Router) record(ctx context.Context, q SubQuestion, ans Answer, latencyMs int64, hit bool) {
 	if r.recorder == nil {
 		return
 	}
-	_ = r.recorder.RecordRouter(ctx, telemetry.RouterMetric{
+	err := r.recorder.RecordRouter(ctx, telemetry.RouterMetric{
+		InvocationID:   fmt.Sprintf("router-%d", r.seq.Add(1)),
 		NebulaID:       r.NebulaID,
 		PhaseID:        r.PhaseID,
 		SubKind:        string(q.Kind),
@@ -173,11 +223,42 @@ func (r *Router) record(ctx context.Context, q SubQuestion, ans Answer, latencyM
 		LatencyMs:      latencyMs,
 		CacheHit:       hit,
 	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[router] failed to record metric: %v\n", err)
+	}
 }
 
 // elapsedMs returns milliseconds elapsed since start using the Router's clock.
 func (r *Router) elapsedMs(start time.Time) int64 {
 	return r.now().Sub(start).Milliseconds()
+}
+
+// starNameFor maps a sub-question kind to its sub-star file name. The bool is
+// false for an unrecognized kind so the caller can fail closed.
+func starNameFor(kind SubKind) (string, bool) {
+	switch kind {
+	case SubKindFileFinder:
+		return "file-finder", true
+	case SubKindTestMapper:
+		return "test-mapper", true
+	case SubKindLintTriage:
+		return "lint-triage", true
+	case SubKindSymbolFinder:
+		return "symbol-finder", true
+	default:
+		return "", false
+	}
+}
+
+// routerContextBudget returns the tight budget pinned on every routed sub-agent
+// so it never inherits the coder/reviewer defaults BudgetForRole would supply.
+func routerContextBudget() ContextBudget {
+	return ContextBudget{
+		MaxReadsBeforeEdit: routerMaxReadsBeforeEdit,
+		MaxGrepsBeforeEdit: routerMaxGrepsBeforeEdit,
+		MaxTotalReads:      routerMaxTotalReads,
+		ToolResultMaxBytes: routerToolResultMaxBytes,
+	}
 }
 
 // cacheKey derives a stable LRU key from the fields that determine the answer.
@@ -209,29 +290,6 @@ func (q SubQuestion) userPrompt() string {
 		}
 	}
 	return b.String()
-}
-
-// systemPromptFor returns the per-kind rubric handed to Haiku so it answers in
-// the structured shape the coder expects. An unknown kind gets a generic
-// instruction rather than failing the call.
-func systemPromptFor(kind SubKind) string {
-	switch kind {
-	case SubKindFileFinder:
-		return "You locate where a Go symbol is declared or implemented. " +
-			"Answer with a single line in the form <path>:<line> and nothing else."
-	case SubKindTestMapper:
-		return "You map a Go file or function to the tests that cover it. " +
-			"Answer with one <path>:<TestFuncName> per line and nothing else."
-	case SubKindLintTriage:
-		return "You triage linter or compiler output. " +
-			"Answer with a single JSON object: " +
-			`{"file","line","severity","category","summary"} and nothing else.`
-	case SubKindSymbolFinder:
-		return "You name the Go package that owns a symbol. " +
-			"Answer with the package name on one line and nothing else."
-	default:
-		return "Answer the question concisely with only the requested result."
-	}
 }
 
 // resultCache is a fixed-capacity, mutex-guarded LRU keyed by sub-question hash.

@@ -67,28 +67,29 @@ func TestLoadStar(t *testing.T) {
 		}
 	})
 
-	t.Run("router-aware skill exposes the RouteQuery tool", func(t *testing.T) {
+	t.Run("RouteQuery is exposed only when router-aware is referenced", func(t *testing.T) {
 		t.Parallel()
 		l, repo := newTestLoader(t)
 
-		// The coder references router-aware, so RouteQuery is unioned in.
+		// router-aware is intentionally NOT in the default coder's skills yet
+		// (no backing RouteQuery tool exists), so the coder must NOT get it.
 		coder, err := l.LoadStar("coder")
 		if err != nil {
 			t.Fatalf("LoadStar coder: %v", err)
 		}
-		if !containsStr(coder.Tools.Allowed, "RouteQuery") {
-			t.Errorf("coder missing RouteQuery from router-aware: %v", coder.Tools.Allowed)
+		if containsStr(coder.Tools.Allowed, "RouteQuery") {
+			t.Errorf("coder should not expose RouteQuery while router-aware is gated out: %v", coder.Tools.Allowed)
 		}
 
-		// A star without the skill must NOT get RouteQuery — the tool is gated
-		// on loading router-aware.
-		writeFile(t, repo, "stars/plain.md", "+++\nname = \"plain\"\n\n[tools]\nallowed = [\"Read\"]\n+++\n\nBody.\n")
-		plain, err := l.LoadStar("plain")
+		// A star that explicitly references router-aware DOES get RouteQuery —
+		// the union mechanism that will back the tool once it is wired.
+		writeFile(t, repo, "stars/routed.md", "+++\nname = \"routed\"\nskills = [\"router-aware\"]\n\n[tools]\nallowed = [\"Read\"]\n+++\n\nBody.\n")
+		routed, err := l.LoadStar("routed")
 		if err != nil {
-			t.Fatalf("LoadStar plain: %v", err)
+			t.Fatalf("LoadStar routed: %v", err)
 		}
-		if containsStr(plain.Tools.Allowed, "RouteQuery") {
-			t.Errorf("plain star unexpectedly has RouteQuery: %v", plain.Tools.Allowed)
+		if !containsStr(routed.Tools.Allowed, "RouteQuery") {
+			t.Errorf("router-aware should add RouteQuery when referenced: %v", routed.Tools.Allowed)
 		}
 	})
 

@@ -12,6 +12,11 @@ const (
 	RoleReviewer Role = "reviewer"
 	// RoleArchitect is the agent role that creates and refactors nebula phase files.
 	RoleArchitect Role = "architect"
+	// RoleRouter is the agent role for a routed sub-question: a bounded,
+	// read-only lookup delegated to the cheap model tier. It is neither coder
+	// nor reviewer, so it does not inherit their heavyweight context budgets;
+	// the Router sets a tight budget explicitly (see agent.Router).
+	RoleRouter Role = "router"
 )
 
 // MCPConfig holds optional MCP server configuration for an agent invocation.

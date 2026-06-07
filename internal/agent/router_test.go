@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/papapumpkin/quasar/internal/artifacts"
 	"github.com/papapumpkin/quasar/internal/telemetry"
 )
 
@@ -36,6 +37,40 @@ func (f *fakeInvoker) Invoke(_ context.Context, a Agent, prompt, _ string) (Invo
 
 func (f *fakeInvoker) Validate() error { return nil }
 
+// fakeLoader returns a canned sub-star for any name, standing in for the real
+// artifacts loader so router tests can assert the Agent inherits the star's
+// rubric, tool allow-list, effort, and budget.
+type fakeLoader struct {
+	mu    sync.Mutex
+	names []string
+	star  *artifacts.Star
+	err   error
+}
+
+func (l *fakeLoader) LoadStar(name string) (*artifacts.Star, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.names = append(l.names, name)
+	if l.err != nil {
+		return nil, l.err
+	}
+	return l.star, nil
+}
+
+// readOnlyStar is the canned sub-star used across tests: read-only tools, a
+// low-effort/low-budget profile, and a Haiku model the Router is expected to
+// honor (it forces RouterModel regardless, which equals this).
+func readOnlyStar() *artifacts.Star {
+	return &artifacts.Star{
+		Name:          "file-finder",
+		Model:         "some-other-model", // Router must override this with RouterModel.
+		FallbackModel: "fallback-x",
+		Prompt:        "You locate where a Go symbol is declared.",
+		Tools:         artifacts.StarTools{Allowed: []string{"Read", "Glob", "Grep"}, Denied: []string{"Edit", "Write"}},
+		Defaults:      artifacts.StarDefaults{MaxBudgetUSD: 0.05, Effort: "low"},
+	}
+}
+
 // recordingRecorder captures every RouterMetric for assertions.
 type recordingRecorder struct {
 	mu      sync.Mutex
@@ -52,10 +87,11 @@ func (r *recordingRecorder) RecordRouter(_ context.Context, m telemetry.RouterMe
 func TestRouterAsk(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("invokes claude with the haiku model", func(t *testing.T) {
+	t.Run("loads the sub-star and forces the haiku model", func(t *testing.T) {
 		t.Parallel()
 		inv := &fakeInvoker{result: InvocationResult{ResultText: "internal/sensors/sensor.go:12", InputTokens: 100, OutputTokens: 8}}
-		r := NewRouter(inv, nil)
+		ld := &fakeLoader{star: readOnlyStar()}
+		r := NewRouter(inv, ld, nil)
 
 		ans, err := r.Ask(ctx, SubQuestion{Kind: SubKindFileFinder, Query: "Where is the Sensor interface declared?"})
 		if err != nil {
@@ -64,8 +100,34 @@ func TestRouterAsk(t *testing.T) {
 		if inv.calls != 1 {
 			t.Fatalf("invoker calls = %d, want 1", inv.calls)
 		}
-		if got := inv.agents[0].Model; got != RouterModel {
-			t.Errorf("model = %q, want %q", got, RouterModel)
+		// The right sub-star was loaded for this kind.
+		if len(ld.names) != 1 || ld.names[0] != "file-finder" {
+			t.Errorf("loaded stars = %v, want [file-finder]", ld.names)
+		}
+		got := inv.agents[0]
+		// Router owns the model: forces the cheap tier regardless of star authoring.
+		if got.Model != RouterModel {
+			t.Errorf("model = %q, want %q", got.Model, RouterModel)
+		}
+		// Star owns the rubric, tools, effort, and budget — all must flow through.
+		if got.SystemPrompt != "You locate where a Go symbol is declared." {
+			t.Errorf("system prompt = %q", got.SystemPrompt)
+		}
+		if len(got.AllowedTools) != 3 || got.AllowedTools[0] != "Read" {
+			t.Errorf("allowed tools = %v, want read-only set", got.AllowedTools)
+		}
+		if got.MaxBudgetUSD != 0.05 {
+			t.Errorf("budget = %v, want 0.05", got.MaxBudgetUSD)
+		}
+		if got.Effort != "low" {
+			t.Errorf("effort = %q, want low", got.Effort)
+		}
+		if got.Role != RoleRouter {
+			t.Errorf("role = %q, want %q", got.Role, RoleRouter)
+		}
+		// The pinned tight budget, not coder/reviewer defaults.
+		if got.ContextBudget == nil || got.ContextBudget.MaxTotalReads != routerMaxTotalReads {
+			t.Errorf("context budget = %+v, want tight router budget", got.ContextBudget)
 		}
 		if ans.ModelUsed != RouterModel {
 			t.Errorf("ModelUsed = %q, want %q", ans.ModelUsed, RouterModel)
@@ -78,11 +140,59 @@ func TestRouterAsk(t *testing.T) {
 		}
 	})
 
+	t.Run("each kind loads its own sub-star", func(t *testing.T) {
+		t.Parallel()
+		cases := map[SubKind]string{
+			SubKindFileFinder:   "file-finder",
+			SubKindTestMapper:   "test-mapper",
+			SubKindLintTriage:   "lint-triage",
+			SubKindSymbolFinder: "symbol-finder",
+		}
+		for kind, want := range cases {
+			inv := &fakeInvoker{result: InvocationResult{ResultText: "x"}}
+			ld := &fakeLoader{star: readOnlyStar()}
+			r := NewRouter(inv, ld, nil)
+			if _, err := r.Ask(ctx, SubQuestion{Kind: kind, Query: "q"}); err != nil {
+				t.Fatalf("Ask(%s): %v", kind, err)
+			}
+			if len(ld.names) != 1 || ld.names[0] != want {
+				t.Errorf("kind %s loaded %v, want [%s]", kind, ld.names, want)
+			}
+		}
+	})
+
+	t.Run("unknown kind fails closed without invoking", func(t *testing.T) {
+		t.Parallel()
+		inv := &fakeInvoker{result: InvocationResult{ResultText: "x"}}
+		ld := &fakeLoader{star: readOnlyStar()}
+		r := NewRouter(inv, ld, nil)
+		if _, err := r.Ask(ctx, SubQuestion{Kind: SubKind("bogus"), Query: "q"}); err == nil {
+			t.Fatal("expected error for unknown kind")
+		}
+		if inv.calls != 0 {
+			t.Errorf("invoker calls = %d, want 0 (failed before invoke)", inv.calls)
+		}
+	})
+
+	t.Run("sub-star load failure fails closed", func(t *testing.T) {
+		t.Parallel()
+		inv := &fakeInvoker{result: InvocationResult{ResultText: "x"}}
+		ld := &fakeLoader{err: fmt.Errorf("missing star")}
+		r := NewRouter(inv, ld, nil)
+		if _, err := r.Ask(ctx, SubQuestion{Kind: SubKindFileFinder, Query: "q"}); err == nil {
+			t.Fatal("expected error when sub-star cannot load")
+		}
+		if inv.calls != 0 {
+			t.Errorf("invoker calls = %d, want 0 (no unrestricted fallback)", inv.calls)
+		}
+	})
+
 	t.Run("identical question hits the LRU on the second call", func(t *testing.T) {
 		t.Parallel()
 		inv := &fakeInvoker{result: InvocationResult{ResultText: "x.go:1", InputTokens: 50, OutputTokens: 4}}
+		ld := &fakeLoader{star: readOnlyStar()}
 		rec := &recordingRecorder{}
-		r := NewRouter(inv, rec)
+		r := NewRouter(inv, ld, rec)
 		q := SubQuestion{Kind: SubKindSymbolFinder, Query: "which package owns Loader?"}
 
 		first, err := r.Ask(ctx, q)
@@ -114,12 +224,19 @@ func TestRouterAsk(t *testing.T) {
 		if rec.metrics[1].RoutedTokens() != 54 {
 			t.Errorf("cached metric RoutedTokens = %d, want 54", rec.metrics[1].RoutedTokens())
 		}
+		// Every metric carries a non-empty invocation id.
+		for i, m := range rec.metrics {
+			if m.InvocationID == "" {
+				t.Errorf("metric[%d] InvocationID empty", i)
+			}
+		}
 	})
 
 	t.Run("distinct questions do not collide", func(t *testing.T) {
 		t.Parallel()
 		inv := &fakeInvoker{result: InvocationResult{ResultText: "y.go:2"}}
-		r := NewRouter(inv, nil)
+		ld := &fakeLoader{star: readOnlyStar()}
+		r := NewRouter(inv, ld, nil)
 
 		if _, err := r.Ask(ctx, SubQuestion{Kind: SubKindFileFinder, Query: "a"}); err != nil {
 			t.Fatal(err)
@@ -135,7 +252,8 @@ func TestRouterAsk(t *testing.T) {
 	t.Run("scope is part of the cache key", func(t *testing.T) {
 		t.Parallel()
 		inv := &fakeInvoker{result: InvocationResult{ResultText: "z.go:3"}}
-		r := NewRouter(inv, nil)
+		ld := &fakeLoader{star: readOnlyStar()}
+		r := NewRouter(inv, ld, nil)
 		base := SubQuestion{Kind: SubKindTestMapper, Query: "tests for X"}
 
 		scoped := base
@@ -154,7 +272,8 @@ func TestRouterAsk(t *testing.T) {
 	t.Run("invocation error propagates and is not cached", func(t *testing.T) {
 		t.Parallel()
 		inv := &fakeInvoker{err: fmt.Errorf("boom")}
-		r := NewRouter(inv, nil)
+		ld := &fakeLoader{star: readOnlyStar()}
+		r := NewRouter(inv, ld, nil)
 		q := SubQuestion{Kind: SubKindFileFinder, Query: "fails"}
 
 		if _, err := r.Ask(ctx, q); err == nil {
@@ -174,8 +293,9 @@ func TestRouterAsk(t *testing.T) {
 
 func TestRouterMetricTagging(t *testing.T) {
 	inv := &fakeInvoker{result: InvocationResult{InputTokens: 30, OutputTokens: 6}}
+	ld := &fakeLoader{star: readOnlyStar()}
 	rec := &recordingRecorder{}
-	r := NewRouter(inv, rec)
+	r := NewRouter(inv, ld, rec)
 	r.NebulaID = "neb-1"
 	r.PhaseID = "phase-2"
 
@@ -195,6 +315,9 @@ func TestRouterMetricTagging(t *testing.T) {
 	}
 	if m.HaikuInTokens != 30 || m.HaikuOutTokens != 6 {
 		t.Errorf("tokens = %d/%d, want 30/6", m.HaikuInTokens, m.HaikuOutTokens)
+	}
+	if m.InvocationID == "" {
+		t.Error("InvocationID should be populated")
 	}
 }
 
@@ -231,20 +354,19 @@ func TestResultCacheDisabled(t *testing.T) {
 // can be timed without wall-clock flakiness.
 func TestRouterElapsedClock(t *testing.T) {
 	inv := &fakeInvoker{result: InvocationResult{ResultText: "t.go:1"}}
+	ld := &fakeLoader{star: readOnlyStar()}
 	rec := &recordingRecorder{}
-	r := NewRouter(inv, rec)
+	r := NewRouter(inv, ld, rec)
 
 	now := time.Unix(0, 0)
-	r.now = func() time.Time { return now }
-	q := SubQuestion{Kind: SubKindFileFinder, Query: "timed"}
-
-	// First call: advance the clock 200ms across the miss.
+	// Each now() call advances the clock 200ms; Ask calls it twice (start +
+	// elapsed), so the recorded latency is exactly one 200ms step.
 	r.now = func() time.Time {
 		t := now
 		now = now.Add(200 * time.Millisecond)
 		return t
 	}
-	if _, err := r.Ask(context.Background(), q); err != nil {
+	if _, err := r.Ask(context.Background(), SubQuestion{Kind: SubKindFileFinder, Query: "timed"}); err != nil {
 		t.Fatal(err)
 	}
 	if rec.metrics[0].LatencyMs != 200 {

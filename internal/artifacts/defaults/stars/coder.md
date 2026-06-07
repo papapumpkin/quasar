@@ -2,7 +2,12 @@
 name = "coder"
 model = "claude-sonnet-4-6"
 fallback_model = "claude-haiku-4-5"
-skills = ["git-aware", "prompt-cache-aware", "router-aware"]
+# router-aware is intentionally NOT enabled by default: it adds the RouteQuery
+# tool, but no runtime tool is registered under that name yet (the MCP/CLI
+# bridge is a follow-up). Handing the CLI an unknown tool — and prompting the
+# coder to call it — would be a footgun. Re-add "router-aware" here once
+# RouteQuery is wired to agent.Router.
+skills = ["git-aware", "prompt-cache-aware"]
 
 [tools]
 allowed = ["Read", "Edit", "Write", "Glob", "Grep", "Bash(go *)", "Bash(git diff *)", "Bash(git status)"]
