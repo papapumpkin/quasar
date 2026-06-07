@@ -16,7 +16,7 @@ import (
 
 // ErrBudgetExhausted is returned by Budget.CheckBefore when a capped run has no
 // remaining budget, so the engine must not start the next star invocation. It is
-// the budget analogue of the cycle-cap give-up path: a defined terminal failure
+// the budget analog of the cycle-cap give-up path: a defined terminal failure
 // mode, not an operational error.
 var ErrBudgetExhausted = errors.New("constellations: constellation run budget exhausted")
 

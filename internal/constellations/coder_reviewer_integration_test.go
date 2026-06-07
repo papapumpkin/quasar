@@ -85,7 +85,7 @@ func TestCoderReviewerLoopRequestChangesThenApprove(t *testing.T) {
 // constellation with a reviewer that always requests changes. The run must loop
 // until the embedded [meta].max_cycles cap (3) is exhausted, then route to
 // give-up and terminate failed with the structured reason — never _done. This is
-// the inner-loop analogue of master-review's cap enforcement, using the same
+// the inner-loop analog of master-review's cap enforcement, using the same
 // back-edge cycle counter.
 func TestCoderReviewerLoopExhaustsCyclesAndFails(t *testing.T) {
 	ctx := context.Background()
