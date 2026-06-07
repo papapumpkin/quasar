@@ -53,6 +53,20 @@ func TestBudgetForRole(t *testing.T) {
 			t.Error("architect should include sibling phases")
 		}
 	})
+
+	t.Run("reviewer result is marked structured", func(t *testing.T) {
+		t.Parallel()
+		if !BudgetForRole(RoleReviewer).ResultIsStructured {
+			t.Error("reviewer result is a JSON decision and must be marked structured to skip truncation")
+		}
+	})
+
+	t.Run("coder result is not structured", func(t *testing.T) {
+		t.Parallel()
+		if BudgetForRole(RoleCoder).ResultIsStructured {
+			t.Error("coder result is prose/diff and must remain truncatable")
+		}
+	})
 }
 
 func TestRenderPhaseContext(t *testing.T) {

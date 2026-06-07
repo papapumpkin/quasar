@@ -77,6 +77,7 @@ func (l *Loader) LoadStar(name string) (*Star, error) {
 			ToolResultMaxBytes:   sf.ContextBudget.ToolResultMaxBytes,
 			IncludeSiblingPhases: sf.ContextBudget.IncludeSiblingPhases,
 			EnableToolHook:       sf.ContextBudget.EnableToolHook,
+			ResultIsStructured:   sf.ContextBudget.ResultIsStructured,
 		},
 		Prompt:     strings.TrimSpace(body),
 		SourcePath: src,
@@ -355,6 +356,7 @@ type starFrontmatter struct {
 		ToolResultMaxBytes   int  `toml:"tool_result_max_bytes"`
 		IncludeSiblingPhases bool `toml:"include_sibling_phases"`
 		EnableToolHook       bool `toml:"enable_tool_hook"`
+		ResultIsStructured   bool `toml:"result_is_structured"`
 	} `toml:"context_budget"`
 	// Health overrides healthcheck thresholds; durations are strings, parsed in load.
 	Health struct {

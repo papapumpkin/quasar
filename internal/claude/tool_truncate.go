@@ -50,9 +50,28 @@ func DefaultTruncationPolicy() TruncationPolicy {
 // effective context budget. The byte cap is the budget's ToolResultMaxBytes
 // (per-role default when the agent supplies no explicit budget); a non-positive
 // cap disables truncation in TruncateResult.
+//
+// Mechanism note (see also TruncateResult): because Quasar drives the coder via
+// headless `claude -p`, the Go layer never observes intermediate Read/Grep
+// results — only the final invocation result. Truncation therefore bounds the
+// inter-agent handoff (one agent's output → the next agent's input context), not
+// in-loop per-read bloat. In-loop read size is governed by the budget hook's
+// count caps (MaxReadsBeforeEdit/MaxTotalReads) plus the model's own behavior,
+// never by per-read size clipping.
+//
+// A result consumed as a whole structured payload (ResultIsStructured — the
+// reviewer/master-reviewer JSON decision) bypasses truncation: a head+tail
+// marker spliced into the middle of a JSON document would make it unparseable
+// and hard-fail the downstream reviewer_decision builtin, which is a worse
+// outcome than a larger handoff.
 func truncationPolicyFor(a agent.Agent) TruncationPolicy {
 	p := DefaultTruncationPolicy()
-	p.MaxBytesPerResult = a.EffectiveContextBudget().ToolResultMaxBytes
+	budget := a.EffectiveContextBudget()
+	if budget.ResultIsStructured {
+		p.MaxBytesPerResult = 0 // disable truncation for whole-payload results
+		return p
+	}
+	p.MaxBytesPerResult = budget.ToolResultMaxBytes
 	return p
 }
 

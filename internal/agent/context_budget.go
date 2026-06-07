@@ -37,6 +37,15 @@ type ContextBudget struct {
 	// the Claude CLI's hook contract, which the conservative default avoids
 	// relying on. The soft/hard caps above still apply once it is enabled.
 	EnableToolHook bool `toml:"enable_tool_hook"`
+	// ResultIsStructured marks an invocation whose result is consumed as a whole
+	// structured payload (e.g. the reviewer/master-reviewer JSON decision parsed
+	// by the reviewer_decision builtin). Such results MUST NOT be byte-truncated:
+	// inserting a head+tail marker into the middle of a JSON document produces
+	// invalid JSON and hard-fails the downstream decode. When true the invoker
+	// bypasses tool-result truncation entirely, trading a larger handoff for the
+	// guarantee that the payload still parses. Prose/diff results (the coder)
+	// leave this false so they remain bounded.
+	ResultIsStructured bool `toml:"result_is_structured"`
 }
 
 // RoleNeedsFullNebula reports whether a role must see every phase spec rather
@@ -58,6 +67,9 @@ func BudgetForRole(role Role) ContextBudget {
 	}
 	if role == RoleReviewer {
 		b.ToolResultMaxBytes = reviewerToolResultMaxBytes
+		// The reviewer's result is a strict JSON decision consumed whole by the
+		// reviewer_decision builtin, so it must never be byte-truncated.
+		b.ResultIsStructured = true
 	}
 	return b
 }

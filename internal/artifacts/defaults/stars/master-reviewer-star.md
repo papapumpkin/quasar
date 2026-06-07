@@ -11,6 +11,14 @@ denied  = ["Edit", "Write", "Bash(git push *)", "Bash(gh pr merge *)"]
 [defaults]
 max_budget_usd = 1.50
 effort = "high"
+
+[context_budget]
+# The master reviewer's result is a single master-review-decision-v1 JSON object
+# consumed whole by the master_review_decision builtin. Byte-truncating it would
+# splice a marker into the middle of the document and make it unparseable,
+# hard-failing the decision edge — so truncation is disabled for this star.
+result_is_structured = true
+tool_result_max_bytes = 32768
 +++
 
 You are the master reviewer. A nebula has completed all its phases — the

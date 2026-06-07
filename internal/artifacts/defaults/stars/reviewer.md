@@ -11,6 +11,15 @@ denied  = ["Edit", "Write", "Bash(git push *)", "Bash(gh pr merge *)"]
 [defaults]
 max_budget_usd = 0.30
 effort = "medium"
+
+[context_budget]
+# The reviewer's result is a single reviewer-decision-v1 JSON object consumed
+# whole by the reviewer_decision builtin. Byte-truncating it would splice a
+# marker into the middle of the document and make it unparseable, hard-failing
+# the decision edge — so truncation is disabled for this star. A reviewer also
+# needs fuller surrounding context than a coder, hence the larger result cap.
+result_is_structured = true
+tool_result_max_bytes = 32768
 +++
 
 You are the reviewer. Inspect the coder's diff and judge whether it solves the

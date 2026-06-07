@@ -4,7 +4,46 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/papapumpkin/quasar/internal/agent"
 )
+
+func TestTruncationPolicyFor(t *testing.T) {
+	t.Parallel()
+
+	t.Run("structured result bypasses truncation", func(t *testing.T) {
+		t.Parallel()
+		// A reviewer-style budget whose result is a whole JSON payload: the
+		// policy must disable truncation so a head+tail marker can never be
+		// spliced into the middle of the document.
+		a := agent.Agent{ContextBudget: &agent.ContextBudget{
+			ToolResultMaxBytes: 32 * 1024,
+			ResultIsStructured: true,
+		}}
+		p := truncationPolicyFor(a)
+		if p.MaxBytesPerResult > 0 {
+			t.Fatalf("expected truncation disabled for structured result, got cap %d", p.MaxBytesPerResult)
+		}
+		// And TruncateResult must leave an over-cap JSON payload untouched.
+		in := "{\"comments\":[" + strings.Repeat("\"c\",", 20*1024) + "\"x\"]}"
+		got, truncated := TruncateResult(in, p)
+		if truncated || got != in {
+			t.Error("expected structured result returned unchanged")
+		}
+	})
+
+	t.Run("prose result honors the byte cap", func(t *testing.T) {
+		t.Parallel()
+		a := agent.Agent{ContextBudget: &agent.ContextBudget{
+			ToolResultMaxBytes: 16 * 1024,
+			ResultIsStructured: false,
+		}}
+		p := truncationPolicyFor(a)
+		if p.MaxBytesPerResult != 16*1024 {
+			t.Fatalf("expected cap 16384 for prose result, got %d", p.MaxBytesPerResult)
+		}
+	})
+}
 
 func TestTruncateResult(t *testing.T) {
 	t.Parallel()

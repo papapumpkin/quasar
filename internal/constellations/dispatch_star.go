@@ -115,6 +115,7 @@ func contextBudget(sb artifacts.StarContextBudget, role agent.Role) *agent.Conte
 	}
 	b.IncludeSiblingPhases = sb.IncludeSiblingPhases
 	b.EnableToolHook = sb.EnableToolHook
+	b.ResultIsStructured = sb.ResultIsStructured
 	return &b
 }
 

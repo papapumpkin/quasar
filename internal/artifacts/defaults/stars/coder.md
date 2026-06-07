@@ -23,9 +23,14 @@ effort = "medium"
 # phase's spec is injected (the coder cannot touch sibling phases).
 # tool_result_max_bytes caps every agent result the invoker returns (the coder's
 # output becomes the reviewer's input, so an unbounded result inflates the next
-# cycle). enable_tool_hook installs a Claude CLI PreToolUse hook that enforces
-# the Read/Grep caps on the live tool stream; it defaults to false because it
-# relies on the CLI hook contract — flip it on per-repo to make the caps binding.
+# cycle). NOTE: under headless `claude -p` the Go layer never sees intermediate
+# Read/Grep results — only the final invocation result — so this cap bounds the
+# inter-agent handoff, NOT in-loop per-read size. Large in-loop reads are not
+# size-clipped; their cost is governed only by the count caps below
+# (max_reads_before_edit / max_total_reads) and the model's own behavior.
+# enable_tool_hook installs a Claude CLI PreToolUse hook that enforces the
+# Read/Grep caps on the live tool stream; it defaults to false because it relies
+# on the CLI hook contract — flip it on per-repo to make the caps binding.
 [context_budget]
 max_reads_before_edit = 8
 max_greps_before_edit = 6

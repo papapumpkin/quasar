@@ -80,12 +80,19 @@ func TestTruncationPolicyForUsesBudget(t *testing.T) {
 		}
 	})
 
-	t.Run("reviewer default is larger than coder default", func(t *testing.T) {
+	t.Run("coder default truncates; reviewer default does not", func(t *testing.T) {
 		t.Parallel()
+		// The coder produces a prose/diff result that stays bounded, so its
+		// policy carries a positive byte cap. The reviewer produces a strict
+		// JSON decision (ResultIsStructured), so truncation is disabled entirely
+		// — a marker spliced into the middle would corrupt the payload.
 		coder := truncationPolicyFor(agent.Agent{Role: agent.RoleCoder}).MaxBytesPerResult
 		reviewer := truncationPolicyFor(agent.Agent{Role: agent.RoleReviewer}).MaxBytesPerResult
-		if reviewer <= coder {
-			t.Errorf("expected reviewer cap (%d) > coder cap (%d)", reviewer, coder)
+		if coder <= 0 {
+			t.Errorf("expected positive coder cap, got %d", coder)
+		}
+		if reviewer != 0 {
+			t.Errorf("expected reviewer truncation disabled (cap 0), got %d", reviewer)
 		}
 	})
 }

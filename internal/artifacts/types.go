@@ -81,6 +81,7 @@ type StarContextBudget struct {
 	ToolResultMaxBytes   int  // cap on a single tool result's size in bytes
 	IncludeSiblingPhases bool // when true, inject every phase spec (architect)
 	EnableToolHook       bool // when true, enforce Read/Grep caps via a CLI PreToolUse hook
+	ResultIsStructured   bool // when true, the result is a whole JSON payload; skip truncation
 }
 
 // StarTools is a star's tool permission policy.
