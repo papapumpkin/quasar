@@ -52,6 +52,7 @@ type Star struct {
 	Defaults      StarDefaults
 	ContextBudget StarContextBudget
 	Health        StarHealthPolicy
+	Checkpoint    StarCheckpointPolicy
 	Prompt        string // skill fragments + star body
 	SourcePath    string // for error reporting
 }
@@ -68,6 +69,16 @@ type StarHealthPolicy struct {
 	ToolCallRatioCeiling float64       // max Read:Edit ratio
 	ToolCallWindow       int           // recent tool calls feeding the ratio
 	CPUIdleCap           time.Duration // longest sub-1%-CPU stretch
+}
+
+// StarCheckpointPolicy configures in-cycle worktree checkpoints for a star,
+// parsed from its [checkpoint] frontmatter block. Triggers lists the build-class
+// commands that, on exit 0, snapshot the worktree; an empty list means the
+// runtime applies its built-in Go-centric defaults. Enabled defaults to true
+// when the block is absent, so checkpointing is opt-out rather than opt-in.
+type StarCheckpointPolicy struct {
+	Enabled  bool     // whether to checkpoint at all (default true)
+	Triggers []string // build-class commands that fire a checkpoint on exit 0
 }
 
 // StarContextBudget bounds how much context a star's invocation consumes. It

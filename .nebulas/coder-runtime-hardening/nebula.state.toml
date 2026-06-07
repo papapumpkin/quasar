@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'coder-runtime-hardening'
-total_cost_usd = 40.508368250000004
+total_cost_usd = 48.60385825
 
 [phases]
 [phases.context-budgeting]
@@ -29,15 +29,21 @@ summary = 'A multi-signal dead-coder healthcheck (wall-clock + write-idle + CPU-
 
 [phases.entanglement-revival]
 bead_id = 'entanglement-revival'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-06T21:11:50.108373-04:00
-updated_at = 2026-06-07T15:13:06.651284-04:00
+updated_at = 2026-06-07T15:30:00.378307-04:00
+
+[phases.entanglement-revival.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A correctly-diagnosed, observability-only change that wires the previously-dead `PhaseTracker.Collisions()` surface to the TUI via a race-clean, well-tested bus payload, leaving the already-working scope-deferral safety path untouched.'
 
 [phases.in-cycle-checkpointing]
 bead_id = 'in-cycle-checkpointing'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-06T21:11:50.108118-04:00
-updated_at = 2026-06-07T14:53:17.379945-04:00
+updated_at = 2026-06-07T15:30:00.395615-04:00
 
 [phases.model-routing]
 bead_id = 'model-routing'

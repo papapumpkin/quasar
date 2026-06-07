@@ -88,6 +88,7 @@ func (l *Loader) LoadStar(name string) (*Star, error) {
 		return nil, err
 	}
 	star.Health = health
+	star.Checkpoint = parseStarCheckpoint(sf)
 
 	if err := l.resolveSkills(star); err != nil {
 		return nil, err
@@ -368,6 +369,12 @@ type starFrontmatter struct {
 		ToolCallWindow       int     `toml:"tool_call_window"`
 		CPUIdleCap           string  `toml:"cpu_idle_cap"`
 	} `toml:"health"`
+	// Checkpoint overrides in-cycle worktree checkpoint triggers. Enabled is a
+	// pointer so an absent block defaults to true rather than false.
+	Checkpoint struct {
+		Enabled  *bool    `toml:"enabled"`
+		Triggers []string `toml:"triggers"`
+	} `toml:"checkpoint"`
 }
 
 type skillFrontmatter struct {

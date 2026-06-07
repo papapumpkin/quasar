@@ -70,3 +70,18 @@ func parseStarHealth(sf starFrontmatter, src string) (StarHealthPolicy, error) {
 	}
 	return h, nil
 }
+
+// parseStarCheckpoint converts a star's [checkpoint] block into a typed
+// StarCheckpointPolicy. An absent enabled key defaults to true (checkpointing is
+// opt-out); an empty triggers list leaves the runtime to apply its built-in
+// Go-centric defaults.
+func parseStarCheckpoint(sf starFrontmatter) StarCheckpointPolicy {
+	enabled := true
+	if sf.Checkpoint.Enabled != nil {
+		enabled = *sf.Checkpoint.Enabled
+	}
+	return StarCheckpointPolicy{
+		Enabled:  enabled,
+		Triggers: sf.Checkpoint.Triggers,
+	}
+}
