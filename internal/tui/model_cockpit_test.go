@@ -256,6 +256,48 @@ func TestMsgEntanglementUpdateFeedsViewer(t *testing.T) {
 	}
 }
 
+// TestMsgEntanglementUpdateNoClobber verifies that entanglement updates and
+// collision updates arrive from independent emitters and must not erase each
+// other: a nil field on either axis leaves the existing value intact.
+func TestMsgEntanglementUpdateNoClobber(t *testing.T) {
+	t.Parallel()
+
+	m := newNebulaModelWithPhases("", []PhaseEntry{{ID: "p1", Title: "Phase 1"}})
+
+	// 1. Entanglements arrive (no collision data).
+	ents := []fabric.Entanglement{{Producer: "p1", Kind: "interface", Name: "api.go"}}
+	r1, _ := m.Update(MsgEntanglementUpdate{Entanglements: ents})
+	m1 := r1.(AppModel)
+
+	// 2. A collision-only update arrives — entanglements must survive.
+	cols := []EntanglementCollision{{Scope: "internal/x/**", PhaseID: "p2", OtherPhaseID: "p1"}}
+	r2, _ := m1.Update(MsgEntanglementUpdate{Collisions: cols})
+	m2 := r2.(AppModel)
+
+	if len(m2.Entanglements) != 1 {
+		t.Errorf("collision-only update clobbered entanglements: got %d, want 1", len(m2.Entanglements))
+	}
+	if len(m2.EntanglementView.Collisions) != 1 {
+		t.Fatalf("expected 1 collision, got %d", len(m2.EntanglementView.Collisions))
+	}
+
+	// 3. A later entanglement-only update must not erase the collision warning.
+	r3, _ := m2.Update(MsgEntanglementUpdate{Entanglements: ents})
+	m3 := r3.(AppModel)
+
+	if len(m3.EntanglementView.Collisions) != 1 {
+		t.Errorf("entanglement-only update clobbered collisions: got %d, want 1", len(m3.EntanglementView.Collisions))
+	}
+
+	// 4. An explicit empty (non-nil) collision slice clears the warning.
+	r4, _ := m3.Update(MsgEntanglementUpdate{Collisions: []EntanglementCollision{}})
+	m4 := r4.(AppModel)
+
+	if len(m4.EntanglementView.Collisions) != 0 {
+		t.Errorf("empty collision slice did not clear warnings: got %d, want 0", len(m4.EntanglementView.Collisions))
+	}
+}
+
 func TestMsgScratchpadEntryFeedsScratchpad(t *testing.T) {
 	t.Parallel()
 

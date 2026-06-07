@@ -32,6 +32,10 @@ type Collision struct {
 	// Symbol is the overlapping scope pattern (e.g. "internal/runtime/**").
 	// When the two phases match via different patterns, both are shown.
 	Symbol string
+	// PhaseID is the candidate phase being deferred — the phase that would
+	// lose its work if it ran concurrently. Reporting surfaces (e.g. the TUI)
+	// use it to name which phase is waiting.
+	PhaseID string
 	// OtherPhaseID is the conflicting phase — already in flight or about to
 	// dispatch in the same batch.
 	OtherPhaseID string
@@ -84,6 +88,7 @@ func (c *CollisionDetector) WouldCollide(candidate *PhaseSpec, others []*PhaseSp
 		}
 		collisions = append(collisions, Collision{
 			Symbol:       symbol,
+			PhaseID:      candidate.ID,
 			OtherPhaseID: other.ID,
 			Kind:         CollisionKindScope,
 			Action:       CollisionActionWait,

@@ -86,6 +86,9 @@ func TestWouldCollide(t *testing.T) {
 				if got[0].OtherPhaseID != tc.wantOther {
 					t.Errorf("first collision OtherPhaseID = %q, want %q", got[0].OtherPhaseID, tc.wantOther)
 				}
+				if got[0].PhaseID != tc.candidate.ID {
+					t.Errorf("collision PhaseID = %q, want candidate %q", got[0].PhaseID, tc.candidate.ID)
+				}
 				if got[0].Kind != CollisionKindScope {
 					t.Errorf("collision Kind = %q, want %q", got[0].Kind, CollisionKindScope)
 				}

@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'coder-runtime-hardening'
-total_cost_usd = 38.2375995
+total_cost_usd = 40.508368250000004
 
 [phases]
 [phases.context-budgeting]
@@ -17,15 +17,21 @@ summary = 'Cycle-2 correctly fixes both minor findings (structured-JSON truncati
 
 [phases.dead-coder-detection]
 bead_id = 'dead-coder-detection'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-06T21:11:50.107852-04:00
-updated_at = 2026-06-07T15:07:46.586802-04:00
+updated_at = 2026-06-07T15:13:06.639256-04:00
+
+[phases.dead-coder-detection.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A multi-signal dead-coder healthcheck (wall-clock + write-idle + CPU-idle live, token-rate/tool-ratio staged) that terminates stalled `claude` subprocesses via SIGTERM→SIGKILL and hands partial work to the reviewer as `terminated_health`; correct, race-clean, well-tested, and approved with two minor non-blocking nits.'
 
 [phases.entanglement-revival]
 bead_id = 'entanglement-revival'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-06T21:11:50.108373-04:00
-updated_at = 2026-06-07T14:53:17.380254-04:00
+updated_at = 2026-06-07T15:13:06.651284-04:00
 
 [phases.in-cycle-checkpointing]
 bead_id = 'in-cycle-checkpointing'
