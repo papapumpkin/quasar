@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/papapumpkin/quasar/internal/agent"
@@ -73,6 +74,11 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 		var dead *claude.DeadCoderError
 		if errors.As(err, &dead) {
 			status = "terminated_health"
+			// The coder was killed mid-cycle but its partial work persists in the
+			// worktree. Surface the latest green-build snapshot alongside it so the
+			// reviewer can choose a known-good fallback. Best-effort: a restore
+			// failure must not mask the original termination.
+			r.restoreForReview(ctx, run.ID)
 		}
 		r.recordInvocation(ctx, run, node, star.Name, status, 0, started)
 		return nil, fmt.Errorf("constellations: invoke star %q: %w", star.Name, err)
@@ -88,11 +94,44 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 		return nil, fmt.Errorf("constellations: record star invocation (run %s): %w", run.ID, err)
 	}
 	r.recordCacheMetric(ctx, run, node, st, &res)
+	r.maybeCheckpoint(ctx, run.ID, st.Cycle, star)
 	return map[string]any{
 		"result":     res.ResultText,
 		"cost_usd":   res.CostUSD,
 		"session_id": res.SessionID,
 	}, nil
+}
+
+// maybeCheckpoint snapshots the worktree after a successful coder dispatch when a
+// checkpointer is wired and the star opts in via [checkpoint] enabled. It is the
+// runtime's coarsest green-build signal: a coder that returned without a
+// DeadCoderError left a usable tree. Best-effort — a snapshot failure is logged,
+// never fatal (correctness over throughput: a missed checkpoint only forfeits the
+// fallback, it never breaks the run).
+func (r *Runtime) maybeCheckpoint(ctx context.Context, runID string, cycle int, star *artifacts.Star) {
+	if r.checkpointer == nil || !star.Checkpoint.Enabled {
+		return
+	}
+	if err := r.checkpointer.Checkpoint(ctx, runID, cycle, star.Name); err != nil {
+		fmt.Fprintf(os.Stderr, "checkpoint: run %s cycle %d: %v\n", runID, cycle, err)
+	}
+}
+
+// restoreForReview materializes the latest green-build snapshot next to a copy of
+// the dead coder's partial worktree, logging both paths so the reviewer can
+// compare them. Best-effort: any failure (including no snapshot to fall back to)
+// is logged and swallowed so it never masks the coder termination.
+func (r *Runtime) restoreForReview(ctx context.Context, runID string) {
+	if r.checkpointer == nil {
+		return
+	}
+	base := filepath.Join(os.TempDir(), "quasar-restore-"+runID)
+	partial, checkpoint, err := r.checkpointer.RestoreForReview(ctx, runID, base)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "checkpoint: restore-for-review run %s: %v\n", runID, err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "checkpoint: dead coder run %s — partial=%s checkpoint=%s\n", runID, partial, checkpoint)
 }
 
 // contextBudget converts a star's parsed [context_budget] block into the

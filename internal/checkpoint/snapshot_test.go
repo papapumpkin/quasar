@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -15,76 +16,24 @@ import (
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
-// TestFabricStoreEndToEnd exercises the production NewFabricStore adapter against
-// a real SQLite-backed fabric: a snapshot persists through the checkpoints /
-// checkpoint_files tables and round-trips via Latest, then restores byte-exact.
-func TestFabricStoreEndToEnd(t *testing.T) {
-	ctx := context.Background()
-	dir := t.TempDir()
-	fab, err := fabric.NewSQLiteFabric(ctx, filepath.Join(dir, "test.db"))
-	if err != nil {
-		t.Fatalf("NewSQLiteFabric: %v", err)
-	}
-	t.Cleanup(func() { _ = fab.Close() })
-
-	blobs, err := blobstore.New(filepath.Join(dir, "blobs"), fab.DB())
-	if err != nil {
-		t.Fatalf("blobstore.New: %v", err)
-	}
-	store := NewFabricStore(fabric.NewCheckpointStore(fab.DB()))
-
-	work := writeWorktree(t, map[string]string{"a.go": "package a", "b.go": "package b"})
-	c := New(work, blobs, store, "run-e2e", nil)
-	c.SetCycle(3)
-
-	cp, err := c.Snapshot(ctx, "go test -short ./...")
-	if err != nil {
-		t.Fatalf("Snapshot: %v", err)
-	}
-	if cp.Cycle != 3 {
-		t.Errorf("cycle = %d, want 3", cp.Cycle)
-	}
-
-	// Latest (through the adapter) returns the persisted checkpoint with files.
-	got, err := store.Latest(ctx, "run-e2e")
-	if err != nil {
-		t.Fatalf("Latest: %v", err)
-	}
-	if got.ManifestHash != cp.ManifestHash || len(got.Files) != 2 {
-		t.Fatalf("round-trip mismatch: %+v", got)
-	}
-
-	dest := t.TempDir()
-	if err := c.Restore(ctx, got, dest); err != nil {
-		t.Fatalf("Restore: %v", err)
-	}
-	restored, err := os.ReadFile(filepath.Join(dest, "a.go"))
-	if err != nil {
-		t.Fatalf("read restored: %v", err)
-	}
-	if string(restored) != "package a" {
-		t.Errorf("restored a.go = %q, want %q", restored, "package a")
-	}
-}
-
-// fakeStore is an in-memory Store for exercising the Checkpointer without a
+// fakeStore is an in-memory Store for exercising the Snapshotter without a
 // database. It records every Insert so tests can assert how many rows were
 // written.
 type fakeStore struct {
-	inserted []StoredCheckpoint
-	latest   *StoredCheckpoint
+	inserted []Snapshot
+	latest   *Snapshot
 }
 
-func (f *fakeStore) Insert(_ context.Context, cp StoredCheckpoint) (int64, error) {
-	cp.ID = int64(len(f.inserted) + 1)
-	f.inserted = append(f.inserted, cp)
-	f.latest = &cp
-	return cp.ID, nil
+func (f *fakeStore) Insert(_ context.Context, snap Snapshot) (int64, error) {
+	snap.ID = int64(len(f.inserted) + 1)
+	f.inserted = append(f.inserted, snap)
+	f.latest = &snap
+	return snap.ID, nil
 }
 
-func (f *fakeStore) Latest(_ context.Context, _ string) (*StoredCheckpoint, error) {
+func (f *fakeStore) Latest(_ context.Context, _ string) (*Snapshot, error) {
 	if f.latest == nil {
-		return nil, ErrNoCheckpoint
+		return nil, ErrNoSnapshot
 	}
 	return f.latest, nil
 }
@@ -125,67 +74,67 @@ func writeWorktree(t *testing.T, files map[string]string) string {
 func TestMaybeCheckpoint(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("writes a checkpoint on an exit-0 trigger", func(t *testing.T) {
+	t.Run("writes a snapshot on an exit-0 trigger", func(t *testing.T) {
 		work := writeWorktree(t, map[string]string{"main.go": "package main"})
 		store := &fakeStore{}
-		c := New(work, newTestBlobs(t), store, "run-1", nil)
+		s := NewSnapshotter(work, newTestBlobs(t), store, nil)
 
-		cp, err := c.MaybeCheckpoint(ctx, ToolResult{Command: "go build ./...", ExitCode: 0})
+		snap, err := s.MaybeCheckpoint(ctx, "run-1", 1, ToolResult{Command: "go build ./...", ExitCode: 0})
 		if err != nil {
 			t.Fatalf("MaybeCheckpoint: %v", err)
 		}
-		if cp == nil {
-			t.Fatal("expected a checkpoint, got nil")
+		if snap == nil {
+			t.Fatal("expected a snapshot, got nil")
 		}
 		if len(store.inserted) != 1 {
 			t.Fatalf("got %d rows, want 1", len(store.inserted))
 		}
-		if cp.Trigger != "go build ./..." || cp.RunID != "run-1" {
-			t.Errorf("unexpected checkpoint: %+v", cp)
+		if snap.Trigger != "go build ./..." || snap.RunID != "run-1" {
+			t.Errorf("unexpected snapshot: %+v", snap)
 		}
-		if len(cp.Files) != 1 || cp.Files[0].Path != "main.go" {
-			t.Errorf("unexpected files: %+v", cp.Files)
-		}
-	})
-
-	t.Run("does not checkpoint on a non-zero exit", func(t *testing.T) {
-		work := writeWorktree(t, map[string]string{"main.go": "package main"})
-		store := &fakeStore{}
-		c := New(work, newTestBlobs(t), store, "run-1", nil)
-
-		cp, err := c.MaybeCheckpoint(ctx, ToolResult{Command: "go build ./...", ExitCode: 1})
-		if err != nil {
-			t.Fatalf("MaybeCheckpoint: %v", err)
-		}
-		if cp != nil || len(store.inserted) != 0 {
-			t.Fatalf("expected no checkpoint, got %+v (%d rows)", cp, len(store.inserted))
+		if len(snap.Files) != 1 || snap.Files[0].Path != "main.go" {
+			t.Errorf("unexpected files: %+v", snap.Files)
 		}
 	})
 
-	t.Run("does not checkpoint on a non-trigger command", func(t *testing.T) {
+	t.Run("does not snapshot on a non-zero exit", func(t *testing.T) {
 		work := writeWorktree(t, map[string]string{"main.go": "package main"})
 		store := &fakeStore{}
-		c := New(work, newTestBlobs(t), store, "run-1", nil)
+		s := NewSnapshotter(work, newTestBlobs(t), store, nil)
 
-		cp, err := c.MaybeCheckpoint(ctx, ToolResult{Command: "ls -la", ExitCode: 0})
+		snap, err := s.MaybeCheckpoint(ctx, "run-1", 1, ToolResult{Command: "go build ./...", ExitCode: 1})
 		if err != nil {
 			t.Fatalf("MaybeCheckpoint: %v", err)
 		}
-		if cp != nil || len(store.inserted) != 0 {
-			t.Fatalf("expected no checkpoint, got %+v (%d rows)", cp, len(store.inserted))
+		if snap != nil || len(store.inserted) != 0 {
+			t.Fatalf("expected no snapshot, got %+v (%d rows)", snap, len(store.inserted))
+		}
+	})
+
+	t.Run("does not snapshot on a non-trigger command", func(t *testing.T) {
+		work := writeWorktree(t, map[string]string{"main.go": "package main"})
+		store := &fakeStore{}
+		s := NewSnapshotter(work, newTestBlobs(t), store, nil)
+
+		snap, err := s.MaybeCheckpoint(ctx, "run-1", 1, ToolResult{Command: "ls -la", ExitCode: 0})
+		if err != nil {
+			t.Fatalf("MaybeCheckpoint: %v", err)
+		}
+		if snap != nil || len(store.inserted) != 0 {
+			t.Fatalf("expected no snapshot, got %+v (%d rows)", snap, len(store.inserted))
 		}
 	})
 
 	t.Run("dedups an unchanged tree: no second row", func(t *testing.T) {
 		work := writeWorktree(t, map[string]string{"main.go": "package main"})
 		store := &fakeStore{}
-		c := New(work, newTestBlobs(t), store, "run-1", nil)
+		s := NewSnapshotter(work, newTestBlobs(t), store, nil)
 
-		first, err := c.MaybeCheckpoint(ctx, ToolResult{Command: "go vet ./...", ExitCode: 0})
+		first, err := s.MaybeCheckpoint(ctx, "run-1", 1, ToolResult{Command: "go vet ./...", ExitCode: 0})
 		if err != nil || first == nil {
-			t.Fatalf("first MaybeCheckpoint: cp=%v err=%v", first, err)
+			t.Fatalf("first MaybeCheckpoint: snap=%v err=%v", first, err)
 		}
-		second, err := c.MaybeCheckpoint(ctx, ToolResult{Command: "go vet ./...", ExitCode: 0})
+		second, err := s.MaybeCheckpoint(ctx, "run-1", 1, ToolResult{Command: "go vet ./...", ExitCode: 0})
 		if err != nil {
 			t.Fatalf("second MaybeCheckpoint: %v", err)
 		}
@@ -197,20 +146,20 @@ func TestMaybeCheckpoint(t *testing.T) {
 		}
 	})
 
-	t.Run("checkpoints again after a file changes", func(t *testing.T) {
+	t.Run("snapshots again after a file changes", func(t *testing.T) {
 		work := writeWorktree(t, map[string]string{"main.go": "package main"})
 		store := &fakeStore{}
-		c := New(work, newTestBlobs(t), store, "run-1", nil)
+		s := NewSnapshotter(work, newTestBlobs(t), store, nil)
 
-		if _, err := c.MaybeCheckpoint(ctx, ToolResult{Command: "go build ./...", ExitCode: 0}); err != nil {
+		if _, err := s.MaybeCheckpoint(ctx, "run-1", 1, ToolResult{Command: "go build ./...", ExitCode: 0}); err != nil {
 			t.Fatalf("first: %v", err)
 		}
 		if err := os.WriteFile(filepath.Join(work, "main.go"), []byte("package main // edited"), 0o644); err != nil {
 			t.Fatalf("edit: %v", err)
 		}
-		cp, err := c.MaybeCheckpoint(ctx, ToolResult{Command: "go build ./...", ExitCode: 0})
-		if err != nil || cp == nil {
-			t.Fatalf("second: cp=%v err=%v", cp, err)
+		snap, err := s.MaybeCheckpoint(ctx, "run-1", 2, ToolResult{Command: "go build ./...", ExitCode: 0})
+		if err != nil || snap == nil {
+			t.Fatalf("second: snap=%v err=%v", snap, err)
 		}
 		if len(store.inserted) != 2 {
 			t.Errorf("got %d rows, want 2", len(store.inserted))
@@ -224,15 +173,15 @@ func TestSnapshotManifestDeterminism(t *testing.T) {
 		"internal/foo.go": "package internal",
 		"internal/bar.go": "package internal",
 	})
-	c := New(work, newTestBlobs(t), &fakeStore{}, "run-1", nil)
+	s := NewSnapshotter(work, newTestBlobs(t), &fakeStore{}, nil)
 
-	a, err := c.Snapshot(ctx, "go build ./...")
+	a, err := s.Capture(ctx, "run-1", 1, "go build ./...")
 	if err != nil {
-		t.Fatalf("snapshot a: %v", err)
+		t.Fatalf("capture a: %v", err)
 	}
-	b, err := c.Snapshot(ctx, "go build ./...")
+	b, err := s.Capture(ctx, "run-1", 1, "go build ./...")
 	if err != nil {
-		t.Fatalf("snapshot b: %v", err)
+		t.Fatalf("capture b: %v", err)
 	}
 	if a.ManifestHash == "" {
 		t.Fatal("empty manifest hash")
@@ -250,15 +199,15 @@ func TestRestoreByteIdentical(t *testing.T) {
 		"docs/readme.txt": "hello\nworld\n",
 	}
 	work := writeWorktree(t, original)
-	c := New(work, newTestBlobs(t), &fakeStore{}, "run-1", nil)
+	s := NewSnapshotter(work, newTestBlobs(t), &fakeStore{}, nil)
 
-	cp, err := c.Snapshot(ctx, "go build ./...")
+	snap, err := s.Capture(ctx, "run-1", 1, "go build ./...")
 	if err != nil {
-		t.Fatalf("Snapshot: %v", err)
+		t.Fatalf("Capture: %v", err)
 	}
 
 	dest := t.TempDir()
-	if err := c.Restore(ctx, cp, dest); err != nil {
+	if err := s.Restore(ctx, snap, dest); err != nil {
 		t.Fatalf("Restore: %v", err)
 	}
 	for rel, want := range original {
@@ -272,24 +221,59 @@ func TestRestoreByteIdentical(t *testing.T) {
 	}
 }
 
+// TestRestorePreservesMode verifies the executable bit survives a snapshot +
+// restore round-trip. Skipped on Windows, which has no unix permission bits.
+func TestRestorePreservesMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix permission bits not meaningful on Windows")
+	}
+	ctx := context.Background()
+	work := t.TempDir()
+	script := filepath.Join(work, "scripts", "run.sh")
+	if err := os.MkdirAll(filepath.Dir(script), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho hi\n"), 0o755); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	s := NewSnapshotter(work, newTestBlobs(t), &fakeStore{}, nil)
+	snap, err := s.Capture(ctx, "run-1", 1, "go build ./...")
+	if err != nil {
+		t.Fatalf("Capture: %v", err)
+	}
+
+	dest := t.TempDir()
+	if err := s.Restore(ctx, snap, dest); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	info, err := os.Stat(filepath.Join(dest, "scripts", "run.sh"))
+	if err != nil {
+		t.Fatalf("stat restored: %v", err)
+	}
+	if info.Mode().Perm()&0o111 == 0 {
+		t.Errorf("restored script lost its executable bit: mode %v", info.Mode().Perm())
+	}
+}
+
 func TestRestoreForReview(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("produces partial and checkpoint trees", func(t *testing.T) {
 		work := writeWorktree(t, map[string]string{"main.go": "v1"})
 		store := &fakeStore{}
-		c := New(work, newTestBlobs(t), store, "run-1", nil)
+		s := NewSnapshotter(work, newTestBlobs(t), store, nil)
 
-		if _, err := c.Snapshot(ctx, "go build ./..."); err != nil {
-			t.Fatalf("Snapshot: %v", err)
+		if _, err := s.Capture(ctx, "run-1", 1, "go build ./..."); err != nil {
+			t.Fatalf("Capture: %v", err)
 		}
-		// Simulate post-checkpoint in-flight work that the coder died mid-edit.
+		// Simulate post-snapshot in-flight work that the coder died mid-edit.
 		if err := os.WriteFile(filepath.Join(work, "main.go"), []byte("v2-broken"), 0o644); err != nil {
 			t.Fatalf("edit: %v", err)
 		}
 
 		base := t.TempDir()
-		partial, checkpoint, err := c.RestoreForReview(ctx, base)
+		partial, checkpoint, err := s.RestoreForReview(ctx, "run-1", base)
 		if err != nil {
 			t.Fatalf("RestoreForReview: %v", err)
 		}
@@ -303,17 +287,17 @@ func TestRestoreForReview(t *testing.T) {
 		}
 	})
 
-	t.Run("returns ErrNoCheckpoint when none exist", func(t *testing.T) {
+	t.Run("returns ErrNoSnapshot when none exist", func(t *testing.T) {
 		work := writeWorktree(t, map[string]string{"main.go": "v1"})
-		c := New(work, newTestBlobs(t), &fakeStore{}, "run-1", nil)
-		if _, _, err := c.RestoreForReview(ctx, t.TempDir()); err != ErrNoCheckpoint {
-			t.Fatalf("err = %v, want ErrNoCheckpoint", err)
+		s := NewSnapshotter(work, newTestBlobs(t), &fakeStore{}, nil)
+		if _, _, err := s.RestoreForReview(ctx, "run-1", t.TempDir()); err != ErrNoSnapshot {
+			t.Fatalf("err = %v, want ErrNoSnapshot", err)
 		}
 	})
 }
 
 func TestIsTrigger(t *testing.T) {
-	c := New(t.TempDir(), nil, &fakeStore{}, "run-1", []string{"go build ./...", "make test"})
+	s := NewSnapshotter(t.TempDir(), nil, &fakeStore{}, []string{"go build ./...", "make test"})
 	cases := []struct {
 		cmd  string
 		want bool
@@ -322,20 +306,20 @@ func TestIsTrigger(t *testing.T) {
 		{"go  build   ./...", true},    // whitespace-normalized
 		{"go build ./... -race", true}, // trailing args
 		{"make test", true},
-		{"go vet ./...", false}, // not in this star's triggers
+		{"go vet ./...", false}, // not in this snapshotter's triggers
 		{"go buildxyz", false},  // not a prefix-with-space match
 		{"", false},
 	}
 	for _, tc := range cases {
-		if got := c.isTrigger(tc.cmd); got != tc.want {
+		if got := s.isTrigger(tc.cmd); got != tc.want {
 			t.Errorf("isTrigger(%q) = %v, want %v", tc.cmd, got, tc.want)
 		}
 	}
 }
 
 func TestDefaultTriggersUsedWhenEmpty(t *testing.T) {
-	c := New(t.TempDir(), nil, &fakeStore{}, "run-1", nil)
-	if !c.isTrigger("go test -short ./...") {
+	s := NewSnapshotter(t.TempDir(), nil, &fakeStore{}, nil)
+	if !s.isTrigger("go test -short ./...") {
 		t.Error("expected default Go triggers to be active when none provided")
 	}
 	// DefaultTriggers returns a fresh slice each call (no shared mutable state).
@@ -343,6 +327,57 @@ func TestDefaultTriggersUsedWhenEmpty(t *testing.T) {
 	a[0] = "mutated"
 	if DefaultTriggers()[0] == "mutated" {
 		t.Error("DefaultTriggers leaks shared state")
+	}
+}
+
+// TestFabricStoreEndToEnd exercises the production NewFabricStore adapter against
+// a real SQLite-backed fabric: a snapshot persists through the checkpoints /
+// checkpoint_files tables and round-trips via Latest, then restores byte-exact.
+func TestFabricStoreEndToEnd(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	fab, err := fabric.NewSQLiteFabric(ctx, filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFabric: %v", err)
+	}
+	t.Cleanup(func() { _ = fab.Close() })
+
+	blobs, err := blobstore.New(filepath.Join(dir, "blobs"), fab.DB())
+	if err != nil {
+		t.Fatalf("blobstore.New: %v", err)
+	}
+	store := NewFabricStore(fabric.NewCheckpointStore(fab.DB()))
+
+	work := writeWorktree(t, map[string]string{"a.go": "package a", "b.go": "package b"})
+	s := NewSnapshotter(work, blobs, store, nil)
+
+	snap, err := s.Capture(ctx, "run-e2e", 3, "go test -short ./...")
+	if err != nil {
+		t.Fatalf("Capture: %v", err)
+	}
+	if snap.Cycle != 3 {
+		t.Errorf("cycle = %d, want 3", snap.Cycle)
+	}
+
+	// Latest (through the adapter) returns the persisted snapshot with files.
+	got, err := store.Latest(ctx, "run-e2e")
+	if err != nil {
+		t.Fatalf("Latest: %v", err)
+	}
+	if got.ManifestHash != snap.ManifestHash || len(got.Files) != 2 {
+		t.Fatalf("round-trip mismatch: %+v", got)
+	}
+
+	dest := t.TempDir()
+	if err := s.Restore(ctx, got, dest); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	restored, err := os.ReadFile(filepath.Join(dest, "a.go"))
+	if err != nil {
+		t.Fatalf("read restored: %v", err)
+	}
+	if string(restored) != "package a" {
+		t.Errorf("restored a.go = %q, want %q", restored, "package a")
 	}
 }
 

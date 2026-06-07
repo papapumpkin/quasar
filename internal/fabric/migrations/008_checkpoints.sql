@@ -13,12 +13,13 @@
 -- while still referenced — silent data loss. The child table makes every file
 -- blob a first-class column reference.
 --
--- Both tables cascade from constellation_runs: when a run is hard-deleted by the
--- GC its checkpoint rows go with it, dropping the manifest and file blob
--- references so the next blob sweep reclaims the now-unreferenced blobs. (FK
--- enforcement requires PRAGMA foreign_keys=ON, which the fabric does not enable
--- globally; the GC performs the cascade explicitly. The declaration documents
--- the ownership and is honored the moment enforcement is turned on.)
+-- Reclamation: the fabric runs with PRAGMA foreign_keys OFF, so the declared
+-- ON DELETE CASCADE does NOT fire automatically. The GC's sweepRuns therefore
+-- deletes checkpoint_files and checkpoints explicitly when it reaps a run (see
+-- internal/gc/categories.go); once those rows are gone the manifest and file
+-- blob references disappear and the next blob sweep reclaims the now-
+-- unreferenced blobs. The FK declarations document ownership and would make the
+-- cascade automatic the moment enforcement is turned on.
 --
 -- All creates are IF NOT EXISTS so a later migration can co-exist idempotently;
 -- the schema_migrations ledger runs this file exactly once regardless.
@@ -37,7 +38,8 @@ CREATE INDEX IF NOT EXISTS checkpoints_run ON checkpoints (run_id, cycle);
 CREATE TABLE IF NOT EXISTS checkpoint_files (
   checkpoint_id  INTEGER NOT NULL REFERENCES checkpoints(id) ON DELETE CASCADE,
   path           TEXT NOT NULL,
-  file_blob_hash TEXT NOT NULL                  -- blob hash of this file's exact bytes
+  file_blob_hash TEXT NOT NULL,                  -- blob hash of this file's exact bytes
+  mode           INTEGER NOT NULL DEFAULT 420    -- unix permission bits (420 = 0o644)
 );
 
 CREATE INDEX IF NOT EXISTS checkpoint_files_cp ON checkpoint_files (checkpoint_id);

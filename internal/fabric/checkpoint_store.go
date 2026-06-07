@@ -24,11 +24,13 @@ func NewCheckpointStore(db *sql.DB) *CheckpointStore {
 	return &CheckpointStore{db: db}
 }
 
-// CheckpointFile is one file captured in a checkpoint: its repo-relative path
-// and the blob hash of its exact bytes.
+// CheckpointFile is one file captured in a checkpoint: its repo-relative path,
+// the blob hash of its exact bytes, and its unix permission bits so a restore
+// reproduces the executable bit.
 type CheckpointFile struct {
 	Path     string
 	BlobHash string
+	Mode     uint32
 }
 
 // CheckpointRow is the typed projection of a checkpoints row plus its files.
@@ -76,10 +78,10 @@ func (s *CheckpointStore) Insert(ctx context.Context, cp CheckpointRow) (int64, 
 	}
 
 	const insFile = `
-		INSERT INTO checkpoint_files (checkpoint_id, path, file_blob_hash)
-		VALUES (?, ?, ?)`
+		INSERT INTO checkpoint_files (checkpoint_id, path, file_blob_hash, mode)
+		VALUES (?, ?, ?, ?)`
 	for _, f := range cp.Files {
-		if _, err := tx.ExecContext(ctx, insFile, id, f.Path, f.BlobHash); err != nil {
+		if _, err := tx.ExecContext(ctx, insFile, id, f.Path, f.BlobHash, f.Mode); err != nil {
 			return 0, fmt.Errorf("fabric: insert checkpoint file %q: %w", f.Path, err)
 		}
 	}
@@ -144,7 +146,7 @@ func (s *CheckpointStore) ListForRun(ctx context.Context, runID string) ([]Check
 // restores are deterministic.
 func (s *CheckpointStore) filesFor(ctx context.Context, checkpointID int64) ([]CheckpointFile, error) {
 	const q = `
-		SELECT path, file_blob_hash FROM checkpoint_files
+		SELECT path, file_blob_hash, mode FROM checkpoint_files
 		WHERE checkpoint_id = ? ORDER BY path ASC`
 	rows, err := s.db.QueryContext(ctx, q, checkpointID)
 	if err != nil {
@@ -155,7 +157,7 @@ func (s *CheckpointStore) filesFor(ctx context.Context, checkpointID int64) ([]C
 	var out []CheckpointFile
 	for rows.Next() {
 		var f CheckpointFile
-		if err := rows.Scan(&f.Path, &f.BlobHash); err != nil {
+		if err := rows.Scan(&f.Path, &f.BlobHash, &f.Mode); err != nil {
 			return nil, fmt.Errorf("fabric: scan checkpoint file: %w", err)
 		}
 		out = append(out, f)

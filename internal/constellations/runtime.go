@@ -65,6 +65,23 @@ type Runtime struct {
 	budget           *Budget
 	defaultBudgetUSD float64
 	cacheMetrics     *telemetry.CacheMetricStore // Optional; nil disables cache-token recording.
+	checkpointer     Checkpointer                // Optional; nil disables in-cycle worktree checkpoints.
+}
+
+// Checkpointer snapshots a run's worktree on green-build signals and restores the
+// latest known-good snapshot when a coder dies mid-cycle, so the reviewer can
+// fall back to a recoverable state instead of judging broken in-flight work. The
+// runtime calls it; the concrete blob-backed implementation
+// (checkpoint.RuntimeCheckpointer) is injected from the cmd layer. The interface
+// is defined here, where it is consumed, so dispatchStar never imports the
+// blob/fabric machinery directly (preserving the dependency layering).
+type Checkpointer interface {
+	// Checkpoint captures the worktree for runID at the given cycle, labeled by
+	// trigger. Implementations dedup an unchanged tree.
+	Checkpoint(ctx context.Context, runID string, cycle int, trigger string) error
+	// RestoreForReview materializes, under baseDir, partial/ (the live worktree)
+	// and checkpoint/ (the latest snapshot) for runID, returning their paths.
+	RestoreForReview(ctx context.Context, runID, baseDir string) (partialDir, checkpointDir string, err error)
 }
 
 // RuntimeOpts configures New. RunStore, NebStore, and Loader are required;
@@ -86,6 +103,10 @@ type RuntimeOpts struct {
 	// CacheMetrics, when non-nil, persists per-star prompt-cache token counts to
 	// the JSONL log for `quasar cache report`. Nil disables recording.
 	CacheMetrics *telemetry.CacheMetricStore
+	// Checkpointer, when non-nil, snapshots the worktree after each successful
+	// coder dispatch and restores the latest snapshot on a dead-coder
+	// termination. Nil disables in-cycle checkpointing.
+	Checkpointer Checkpointer
 }
 
 // New constructs a Runtime. It panics on a nil required dependency, surfacing a
@@ -105,6 +126,7 @@ func New(opts RuntimeOpts) *Runtime {
 		budget:           NewBudget(opts.RunStore),
 		defaultBudgetUSD: opts.DefaultBudgetUSD,
 		cacheMetrics:     opts.CacheMetrics,
+		checkpointer:     opts.Checkpointer,
 	}
 }
 

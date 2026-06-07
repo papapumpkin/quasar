@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/papapumpkin/quasar/internal/blobstore"
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
@@ -273,6 +274,59 @@ func TestSweepRuns(t *testing.T) {
 		}
 		if count(t, db, "SELECT COUNT(*) FROM star_invocations WHERE run_id = 'run-old'") != 0 {
 			t.Error("invocations not cascaded")
+		}
+	})
+
+	t.Run("cascades checkpoints and frees their blobs", func(t *testing.T) {
+		db := newGCDB(t)
+		blobs, err := blobstore.New(filepath.Join(t.TempDir(), "blobs"), db)
+		if err != nil {
+			t.Fatalf("blobstore.New: %v", err)
+		}
+		insertNebula(t, db, "n1", "completed", 0)
+		insertRun(t, db, "run-cp", "n1", "done", "/repo-a", old)
+
+		// Persist a real checkpoint: two file blobs + a manifest blob, referenced
+		// from the checkpoints / checkpoint_files rows.
+		fooHash, _ := blobs.Put(ctx, []byte("package foo"))
+		barHash, _ := blobs.Put(ctx, []byte("package bar"))
+		manHash, _ := blobs.Put(ctx, []byte(`{"foo.go":{"h":"x"},"bar.go":{"h":"y"}}`))
+		cpStore := fabric.NewCheckpointStore(db)
+		if _, err := cpStore.Insert(ctx, fabric.CheckpointRow{
+			RunID: "run-cp", Cycle: 1, Trigger: "go build ./...", ManifestHash: manHash,
+			Files: []fabric.CheckpointFile{
+				{Path: "foo.go", BlobHash: fooHash, Mode: 0o644},
+				{Path: "bar.go", BlobHash: barHash, Mode: 0o644},
+			},
+		}); err != nil {
+			t.Fatalf("insert checkpoint: %v", err)
+		}
+
+		markRunDeleted(t, db, "run-cp", baseTime.Add(-2*grace).Unix())
+		res := sweepRuns(ctx, db, nil, baseTime, ttl, grace, false)
+		if res.Err != nil {
+			t.Fatalf("sweepRuns: %v", res.Err)
+		}
+		// One run swept; CascadedChildren counts the single checkpoint row.
+		if res.Swept != 1 || res.CascadedChildren != 1 {
+			t.Errorf("swept=%d cascaded=%d, want 1 and 1", res.Swept, res.CascadedChildren)
+		}
+		if count(t, db, "SELECT COUNT(*) FROM checkpoints WHERE run_id = 'run-cp'") != 0 {
+			t.Error("checkpoints not cascaded")
+		}
+		if count(t, db, "SELECT COUNT(*) FROM checkpoint_files") != 0 {
+			t.Error("checkpoint_files not cascaded")
+		}
+
+		// With the referencing rows gone, the blob sweep reclaims all three blobs.
+		// Blobs are stamped with real wall-clock time on Put, so the sweep's "now"
+		// must be real time (not baseTime) for the min-age check to pass.
+		rep, err := blobs.Sweep(ctx, 0, time.Now().Add(time.Hour), false)
+		if err != nil {
+			t.Fatalf("blob Sweep: %v", err)
+		}
+		if len(rep.Swept) != 3 {
+			t.Errorf("blob sweep reclaimed %d blobs, want 3 (manifest + 2 files)", len(rep.Swept))
 		}
 	})
 }
