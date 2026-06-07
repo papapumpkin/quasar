@@ -17,15 +17,15 @@ updated_at = 2026-06-07T09:49:04.337081-04:00
 
 [phases.entanglement-revival]
 bead_id = 'entanglement-revival'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-06-06T21:11:50.108373-04:00
-updated_at = 2026-06-07T10:15:01.264887-04:00
+updated_at = 2026-06-07T10:25:11.777683-04:00
 
 [phases.in-cycle-checkpointing]
 bead_id = 'in-cycle-checkpointing'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-06T21:11:50.108118-04:00
-updated_at = 2026-06-07T08:37:45.288156-04:00
+updated_at = 2026-06-07T10:25:13.752146-04:00
 
 [phases.model-routing]
 bead_id = 'model-routing'
