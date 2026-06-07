@@ -34,6 +34,11 @@ const (
 	// EventResumed is emitted when the loop resumes from a checkpoint,
 	// before re-entering the coder-reviewer cycle.
 	EventResumed
+	// EventCoderTerminatedHealth is emitted when a coder invocation is killed
+	// by the dead-coder healthcheck (stalled or thrashing). The cycle is marked
+	// terminated_health — distinct from a normal failure — so partial work can
+	// be handed to the reviewer rather than discarded.
+	EventCoderTerminatedHealth
 )
 
 // Event represents a lifecycle event in the coder-reviewer loop.

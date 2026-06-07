@@ -1,6 +1,11 @@
 package claude
 
-import "fmt"
+import (
+	"fmt"
+	"unicode/utf8"
+
+	"github.com/papapumpkin/quasar/internal/agent"
+)
 
 // defaultMaxResultBytes is the default per-result truncation cap for tool
 // output reaching a coder. 16 KB keeps almost every real file read intact
@@ -41,6 +46,16 @@ func DefaultTruncationPolicy() TruncationPolicy {
 	}
 }
 
+// truncationPolicyFor derives the result-truncation policy from an agent's
+// effective context budget. The byte cap is the budget's ToolResultMaxBytes
+// (per-role default when the agent supplies no explicit budget); a non-positive
+// cap disables truncation in TruncateResult.
+func truncationPolicyFor(a agent.Agent) TruncationPolicy {
+	p := DefaultTruncationPolicy()
+	p.MaxBytesPerResult = a.EffectiveContextBudget().ToolResultMaxBytes
+	return p
+}
+
 // TruncateResult caps result to p.MaxBytesPerResult bytes. It returns the
 // possibly-shortened string and whether truncation occurred. The returned
 // string is always <= MaxBytesPerResult: the marker length is reserved before
@@ -49,6 +64,10 @@ func DefaultTruncationPolicy() TruncationPolicy {
 // When both KeepHead and KeepTail are set (the default), the surviving budget
 // is split evenly between the two ends. When only one is set, that end keeps
 // the entire budget. If neither is set, only the marker is returned.
+//
+// Head/tail cut points are snapped to UTF-8 rune boundaries so a truncated
+// result never contains a partial multi-byte rune. Snapping only ever shrinks
+// a slice, so the <= MaxBytesPerResult guarantee is preserved.
 func TruncateResult(result string, p TruncationPolicy) (string, bool) {
 	total := len(result)
 	if p.MaxBytesPerResult <= 0 || total <= p.MaxBytesPerResult {
@@ -64,17 +83,58 @@ func TruncateResult(result string, p TruncationPolicy) (string, bool) {
 	// marker can only be shorter than reserved — never longer.
 	reserved := len(fmt.Sprintf(marker, total, total))
 
-	avail := p.MaxBytesPerResult - reserved
-	if avail < 0 {
-		avail = 0
+	// Pathologically small cap: the marker alone does not fit. Returning the
+	// full marker would exceed the cap, so hard-clamp it (on a rune boundary)
+	// to honor the <= MaxBytesPerResult contract.
+	if reserved >= p.MaxBytesPerResult {
+		final := fmt.Sprintf(marker, total, total)
+		return final[:headBoundary(final, p.MaxBytesPerResult)], true
 	}
 
+	avail := p.MaxBytesPerResult - reserved
 	headLen, tailLen := splitBudget(avail, p.KeepHead, p.KeepTail)
-	head := result[:headLen]
-	tail := result[total-tailLen:]
 
-	dropped := total - headLen - tailLen
+	headEnd := headBoundary(result, headLen)
+	tailStart := tailBoundary(result, total-tailLen)
+	if tailStart < headEnd {
+		tailStart = headEnd // guard against head/tail overlap on tiny inputs
+	}
+	head := result[:headEnd]
+	tail := result[tailStart:]
+
+	dropped := total - len(head) - len(tail)
 	return head + fmt.Sprintf(marker, dropped, total) + tail, true
+}
+
+// headBoundary returns the largest index <= n that lies on a UTF-8 rune
+// boundary, so s[:headBoundary(s, n)] never ends mid-rune. Indices beyond
+// len(s) clamp to len(s).
+func headBoundary(s string, n int) int {
+	if n >= len(s) {
+		return len(s)
+	}
+	if n < 0 {
+		return 0
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return n
+}
+
+// tailBoundary returns the smallest index >= start that lies on a UTF-8 rune
+// boundary, so s[tailBoundary(s, start):] never begins mid-rune.
+func tailBoundary(s string, start int) int {
+	if start <= 0 {
+		return 0
+	}
+	if start >= len(s) {
+		return len(s)
+	}
+	for start < len(s) && !utf8.RuneStart(s[start]) {
+		start++
+	}
+	return start
 }
 
 // splitBudget divides avail bytes between the head and tail according to which

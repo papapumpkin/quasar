@@ -76,10 +76,17 @@ func (l *Loader) LoadStar(name string) (*Star, error) {
 			MaxTotalReads:        sf.ContextBudget.MaxTotalReads,
 			ToolResultMaxBytes:   sf.ContextBudget.ToolResultMaxBytes,
 			IncludeSiblingPhases: sf.ContextBudget.IncludeSiblingPhases,
+			EnableToolHook:       sf.ContextBudget.EnableToolHook,
 		},
 		Prompt:     strings.TrimSpace(body),
 		SourcePath: src,
 	}
+
+	health, err := parseStarHealth(sf, src)
+	if err != nil {
+		return nil, err
+	}
+	star.Health = health
 
 	if err := l.resolveSkills(star); err != nil {
 		return nil, err
@@ -347,42 +354,21 @@ type starFrontmatter struct {
 		MaxTotalReads        int  `toml:"max_total_reads"`
 		ToolResultMaxBytes   int  `toml:"tool_result_max_bytes"`
 		IncludeSiblingPhases bool `toml:"include_sibling_phases"`
+		EnableToolHook       bool `toml:"enable_tool_hook"`
 	} `toml:"context_budget"`
+	// Health overrides healthcheck thresholds; durations are strings, parsed in load.
+	Health struct {
+		WallClockCap         string  `toml:"wall_clock_cap"`
+		FileWriteIdleCap     string  `toml:"file_write_idle_cap"`
+		TokenRateFloor       float64 `toml:"token_rate_floor"`
+		TokenRateWindow      string  `toml:"token_rate_window"`
+		ToolCallRatioCeiling float64 `toml:"tool_call_ratio_ceiling"`
+		ToolCallWindow       int     `toml:"tool_call_window"`
+		CPUIdleCap           string  `toml:"cpu_idle_cap"`
+	} `toml:"health"`
 }
 
 type skillFrontmatter struct {
 	Name     string   `toml:"name"`
 	ToolsAdd []string `toml:"tools_add"`
-}
-
-type constellationFile struct {
-	Name        string         `toml:"name"`
-	Description string         `toml:"description"`
-	Meta        map[string]any `toml:"meta"`
-	Nodes       []struct {
-		ID     string            `toml:"id"`
-		Type   string            `toml:"type"`
-		Star   string            `toml:"star"`
-		Ref    string            `toml:"ref"`
-		Op     string            `toml:"op"`
-		Inputs map[string]string `toml:"inputs"`
-	} `toml:"nodes"`
-	Edges []struct {
-		From string `toml:"from"`
-		To   string `toml:"to"`
-		When string `toml:"when"`
-	} `toml:"edges"`
-	Outputs map[string]string `toml:"outputs"`
-}
-
-type sensorFile struct {
-	Name         string         `toml:"name"`
-	Type         string         `toml:"type"`
-	PollInterval string         `toml:"poll_interval"`
-	MaxInflight  int            `toml:"max_inflight"`
-	Config       map[string]any `toml:"config"`
-	Triggers     []struct {
-		Constellation string `toml:"constellation"`
-		When          string `toml:"when"`
-	} `toml:"triggers"`
 }

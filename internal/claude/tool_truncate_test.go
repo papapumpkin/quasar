@@ -3,6 +3,7 @@ package claude
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestTruncateResult(t *testing.T) {
@@ -99,6 +100,39 @@ func TestTruncateResult(t *testing.T) {
 		got, truncated := TruncateResult("", DefaultTruncationPolicy())
 		if truncated || got != "" {
 			t.Error("expected empty input unchanged")
+		}
+	})
+
+	t.Run("cap smaller than marker still honors byte cap", func(t *testing.T) {
+		t.Parallel()
+		// A cap below the rendered marker length must never produce output
+		// larger than the cap — the marker itself is clamped.
+		p := TruncationPolicy{MaxBytesPerResult: 8, KeepHead: true, KeepTail: true, Marker: defaultMarker}
+		in := strings.Repeat("q", 1024)
+		got, truncated := TruncateResult(in, p)
+		if !truncated {
+			t.Fatal("expected truncation")
+		}
+		if len(got) > p.MaxBytesPerResult {
+			t.Errorf("output %d bytes exceeds tiny cap %d", len(got), p.MaxBytesPerResult)
+		}
+	})
+
+	t.Run("does not split multibyte runes at cut points", func(t *testing.T) {
+		t.Parallel()
+		// All multi-byte runes: any byte-boundary cut would split a rune and
+		// emit invalid UTF-8. The output must remain valid UTF-8.
+		in := strings.Repeat("世", 8*1024) // 3 bytes each = 24 KB
+		p := DefaultTruncationPolicy()    // 16 KB
+		got, truncated := TruncateResult(in, p)
+		if !truncated {
+			t.Fatal("expected truncation for 24KB input under 16KB cap")
+		}
+		if len(got) > p.MaxBytesPerResult {
+			t.Errorf("output %d exceeds cap %d", len(got), p.MaxBytesPerResult)
+		}
+		if !utf8.ValidString(got) {
+			t.Error("expected truncated output to remain valid UTF-8 (no split runes)")
 		}
 	})
 }

@@ -54,6 +54,10 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 		// A star's prompt is a fixed prefix reused across every firing of the
 		// same node, so a byte-stable system prompt is always desirable here.
 		CacheOptimization: true,
+		// Honor the star's [context_budget] block: the invoker uses it to cap
+		// the result and (when enabled) enforce per-tool budgets, so changing
+		// tool_result_max_bytes in a star file has a real runtime effect.
+		ContextBudget: contextBudget(star.ContextBudget, agent.RoleCoder),
 	}, userPrompt(args, st), r.repoPath)
 	if err != nil {
 		r.recordInvocation(ctx, run, node, star.Name, "failed", 0, started)
@@ -75,6 +79,29 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 		"cost_usd":   res.CostUSD,
 		"session_id": res.SessionID,
 	}, nil
+}
+
+// contextBudget converts a star's parsed [context_budget] block into the
+// agent budget the invoker consumes. A zero value in the star config means
+// "unset", so each unset numeric field falls back to the per-role default
+// (BudgetForRole). Boolean fields are taken verbatim from the star config.
+func contextBudget(sb artifacts.StarContextBudget, role agent.Role) *agent.ContextBudget {
+	b := agent.BudgetForRole(role)
+	if sb.MaxReadsBeforeEdit > 0 {
+		b.MaxReadsBeforeEdit = sb.MaxReadsBeforeEdit
+	}
+	if sb.MaxGrepsBeforeEdit > 0 {
+		b.MaxGrepsBeforeEdit = sb.MaxGrepsBeforeEdit
+	}
+	if sb.MaxTotalReads > 0 {
+		b.MaxTotalReads = sb.MaxTotalReads
+	}
+	if sb.ToolResultMaxBytes > 0 {
+		b.ToolResultMaxBytes = sb.ToolResultMaxBytes
+	}
+	b.IncludeSiblingPhases = sb.IncludeSiblingPhases
+	b.EnableToolHook = sb.EnableToolHook
+	return &b
 }
 
 // recordCacheMetric persists a star invocation's prompt-cache token counts to

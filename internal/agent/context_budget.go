@@ -31,6 +31,12 @@ type ContextBudget struct {
 	// coder/reviewer default) only the current phase's spec is injected; when
 	// true (architect) every phase is included.
 	IncludeSiblingPhases bool `toml:"include_sibling_phases"`
+	// EnableToolHook, when true, instructs the invoker to install a Claude CLI
+	// PreToolUse hook that enforces the soft/hard Read/Grep caps on the live
+	// subprocess tool stream. It defaults to false because the hook depends on
+	// the Claude CLI's hook contract, which the conservative default avoids
+	// relying on. The soft/hard caps above still apply once it is enabled.
+	EnableToolHook bool `toml:"enable_tool_hook"`
 }
 
 // RoleNeedsFullNebula reports whether a role must see every phase spec rather

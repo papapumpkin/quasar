@@ -34,6 +34,20 @@ type Agent struct {
 	// --exclude-dynamic-system-prompt-sections so the system-prompt prefix stays
 	// byte-stable across invocations and remains eligible for prompt caching.
 	CacheOptimization bool
+	// ContextBudget bounds how much context this invocation consumes. When nil,
+	// the invoker falls back to BudgetForRole(Role). It drives tool-result
+	// truncation (ToolResultMaxBytes) and, when EnableToolHook is set, per-tool
+	// budget enforcement via a Claude CLI PreToolUse hook.
+	ContextBudget *ContextBudget
+}
+
+// EffectiveContextBudget returns a.ContextBudget when set, otherwise the
+// per-role default from BudgetForRole. Callers always receive a usable budget.
+func (a Agent) EffectiveContextBudget() ContextBudget {
+	if a.ContextBudget != nil {
+		return *a.ContextBudget
+	}
+	return BudgetForRole(a.Role)
 }
 
 // InvocationResult holds the output and cost metrics from a single agent invocation.

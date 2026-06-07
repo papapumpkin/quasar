@@ -2,11 +2,13 @@ package loop
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/papapumpkin/quasar/internal/agent"
+	"github.com/papapumpkin/quasar/internal/claude"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/filter"
 	"github.com/papapumpkin/quasar/internal/telemetry"
@@ -917,8 +919,12 @@ func (l *Loop) coderAgent(budget float64) agent.Agent {
 		MCP:               l.MCP,
 		FallbackModel:     l.FallbackModel,
 		CacheOptimization: l.CacheOptimization,
+		ContextBudget:     budgetPtr(agent.BudgetForRole(agent.RoleCoder)),
 	}
 }
+
+// budgetPtr returns a heap pointer to b so it can populate Agent.ContextBudget.
+func budgetPtr(b agent.ContextBudget) *agent.ContextBudget { return &b }
 
 // reviewerAgent builds the agent configuration for the reviewer role.
 // It uses the pre-computed system prompt cached at phase start by
@@ -945,6 +951,7 @@ func (l *Loop) reviewerAgent(budget float64) agent.Agent {
 		MCP:               l.MCP,
 		FallbackModel:     l.FallbackModel,
 		CacheOptimization: l.CacheOptimization,
+		ContextBudget:     budgetPtr(agent.BudgetForRole(agent.RoleReviewer)),
 	}
 }
 
@@ -966,6 +973,21 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 
 	result, err := l.Invoker.Invoke(ctx, coder, prompt, l.WorkDir)
 	if err != nil {
+		// A healthcheck termination is not an ordinary failure: the partial
+		// work persists in the worktree and is worth a reviewer's judgement, so
+		// mark the cycle terminated_health and surface a distinct sentinel.
+		var dead *claude.DeadCoderError
+		if errors.As(err, &dead) {
+			state.Phase = PhaseError
+			l.emit(ctx, Event{
+				Kind:    EventCoderTerminatedHealth,
+				TaskID:  state.TaskID,
+				Cycle:   state.Cycle,
+				Agent:   "coder",
+				Message: fmt.Sprintf("terminated_health: %s (partial work at %s)", dead.Reason, dead.PartialWorkdir),
+			})
+			return fmt.Errorf("%w: %v", ErrCoderTerminatedHealth, dead)
+		}
 		state.Phase = PhaseError
 		return fmt.Errorf("coder invocation failed: %w", err)
 	}

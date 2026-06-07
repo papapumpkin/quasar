@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/papapumpkin/quasar/internal/repos"
 )
@@ -116,6 +117,45 @@ func TestLoadStar(t *testing.T) {
 
 		if _, err := l.LoadStar("bad"); err == nil {
 			t.Fatal("expected error for unknown skill")
+		}
+	})
+
+	t.Run("health frontmatter is parsed", func(t *testing.T) {
+		t.Parallel()
+		l, repo := newTestLoader(t)
+		writeFile(t, repo, "stars/coder.md",
+			"+++\nname = \"coder\"\n[health]\nwall_clock_cap = \"30m\"\nfile_write_idle_cap = \"3m\"\n"+
+				"token_rate_floor = 8\ncpu_idle_cap = \"45s\"\ntool_call_window = 15\n+++\n\nBody.\n")
+
+		star, err := l.LoadStar("coder")
+		if err != nil {
+			t.Fatalf("LoadStar: %v", err)
+		}
+		if star.Health.WallClockCap != 30*time.Minute {
+			t.Errorf("WallClockCap = %v, want 30m", star.Health.WallClockCap)
+		}
+		if star.Health.FileWriteIdleCap != 3*time.Minute {
+			t.Errorf("FileWriteIdleCap = %v, want 3m", star.Health.FileWriteIdleCap)
+		}
+		if star.Health.TokenRateFloor != 8 {
+			t.Errorf("TokenRateFloor = %v, want 8", star.Health.TokenRateFloor)
+		}
+		if star.Health.CPUIdleCap != 45*time.Second {
+			t.Errorf("CPUIdleCap = %v, want 45s", star.Health.CPUIdleCap)
+		}
+		if star.Health.ToolCallWindow != 15 {
+			t.Errorf("ToolCallWindow = %d, want 15", star.Health.ToolCallWindow)
+		}
+	})
+
+	t.Run("malformed health duration is an error", func(t *testing.T) {
+		t.Parallel()
+		l, repo := newTestLoader(t)
+		writeFile(t, repo, "stars/coder.md",
+			"+++\nname = \"coder\"\n[health]\nwall_clock_cap = \"not-a-duration\"\n+++\n\nBody.\n")
+
+		if _, err := l.LoadStar("coder"); err == nil {
+			t.Fatal("expected error for malformed [health] duration")
 		}
 	})
 }
