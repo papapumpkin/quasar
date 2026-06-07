@@ -23,25 +23,21 @@ type Invoker struct {
 	execCommandContext func(ctx context.Context, name string, arg ...string) *exec.Cmd
 	execCommand        func(name string, arg ...string) *exec.Cmd
 
-	// Health, when non-nil and Enabled, attaches a multi-signal healthcheck to
-	// every Invoke so a stalled or thrashing coder is terminated rather than
-	// allowed to burn inference silently. A nil/disabled config preserves the
-	// legacy blocking cmd.Run path exactly.
-	Health *HealthConfig
-}
-
-// HealthConfig controls subprocess dead-coder detection for an Invoker.
-type HealthConfig struct {
-	// Enabled turns on healthcheck monitoring.
-	Enabled bool
-	// Policy holds the (possibly per-star-overridden) thresholds. Zero-valued
-	// fields fall back to the conservative defaults.
-	Policy HealthPolicy
-	// Events, when non-nil, receives a JSONL record per state transition.
-	Events *telemetry.HealthEventStore
+	// HealthDefault, when non-nil, is the dead-coder policy applied to any
+	// invocation whose Agent carries no Health override of its own. Setting it
+	// turns on multi-signal monitoring (stalled/thrashing subprocess → killed,
+	// surfaced as *DeadCoderError) for every invocation on this invoker; leaving
+	// it nil preserves the legacy blocking cmd.Run path. Call EnableHealth to
+	// turn it on with the conservative defaults.
+	HealthDefault *agent.HealthPolicy
+	// HealthEvents, when non-nil, is the JSONL sink for health state transitions
+	// (read back by `quasar coder report`). Telemetry only — a write failure
+	// never blocks an invocation.
+	HealthEvents *telemetry.HealthEventStore
 }
 
 // NewInvoker creates an Invoker with sensible defaults for command execution.
+// Dead-coder monitoring is OFF by default; call EnableHealth to turn it on.
 func NewInvoker(claudePath string, verbose bool) *Invoker {
 	return &Invoker{
 		ClaudePath:         claudePath,
@@ -49,6 +45,26 @@ func NewInvoker(claudePath string, verbose bool) *Invoker {
 		execCommandContext: exec.CommandContext,
 		execCommand:        exec.Command,
 	}
+}
+
+// EnableHealth turns on dead-coder monitoring for every invocation on this
+// invoker using the conservative default policy (25-minute wall-clock cap,
+// etc.), logging state transitions to events when non-nil. A per-star [health]
+// block still overrides this default per invocation (see Agent.Health). This is
+// the single switch the cmd layer flips to make the safety mechanism live.
+func (inv *Invoker) EnableHealth(events *telemetry.HealthEventStore) {
+	policy := agent.DefaultHealthPolicy()
+	inv.HealthDefault = &policy
+	inv.HealthEvents = events
+}
+
+// effectiveHealth resolves the policy for an invocation: the Agent's own
+// override wins, else the invoker's default, else nil (monitoring off).
+func (inv *Invoker) effectiveHealth(a agent.Agent) *agent.HealthPolicy {
+	if a.Health != nil {
+		return a.Health
+	}
+	return inv.HealthDefault
 }
 
 // buildEnv constructs the environment for a claude invocation.
@@ -146,7 +162,7 @@ func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, wo
 		fmt.Fprintf(os.Stderr, "[claude] running: %s %s\n", inv.ClaudePath, strings.Join(args, " "))
 	}
 
-	if err := inv.run(ctx, cmd, workDir, &stderr); err != nil {
+	if err := inv.run(ctx, cmd, workDir, &stderr, inv.effectiveHealth(a)); err != nil {
 		return agent.InvocationResult{}, err
 	}
 
@@ -177,6 +193,7 @@ func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, wo
 		UserPromptLen:       len(prompt),
 		SystemPromptHash:    sha256Hex(a.SystemPrompt),
 		InputTokens:         resp.Usage.InputTokens,
+		OutputTokens:        resp.Usage.OutputTokens,
 		CacheCreationTokens: resp.Usage.CacheCreationInputTokens,
 		CacheReadTokens:     resp.Usage.CacheReadInputTokens,
 	}, nil
@@ -196,29 +213,29 @@ func (inv *Invoker) Validate() error {
 	return nil
 }
 
-// run executes cmd, optionally under a dead-coder healthcheck. With no health
-// config it preserves the legacy blocking cmd.Run path. With health enabled it
-// starts the subprocess, monitors it via the multi-signal probe, and returns a
+// run executes cmd, optionally under a dead-coder healthcheck. A nil policy
+// preserves the legacy blocking cmd.Run path. A non-nil policy starts the
+// subprocess, monitors it via the multi-signal probe, and returns a
 // *DeadCoderError if the coder was terminated for stalling or thrashing.
-func (inv *Invoker) run(ctx context.Context, cmd *exec.Cmd, workDir string, stderr *bytes.Buffer) error {
-	if inv.Health == nil || !inv.Health.Enabled {
+func (inv *Invoker) run(ctx context.Context, cmd *exec.Cmd, workDir string, stderr *bytes.Buffer, policy *agent.HealthPolicy) error {
+	if policy == nil {
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("claude invocation failed: %w\nstderr: %s", err, stderr.String())
 		}
 		return nil
 	}
-	return inv.runMonitored(ctx, cmd, workDir, stderr)
+	return inv.runMonitored(ctx, cmd, workDir, stderr, *policy)
 }
 
 // runMonitored runs cmd alongside a Healthcheck. The subprocess is reaped by a
 // dedicated goroutine that closes `exited`; the healthcheck blocks on the same
 // channel, so the termination handshake never double-waits on the process.
-func (inv *Invoker) runMonitored(ctx context.Context, cmd *exec.Cmd, workDir string, stderr *bytes.Buffer) error {
+func (inv *Invoker) runMonitored(ctx context.Context, cmd *exec.Cmd, workDir string, stderr *bytes.Buffer, policy agent.HealthPolicy) error {
 	hc := &Healthcheck{
 		Cmd:          cmd,
 		Workdir:      workDir,
-		Policy:       inv.Health.Policy,
-		Events:       inv.Health.Events,
+		Policy:       policy,
+		Events:       inv.HealthEvents,
 		InvocationID: fmt.Sprintf("inv-%d", time.Now().UnixNano()),
 	}
 	if inv.Verbose {
@@ -227,9 +244,12 @@ func (inv *Invoker) runMonitored(ctx context.Context, cmd *exec.Cmd, workDir str
 		}
 	}
 
-	// Attach the cheap, always-available signals (file-write idle, CPU idle).
-	// The token-rate signal needs stream-json output and is wired by callers
-	// that switch the output format; the probe is left nil here (valid=false).
+	// Attach the live signals: file-write idle and CPU idle. The token-rate and
+	// tool-ratio probes are intentionally left nil (valid=false → ignored) until
+	// their sources are wired — token-rate needs --output-format stream-json
+	// (see the fence in signals.go) and tool-ratio needs an in-process tool
+	// ledger. The active detector is thus {write_idle, cpu_idle, wall_clock},
+	// which already satisfies the headline goal (no 60+ min silent burns).
 	if fw, err := newFileWriteWatcher(workDir, nil); err == nil {
 		defer fw.Close()
 		hc.writeIdleFn = fw.IdleSince

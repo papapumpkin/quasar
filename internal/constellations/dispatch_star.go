@@ -2,12 +2,14 @@ package constellations
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/artifacts"
+	"github.com/papapumpkin/quasar/internal/claude"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/telemetry"
 )
@@ -58,9 +60,21 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 		// the result and (when enabled) enforce per-tool budgets, so changing
 		// tool_result_max_bytes in a star file has a real runtime effect.
 		ContextBudget: contextBudget(star.ContextBudget, agent.RoleCoder),
+		// Honor the star's [health] block: the invoker monitors this invocation
+		// against these thresholds and kills a stalled/thrashing subprocess, so
+		// wall_clock_cap etc. in a star file have a real runtime effect.
+		Health: contextHealth(star.Health),
 	}, userPrompt(args, st), r.repoPath)
 	if err != nil {
-		r.recordInvocation(ctx, run, node, star.Name, "failed", 0, started)
+		// A dead-coder termination is distinct from a generic failure: the
+		// partial work persists in the worktree, so record terminated_health so
+		// downstream can route it for reviewer judgement rather than discard.
+		status := "failed"
+		var dead *claude.DeadCoderError
+		if errors.As(err, &dead) {
+			status = "terminated_health"
+		}
+		r.recordInvocation(ctx, run, node, star.Name, status, 0, started)
 		return nil, fmt.Errorf("constellations: invoke star %q: %w", star.Name, err)
 	}
 
@@ -102,6 +116,24 @@ func contextBudget(sb artifacts.StarContextBudget, role agent.Role) *agent.Conte
 	b.IncludeSiblingPhases = sb.IncludeSiblingPhases
 	b.EnableToolHook = sb.EnableToolHook
 	return &b
+}
+
+// contextHealth converts a star's parsed [health] block into the agent health
+// policy the invoker consumes. A zero field means "unset", filled from the
+// conservative defaults by WithDefaults, so a star that omits [health] (or
+// omits a single field) still gets full monitoring with the 25-minute cap. The
+// returned pointer is always non-nil, so every dispatched star is monitored.
+func contextHealth(sh artifacts.StarHealthPolicy) *agent.HealthPolicy {
+	p := agent.HealthPolicy{
+		WallClockCap:         sh.WallClockCap,
+		FileWriteIdleCap:     sh.FileWriteIdleCap,
+		TokenRateFloor:       sh.TokenRateFloor,
+		TokenRateWindow:      sh.TokenRateWindow,
+		ToolCallRatioCeiling: sh.ToolCallRatioCeiling,
+		ToolCallWindow:       sh.ToolCallWindow,
+		CPUIdleCap:           sh.CPUIdleCap,
+	}.WithDefaults()
+	return &p
 }
 
 // recordCacheMetric persists a star invocation's prompt-cache token counts to

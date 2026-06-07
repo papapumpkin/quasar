@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/telemetry"
 )
 
@@ -49,89 +50,17 @@ const (
 	signalCPUIdle   = "cpu_idle"
 )
 
-// Default healthcheck policy values. Conservative by design: a 25-minute
-// wall-clock cap means a coder doing legitimate work is never killed early,
-// while a stalled one is reclaimed long before the 60–90 minute silent burns
-// this detector exists to prevent.
+// Runtime cadence constants for the healthcheck loop. The policy *thresholds*
+// (wall-clock cap, idle caps, etc.) live in the agent package as
+// agent.HealthPolicy; these two govern how often the probe runs and how long
+// termination waits, which are invoker-internal mechanics, not policy.
 const (
-	DefaultWallClockCap     = 25 * time.Minute
-	DefaultFileWriteIdleCap = 5 * time.Minute
-	DefaultTokenRateFloor   = 5.0
-	DefaultTokenRateWindow  = 60 * time.Second
-	DefaultToolRatioCeiling = 12.0
-	DefaultToolCallWindow   = 20
-	DefaultCPUIdleCap       = 90 * time.Second
-	DefaultTick             = 5 * time.Second
+	// DefaultTick is the probe interval.
+	DefaultTick = 5 * time.Second
 	// terminateGrace is how long we wait after SIGTERM before escalating to
 	// SIGKILL.
 	terminateGrace = 5 * time.Second
 )
-
-// HealthPolicy is the set of thresholds the healthcheck evaluates each tick.
-// The TOML tags allow a star's [health] frontmatter block (or a nebula's
-// [execution] block) to override the defaults.
-type HealthPolicy struct {
-	// WallClockCap is the absolute upper bound on subprocess lifetime.
-	WallClockCap time.Duration `toml:"wall_clock_cap"`
-	// FileWriteIdleCap is the longest stretch without a write under the
-	// workdir (excluding .git, node_modules) before the coder is stalled.
-	FileWriteIdleCap time.Duration `toml:"file_write_idle_cap"`
-	// TokenRateFloor is the minimum stream-token rate (tokens/sec averaged
-	// over TokenRateWindow) below which the coder is "stuck reasoning".
-	TokenRateFloor float64 `toml:"token_rate_floor"`
-	// TokenRateWindow is the averaging window for the token-rate signal.
-	TokenRateWindow time.Duration `toml:"token_rate_window"`
-	// ToolCallRatioCeiling is the max Read:Edit ratio over the last
-	// ToolCallWindow tool calls before the coder is in an "explore loop".
-	ToolCallRatioCeiling float64 `toml:"tool_call_ratio_ceiling"`
-	// ToolCallWindow is how many recent tool calls feed the ratio signal.
-	ToolCallWindow int `toml:"tool_call_window"`
-	// CPUIdleCap is the longest stretch the subprocess can sit below 1% CPU
-	// before it is declared hung.
-	CPUIdleCap time.Duration `toml:"cpu_idle_cap"`
-}
-
-// DefaultHealthPolicy returns the conservative built-in policy.
-func DefaultHealthPolicy() HealthPolicy {
-	return HealthPolicy{
-		WallClockCap:         DefaultWallClockCap,
-		FileWriteIdleCap:     DefaultFileWriteIdleCap,
-		TokenRateFloor:       DefaultTokenRateFloor,
-		TokenRateWindow:      DefaultTokenRateWindow,
-		ToolCallRatioCeiling: DefaultToolRatioCeiling,
-		ToolCallWindow:       DefaultToolCallWindow,
-		CPUIdleCap:           DefaultCPUIdleCap,
-	}
-}
-
-// withDefaults returns p with any zero-valued field filled from the defaults,
-// so a partial override (e.g. only wall_clock_cap set) keeps sane values for
-// the rest.
-func (p HealthPolicy) withDefaults() HealthPolicy {
-	d := DefaultHealthPolicy()
-	if p.WallClockCap <= 0 {
-		p.WallClockCap = d.WallClockCap
-	}
-	if p.FileWriteIdleCap <= 0 {
-		p.FileWriteIdleCap = d.FileWriteIdleCap
-	}
-	if p.TokenRateFloor <= 0 {
-		p.TokenRateFloor = d.TokenRateFloor
-	}
-	if p.TokenRateWindow <= 0 {
-		p.TokenRateWindow = d.TokenRateWindow
-	}
-	if p.ToolCallRatioCeiling <= 0 {
-		p.ToolCallRatioCeiling = d.ToolCallRatioCeiling
-	}
-	if p.ToolCallWindow <= 0 {
-		p.ToolCallWindow = d.ToolCallWindow
-	}
-	if p.CPUIdleCap <= 0 {
-		p.CPUIdleCap = d.CPUIdleCap
-	}
-	return p
-}
 
 // healthSnapshot is the set of instantaneous signal readings evaluated each
 // tick. A signal with valid=false has no data yet (e.g. the token meter before
@@ -153,10 +82,10 @@ type healthSnapshot struct {
 	cpuValid bool
 }
 
-// evaluate is the pure decision function: given a snapshot it returns the
-// classification, a human-readable reason, and the list of red signal names.
+// evaluateHealth is the pure decision function: given a policy and a snapshot it
+// returns the classification, a human-readable reason, and the red signals.
 // Wall-clock is special-cased — it kills regardless of any other signal.
-func (p HealthPolicy) evaluate(s healthSnapshot) (HealthState, string, []float64Signal) {
+func evaluateHealth(p agent.HealthPolicy, s healthSnapshot) (HealthState, string, []float64Signal) {
 	if s.elapsed > p.WallClockCap {
 		return Dead, "wall-clock cap exceeded", []float64Signal{{Name: signalWallClock, Value: s.elapsed.Seconds()}}
 	}
@@ -213,7 +142,7 @@ type Healthcheck struct {
 	// Tick is the probe interval. Zero uses DefaultTick.
 	Tick time.Duration
 
-	Policy        HealthPolicy
+	Policy        agent.HealthPolicy
 	OnStateChange func(s HealthState, reason string)
 
 	// GracePeriod is how long to wait after SIGTERM before escalating to
@@ -274,7 +203,7 @@ func (h *Healthcheck) snapshot(start, now time.Time) healthSnapshot {
 // context is cancelled, or the coder is declared Dead and terminated. It
 // returns a *DeadCoderError only in the last case; otherwise nil.
 func (h *Healthcheck) Run(ctx context.Context, exited <-chan struct{}) error {
-	policy := h.Policy.withDefaults()
+	policy := h.Policy.WithDefaults()
 	tick := h.Tick
 	if tick <= 0 {
 		tick = DefaultTick
@@ -292,7 +221,7 @@ func (h *Healthcheck) Run(ctx context.Context, exited <-chan struct{}) error {
 			return nil
 		case <-ticker.C:
 			now := h.clock()
-			state, reason, reds := policy.evaluate(h.snapshot(start, now))
+			state, reason, reds := evaluateHealth(policy, h.snapshot(start, now))
 
 			h.mu.Lock()
 			changed := state != h.state
@@ -360,10 +289,10 @@ func (h *Healthcheck) terminate(ctx context.Context, exited <-chan struct{}, ela
 	}
 
 	return &DeadCoderError{
-		Reason:         reason,
-		Signals:        names,
-		Elapsed:        elapsed.String(),
-		PartialWorkdir: h.Workdir,
+		Reason:  reason,
+		Signals: names,
+		Elapsed: elapsed.String(),
+		Workdir: h.Workdir,
 	}
 }
 

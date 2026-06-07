@@ -984,7 +984,7 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 				TaskID:  state.TaskID,
 				Cycle:   state.Cycle,
 				Agent:   "coder",
-				Message: fmt.Sprintf("terminated_health: %s (partial work at %s)", dead.Reason, dead.PartialWorkdir),
+				Message: fmt.Sprintf("terminated_health: %s (partial work at %s)", dead.Reason, dead.Workdir),
 			})
 			return fmt.Errorf("%w: %v", ErrCoderTerminatedHealth, dead)
 		}

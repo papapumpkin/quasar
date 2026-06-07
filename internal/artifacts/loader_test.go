@@ -67,6 +67,31 @@ func TestLoadStar(t *testing.T) {
 		}
 	})
 
+	t.Run("router-aware skill exposes the RouteQuery tool", func(t *testing.T) {
+		t.Parallel()
+		l, repo := newTestLoader(t)
+
+		// The coder references router-aware, so RouteQuery is unioned in.
+		coder, err := l.LoadStar("coder")
+		if err != nil {
+			t.Fatalf("LoadStar coder: %v", err)
+		}
+		if !containsStr(coder.Tools.Allowed, "RouteQuery") {
+			t.Errorf("coder missing RouteQuery from router-aware: %v", coder.Tools.Allowed)
+		}
+
+		// A star without the skill must NOT get RouteQuery — the tool is gated
+		// on loading router-aware.
+		writeFile(t, repo, "stars/plain.md", "+++\nname = \"plain\"\n\n[tools]\nallowed = [\"Read\"]\n+++\n\nBody.\n")
+		plain, err := l.LoadStar("plain")
+		if err != nil {
+			t.Fatalf("LoadStar plain: %v", err)
+		}
+		if containsStr(plain.Tools.Allowed, "RouteQuery") {
+			t.Errorf("plain star unexpectedly has RouteQuery: %v", plain.Tools.Allowed)
+		}
+	})
+
 	t.Run("context_budget frontmatter is parsed", func(t *testing.T) {
 		t.Parallel()
 		l, _ := newTestLoader(t)

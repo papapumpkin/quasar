@@ -39,6 +39,12 @@ type Agent struct {
 	// truncation (ToolResultMaxBytes) and, when EnableToolHook is set, per-tool
 	// budget enforcement via a Claude CLI PreToolUse hook.
 	ContextBudget *ContextBudget
+	// Health, when non-nil, turns on dead-coder monitoring for this invocation
+	// with the given thresholds: a stalled or thrashing subprocess is terminated
+	// and surfaced as a *claude.DeadCoderError. When nil, the invoker falls back
+	// to its own default policy (claude.Invoker.HealthDefault), so leaving this
+	// unset does not necessarily disable monitoring.
+	Health *HealthPolicy
 }
 
 // EffectiveContextBudget returns a.ContextBudget when set, otherwise the
@@ -63,6 +69,10 @@ type InvocationResult struct {
 	// InputTokens is the count of fresh (uncached) input tokens billed at full
 	// rate for this invocation, as reported by the model's usage block.
 	InputTokens int
+	// OutputTokens is the count of tokens the model generated for this
+	// invocation, as reported by its usage block. The router records it to
+	// confirm a routed sub-question stayed cheap on the Haiku tier.
+	OutputTokens int
 	// CacheCreationTokens is the count of input tokens written into the prompt
 	// cache on this invocation (billed at the cache-write rate).
 	CacheCreationTokens int

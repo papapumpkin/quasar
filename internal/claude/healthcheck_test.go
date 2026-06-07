@@ -10,12 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/telemetry"
 )
 
 func TestHealthPolicyEvaluate(t *testing.T) {
 	t.Parallel()
-	p := DefaultHealthPolicy()
+	p := agent.DefaultHealthPolicy()
 
 	tests := []struct {
 		name      string
@@ -85,7 +86,7 @@ func TestHealthPolicyEvaluate(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			state, _, reds := p.evaluate(tt.snap)
+			state, _, reds := evaluateHealth(p, tt.snap)
 			if state != tt.wantState {
 				t.Fatalf("state = %v, want %v", state, tt.wantState)
 			}
@@ -108,21 +109,21 @@ func TestHealthPolicyEvaluate(t *testing.T) {
 func TestHealthPolicyWithDefaults(t *testing.T) {
 	t.Parallel()
 	// A partial override keeps the rest at defaults.
-	p := HealthPolicy{WallClockCap: time.Hour}.withDefaults()
+	p := agent.HealthPolicy{WallClockCap: time.Hour}.WithDefaults()
 	if p.WallClockCap != time.Hour {
 		t.Errorf("WallClockCap = %v, want 1h (override preserved)", p.WallClockCap)
 	}
-	if p.FileWriteIdleCap != DefaultFileWriteIdleCap {
-		t.Errorf("FileWriteIdleCap = %v, want default %v", p.FileWriteIdleCap, DefaultFileWriteIdleCap)
+	if p.FileWriteIdleCap != agent.DefaultFileWriteIdleCap {
+		t.Errorf("FileWriteIdleCap = %v, want default %v", p.FileWriteIdleCap, agent.DefaultFileWriteIdleCap)
 	}
-	if p.CPUIdleCap != DefaultCPUIdleCap {
-		t.Errorf("CPUIdleCap = %v, want default %v", p.CPUIdleCap, DefaultCPUIdleCap)
+	if p.CPUIdleCap != agent.DefaultCPUIdleCap {
+		t.Errorf("CPUIdleCap = %v, want default %v", p.CPUIdleCap, agent.DefaultCPUIdleCap)
 	}
 }
 
 func TestDefaultWallClockCapIs25Minutes(t *testing.T) {
 	t.Parallel()
-	if got := DefaultHealthPolicy().WallClockCap; got != 25*time.Minute {
+	if got := agent.DefaultHealthPolicy().WallClockCap; got != 25*time.Minute {
 		t.Fatalf("default WallClockCap = %v, want 25m", got)
 	}
 }
@@ -169,8 +170,8 @@ func TestHealthcheckTwoSignalsKills(t *testing.T) {
 	if len(dead.Signals) != 2 {
 		t.Fatalf("dead.Signals = %v, want 2", dead.Signals)
 	}
-	if dead.PartialWorkdir != hc.Workdir {
-		t.Errorf("PartialWorkdir = %q, want %q", dead.PartialWorkdir, hc.Workdir)
+	if dead.Workdir != hc.Workdir {
+		t.Errorf("Workdir = %q, want %q", dead.Workdir, hc.Workdir)
 	}
 	<-exited // subprocess was reaped
 }
@@ -217,7 +218,7 @@ func TestHealthcheckWallClockKillsRegardless(t *testing.T) {
 		Workdir:     t.TempDir(),
 		Tick:        5 * time.Millisecond,
 		GracePeriod: 2 * time.Second,
-		Policy:      HealthPolicy{WallClockCap: 10 * time.Minute},
+		Policy:      agent.HealthPolicy{WallClockCap: 10 * time.Minute},
 		Clock: func() time.Time {
 			if calls.Add(1) == 1 {
 				return base

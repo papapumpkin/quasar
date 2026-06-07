@@ -2,7 +2,7 @@
 name = "coder"
 model = "claude-sonnet-4-6"
 fallback_model = "claude-haiku-4-5"
-skills = ["git-aware", "prompt-cache-aware"]
+skills = ["git-aware", "prompt-cache-aware", "router-aware"]
 
 [tools]
 allowed = ["Read", "Edit", "Write", "Glob", "Grep", "Bash(go *)", "Bash(git diff *)", "Bash(git status)"]

@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+
+	"github.com/papapumpkin/quasar/internal/agent"
 )
 
 // excludedWatchDirs are directory base names never watched for file-write
@@ -118,8 +120,19 @@ type tokenSample struct {
 	tokens int
 }
 
+// NOT YET WIRED INTO THE LIVE INVOCATION: the token-rate signal source below
+// (tokenRateMeter, parseTokenCount, streamEvent) is unit-tested but has no
+// production caller yet. Feeding it requires switching the CLI to
+// --output-format stream-json (claude.go still uses buffered json), which
+// rewrites the final-result parse path. runMonitored therefore leaves
+// Healthcheck.tokenRateFn nil (valid=false → the signal is ignored), so the
+// active probe is write-idle + cpu-idle + wall-clock. When stream-json lands,
+// wire a *tokenRateMeter to tokenRateFn and feed it from the event stream —
+// observing the CONTRACT documented on Observe below. Tracked as follow-up
+// "enable stream-json token-rate signal".
+
 // tokenRateMeter computes a sliding-window token rate (tokens/sec) from
-// streamed output-token deltas. It is the source for the token-rate signal.
+// per-event output-token *deltas*. It is the source for the token-rate signal.
 // Until Observe is called at least once it reports valid=false, so a coder that
 // has not yet produced any output is never judged "stuck reasoning".
 type tokenRateMeter struct {
@@ -137,12 +150,20 @@ func newTokenRateMeter(window time.Duration, clock func() time.Time) *tokenRateM
 		clock = time.Now
 	}
 	if window <= 0 {
-		window = DefaultTokenRateWindow
+		window = agent.DefaultTokenRateWindow
 	}
 	return &tokenRateMeter{window: window, clock: clock}
 }
 
 // Observe records delta output tokens produced now.
+//
+// CONTRACT: delta must be the INCREMENTAL output-token count since the previous
+// Observe, not a running total. parseTokenCount returns claude's
+// usage.output_tokens, which in stream-json is CUMULATIVE per message (and the
+// final result event reports the grand total). The caller wiring this meter
+// must therefore track the last-seen cumulative value per stream and Observe
+// the difference (current - lastSeen) — feeding the raw cumulative counts here
+// would sum totals and massively overstate the rate.
 func (m *tokenRateMeter) Observe(delta int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

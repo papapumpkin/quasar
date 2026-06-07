@@ -19,10 +19,13 @@ type DeadCoderError struct {
 	// Elapsed is how long the subprocess ran before it was terminated.
 	Elapsed string
 
-	// PartialWorkdir is the path to the snapshot of the worktree captured at
-	// termination, so the reviewer can judge whether the partial work is
-	// shippable. Empty if the snapshot could not be taken.
-	PartialWorkdir string
+	// Workdir is the live worktree the killed coder was operating in. The
+	// partial work persists there in-place (this runtime does not snapshot to a
+	// separate <state>.partial tree — the sequential loop reviews the live tree
+	// directly), so the reviewer judges whether that partial work is shippable.
+	// A frozen snapshot only becomes necessary once concurrent coders can mutate
+	// the tree before review (the entanglements phase).
+	Workdir string
 }
 
 // Error implements the error interface.
