@@ -1,5 +1,13 @@
 name        = "master-review"
-description = "Reviews a completed nebula's full diff and decides ship vs spawn-fix vs escalate."
+description = "Reviews a completed nebula's full diff and decides ship vs spawn-fix vs escalate, failing the run once the declarative cycle cap is exhausted."
+
+# max_cycles is the declarative cap on master-review fix cycles. It is the
+# embedded default; a repo's constellations/master-review.toml may override it at
+# the file level, and a nebula's [execution].max_review_cycles overrides it per
+# run. The runtime resolves the effective value at Fire time and surfaces it to
+# the edge guards below as meta.max_cycles — no cycle limit is hardcoded in Go.
+[meta]
+max_cycles = 3
 
 [[nodes]]
 id     = "review"
@@ -7,22 +15,63 @@ type   = "star"
 star   = "master-reviewer-star"
 inputs = { nebula_diff = "${nebula.full_diff}", verify_results = "${nebula.verify_results}" }
 
+# decide parses the reviewer star's JSON output into a typed decision the edges
+# below route on. It is the single producer of `decision` (ship/fix/escalate);
+# the star itself only emits raw JSON matching master-review-decision-v1.
+[[nodes]]
+id     = "decide"
+type   = "builtin"
+op     = "master_review_decision"
+inputs = { output = "${nodes.review.result}" }
+
+# give-up terminates the run with a structured failure reason when the master
+# reviewer still wants changes after the cycle cap is exhausted. Its output feeds
+# the unconditional _failed edge below, so no PR is opened.
+[[nodes]]
+id     = "give-up"
+type   = "builtin"
+op     = "fail_run"
+inputs = { reason = "max master-review cycles exhausted", detail = "${nodes.decide.feedback}" }
+
 [[edges]]
 from = "review"
+to   = "decide"
+
+[[edges]]
+from = "decide"
 to   = "_done"
-when = "review.decision == 'ship'"
+when = "nodes.decide.decision == 'ship'"
 
 [[edges]]
-from = "review"
+from = "decide"
 to   = "_awaiting_human"
-when = "review.decision == 'escalate'"
+when = "nodes.decide.decision == 'escalate'"
 
+# PLACEHOLDER — the within-cap fix edge cannot yet loop. The real loop is a
+# back-edge into an inner coder-reviewer constellation node, but constellation
+# nodes are not executable by the runtime yet (NodeConstellation returns
+# ErrNodeTypeUnsupported); see runtime.go dispatch. Until that node lands there
+# is no back-edge here, so `cycle` never increments and the give-up edge below is
+# unreachable on this artifact. We therefore route a within-cap fix to
+# _awaiting_human, NOT _done: a run that needs changes must never be marked
+# successful (which would let PR-open proceed). The runtime's cycle-counting and
+# give-up→_failed path are exercised end-to-end by the looping fixture in the
+# constellations package tests; wiring the real back-edge is a follow-up phase.
+# When that lands, change `to` here to the inner coder-reviewer node.
 [[edges]]
-from = "review"
-to   = "_done"
-when = "review.decision == 'fix' && cycle < 3"
-
-[[edges]]
-from = "review"
+from = "decide"
 to   = "_awaiting_human"
-when = "cycle >= 3"
+when = "nodes.decide.decision == 'fix' && cycle < meta.max_cycles"
+
+[[edges]]
+from = "decide"
+to   = "give-up"
+when = "nodes.decide.decision == 'fix' && cycle >= meta.max_cycles"
+
+[[edges]]
+from = "give-up"
+to   = "_failed"
+
+[outputs]
+decision = "${nodes.decide.decision}"
+feedback = "${nodes.decide.feedback}"

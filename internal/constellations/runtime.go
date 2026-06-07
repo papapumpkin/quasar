@@ -54,13 +54,15 @@ type Committer interface {
 // Runtime executes constellation runs for a single repo. The supervisor owns
 // one Runtime per registered repo and drives Step in its dispatch loop.
 type Runtime struct {
-	runStore  *fabric.ConstellationRunStore
-	nebStore  *fabric.NebulaStore
-	loader    Loader
-	invoker   agent.Invoker
-	committer Committer
-	repoPath  string
-	preCommit gitops.PreCommitConfig
+	runStore         *fabric.ConstellationRunStore
+	nebStore         *fabric.NebulaStore
+	loader           Loader
+	invoker          agent.Invoker
+	committer        Committer
+	repoPath         string
+	preCommit        gitops.PreCommitConfig
+	budget           *Budget
+	defaultBudgetUSD float64
 }
 
 // RuntimeOpts configures New. RunStore, NebStore, and Loader are required;
@@ -74,6 +76,11 @@ type RuntimeOpts struct {
 	Committer Committer
 	RepoPath  string
 	PreCommit gitops.PreCommitConfig
+	// DefaultBudgetUSD is the operator-level fallback budget cap (from the repo's
+	// .quasar.yaml defaults.max_budget_usd) used at Fire time when neither an
+	// explicit override nor the nebula manifest sets a budget. Zero means no
+	// fallback cap.
+	DefaultBudgetUSD float64
 }
 
 // New constructs a Runtime. It panics on a nil required dependency, surfacing a
@@ -83,13 +90,15 @@ func New(opts RuntimeOpts) *Runtime {
 		panic("constellations: RunStore, NebStore, and Loader are required")
 	}
 	return &Runtime{
-		runStore:  opts.RunStore,
-		nebStore:  opts.NebStore,
-		loader:    opts.Loader,
-		invoker:   opts.Invoker,
-		committer: opts.Committer,
-		repoPath:  opts.RepoPath,
-		preCommit: opts.PreCommit,
+		runStore:         opts.RunStore,
+		nebStore:         opts.NebStore,
+		loader:           opts.Loader,
+		invoker:          opts.Invoker,
+		committer:        opts.Committer,
+		repoPath:         opts.RepoPath,
+		preCommit:        opts.PreCommit,
+		budget:           NewBudget(opts.RunStore),
+		defaultBudgetUSD: opts.DefaultBudgetUSD,
 	}
 }
 
@@ -97,7 +106,9 @@ func New(opts RuntimeOpts) *Runtime {
 // constellation source for versioning, builds the initial State from the
 // nebula, and inserts a run row positioned at the entry node. Execution is
 // asynchronous: the supervisor drives Step until the run is terminal.
-func (r *Runtime) Fire(ctx context.Context, constellationName, nebulaID, parentRunID string) (string, error) {
+// budgetOverride is the explicit per-run cap (CLI --budget-usd / API caller);
+// a non-positive value defers to the nebula manifest then the global default.
+func (r *Runtime) Fire(ctx context.Context, constellationName, nebulaID, parentRunID string, budgetOverride float64) (string, error) {
 	con, err := r.loader.LoadConstellation(constellationName)
 	if err != nil {
 		return "", fmt.Errorf("constellations: load %q: %w", constellationName, err)
@@ -114,6 +125,7 @@ func (r *Runtime) Fire(ctx context.Context, constellationName, nebulaID, parentR
 
 	now := time.Now()
 	st := NewState(SnapshotNebula(neb), now.Unix())
+	st.Meta.MaxCycles = resolveMaxCycles(con, neb)
 	dagState, err := MarshalState(st)
 	if err != nil {
 		return "", err
@@ -130,6 +142,13 @@ func (r *Runtime) Fire(ctx context.Context, constellationName, nebulaID, parentR
 		DAGStateTOML:      dagState,
 	})
 	if err != nil {
+		return "", err
+	}
+
+	// Resolve and seed the run's budget cap. An uncapped result (no override, no
+	// manifest budget, no global default) leaves the budget columns NULL so the
+	// CheckBefore gate is a no-op for this run.
+	if err := r.budget.Initialize(ctx, runID, resolveBudget(budgetOverride, neb, r.defaultBudgetUSD)); err != nil {
 		return "", err
 	}
 	return runID, nil
@@ -163,6 +182,9 @@ func (r *Runtime) Step(ctx context.Context, runID string) (string, error) {
 
 	output, err := r.dispatch(ctx, run, st, node)
 	if err != nil {
+		if errors.Is(err, ErrBudgetExhausted) {
+			return r.failBudget(ctx, run, st, node)
+		}
 		return r.fail(ctx, run, st, err)
 	}
 	st.RecordNode(node.ID, output)
@@ -170,6 +192,15 @@ func (r *Runtime) Step(ctx context.Context, runID string) (string, error) {
 	next, err := nextTarget(con, node.ID, st.ExprState())
 	if err != nil {
 		return r.fail(ctx, run, st, err)
+	}
+
+	// A back-edge (a transition to an earlier-declared node) is one loop
+	// iteration. Incrementing here is what makes the declarative cycle cap bite:
+	// the next time the loop's routing node evaluates its `when` guards, `cycle`
+	// has advanced, so meta.max_cycles is eventually exceeded and the give-up
+	// fallback edge wins. The new count persists with the transition below.
+	if isBackEdge(con, node.ID, next) {
+		st.Cycle++
 	}
 
 	if artifacts.IsTerminal(next) {
@@ -202,7 +233,9 @@ func (r *Runtime) dispatch(ctx context.Context, run *fabric.RunRow, st *State, n
 		return r.dispatchBuiltin(ctx, st, node)
 	case artifacts.NodeStar:
 		return r.dispatchStar(ctx, run, st, node)
-	case artifacts.NodeConstellation, artifacts.NodePhaseIterator:
+	case artifacts.NodeConstellation:
+		return r.dispatchConstellation(ctx, run, st, node)
+	case artifacts.NodePhaseIterator:
 		return nil, fmt.Errorf("%w: %q (node %q)", ErrNodeTypeUnsupported, node.Type, node.ID)
 	default:
 		return nil, fmt.Errorf("constellations: unknown node type %q (node %q)", node.Type, node.ID)
@@ -238,6 +271,11 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 	if r.invoker == nil {
 		return nil, fmt.Errorf("constellations: star node %q requires an Invoker", node.ID)
 	}
+	// Pre-step budget gate: refuse to start this invocation if the run's cap is
+	// spent. The sentinel propagates up to Step, which routes to failBudget.
+	if err := r.budget.CheckBefore(ctx, run.ID); err != nil {
+		return nil, err
+	}
 	star, err := r.loader.LoadStar(node.Star)
 	if err != nil {
 		return nil, fmt.Errorf("constellations: load star %q: %w", node.Star, err)
@@ -263,32 +301,19 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 	}
 
 	st.Meta.TotalCostUSD += res.CostUSD
-	r.recordInvocation(ctx, run, node, star.Name, "done", res.CostUSD, started)
+	// Charge the run's budget and persist the invocation trace atomically via
+	// RecordCost: a crash between the two writes can neither double-charge nor
+	// skip the cost. Unlike the failure-path trace, the charge is correctness-
+	// relevant, so a failure to record it fails the step rather than being
+	// logged and ignored.
+	if _, err := r.budget.RecordCost(ctx, r.invocationRow(run, node, star.Name, "done", res.CostUSD, started)); err != nil {
+		return nil, fmt.Errorf("constellations: record star invocation (run %s): %w", run.ID, err)
+	}
 	return map[string]any{
 		"result":     res.ResultText,
 		"cost_usd":   res.CostUSD,
 		"session_id": res.SessionID,
 	}, nil
-}
-
-// recordInvocation persists a star_invocation row. Failure to record is logged,
-// not fatal: the run's correctness does not depend on the trace.
-func (r *Runtime) recordInvocation(ctx context.Context, run *fabric.RunRow, node *artifacts.ConstellationNode, starName, state string, cost float64, started time.Time) {
-	_, err := r.runStore.InsertStarInvocation(ctx, fabric.StarInvocationRow{
-		RunID:      run.ID,
-		Seq:        run.StepIndex,
-		Node:       node.ID,
-		StarName:   starName,
-		State:      state,
-		Cycle:      run.Cycle,
-		CostUSD:    cost,
-		DurationMs: time.Since(started).Milliseconds(),
-		StartedAt:  started.Unix(),
-		EndedAt:    time.Now().Unix(),
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "constellations: record star invocation (run %s): %v\n", run.ID, err)
-	}
 }
 
 // commitWork is the single point where the runtime writes a commit. It always
@@ -331,6 +356,10 @@ func (r *Runtime) terminate(ctx context.Context, run *fabric.RunRow, st *State, 
 	if dag, err := MarshalState(st); err == nil {
 		run.DAGStateTOML = dag
 		run.CurrentNode = target
+		// Keep the cycle column authoritative, symmetric with persistTransition.
+		// Today a terminal target is never a back-edge so st.Cycle already matches
+		// the column, but syncing here removes the footgun if that ever changes.
+		run.Cycle = st.Cycle
 		if err := r.runStore.SaveProgress(ctx, run); err != nil {
 			fmt.Fprintf(os.Stderr, "constellations: save final state (run %s): %v\n", run.ID, err)
 		}

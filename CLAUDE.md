@@ -22,13 +22,29 @@ internal/
   agent/         Agent types, roles, and the Invoker interface
   claude/        Claude CLI invoker (satisfies agent.Invoker)
   config/        Viper-based config loading (.quasar.yaml / env QUASAR_*)
-  integrations/  Forge-agnostic ticket sources + Forge stub + registry + secrets
-                 (github/ adapter; reach adapters only via integrations.Default())
-  gitops/        Vanilla-git output safety perimeter (reserved; lands in a later nebula)
-  loop/          Core coder-reviewer loop and state machine
+  sensors/       Poll-driven external integrations (Sensor interface, replacing
+                 the legacy TicketSource); github/ adapter; reach adapters only via
+                 sensors.Default()
+  gitops/        Vanilla-git output safety perimeter; every git write is routed here
+  artifacts/     Embedded default stars/skills/constellations + per-repo override loader
+  constellations/ Constellation engine: Step/Fire walk, operators, budget + cycle
+                 guard, and nested-constellation dispatch (master-review calls
+                 coder-reviewer as a real inner loop via NodeConstellation)
+  fabric/        SQLite persistence (constellation_runs, star_invocations, nebulas)
+  loop/          Legacy in-process coder-reviewer loop (still backs `quasar run`
+                 and its tests). Superseded by the coder-reviewer constellation now
+                 that NodeConstellation dispatches; deleting it + collapsing into a
+                 thin internal/runner/ shim is the remaining follow-up.
   nebula/        Multi-task orchestration (parse, validate, plan, apply)
   ui/            Stderr-based UI printer (ANSI colors)
 ```
+
+The coder-reviewer pair runs as a declarative constellation
+(`internal/artifacts/defaults/constellations/coder-reviewer.toml`): the coder
+writes a diff, the runtime commits it, the reviewer judges it (parsed by the
+`reviewer_decision` builtin), and a back-edge revises up to `[meta].max_cycles`
+times before the run fails. The inner cycle cap is enforced by the same runtime
+back-edge counter as every other loop — no Go constant, no special-casing.
 
 ## Integrations & Safety
 

@@ -118,7 +118,7 @@ func TestArchitectConstellationWiresPreCommitAndPersists(t *testing.T) {
 	rt, nebID := newTestRuntime(t, loader, inv)
 	rt.preCommit = gitops.PreCommitConfig{Commands: []string{"gofmt -l .", "go test ./..."}}
 
-	runID, err := rt.Fire(ctx, "architect", nebID, "")
+	runID, err := rt.Fire(ctx, "architect", nebID, "", 0)
 	if err != nil {
 		t.Fatalf("Fire: %v", err)
 	}

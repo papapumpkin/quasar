@@ -1,22 +1,24 @@
 name        = "coder-reviewer"
-description = "The canonical implement-then-review loop. Runs per nebula phase."
+description = "Coder writes a diff; the runtime commits it; the reviewer judges it; the coder revises. Loops up to [meta].max_cycles times, then fails the run."
 
-# Runtime field contract. Some edge guards below reference fields the runtime
-# does not populate yet from a star's free-form output:
-#   - review.findings_count / review.approved are parsed from the reviewer
-#     star's result by a forthcoming phase (structured star output).
-#   - nebula.current_phase and nebula.execution are supplied by the
-#     phase_iterator node, which is also a later phase.
-# Until those land, the affected guards evaluate falsy. The commit node's
-# `committed` field, by contrast, is produced today by the commit operator, so
-# the implement -> commit -> review path is live. This wiring is faithful to the
-# spec; the missing pieces are explicitly a later phase's runtime contract.
+# The inner implement-then-review loop, run per nebula phase. Unlike master-review
+# (which will call this as a child constellation once the NodeConstellation type
+# lands), this loop is a plain back-edge within a single constellation:
+# review -> decide -> implement. Each decide -> implement back-edge is one cycle,
+# counted by the same runtime back-edge counter used everywhere else, so the
+# declarative cap below is enforced with no Go constant and no special-casing.
+[meta]
+max_cycles = 3
 
 [[nodes]]
 id     = "implement"
 type   = "star"
 star   = "coder"
-inputs = { phase_body = "${nebula.current_phase.body}", phase_title = "${nebula.current_phase.title}" }
+# `review` is empty on the first pass — nodes.decide has not run yet, so the
+# reference resolves to nil (the engine's lookups are null-safe) — and carries
+# the reviewer's change requests on every revision. This is the structured
+# equivalent of the old loop's `${reviewer.comments | default('')}`.
+inputs = { phase_body = "${nebula.current_phase.body}", phase_title = "${nebula.current_phase.title}", review = "${nodes.decide.comments}" }
 
 # The runtime — never the coder star — owns the commit. This builtin is the sole
 # place the repo's [pre_commit] config is threaded into gitops.Commit, so every
@@ -33,7 +35,26 @@ inputs = { message = "${nebula.current_phase.title}" }
 id     = "review"
 type   = "star"
 star   = "reviewer"
-inputs = { phase_body = "${nebula.current_phase.body}" }
+inputs = { phase_body = "${nebula.current_phase.body}", diff = "${nodes.implement.result}" }
+
+# Parse the reviewer star's reviewer-decision-v1 JSON into the {verdict, approved,
+# comments} fields the edges route on. A separate operator from
+# master_review_decision because the reviewer's schema is deliberately narrower:
+# it only approves or requests changes (no score, no abandon).
+[[nodes]]
+id     = "decide"
+type   = "builtin"
+op     = "reviewer_decision"
+inputs = { output = "${nodes.review.result}" }
+
+# Cycle cap exhausted: terminate the run failed with a structured reason rather
+# than shipping work the reviewer never signed off on. Mirrors master-review's
+# give-up node; the unconditional edge to _failed ensures no downstream work runs.
+[[nodes]]
+id     = "give-up"
+type   = "builtin"
+op     = "fail_run"
+inputs = { reason = "max coder-reviewer cycles exhausted", detail = "${nodes.decide.comments}" }
 
 [[edges]]
 from = "implement"
@@ -42,19 +63,31 @@ to   = "commit"
 [[edges]]
 from = "commit"
 to   = "review"
-when = "commit.committed"
+when = "nodes.commit.committed"
 
 [[edges]]
 from = "review"
-to   = "implement"
-when = "review.findings_count > 0 && cycle < nebula.execution.max_review_cycles"
+to   = "decide"
 
 [[edges]]
-from = "review"
+from = "decide"
 to   = "_done"
-when = "review.approved"
+when = "nodes.decide.approved"
 
 [[edges]]
-from = "review"
+from = "decide"
+to   = "implement"
+when = "nodes.decide.verdict == 'request_changes' && cycle < meta.max_cycles"
+
+[[edges]]
+from = "decide"
+to   = "give-up"
+when = "nodes.decide.verdict == 'request_changes' && cycle >= meta.max_cycles"
+
+[[edges]]
+from = "give-up"
 to   = "_failed"
-when = "cycle >= nebula.execution.max_review_cycles"
+
+[outputs]
+verdict  = "${nodes.decide.verdict}"
+comments = "${nodes.decide.comments}"

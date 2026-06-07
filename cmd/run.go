@@ -31,6 +31,7 @@ var runCmd = &cobra.Command{
 func init() {
 	runCmd.Flags().Int("max-cycles", 0, "override max review cycles")
 	runCmd.Flags().Float64("max-budget", 0, "override max budget in USD")
+	runCmd.Flags().Float64("budget-usd", 0, "override the run budget cap in USD (takes precedence over --max-budget)")
 	runCmd.Flags().String("coder-prompt-file", "", "file containing custom coder system prompt")
 	runCmd.Flags().String("reviewer-prompt-file", "", "file containing custom reviewer system prompt")
 	runCmd.Flags().Bool("auto", false, "run a single task from stdin and exit (non-interactive)")
@@ -151,6 +152,11 @@ func applyFlagOverrides(cmd *cobra.Command, cfg *config.Config) {
 		cfg.MaxReviewCycles = v
 	}
 	if v, _ := cmd.Flags().GetFloat64("max-budget"); v > 0 {
+		cfg.MaxBudgetUSD = v
+	}
+	// --budget-usd is the canonical run-budget flag and takes precedence over the
+	// legacy --max-budget alias, so it is applied last.
+	if v, _ := cmd.Flags().GetFloat64("budget-usd"); v > 0 {
 		cfg.MaxBudgetUSD = v
 	}
 	if v, _ := cmd.Flags().GetBool("verbose"); v {

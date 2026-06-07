@@ -154,7 +154,7 @@ func recentBlock(lane RepoLane, col, markCard int) []string {
 		return append(lines, pad("  (none)", col))
 	}
 	for i, c := range lane.Recent {
-		lines = append(lines, pad(gutter(i == markCard)+fmt.Sprintf("%s %s%s", statusGlyph(c.Status), c.Title, prSuffix(c)), col))
+		lines = append(lines, pad(gutter(i == markCard)+fmt.Sprintf("%s %s%s%s", statusGlyph(c.Status), c.Title, prSuffix(c), failureSuffix(c)), col))
 	}
 	return lines
 }
@@ -217,6 +217,17 @@ func prSuffix(c NebulaCard) string {
 		return ""
 	}
 	return fmt.Sprintf(" (PR #%d %s)", c.PRNumber, c.PRStatus)
+}
+
+// failureSuffix renders a recent card's structured failure reason as a
+// parenthetical, e.g. "(budget exhausted)". Empty when the card is not in a
+// failed state or no _error reason was recorded — the lane then falls back to
+// the bare status glyph + title.
+func failureSuffix(c NebulaCard) string {
+	if c.FailureReason == "" {
+		return ""
+	}
+	return fmt.Sprintf(" (%s)", c.FailureReason)
 }
 
 // statusGlyph maps a terminal status to a compact glyph.

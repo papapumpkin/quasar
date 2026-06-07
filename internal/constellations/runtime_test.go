@@ -66,6 +66,14 @@ func mustExpr(t *testing.T, src string) artifacts.Expression {
 // nebula, plus the provided loader and invoker.
 func newTestRuntime(t *testing.T, loader Loader, inv agent.Invoker) (*Runtime, string) {
 	t.Helper()
+	return newTestRuntimeWithExecution(t, loader, inv, "")
+}
+
+// newTestRuntimeWithExecution is newTestRuntime with control over the seeded
+// nebula's [execution] config blob, so a test can exercise per-run overrides
+// such as max_review_cycles.
+func newTestRuntimeWithExecution(t *testing.T, loader Loader, inv agent.Invoker, executionTOML string) (*Runtime, string) {
+	t.Helper()
 	dir := t.TempDir()
 	fab, err := fabric.NewSQLiteFabric(context.Background(), filepath.Join(dir, "test.db"))
 	if err != nil {
@@ -78,7 +86,7 @@ func newTestRuntime(t *testing.T, loader Loader, inv agent.Invoker) (*Runtime, s
 	}
 	nebStore := fabric.NewNebulaStore(fab.DB(), blobs)
 	nebID, err := nebStore.Insert(context.Background(), fabric.NebulaRow{
-		Name: "demo", Status: "running", ContextTOML: "do the thing",
+		Name: "demo", Status: "running", ContextTOML: "do the thing", ExecutionTOML: executionTOML,
 	})
 	if err != nil {
 		t.Fatalf("seed nebula: %v", err)
@@ -111,7 +119,7 @@ func TestRuntimeFireAndStepBuiltins(t *testing.T) {
 	loader := &fakeLoader{cons: map[string]*artifacts.Constellation{"seed-flow": con}}
 	rt, nebID := newTestRuntime(t, loader, nil)
 
-	runID, err := rt.Fire(ctx, "seed-flow", nebID, "")
+	runID, err := rt.Fire(ctx, "seed-flow", nebID, "", 0)
 	if err != nil {
 		t.Fatalf("Fire: %v", err)
 	}
@@ -162,7 +170,7 @@ func TestRuntimeStarNode(t *testing.T) {
 	inv := &fakeInvoker{result: agent.InvocationResult{ResultText: "did it", CostUSD: 0.75}}
 	rt, nebID := newTestRuntime(t, loader, inv)
 
-	runID, err := rt.Fire(ctx, "code", nebID, "")
+	runID, err := rt.Fire(ctx, "code", nebID, "", 0)
 	if err != nil {
 		t.Fatalf("Fire: %v", err)
 	}
@@ -196,7 +204,7 @@ func TestRuntimeResume(t *testing.T) {
 	loader := &fakeLoader{cons: map[string]*artifacts.Constellation{"flow": con}}
 	rt, nebID := newTestRuntime(t, loader, nil)
 
-	runID, _ := rt.Fire(ctx, "flow", nebID, "")
+	runID, _ := rt.Fire(ctx, "flow", nebID, "", 0)
 	if _, err := rt.Step(ctx, runID); err != nil { // render -> notify
 		t.Fatalf("Step: %v", err)
 	}
@@ -255,7 +263,7 @@ func TestUnsupportedNodeTypeFailsRun(t *testing.T) {
 	}
 	loader := &fakeLoader{cons: map[string]*artifacts.Constellation{"sub": con}}
 	rt, nebID := newTestRuntime(t, loader, nil)
-	runID, _ := rt.Fire(ctx, "sub", nebID, "")
+	runID, _ := rt.Fire(ctx, "sub", nebID, "", 0)
 	state, err := rt.Step(ctx, runID)
 	if state != StateFailed {
 		t.Fatalf("state = %q, want failed", state)
@@ -303,7 +311,7 @@ func TestCommitOperatorThreadsPreCommit(t *testing.T) {
 	committer := &fakeCommitter{sha: "abc123"}
 	rt, nebID := newRuntimeWithCommitter(t, committer, pc)
 
-	runID, err := rt.Fire(ctx, "ship", nebID, "")
+	runID, err := rt.Fire(ctx, "ship", nebID, "", 0)
 	if err != nil {
 		t.Fatalf("Fire: %v", err)
 	}
@@ -335,7 +343,7 @@ func TestCommitFailureBlocksRun(t *testing.T) {
 	committer := &fakeCommitter{err: errors.New("pre-commit hook \"false\" failed")}
 	rt, nebID := newRuntimeWithCommitter(t, committer, pc)
 
-	runID, _ := rt.Fire(ctx, "ship", nebID, "")
+	runID, _ := rt.Fire(ctx, "ship", nebID, "", 0)
 	state, err := rt.Step(ctx, runID)
 	if state != StateFailed {
 		t.Fatalf("state = %q, want failed", state)
@@ -350,7 +358,7 @@ func TestCommitNothingToCommitIsNotAFailure(t *testing.T) {
 	committer := &fakeCommitter{err: gitops.ErrNothingToCommit}
 	rt, nebID := newRuntimeWithCommitter(t, committer, gitops.PreCommitConfig{})
 
-	runID, _ := rt.Fire(ctx, "ship", nebID, "")
+	runID, _ := rt.Fire(ctx, "ship", nebID, "", 0)
 	state, err := rt.Step(ctx, runID)
 	if err != nil {
 		t.Fatalf("Step: %v", err)

@@ -82,10 +82,15 @@ type Skill struct {
 type Constellation struct {
 	Name        string
 	Description string
-	Nodes       []ConstellationNode
-	Edges       []ConstellationEdge
-	Outputs     map[string]Expression // pre-compiled interpolation templates
-	SourcePath  string
+	// Meta is the constellation's declarative [meta] table: operator-tunable
+	// scalars (e.g. max_cycles) the runtime resolves at Fire time and surfaces
+	// to edge guards as meta.<key>. Kept as an untyped map so new meta keys need
+	// no loader change; the runtime coerces the values it understands.
+	Meta       map[string]any
+	Nodes      []ConstellationNode
+	Edges      []ConstellationEdge
+	Outputs    map[string]Expression // pre-compiled interpolation templates
+	SourcePath string
 }
 
 // ConstellationNode is a single node in a constellation DAG. Exactly one of

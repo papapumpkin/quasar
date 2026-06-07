@@ -162,6 +162,22 @@ func opNotifyHuman(ctx context.Context, rt *Runtime, st *State, _ map[string]any
 	return map[string]any{"notified": true}, nil
 }
 
+// opFailRun terminates a run with a structured failure reason. It is the
+// give-up node of a guarded loop (e.g. master-review once its cycle cap is
+// exhausted): the node records reason/detail into State, and an unconditional
+// edge to _failed marks the run failed so no downstream work (e.g. opening a
+// PR) runs. detail is passed through unchanged so a node may emit either a plain
+// string or a structured breakdown (the engine's budget-exhaustion path records
+// the same map shape directly via failBudget). A missing detail yields nil.
+// Output: {"reason": <string>, "detail": <any>}.
+func opFailRun(_ context.Context, _ *Runtime, _ *State, args map[string]any) (map[string]any, error) {
+	reason, _ := args["reason"].(string)
+	if strings.TrimSpace(reason) == "" {
+		reason = "run failed"
+	}
+	return map[string]any{"reason": reason, "detail": args["detail"]}, nil
+}
+
 // opVerify returns the verify_<kind> operator. It runs the command supplied via
 // args["command"] in the repo working dir and reports a structured outcome.
 // Output: {"passed": bool, "output": <combined>, "kind": <kind>}. A non-zero

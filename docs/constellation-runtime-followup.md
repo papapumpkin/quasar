@@ -44,6 +44,58 @@ follow-up phase lands, delete the corresponding rows.
 | `gh_open_pr` operator | **Deferred** | Only the constellation default (`internal/artifacts/defaults/constellations/open-pr.toml`) references it. Blocked on the `Forge` write methods, which the project constraints place in a later nebula. |
 | Rationale blobs written to `star_invocations.rationale_blob_hash`/`rationale_preview` | **Deferred** | Columns exist (migration `004`); `recordInvocation` does not yet write the LLM reasoning blob. |
 
+## Cycle-limit phase — ratified deviations from the written criteria
+
+The `cycle-limit-in-constellation` phase delivered the declarative cycle cap
+(`master-review.toml [meta].max_cycles`, per-run override at Fire time, back-edge
+cycle counting, give-up→`_failed` with a structured reason — all tested in
+`internal/constellations`). Two of its written acceptance bullets were **not**
+implemented as literally specified because they contradict the same phase's
+stated constraints and the current engine reality. These deviations are
+**ratified here** (reviewer-recommended Option A) rather than left as silently
+unchecked boxes.
+
+| Written criterion | Resolution | Rationale |
+|-------------------|------------|-----------|
+| `internal/loop/` is renamed to `internal/runner/` and reduced to a Fire shim | **Superseded / deferred** | Directly contradicts the phase constraint "internal/loop continues to exist for in-process invocation … but is no longer the master-review owner." Gutting it now would disable the only working coder-reviewer implementation, since the runtime cannot yet execute an inner constellation node (`NodeConstellation` → `ErrNodeTypeUnsupported`). Revisit when that node type lands and a runtime replacement exists. |
+| `CycleGuard` + `cycle_counts` BLOB column + migration (`internal/runtime/cycle_guard.go`, `NNN_cycle_counts.sql`) | **Superseded** | Violates the phase constraint "No new abstractions for budget tracking." The single per-run `State.Cycle` (persisted to the existing `constellation_runs.cycle` column from migration `004`) already satisfies "cycle counting is per-run" without a parallel per-node state model. Per-node `cycle_counts` granularity is only needed once multiple independent loops exist. |
+| "No hardcoded cycle constants remain in Go" — `internal/nebula/config.go` `DefaultMaxReviewCycles = 3` | **Kept (defensible)** | This constant is the fallback default for the per-run **override knob** (`[execution].max_review_cycles`), consumed by `ResolveExecution` — not the master-review **cap**, which is declarative in TOML. It passes the literal arch-grep (`maxCycles\s*=\s*\d+`) and has live usages + tests; removing it would break `internal/nebula`. |
+| Real master-review back-edge (within-cap `fix` loops into the inner coder-reviewer) | **Deferred** | Blocked on `NodeConstellation` support (same dependency as above). Until then the embedded `master-review.toml` routes a within-cap `fix` to `_awaiting_human` (never `_done`), so a needs-changes run is never marked successful. The runtime's cycle-counting + give-up path is proven by the looping fixture test. |
+
+## coder-reviewer-as-inner-constellation phase — delivered & deferred
+
+This phase moved the inner coder-reviewer pair into the `coder-reviewer`
+constellation as a real, executable loop and added the operator that drives it.
+
+**Delivered (green):**
+
+- `internal/artifacts/defaults/constellations/coder-reviewer.toml` is now the
+  final loop, not the Phase-6 stub: `implement` (coder) → `commit` →
+  `review` (reviewer) → `decide` (`reviewer_decision`) → either `_done` (approve),
+  a `decide → implement` back-edge (request_changes within cap), or
+  `give-up → _failed` (cap exhausted). The cap is declarative in `[meta].max_cycles`
+  and enforced by the same back-edge cycle counter as master-review — no Go
+  constant, no special case. The stub's bare `review.approved`/`commit.committed`
+  guards (which `ExprState` never populated, so they were inert) are replaced with
+  the correct `nodes.<id>.<field>` form.
+- `internal/constellations/reviewer_decision.go` already existed; this phase added
+  its test (`reviewer_decision_test.go`) and put it to use. The operator parses the
+  reviewer star's `reviewer-decision-v1` JSON into `{verdict, approved, comments}`.
+- `internal/artifacts/defaults/stars/reviewer.md` now emits the
+  `reviewer-decision-v1` JSON the operator consumes, mirroring the established
+  `master-reviewer-star.md` JSON contract (nothing else consumed the reviewer
+  star's former free-text output).
+- `coder_reviewer_integration_test.go` drives the embedded constellation
+  end-to-end: request-changes-then-approve (two coder invocations → `_done`) and
+  always-request-changes (cap exhausted → `_failed` with structured reason).
+
+**Deferred / superseded (same blockers as the cycle-limit phase above):**
+
+| Written criterion | Resolution | Rationale |
+|-------------------|------------|-----------|
+| `internal/loop/` deleted; `internal/runner/runner.go` < 50 LOC thin `runtime.Fire` shim | **Deferred** | Same blocker as the cycle-limit phase: the runtime cannot yet execute a `NodeConstellation`, so `master-review` cannot call `coder-reviewer` as a child. `internal/loop` is still the only working coder-reviewer for `quasar run` (`cmd/run.go` → `buildLoop`); deleting it would break the build and all `quasar run` CLI tests. The package layout also differs from the phase's assumptions: the engine is `internal/constellations` (not `internal/runtime`) and there is no `runtime.Open`/`Overrides`/`RunResult` API of the shape the shim assumes. Revisit when `NodeConstellation` lands. |
+| `CLAUDE.md` rewritten to an `internal/runner` + `internal/runtime` + `internal/stars` structure | **Superseded** | Those directories do not exist; writing that block would be false documentation. `CLAUDE.md`'s structure section was instead updated to reflect the real packages (`constellations/`, `artifacts/`, and the still-present `loop/`). |
+
 ## Sequencing note
 
 The deferred items are not independent: `constellation`/`phase_iterator`

@@ -1,0 +1,38 @@
+[nebula]
+name = "coder-runtime-hardening"
+description = "Address the three compounding problems that make a Quasar coder spend $X for ~$X/3 of useful output: (1) prompt cache is architecturally correct but the claude CLI invocation drops the flag that makes it stable, and we don't measure hit rate; (2) a single coder can grind for 60–90 min and exit with partial work, losing tokens to thrash; (3) concurrent coders aren't coordinating via entanglements because the producer (neutron) isn't emitting. Six small phases."
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["quasar", "runtime", "efficiency"]
+assignee = ""
+
+[execution]
+max_workers = 1
+max_review_cycles = 3
+max_budget_usd = 45.0
+model = ""
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Prompt cache verifiably hits — telemetry captures cache_read_input_tokens vs cache_creation_input_tokens, and the claude CLI invocation passes the flags that keep the prefix stable",
+    "A single coder invocation cannot consume 60+ minutes silently — wall-clock cap plus multi-signal health probe terminates dead/thrashing invocations and hands partial work to the reviewer",
+    "Coder context is bounded — only the current phase spec lands in-prompt (not the whole nebula), tool results are truncated past a configurable cap, soft tool-budget caps prevent Read/Grep thrash",
+    "Cheap sub-decisions route to Haiku — file lookup, test-coverage scanning, and lint-class triage do not need an Opus/Sonnet coder",
+    "Subprocess death loses at most one build cycle of work — in-cycle checkpoints snapshot the worktree after each green build",
+    "Concurrent coders coordinate via entanglements — neutron emits per-phase symbol manifests; the master-reviewer detects write collisions before they corrupt the tree; the TUI surfaces the contract graph",
+]
+constraints = [
+    "All changes preserve correctness over throughput — a coder that ships nothing is always preferable to a coder that ships broken code",
+    "Telemetry additions are read-only (PRAGMA-level), never the canonical path",
+    "Dead-detection terminates the SUBPROCESS, never the supervisor — supervisor survives to seed the next attempt",
+    "Defaults are conservative — a 25 min wall-clock cap is the default; teams can raise it but should not need to",
+    "No new external dependencies; everything uses stdlib + existing modules",
+]
+
+[dependencies]
+requires_nebulae = ["constellation-runtime"]

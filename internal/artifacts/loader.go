@@ -151,6 +151,7 @@ func (l *Loader) LoadConstellation(name string) (*Constellation, error) {
 	c := &Constellation{
 		Name:        cf.Name,
 		Description: cf.Description,
+		Meta:        cf.Meta,
 		SourcePath:  src,
 	}
 
@@ -341,8 +342,9 @@ type skillFrontmatter struct {
 }
 
 type constellationFile struct {
-	Name        string `toml:"name"`
-	Description string `toml:"description"`
+	Name        string         `toml:"name"`
+	Description string         `toml:"description"`
+	Meta        map[string]any `toml:"meta"`
 	Nodes       []struct {
 		ID     string            `toml:"id"`
 		Type   string            `toml:"type"`
