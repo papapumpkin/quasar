@@ -66,6 +66,32 @@ func TestLoadStar(t *testing.T) {
 		}
 	})
 
+	t.Run("context_budget frontmatter is parsed", func(t *testing.T) {
+		t.Parallel()
+		l, _ := newTestLoader(t)
+
+		star, err := l.LoadStar("coder")
+		if err != nil {
+			t.Fatalf("LoadStar: %v", err)
+		}
+		cb := star.ContextBudget
+		if cb.MaxReadsBeforeEdit != 8 {
+			t.Errorf("MaxReadsBeforeEdit = %d, want 8", cb.MaxReadsBeforeEdit)
+		}
+		if cb.MaxGrepsBeforeEdit != 6 {
+			t.Errorf("MaxGrepsBeforeEdit = %d, want 6", cb.MaxGrepsBeforeEdit)
+		}
+		if cb.MaxTotalReads != 30 {
+			t.Errorf("MaxTotalReads = %d, want 30", cb.MaxTotalReads)
+		}
+		if cb.ToolResultMaxBytes != 16384 {
+			t.Errorf("ToolResultMaxBytes = %d, want 16384", cb.ToolResultMaxBytes)
+		}
+		if cb.IncludeSiblingPhases {
+			t.Error("IncludeSiblingPhases should be false for the coder star")
+		}
+	})
+
 	t.Run("per-repo override wins", func(t *testing.T) {
 		t.Parallel()
 		l, repo := newTestLoader(t)

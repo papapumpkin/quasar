@@ -11,6 +11,17 @@ denied  = ["Bash(git push *)", "Bash(gh pr merge *)", "Bash(git reset *)", "Bash
 [defaults]
 max_budget_usd = 0.50
 effort = "medium"
+
+# Context budget bounds how much context each invocation consumes. Defaults are
+# conservative; a code-archaeology-heavy repo can raise tool_result_max_bytes
+# via a per-repo override. include_sibling_phases is false so only the current
+# phase's spec is injected (the coder cannot touch sibling phases).
+[context_budget]
+max_reads_before_edit = 8
+max_greps_before_edit = 6
+max_total_reads = 30
+tool_result_max_bytes = 16384
+include_sibling_phases = false
 +++
 
 You are the coder. Implement the task described to you as a single focused

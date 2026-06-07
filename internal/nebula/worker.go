@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -147,33 +146,22 @@ func (wg *WorkerGroup) SnapshotNebula() *Nebula {
 	return wg.Nebula.Snapshot()
 }
 
-// buildPhasePrompt prepends nebula context (goals, constraints) to the phase body.
+// buildPhasePrompt prepends nebula context (goals, constraints) to the phase
+// body. Only the current phase's spec is injected — sibling phase specs are
+// elided because the coder cannot touch them, bounding per-cycle input tokens.
+// Phase-spec injection is delegated to agent.RenderPhaseContext so the
+// phase-only policy is centralized and role-gated (the architect, which needs
+// every phase, uses the same renderer with RoleArchitect).
 func buildPhasePrompt(phase *PhaseSpec, ctx *Context) string {
-	if ctx == nil || (len(ctx.Goals) == 0 && len(ctx.Constraints) == 0) {
-		return phase.Body
+	in := agent.PhaseContextInput{
+		Role:         agent.RoleCoder,
+		CurrentPhase: phase.Body,
 	}
-
-	var sb strings.Builder
-	sb.WriteString("PROJECT CONTEXT:\n")
-	if len(ctx.Goals) > 0 {
-		sb.WriteString("Goals:\n")
-		for _, g := range ctx.Goals {
-			sb.WriteString("- ")
-			sb.WriteString(g)
-			sb.WriteString("\n")
-		}
+	if ctx != nil {
+		in.Goals = ctx.Goals
+		in.Constraints = ctx.Constraints
 	}
-	if len(ctx.Constraints) > 0 {
-		sb.WriteString("Constraints:\n")
-		for _, c := range ctx.Constraints {
-			sb.WriteString("- ")
-			sb.WriteString(c)
-			sb.WriteString("\n")
-		}
-	}
-	sb.WriteString("\nPHASE:\n")
-	sb.WriteString(phase.Body)
-	return sb.String()
+	return agent.RenderPhaseContext(in)
 }
 
 // ensureGater builds the Gater from the Prompter and manifest if not already set.

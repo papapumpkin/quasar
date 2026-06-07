@@ -50,8 +50,21 @@ type Star struct {
 	Skills        []string // skill names referenced in frontmatter, pre-resolution
 	Tools         StarTools
 	Defaults      StarDefaults
+	ContextBudget StarContextBudget
 	Prompt        string // skill fragments + star body
 	SourcePath    string // for error reporting
+}
+
+// StarContextBudget bounds how much context a star's invocation consumes. It
+// is parsed from the star's [context_budget] frontmatter block. Zero values
+// mean "unset"; callers fall back to per-role defaults (see
+// agent.BudgetForRole).
+type StarContextBudget struct {
+	MaxReadsBeforeEdit   int  // soft Read-thrash limit before an Edit
+	MaxGrepsBeforeEdit   int  // soft Grep-thrash limit before an Edit
+	MaxTotalReads        int  // hard cap on Reads per invocation
+	ToolResultMaxBytes   int  // cap on a single tool result's size in bytes
+	IncludeSiblingPhases bool // when true, inject every phase spec (architect)
 }
 
 // StarTools is a star's tool permission policy.

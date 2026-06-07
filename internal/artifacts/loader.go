@@ -70,7 +70,14 @@ func (l *Loader) LoadStar(name string) (*Star, error) {
 		Skills:        sf.Skills,
 		Tools:         StarTools{Allowed: sf.Tools.Allowed, Denied: sf.Tools.Denied},
 		Defaults:      StarDefaults{MaxBudgetUSD: sf.Defaults.MaxBudgetUSD, Effort: sf.Defaults.Effort},
-		Prompt:        strings.TrimSpace(body),
+		ContextBudget: StarContextBudget{
+			MaxReadsBeforeEdit:   sf.ContextBudget.MaxReadsBeforeEdit,
+			MaxGrepsBeforeEdit:   sf.ContextBudget.MaxGrepsBeforeEdit,
+			MaxTotalReads:        sf.ContextBudget.MaxTotalReads,
+			ToolResultMaxBytes:   sf.ContextBudget.ToolResultMaxBytes,
+			IncludeSiblingPhases: sf.ContextBudget.IncludeSiblingPhases,
+		},
+		Prompt: strings.TrimSpace(body),
 		SourcePath:    src,
 	}
 
@@ -334,6 +341,13 @@ type starFrontmatter struct {
 		MaxBudgetUSD float64 `toml:"max_budget_usd"`
 		Effort       string  `toml:"effort"`
 	} `toml:"defaults"`
+	ContextBudget struct {
+		MaxReadsBeforeEdit   int  `toml:"max_reads_before_edit"`
+		MaxGrepsBeforeEdit   int  `toml:"max_greps_before_edit"`
+		MaxTotalReads        int  `toml:"max_total_reads"`
+		ToolResultMaxBytes   int  `toml:"tool_result_max_bytes"`
+		IncludeSiblingPhases bool `toml:"include_sibling_phases"`
+	} `toml:"context_budget"`
 }
 
 type skillFrontmatter struct {
