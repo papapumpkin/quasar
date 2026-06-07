@@ -7,13 +7,13 @@ total_cost_usd = 16.41538015
 bead_id = 'budget-propagation'
 status = 'failed'
 created_at = 2026-06-06T11:31:43.661302-04:00
-updated_at = 2026-06-06T20:25:33.057209-04:00
+updated_at = 2026-06-06T20:35:31.721211-04:00
 
 [phases.coder-reviewer-as-inner-constellation]
 bead_id = 'coder-reviewer-as-inner-constellation'
 status = 'failed'
 created_at = 2026-06-06T11:31:43.661603-04:00
-updated_at = 2026-06-06T20:33:52.359051-04:00
+updated_at = 2026-06-06T20:35:31.72252-04:00
 
 [phases.cycle-limit-in-constellation]
 bead_id = 'cycle-limit-in-constellation'
