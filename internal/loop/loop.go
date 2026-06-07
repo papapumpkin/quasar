@@ -905,8 +905,9 @@ func (l *Loop) coderAgent(budget float64) agent.Agent {
 			"Read", "Edit", "Write", "Glob", "Grep",
 			"Bash(go *)", "Bash(git diff *)", "Bash(git status)", "Bash(git log *)",
 		},
-		MCP:           l.MCP,
-		FallbackModel: l.FallbackModel,
+		MCP:               l.MCP,
+		FallbackModel:     l.FallbackModel,
+		CacheOptimization: l.CacheOptimization,
 	}
 }
 
@@ -932,8 +933,9 @@ func (l *Loop) reviewerAgent(budget float64) agent.Agent {
 			"Read", "Glob", "Grep",
 			"Bash(go vet *)", "Bash(git diff *)", "Bash(git log *)",
 		},
-		MCP:           l.MCP,
-		FallbackModel: l.FallbackModel,
+		MCP:               l.MCP,
+		FallbackModel:     l.FallbackModel,
+		CacheOptimization: l.CacheOptimization,
 	}
 }
 

@@ -294,6 +294,9 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 		MaxBudgetUSD:  star.Defaults.MaxBudgetUSD,
 		Effort:        star.Defaults.Effort,
 		AllowedTools:  star.Tools.Allowed,
+		// A star's prompt is a fixed prefix reused across every firing of the
+		// same node, so a byte-stable system prompt is always desirable here.
+		CacheOptimization: true,
 	}, userPrompt(args, st), r.repoPath)
 	if err != nil {
 		r.recordInvocation(ctx, run, node, star.Name, "failed", 0, started)

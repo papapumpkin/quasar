@@ -365,6 +365,18 @@ func TestBuildArgs_OptionalFlags(t *testing.T) {
 			wantFlag: "--fallback-model",
 			present:  false,
 		},
+		{
+			name:     "cache optimization enabled",
+			agent:    agent.Agent{CacheOptimization: true},
+			wantFlag: "--exclude-dynamic-system-prompt-sections",
+			present:  true,
+		},
+		{
+			name:     "cache optimization disabled",
+			agent:    agent.Agent{CacheOptimization: false},
+			wantFlag: "--exclude-dynamic-system-prompt-sections",
+			present:  false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -514,6 +526,39 @@ func TestInvoke_PopulatesPromptMetrics(t *testing.T) {
 	wantHash := sha256Hex(sysPrompt)
 	if result.SystemPromptHash != wantHash {
 		t.Errorf("SystemPromptHash = %q, want %q", result.SystemPromptHash, wantHash)
+	}
+}
+
+func TestInvoke_ParsesCacheTokens(t *testing.T) {
+	resp := CLIResponse{
+		Result:    "ok",
+		SessionID: "sess-cache",
+		Usage: ClaudeUsage{
+			InputTokens:              200,
+			OutputTokens:             50,
+			CacheCreationInputTokens: 1400,
+			CacheReadInputTokens:     18200,
+		},
+	}
+	jsonBytes, _ := json.Marshal(resp)
+
+	dir := t.TempDir()
+	script := writeScript(t, dir, "claude", "printf '%s' '"+string(jsonBytes)+"'")
+
+	inv := newTestInvoker("claude", false, fakeExecContextWith(script), nil)
+	result, err := inv.Invoke(context.Background(), agent.Agent{}, "do stuff", dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.InputTokens != 200 {
+		t.Errorf("InputTokens = %d, want 200", result.InputTokens)
+	}
+	if result.CacheCreationTokens != 1400 {
+		t.Errorf("CacheCreationTokens = %d, want 1400", result.CacheCreationTokens)
+	}
+	if result.CacheReadTokens != 18200 {
+		t.Errorf("CacheReadTokens = %d, want 18200", result.CacheReadTokens)
 	}
 }
 

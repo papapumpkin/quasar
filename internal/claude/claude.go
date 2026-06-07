@@ -58,6 +58,12 @@ func buildArgs(a agent.Agent, prompt string) []string {
 		args = append(args, "--system-prompt", a.SystemPrompt)
 	}
 
+	// Keep dynamic content (timestamps, env) out of the system prompt so the
+	// cache prefix is byte-stable across invocations and prompt caching hits.
+	if a.CacheOptimization {
+		args = append(args, "--exclude-dynamic-system-prompt-sections")
+	}
+
 	if a.Model != "" {
 		args = append(args, "--model", a.Model)
 	}
@@ -120,13 +126,16 @@ func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, wo
 	}
 
 	return agent.InvocationResult{
-		ResultText:       resp.Result,
-		CostUSD:          resp.TotalCostUSD,
-		DurationMs:       resp.DurationMs,
-		SessionID:        resp.SessionID,
-		SystemPromptLen:  len(a.SystemPrompt),
-		UserPromptLen:    len(prompt),
-		SystemPromptHash: sha256Hex(a.SystemPrompt),
+		ResultText:          resp.Result,
+		CostUSD:             resp.TotalCostUSD,
+		DurationMs:          resp.DurationMs,
+		SessionID:           resp.SessionID,
+		SystemPromptLen:     len(a.SystemPrompt),
+		UserPromptLen:       len(prompt),
+		SystemPromptHash:    sha256Hex(a.SystemPrompt),
+		InputTokens:         resp.Usage.InputTokens,
+		CacheCreationTokens: resp.Usage.CacheCreationInputTokens,
+		CacheReadTokens:     resp.Usage.CacheReadInputTokens,
 	}, nil
 }
 

@@ -30,6 +30,10 @@ type Agent struct {
 	ResumeSessionID string     // When set, passes --resume <id> to resume a prior session.
 	Effort          string     // "low", "medium", "high", or "" (Claude's default).
 	FallbackModel   string     // Automatic fallback model when primary is overloaded.
+	// CacheOptimization, when true, instructs the invoker to pass
+	// --exclude-dynamic-system-prompt-sections so the system-prompt prefix stays
+	// byte-stable across invocations and remains eligible for prompt caching.
+	CacheOptimization bool
 }
 
 // InvocationResult holds the output and cost metrics from a single agent invocation.
@@ -41,6 +45,17 @@ type InvocationResult struct {
 	SystemPromptLen  int    // Length of the system prompt in bytes.
 	UserPromptLen    int    // Length of the user prompt in bytes.
 	SystemPromptHash string // SHA-256 hex digest of the system prompt for cache identity tracking.
+
+	// InputTokens is the count of fresh (uncached) input tokens billed at full
+	// rate for this invocation, as reported by the model's usage block.
+	InputTokens int
+	// CacheCreationTokens is the count of input tokens written into the prompt
+	// cache on this invocation (billed at the cache-write rate).
+	CacheCreationTokens int
+	// CacheReadTokens is the count of input tokens served from the prompt cache
+	// on this invocation (billed at the discounted cache-read rate). A non-zero
+	// value on a repeat invocation is the signal that caching is working.
+	CacheReadTokens int
 }
 
 // ReviewReport captures structured metadata from the reviewer's REPORT: block.
