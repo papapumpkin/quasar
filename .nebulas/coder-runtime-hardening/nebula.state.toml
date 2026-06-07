@@ -1,19 +1,25 @@
 version = 1
 nebula_name = 'coder-runtime-hardening'
-total_cost_usd = 30.665948000000004
+total_cost_usd = 38.2375995
 
 [phases]
 [phases.context-budgeting]
 bead_id = 'context-budgeting'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-06T21:11:50.107277-04:00
-updated_at = 2026-06-07T14:53:17.822496-04:00
+updated_at = 2026-06-07T15:07:46.57381-04:00
+
+[phases.context-budgeting.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Cycle-2 correctly fixes both minor findings (structured-JSON truncation bypass + doc accuracy) with clean wiring and matching tests; approved, with one non-blocking dead-config note about the unused `IncludeSiblingPhases` knob.'
 
 [phases.dead-coder-detection]
 bead_id = 'dead-coder-detection'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-06T21:11:50.107852-04:00
-updated_at = 2026-06-07T14:53:17.378655-04:00
+updated_at = 2026-06-07T15:07:46.586802-04:00
 
 [phases.entanglement-revival]
 bead_id = 'entanglement-revival'
