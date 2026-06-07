@@ -63,8 +63,8 @@ func runCacheReport(cmd *cobra.Command, _ []string) error {
 	for _, phase := range sortedPhases(phaseRates) {
 		fmt.Fprintf(w, "  phase %s: %s\n", phase, formatPct(phaseRates[phase]))
 
-		for i, rate := range telemetry.HitRateByCycleFor(metrics, phase) {
-			fmt.Fprintf(w, "    cycle %d: %s\n", i, formatPct(rate))
+		for _, c := range telemetry.HitRateByCycleFor(metrics, phase) {
+			fmt.Fprintf(w, "    cycle %d: %s\n", c.Cycle, formatPct(c.HitRate))
 		}
 	}
 	return nil

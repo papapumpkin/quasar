@@ -54,8 +54,14 @@ func HitRatioFor(metrics []CacheMetric) float64 {
 }
 
 // CacheMetricStore appends CacheMetric records to a JSONL file and reads them
-// back for reporting. It is safe for concurrent use: each Record performs a
-// single atomic O_APPEND write under a mutex.
+// back for reporting.
+//
+// Concurrency has two layers. Within a single store instance the mutex
+// serializes Record calls, so concurrent goroutines (e.g. max_workers phases)
+// are safe. Across *separate* store instances over the same file — including
+// separate processes — the mutex does not apply; safety then rests on POSIX
+// O_APPEND write atomicity, which holds only for writes below PIPE_BUF. See the
+// invariant documented on Record.
 type CacheMetricStore struct {
 	path string
 	mu   sync.Mutex
@@ -98,6 +104,13 @@ func (s *CacheMetricStore) Record(ctx context.Context, metric CacheMetric) error
 	}
 	defer f.Close()
 
+	// INVARIANT: cross-instance and cross-process interleaving safety depends on
+	// this being a single O_APPEND write smaller than PIPE_BUF (4096 on Linux,
+	// 512 on the POSIX minimum). CacheMetric serializes to well under that, and
+	// callers must keep it so. If a future field pushes a line past PIPE_BUF, or
+	// the log lands on a network filesystem without atomic append, concurrent
+	// writers from different store instances could interleave and corrupt lines —
+	// switch to file locking (flock) at that point.
 	if _, err := f.Write(line); err != nil {
 		return fmt.Errorf("telemetry: append cache metric: %w", err)
 	}
@@ -129,10 +142,18 @@ func (s *CacheMetricStore) HitRateByPhase(ctx context.Context, nebulaID string) 
 	return HitRateByPhaseFor(metrics), nil
 }
 
+// CycleHitRate pairs a cycle number with its pooled cache hit ratio. The cycle
+// number is the real loop cycle (loops start at 1), not a slice index, so
+// non-contiguous cycles are reported honestly rather than renumbered.
+type CycleHitRate struct {
+	Cycle   int
+	HitRate float64
+}
+
 // HitRateByCycle returns the pooled hit ratio for each cycle of one phase,
 // ordered by ascending cycle number. Multiple records sharing a cycle (e.g. a
 // coder and reviewer invocation) are pooled into that cycle's ratio.
-func (s *CacheMetricStore) HitRateByCycle(ctx context.Context, nebulaID, phaseID string) ([]float64, error) {
+func (s *CacheMetricStore) HitRateByCycle(ctx context.Context, nebulaID, phaseID string) ([]CycleHitRate, error) {
 	metrics, err := s.MetricsByNebula(ctx, nebulaID)
 	if err != nil {
 		return nil, err
@@ -156,9 +177,10 @@ func HitRateByPhaseFor(metrics []CacheMetric) map[string]float64 {
 }
 
 // HitRateByCycleFor computes the pooled hit ratio for each cycle of phaseID
-// from an in-memory slice of metrics, ordered by ascending cycle number. It
-// performs no I/O.
-func HitRateByCycleFor(metrics []CacheMetric, phaseID string) []float64 {
+// from an in-memory slice of metrics, ordered by ascending cycle number. Each
+// result carries its real cycle number, so non-contiguous cycles are preserved
+// rather than renumbered. It performs no I/O.
+func HitRateByCycleFor(metrics []CacheMetric, phaseID string) []CycleHitRate {
 	byCycle := make(map[int][]CacheMetric)
 	for _, m := range metrics {
 		if m.PhaseID != phaseID {
@@ -172,9 +194,9 @@ func HitRateByCycleFor(metrics []CacheMetric, phaseID string) []float64 {
 	}
 	sort.Ints(cycles)
 
-	out := make([]float64, 0, len(cycles))
+	out := make([]CycleHitRate, 0, len(cycles))
 	for _, c := range cycles {
-		out = append(out, HitRatioFor(byCycle[c]))
+		out = append(out, CycleHitRate{Cycle: c, HitRate: HitRatioFor(byCycle[c])})
 	}
 	return out
 }

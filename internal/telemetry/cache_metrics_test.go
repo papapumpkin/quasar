@@ -121,9 +121,11 @@ func TestCacheMetricStore_HitRateByCycle(t *testing.T) {
 	store := NewCacheMetricStore(path)
 	ctx := context.Background()
 
+	// Use non-contiguous cycle numbers (2 and 5) that start above zero. The
+	// result must preserve the real cycle numbers, not renumber them to 0,1.
 	records := []CacheMetric{
-		{NebulaID: "neb-1", PhaseID: "phase-a", CycleN: 1, InputTokens: 0, CacheRead: 800},
-		{NebulaID: "neb-1", PhaseID: "phase-a", CycleN: 0, InputTokens: 1000, CacheRead: 0},
+		{NebulaID: "neb-1", PhaseID: "phase-a", CycleN: 5, InputTokens: 0, CacheRead: 800},
+		{NebulaID: "neb-1", PhaseID: "phase-a", CycleN: 2, InputTokens: 1000, CacheRead: 0},
 		{NebulaID: "neb-1", PhaseID: "phase-b", CycleN: 0, InputTokens: 1, CacheRead: 1},
 	}
 	for _, r := range records {
@@ -136,15 +138,17 @@ func TestCacheMetricStore_HitRateByCycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HitRateByCycle: %v", err)
 	}
-	if len(cycles) != 2 {
-		t.Fatalf("expected 2 cycles, got %d: %v", len(cycles), cycles)
+	want := []CycleHitRate{
+		{Cycle: 2, HitRate: 0}, // all fresh
+		{Cycle: 5, HitRate: 1}, // all cached
 	}
-	// Ordered by cycle number: cycle 0 (all fresh) = 0, cycle 1 (all cached) = 1.
-	if cycles[0] != 0 {
-		t.Errorf("cycle 0 = %v, want 0", cycles[0])
+	if len(cycles) != len(want) {
+		t.Fatalf("expected %d cycles, got %d: %v", len(want), len(cycles), cycles)
 	}
-	if cycles[1] != 1 {
-		t.Errorf("cycle 1 = %v, want 1", cycles[1])
+	for i, w := range want {
+		if cycles[i] != w {
+			t.Errorf("cycles[%d] = %+v, want %+v", i, cycles[i], w)
+		}
 	}
 }
 
