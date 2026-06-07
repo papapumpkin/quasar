@@ -74,6 +74,89 @@ func (b *Budget) RecordCost(ctx context.Context, inv fabric.StarInvocationRow) (
 	return b.store.RecordInvocationCost(ctx, inv)
 }
 
+// invocationRow builds a star_invocation trace row for one node firing. Cycle is
+// taken from the run row (authoritative for the column), and the duration is
+// measured from started to now so both success- and failure-path traces stamp a
+// consistent end time.
+func (r *Runtime) invocationRow(run *fabric.RunRow, node *artifacts.ConstellationNode, starName, state string, costUSD float64, started time.Time) fabric.StarInvocationRow {
+	ended := time.Now()
+	return fabric.StarInvocationRow{
+		RunID:      run.ID,
+		Node:       node.ID,
+		StarName:   starName,
+		State:      state,
+		Cycle:      run.Cycle,
+		CostUSD:    costUSD,
+		DurationMs: ended.Sub(started).Milliseconds(),
+		StartedAt:  started.Unix(),
+		EndedAt:    ended.Unix(),
+	}
+}
+
+// recordInvocation persists a failure-path trace row for telemetry only — it
+// does not charge the budget (a failed invocation has no billable cost). Unlike
+// the success path's RecordCost, a write error here is logged and swallowed: the
+// trace is best-effort and must not mask the underlying invocation failure the
+// caller is already returning.
+func (r *Runtime) recordInvocation(ctx context.Context, run *fabric.RunRow, node *artifacts.ConstellationNode, starName, state string, costUSD float64, started time.Time) {
+	if _, err := r.runStore.InsertStarInvocation(ctx, r.invocationRow(run, node, starName, state, costUSD, started)); err != nil {
+		fmt.Fprintf(os.Stderr, "constellations: record %s invocation (run %s, node %s): %v\n", state, run.ID, node.ID, err)
+	}
+}
+
+// budgetDetail builds the structured breakdown attached to a budget-exhaustion
+// failure: the cap, the total spent, the node the cap tripped on, and the
+// per-node cost ranking (most expensive first). Store-read errors are logged and
+// the partial detail is returned rather than failing the already-terminating
+// run.
+func (r *Runtime) budgetDetail(ctx context.Context, runID, node string) map[string]any {
+	_, initial, remaining, err := r.runStore.RunBudget(ctx, runID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "constellations: read budget for detail (run %s): %v\n", runID, err)
+	}
+	breakdown, err := r.runStore.CostBreakdown(ctx, runID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "constellations: cost breakdown for detail (run %s): %v\n", runID, err)
+	}
+	top := make([]map[string]any, len(breakdown))
+	for i, nc := range breakdown {
+		top[i] = map[string]any{
+			"node":        nc.Node,
+			"invocations": nc.Invocations,
+			"cost_usd":    nc.CostUSD,
+		}
+	}
+	return map[string]any{
+		"reason":            "budget exhausted",
+		"exhausted_at_node": node,
+		"initial_usd":       initial,
+		"spent_usd":         initial - remaining,
+		"top_costs":         top,
+	}
+}
+
+// failBudget terminates a run that hit its budget cap. It mirrors fail, but
+// records a structured budget breakdown into the _error node and returns
+// ErrBudgetExhausted so callers (and tests) can distinguish a budget stop — a
+// defined terminal failure mode — from an operational error.
+func (r *Runtime) failBudget(ctx context.Context, run *fabric.RunRow, st *State, node *artifacts.ConstellationNode) (string, error) {
+	st.RecordNode("_error", map[string]any{
+		"reason": "budget exhausted",
+		"detail": r.budgetDetail(ctx, run.ID, node.ID),
+		"node":   node.ID,
+	})
+	if dag, err := MarshalState(st); err == nil {
+		run.DAGStateTOML = dag
+		if err := r.runStore.SaveProgress(ctx, run); err != nil {
+			fmt.Fprintf(os.Stderr, "constellations: save budget-failure state (run %s): %v\n", run.ID, err)
+		}
+	}
+	if err := r.runStore.Complete(ctx, run.ID, StateFailed); err != nil {
+		return "", err
+	}
+	return StateFailed, ErrBudgetExhausted
+}
+
 // resolveBudget computes a run's initial budget cap at Fire time. Precedence:
 // explicit override (CLI/API) > nebula [execution].max_budget_usd > global
 // default. A non-positive result means the run has no cap.

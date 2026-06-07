@@ -102,11 +102,11 @@ func TestLoadConstellation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConstellation: %v", err)
 	}
-	if len(c.Nodes) != 3 {
-		t.Fatalf("nodes = %d, want 3", len(c.Nodes))
+	if len(c.Nodes) != 5 {
+		t.Fatalf("nodes = %d, want 5", len(c.Nodes))
 	}
-	if len(c.Edges) != 5 {
-		t.Fatalf("edges = %d, want 5", len(c.Edges))
+	if len(c.Edges) != 7 {
+		t.Fatalf("edges = %d, want 7", len(c.Edges))
 	}
 
 	// Safety wiring: the commit is a runtime-owned builtin node, not the coder
@@ -118,14 +118,15 @@ func TestLoadConstellation(t *testing.T) {
 	}
 
 	// Expressions are pre-compiled: the unconditional check is that When is a
-	// usable Expression, not a deferred string.
-	approvedEdge := findEdge(t, c, "review", "_done")
-	got, err := approvedEdge.When.Eval(State{"review": map[string]any{"approved": true}})
+	// usable Expression, not a deferred string. The approve edge runs from the
+	// reviewer-decision node (decide), which exposes the typed `approved` flag.
+	approvedEdge := findEdge(t, c, "decide", "_done")
+	got, err := approvedEdge.When.Eval(State{"nodes": map[string]any{"decide": map[string]any{"approved": true}}})
 	if err != nil {
 		t.Fatalf("Eval: %v", err)
 	}
 	if got != true {
-		t.Errorf("review.approved guard = %v, want true", got)
+		t.Errorf("decide.approved guard = %v, want true", got)
 	}
 
 	// Node inputs are compiled interpolation templates.

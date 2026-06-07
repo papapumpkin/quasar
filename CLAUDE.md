@@ -25,10 +25,21 @@ internal/
   integrations/  Forge-agnostic ticket sources + Forge stub + registry + secrets
                  (github/ adapter; reach adapters only via integrations.Default())
   gitops/        Vanilla-git output safety perimeter (reserved; lands in a later nebula)
-  loop/          Core coder-reviewer loop and state machine
+  artifacts/     Embedded default stars/skills/constellations + per-repo override loader
+  constellations/ Constellation engine: Step/Fire walk, operators, budget + cycle guard
+  fabric/        SQLite persistence (constellation_runs, star_invocations, nebulas)
+  loop/          In-process coder-reviewer loop (cmd `quasar run`, tests); being
+                 superseded by the coder-reviewer constellation as NodeConstellation lands
   nebula/        Multi-task orchestration (parse, validate, plan, apply)
   ui/            Stderr-based UI printer (ANSI colors)
 ```
+
+The coder-reviewer pair runs as a declarative constellation
+(`internal/artifacts/defaults/constellations/coder-reviewer.toml`): the coder
+writes a diff, the runtime commits it, the reviewer judges it (parsed by the
+`reviewer_decision` builtin), and a back-edge revises up to `[meta].max_cycles`
+times before the run fails. The inner cycle cap is enforced by the same runtime
+back-edge counter as every other loop — no Go constant, no special-casing.
 
 ## Integrations & Safety
 
