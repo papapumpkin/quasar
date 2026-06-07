@@ -126,15 +126,7 @@ func (s *CacheMetricStore) HitRateByPhase(ctx context.Context, nebulaID string) 
 	if err != nil {
 		return nil, err
 	}
-	byPhase := make(map[string][]CacheMetric)
-	for _, m := range metrics {
-		byPhase[m.PhaseID] = append(byPhase[m.PhaseID], m)
-	}
-	rates := make(map[string]float64, len(byPhase))
-	for phase, ms := range byPhase {
-		rates[phase] = HitRatioFor(ms)
-	}
-	return rates, nil
+	return HitRateByPhaseFor(metrics), nil
 }
 
 // HitRateByCycle returns the pooled hit ratio for each cycle of one phase,
@@ -145,6 +137,28 @@ func (s *CacheMetricStore) HitRateByCycle(ctx context.Context, nebulaID, phaseID
 	if err != nil {
 		return nil, err
 	}
+	return HitRateByCycleFor(metrics, phaseID), nil
+}
+
+// HitRateByPhaseFor computes the pooled hit ratio per phase from an in-memory
+// slice of metrics (already scoped to one nebula). It performs no I/O, so
+// callers that have already loaded the metrics avoid re-reading the log.
+func HitRateByPhaseFor(metrics []CacheMetric) map[string]float64 {
+	byPhase := make(map[string][]CacheMetric)
+	for _, m := range metrics {
+		byPhase[m.PhaseID] = append(byPhase[m.PhaseID], m)
+	}
+	rates := make(map[string]float64, len(byPhase))
+	for phase, ms := range byPhase {
+		rates[phase] = HitRatioFor(ms)
+	}
+	return rates
+}
+
+// HitRateByCycleFor computes the pooled hit ratio for each cycle of phaseID
+// from an in-memory slice of metrics, ordered by ascending cycle number. It
+// performs no I/O.
+func HitRateByCycleFor(metrics []CacheMetric, phaseID string) []float64 {
 	byCycle := make(map[int][]CacheMetric)
 	for _, m := range metrics {
 		if m.PhaseID != phaseID {
@@ -162,7 +176,7 @@ func (s *CacheMetricStore) HitRateByCycle(ctx context.Context, nebulaID, phaseID
 	for _, c := range cycles {
 		out = append(out, HitRatioFor(byCycle[c]))
 	}
-	return out, nil
+	return out
 }
 
 // readAll loads every metric line from the log. A non-existent file yields an

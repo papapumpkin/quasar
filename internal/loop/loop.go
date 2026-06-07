@@ -9,6 +9,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/filter"
+	"github.com/papapumpkin/quasar/internal/telemetry"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
@@ -47,6 +48,14 @@ type Loop struct {
 	CheckpointDir     string           // Directory for checkpoint files. Empty disables checkpointing.
 	FixEffort         string           // Effort level for lint/filter fix invocations (e.g. "low"). Empty = Claude's default.
 	FallbackModel     string           // Automatic fallback model passed to all agents.
+
+	// CacheMetrics, when non-nil, persists per-invocation prompt-cache token
+	// counts to the JSONL log so `quasar cache report` can measure hit rate.
+	// A nil store disables recording (e.g. in unit tests).
+	CacheMetrics *telemetry.CacheMetricStore
+	// NebulaID labels recorded cache metrics so they can be grouped by run.
+	// Empty for ad-hoc single-task runs that are not part of a nebula.
+	NebulaID string
 	// NewCheckpointHook, when non-nil, is called by RunTask and RunExistingTask
 	// to create a checkpoint hook that is prepended to Hooks. The function
 	// receives a state accessor (returning the current *CycleState) and must
@@ -1083,6 +1092,29 @@ func (l *Loop) trackCacheMetrics(ctx context.Context, state *CycleState, agentRo
 		Message: fmt.Sprintf("sys_prompt_hash=%s sys_prompt_len=%d user_prompt_len=%d cost=%.4f",
 			hash, result.SystemPromptLen, result.UserPromptLen, result.CostUSD),
 	})
+
+	l.recordCacheMetric(ctx, state, result)
+}
+
+// recordCacheMetric persists the invocation's prompt-cache token counts to the
+// JSONL log when a store is configured. Recording is best-effort: a write
+// failure is logged to stderr but never fails the loop, since telemetry is a
+// read-only side channel and must not block correct coder progress.
+func (l *Loop) recordCacheMetric(ctx context.Context, state *CycleState, result *agent.InvocationResult) {
+	if l.CacheMetrics == nil {
+		return
+	}
+	err := l.CacheMetrics.Record(ctx, telemetry.CacheMetric{
+		NebulaID:    l.NebulaID,
+		PhaseID:     state.TaskID,
+		CycleN:      state.Cycle,
+		InputTokens: result.InputTokens,
+		CacheCreate: result.CacheCreationTokens,
+		CacheRead:   result.CacheReadTokens,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[cache] failed to record metric: %v\n", err)
+	}
 }
 
 // checkBudget returns ErrBudgetExceeded if the total cost has reached the limit.

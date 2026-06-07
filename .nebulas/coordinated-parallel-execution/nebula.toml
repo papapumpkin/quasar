@@ -1,0 +1,36 @@
+[nebula]
+name = "coordinated-parallel-execution"
+description = "Make parallel coder execution genuinely safe by treating conflicts as a coordination problem rather than a corruption problem. Four pieces: (1) an entanglement lifecycle that publishes intent before, during, and after each phase; (2) a pre-flight coordination check that injects sibling-aware notes into the coder's prompt; (3) a merge gate that catches both marker conflicts and post-merge build/test failures; (4) a specialist conflict-resolver star whose prompt carries both originating workstreams' specs + diffs + entanglement state, so it can preserve both intents rather than guessing."
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["quasar", "runtime", "parallelism"]
+assignee = ""
+
+[execution]
+max_workers = 1
+max_review_cycles = 3
+max_budget_usd = 50.0
+model = ""
+gate = "review"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Entanglements have a full lifecycle (declared → claimed → in_flight → fulfilled | withdrawn | deprecated); status transitions correspond to observable runtime events (architect parses spec, coder picks up phase, coder green-builds, supervisor merges, supervisor terminates)",
+    "Before a coder starts, the runtime queries entanglements that intersect its scope and injects sibling-aware coordination notes into its prompt — including any in-flight signature drafts and any deprecated symbols it must NOT reintroduce",
+    "Phase completion goes through a merge gate: try git merge into the parent branch; clean → fulfill; marker conflict OR post-merge build failure → fire conflict-resolver constellation",
+    "A specialist conflict-resolver star receives a structured prompt containing both originating workstreams' specs, both diffs against base, the entanglement state, and any build error output, so it can preserve both intents rather than picking a winner",
+    "Conflict resolution is cycle-bounded (2 cycles) and budget-bounded ($5), with hard escalation to _awaiting_human on config-file conflicts, repeated-failure patterns, and any same-file-deleted-vs-modified collision",
+]
+constraints = [
+    "No new external dependencies for any of this work — entanglement queries are pure SQLite; merge attempts use the existing gitops Client",
+    "Conflict-resolver star tools are tightly denylisted (no Bash(git push|merge|reset), no Write); the resolver may only Edit files that already contain conflict markers OR have outstanding build errors",
+    "Entanglements remain advisory, not authoritative — a coder MAY override coordination notes when its spec explicitly requires it, but the override is recorded in telemetry so we can audit how often advice is ignored",
+    "Backward compatibility: existing entanglements with status='pending' migrate to 'fulfilled' if their producer run is terminal-done, 'withdrawn' if terminal-failed, unchanged otherwise",
+]
+
+[dependencies]
+requires_nebulae = ["constellation-runtime", "coder-runtime-hardening"]

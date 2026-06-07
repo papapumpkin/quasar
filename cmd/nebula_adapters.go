@@ -18,6 +18,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/loop"
 	"github.com/papapumpkin/quasar/internal/nebula"
+	"github.com/papapumpkin/quasar/internal/telemetry"
 	"github.com/papapumpkin/quasar/internal/tui"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
@@ -127,13 +128,15 @@ type tuiLoopAdapter struct {
 	coderPrompt      string
 	reviewPrompt     string
 	workDir          string
-	fabric           fabric.Fabric // nil when fabric is not configured
-	bus              bus.Bus       // nil = use PhaseUIBridge; non-nil = use BusUIBridge
-	projectContext   string        // Deterministic project snapshot for prompt caching.
-	maxContextTokens int           // Token budget for context injection. 0 = use default.
-	checkpointDir    string        // Directory for checkpoint files. Empty disables checkpointing.
-	fixEffort        string        // Effort level for lint/filter fix invocations.
-	fallbackModel    string        // Automatic fallback model when primary is overloaded.
+	fabric           fabric.Fabric               // nil when fabric is not configured
+	bus              bus.Bus                     // nil = use PhaseUIBridge; non-nil = use BusUIBridge
+	projectContext   string                      // Deterministic project snapshot for prompt caching.
+	maxContextTokens int                         // Token budget for context injection. 0 = use default.
+	checkpointDir    string                      // Directory for checkpoint files. Empty disables checkpointing.
+	fixEffort        string                      // Effort level for lint/filter fix invocations.
+	fallbackModel    string                      // Automatic fallback model when primary is overloaded.
+	cacheMetrics     *telemetry.CacheMetricStore // Optional; persists prompt-cache token counts per phase.
+	nebulaID         string                      // Nebula name used to label recorded cache metrics.
 }
 
 // newPhaseUI returns a ui.UI implementation for the given phase. When the bus
@@ -174,6 +177,8 @@ func (a *tuiLoopAdapter) RunExistingPhase(ctx context.Context, phaseID, beadID, 
 		CheckpointDir:     a.checkpointDir,
 		FixEffort:         a.fixEffort,
 		FallbackModel:     a.fallbackModel,
+		CacheMetrics:      a.cacheMetrics,
+		NebulaID:          a.nebulaID,
 	}
 
 	// Apply per-phase execution overrides.
@@ -274,6 +279,8 @@ func (a *tuiLoopAdapter) RunFromCheckpoint(ctx context.Context, checkpointData a
 		CheckpointDir:     a.checkpointDir,
 		FixEffort:         a.fixEffort,
 		FallbackModel:     a.fallbackModel,
+		CacheMetrics:      a.cacheMetrics,
+		NebulaID:          a.nebulaID,
 	}
 
 	// Apply per-phase execution overrides.

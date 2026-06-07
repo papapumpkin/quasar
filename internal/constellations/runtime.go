@@ -11,6 +11,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/artifacts"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/gitops"
+	"github.com/papapumpkin/quasar/internal/telemetry"
 )
 
 // Terminal run states. Edge targets (_done, _failed, …) map onto these when the
@@ -63,6 +64,7 @@ type Runtime struct {
 	preCommit        gitops.PreCommitConfig
 	budget           *Budget
 	defaultBudgetUSD float64
+	cacheMetrics     *telemetry.CacheMetricStore // Optional; nil disables cache-token recording.
 }
 
 // RuntimeOpts configures New. RunStore, NebStore, and Loader are required;
@@ -81,6 +83,9 @@ type RuntimeOpts struct {
 	// explicit override nor the nebula manifest sets a budget. Zero means no
 	// fallback cap.
 	DefaultBudgetUSD float64
+	// CacheMetrics, when non-nil, persists per-star prompt-cache token counts to
+	// the JSONL log for `quasar cache report`. Nil disables recording.
+	CacheMetrics *telemetry.CacheMetricStore
 }
 
 // New constructs a Runtime. It panics on a nil required dependency, surfacing a
@@ -99,6 +104,7 @@ func New(opts RuntimeOpts) *Runtime {
 		preCommit:        opts.PreCommit,
 		budget:           NewBudget(opts.RunStore),
 		defaultBudgetUSD: opts.DefaultBudgetUSD,
+		cacheMetrics:     opts.CacheMetrics,
 	}
 }
 
@@ -253,70 +259,6 @@ func (r *Runtime) dispatchBuiltin(ctx context.Context, st *State, node *artifact
 		return nil, err
 	}
 	return op(ctx, r, st, args)
-}
-
-// dispatchStar resolves the star, invokes the LLM with the node's rendered
-// inputs, accumulates cost, and records a star_invocation row.
-//
-// SAFETY INVARIANT — stars must never be granted git-write tools. A star edits
-// the worktree; the *commit* happens only in the `commit` builtin node, which
-// is the sole place the runtime threads the repo's [pre_commit] config into
-// gitops.Commit. If a star's allowed-tools (star.Tools.Allowed, passed below)
-// included direct git access, the LLM could commit inside the worktree itself,
-// bypassing both the internal/gitops perimeter and the pre-commit gate. This
-// runtime does not yet enforce the invariant (a loader-side rejection of
-// git-write tools lands when the star tool model firms up); until then it is an
-// authoring rule. See docs/safety.md ("Stars and git writes").
-func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *State, node *artifacts.ConstellationNode) (map[string]any, error) {
-	if r.invoker == nil {
-		return nil, fmt.Errorf("constellations: star node %q requires an Invoker", node.ID)
-	}
-	// Pre-step budget gate: refuse to start this invocation if the run's cap is
-	// spent. The sentinel propagates up to Step, which routes to failBudget.
-	if err := r.budget.CheckBefore(ctx, run.ID); err != nil {
-		return nil, err
-	}
-	star, err := r.loader.LoadStar(node.Star)
-	if err != nil {
-		return nil, fmt.Errorf("constellations: load star %q: %w", node.Star, err)
-	}
-	args, err := evalInputs(node, st.ExprState())
-	if err != nil {
-		return nil, err
-	}
-
-	started := time.Now()
-	res, err := r.invoker.Invoke(ctx, agent.Agent{
-		Role:          agent.RoleCoder,
-		SystemPrompt:  star.Prompt,
-		Model:         star.Model,
-		FallbackModel: star.FallbackModel,
-		MaxBudgetUSD:  star.Defaults.MaxBudgetUSD,
-		Effort:        star.Defaults.Effort,
-		AllowedTools:  star.Tools.Allowed,
-		// A star's prompt is a fixed prefix reused across every firing of the
-		// same node, so a byte-stable system prompt is always desirable here.
-		CacheOptimization: true,
-	}, userPrompt(args, st), r.repoPath)
-	if err != nil {
-		r.recordInvocation(ctx, run, node, star.Name, "failed", 0, started)
-		return nil, fmt.Errorf("constellations: invoke star %q: %w", star.Name, err)
-	}
-
-	st.Meta.TotalCostUSD += res.CostUSD
-	// Charge the run's budget and persist the invocation trace atomically via
-	// RecordCost: a crash between the two writes can neither double-charge nor
-	// skip the cost. Unlike the failure-path trace, the charge is correctness-
-	// relevant, so a failure to record it fails the step rather than being
-	// logged and ignored.
-	if _, err := r.budget.RecordCost(ctx, r.invocationRow(run, node, star.Name, "done", res.CostUSD, started)); err != nil {
-		return nil, fmt.Errorf("constellations: record star invocation (run %s): %w", run.ID, err)
-	}
-	return map[string]any{
-		"result":     res.ResultText,
-		"cost_usd":   res.CostUSD,
-		"session_id": res.SessionID,
-	}, nil
 }
 
 // commitWork is the single point where the runtime writes a commit. It always

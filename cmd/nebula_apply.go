@@ -20,6 +20,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/loop"
 	"github.com/papapumpkin/quasar/internal/nebula"
 	"github.com/papapumpkin/quasar/internal/snapshot"
+	"github.com/papapumpkin/quasar/internal/telemetry"
 	"github.com/papapumpkin/quasar/internal/tui"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
@@ -371,6 +372,8 @@ func runApplyWithStderr(
 		CheckpointDir:     ecfg.NebulaDir,
 		FixEffort:         ecfg.FixEffort,
 		FallbackModel:     ecfg.FallbackModel,
+		CacheMetrics:      telemetry.NewCacheMetricStore(cacheMetricsPath),
+		NebulaID:          n.Manifest.Nebula.Name,
 	}
 
 	isTTY := isStderrTTY()
@@ -447,6 +450,8 @@ func buildTUIWorkerOpts(
 		checkpointDir:    ecfg.NebulaDir,
 		fixEffort:        ecfg.FixEffort,
 		fallbackModel:    ecfg.FallbackModel,
+		cacheMetrics:     telemetry.NewCacheMetricStore(cacheMetricsPath),
+		nebulaID:         engine.GetNebula().Manifest.Nebula.Name,
 	}
 
 	opts := []nebula.Option{

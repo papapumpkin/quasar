@@ -57,19 +57,13 @@ func runCacheReport(cmd *cobra.Command, _ []string) error {
 	fmt.Fprintf(w, "Cache report for nebula %s\n", nebulaID)
 	fmt.Fprintf(w, "  global hit rate: %s\n\n", formatPct(telemetry.HitRatioFor(metrics)))
 
-	phaseRates, err := store.HitRateByPhase(ctx, nebulaID)
-	if err != nil {
-		return fmt.Errorf("cache report: %w", err)
-	}
-
+	// Compute every aggregate from the single slice already loaded above, so the
+	// append-only log is parsed exactly once regardless of phase count.
+	phaseRates := telemetry.HitRateByPhaseFor(metrics)
 	for _, phase := range sortedPhases(phaseRates) {
 		fmt.Fprintf(w, "  phase %s: %s\n", phase, formatPct(phaseRates[phase]))
 
-		cycleRates, err := store.HitRateByCycle(ctx, nebulaID, phase)
-		if err != nil {
-			return fmt.Errorf("cache report: %w", err)
-		}
-		for i, rate := range cycleRates {
+		for i, rate := range telemetry.HitRateByCycleFor(metrics, phase) {
 			fmt.Fprintf(w, "    cycle %d: %s\n", i, formatPct(rate))
 		}
 	}
