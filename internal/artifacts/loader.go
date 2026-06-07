@@ -77,8 +77,8 @@ func (l *Loader) LoadStar(name string) (*Star, error) {
 			ToolResultMaxBytes:   sf.ContextBudget.ToolResultMaxBytes,
 			IncludeSiblingPhases: sf.ContextBudget.IncludeSiblingPhases,
 		},
-		Prompt: strings.TrimSpace(body),
-		SourcePath:    src,
+		Prompt:     strings.TrimSpace(body),
+		SourcePath: src,
 	}
 
 	if err := l.resolveSkills(star); err != nil {
