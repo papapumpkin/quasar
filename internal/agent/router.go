@@ -80,7 +80,11 @@ type Answer struct {
 	Result       string // structured answer per Kind
 	InputTokens  int    // Haiku input tokens billed for this answer
 	OutputTokens int    // Haiku output tokens billed for this answer
-	ModelUsed    string // the model that produced the answer (always RouterModel)
+	// ModelUsed is the model the Router *requested* (RouterModel/Haiku). The
+	// invoker may fall back to FallbackModel under overload; this field does not
+	// yet reflect that, because InvocationResult carries no actual-model field.
+	// True attribution lands with the live-wiring follow-up.
+	ModelUsed string
 }
 
 // StarLoader loads a resolved sub-star by name. *artifacts.Loader satisfies it.
