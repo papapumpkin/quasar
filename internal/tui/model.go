@@ -533,6 +533,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MsgEntanglementUpdate:
 		m.Entanglements = msg.Entanglements
 		m.EntanglementView.Entanglements = msg.Entanglements
+		m.EntanglementView.Collisions = msg.Collisions
 		m.EntanglementView.ClampCursor()
 
 	case MsgDiscoveryPosted:

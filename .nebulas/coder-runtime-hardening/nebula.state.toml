@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'coder-runtime-hardening'
-total_cost_usd = 19.828920500000002
+total_cost_usd = 30.665948000000004
 
 [phases]
 [phases.context-budgeting]
@@ -17,9 +17,9 @@ updated_at = 2026-06-07T09:49:04.337081-04:00
 
 [phases.entanglement-revival]
 bead_id = 'entanglement-revival'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-06T21:11:50.108373-04:00
-updated_at = 2026-06-07T08:37:45.288351-04:00
+updated_at = 2026-06-07T10:15:01.264887-04:00
 
 [phases.in-cycle-checkpointing]
 bead_id = 'in-cycle-checkpointing'
@@ -29,9 +29,15 @@ updated_at = 2026-06-07T08:37:45.288156-04:00
 
 [phases.model-routing]
 bead_id = 'model-routing'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-06T21:11:50.107566-04:00
-updated_at = 2026-06-07T09:49:04.337582-04:00
+updated_at = 2026-06-07T10:15:01.242726-04:00
+
+[phases.model-routing.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A correctly-implemented, fully-tested Haiku sub-question router ships as gated infrastructure with all five prior findings resolved; the only open item is human sign-off on its intentional lack of live wiring.'
 
 [phases.prompt-cache-audit-and-fix]
 bead_id = 'prompt-cache-audit-and-fix'

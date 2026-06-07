@@ -1,6 +1,8 @@
 package nebula
 
 import (
+	"sort"
+
 	"github.com/papapumpkin/quasar/internal/dag"
 )
 
@@ -13,6 +15,7 @@ type PhaseTracker struct {
 	done       map[string]bool
 	failed     map[string]bool
 	inFlight   map[string]bool
+	collisions *CollisionDetector
 }
 
 // NewPhaseTracker creates a PhaseTracker from the current nebula and state.
@@ -24,6 +27,7 @@ func NewPhaseTracker(phases []PhaseSpec, state *State) *PhaseTracker {
 		failed:     make(map[string]bool),
 		inFlight:   make(map[string]bool),
 	}
+	pt.collisions = NewCollisionDetector(pt.phasesByID)
 	for id, ps := range state.Phases {
 		if ps.Status == PhaseStatusDone {
 			pt.done[id] = true
@@ -63,6 +67,7 @@ func (pt *PhaseTracker) InFlight() map[string]bool {
 // admitted and subsequent conflicting phases are deferred until the next
 // dispatch cycle.
 func (pt *PhaseTracker) FilterEligible(ready []string, d *dag.DAG) []string {
+	inFlight := pt.inFlightIDs()
 	var eligible []string
 	for _, id := range ready {
 		if pt.inFlight[id] || pt.failed[id] {
@@ -71,13 +76,14 @@ func (pt *PhaseTracker) FilterEligible(ready []string, d *dag.DAG) []string {
 		if pt.hasFailedDep(id, d) {
 			continue
 		}
-		if pt.hasScopeConflictWithInFlight(id) {
+		spec := pt.phasesByID[id]
+		// Defer if this phase would collide with an in-flight phase, or with
+		// a phase already admitted in this same batch — both would run
+		// concurrently into overlapping scope.
+		if len(pt.collisions.wouldCollideIDs(spec, inFlight)) > 0 {
 			continue
 		}
-		// Also check scope conflicts with phases we're about to dispatch
-		// in this same batch — both are not yet in-flight but would run
-		// concurrently.
-		if pt.hasScopeConflictWith(id, eligible) {
+		if len(pt.collisions.wouldCollideIDs(spec, eligible)) > 0 {
 			continue
 		}
 		eligible = append(eligible, id)
@@ -85,50 +91,37 @@ func (pt *PhaseTracker) FilterEligible(ready []string, d *dag.DAG) []string {
 	return eligible
 }
 
+// inFlightIDs returns the in-flight phase IDs in sorted order for
+// deterministic collision reporting.
+func (pt *PhaseTracker) inFlightIDs() []string {
+	ids := make([]string, 0, len(pt.inFlight))
+	for id := range pt.inFlight {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// Collisions returns the scope collisions between each ready (not-yet-admitted)
+// phase and the currently in-flight set. It is a read-only reporting surface
+// for operators (e.g. the TUI) that explains why a phase is being deferred; it
+// does not mutate scheduler state.
+func (pt *PhaseTracker) Collisions(ready []string) []Collision {
+	inFlight := pt.inFlightIDs()
+	var all []Collision
+	for _, id := range ready {
+		if pt.inFlight[id] || pt.failed[id] || pt.done[id] {
+			continue
+		}
+		all = append(all, pt.collisions.wouldCollideIDs(pt.phasesByID[id], inFlight)...)
+	}
+	return all
+}
+
 // hasFailedDep reports whether any direct dependency of phaseID has failed.
 func (pt *PhaseTracker) hasFailedDep(phaseID string, d *dag.DAG) bool {
 	for _, dep := range d.DepsFor(phaseID) {
 		if pt.failed[dep] {
-			return true
-		}
-	}
-	return false
-}
-
-// hasScopeConflictWithInFlight reports whether phaseID has overlapping scope
-// with any currently in-flight phase, unless one of them opts out via
-// AllowScopeOverlap. This preserves the scope-based conflict avoidance that
-// was previously handled by EffectiveParallelism in the wave-based approach.
-func (pt *PhaseTracker) hasScopeConflictWithInFlight(phaseID string) bool {
-	spec := pt.phasesByID[phaseID]
-	if spec == nil || len(spec.Scope) == 0 || spec.AllowScopeOverlap {
-		return false
-	}
-	for flyingID := range pt.inFlight {
-		flySpec := pt.phasesByID[flyingID]
-		if flySpec == nil || len(flySpec.Scope) == 0 || flySpec.AllowScopeOverlap {
-			continue
-		}
-		if _, _, overlaps := scopesOverlap(spec.Scope, flySpec.Scope); overlaps {
-			return true
-		}
-	}
-	return false
-}
-
-// hasScopeConflictWith reports whether phaseID has overlapping scope with any
-// phase in the given set of IDs.
-func (pt *PhaseTracker) hasScopeConflictWith(phaseID string, ids []string) bool {
-	spec := pt.phasesByID[phaseID]
-	if spec == nil || len(spec.Scope) == 0 || spec.AllowScopeOverlap {
-		return false
-	}
-	for _, otherID := range ids {
-		otherSpec := pt.phasesByID[otherID]
-		if otherSpec == nil || len(otherSpec.Scope) == 0 || otherSpec.AllowScopeOverlap {
-			continue
-		}
-		if _, _, overlaps := scopesOverlap(spec.Scope, otherSpec.Scope); overlaps {
 			return true
 		}
 	}

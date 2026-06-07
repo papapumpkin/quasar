@@ -317,8 +317,24 @@ type MsgSplashDone struct{}
 // Fabric bridge messages — carry fabric event data for the cockpit TUI.
 
 // MsgEntanglementUpdate carries entanglement data for the cockpit viewer.
+// Collisions, when present, surface scope conflicts between phases that the
+// scheduler has deferred so operators can see the contention before a run dies.
 type MsgEntanglementUpdate struct {
 	Entanglements []fabric.Entanglement
+	Collisions    []EntanglementCollision
+}
+
+// EntanglementCollision is the TUI's view of a scheduler scope collision: two
+// phases whose owned file scopes overlap and therefore cannot run concurrently.
+// It is a presentation-layer mirror of nebula.Collision, kept local to avoid a
+// dependency from the TUI onto the orchestrator package.
+type EntanglementCollision struct {
+	// Scope is the overlapping scope pattern(s).
+	Scope string
+	// PhaseID is the phase being deferred.
+	PhaseID string
+	// OtherPhaseID is the conflicting phase it would collide with.
+	OtherPhaseID string
 }
 
 // MsgDiscoveryPosted surfaces a new discovery in the cockpit.
