@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 // terminalStatuses are the nebula lifecycle statuses considered complete; the
@@ -47,6 +49,11 @@ type NebulaCard struct {
 	Age         time.Duration
 	PRNumber    int
 	PRStatus    string // "open" | "merged" | ""
+	// FailureReason is a short label (e.g. "budget exhausted") sourced from
+	// the nebula's latest failed constellation_run's _error node. Populated
+	// only when Status indicates failure; empty otherwise. The Recent lane
+	// renders this as a parenthetical suffix on the card.
+	FailureReason string
 }
 
 // RunCard is a list-view projection of a live constellation_run.
@@ -218,6 +225,8 @@ func (s *Store) scanCards(ctx context.Context, q, repo string, now time.Time) ([
 }
 
 // scanCardsArgs runs a card query with arbitrary args and maps rows to cards.
+// For cards in a failed lifecycle state, FailureReason is populated from the
+// latest failed constellation_run's _error node.
 func (s *Store) scanCardsArgs(ctx context.Context, q string, now time.Time, args ...any) ([]NebulaCard, error) {
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -243,7 +252,77 @@ func (s *Store) scanCardsArgs(ctx context.Context, q string, now time.Time, args
 		c.PRStatus = prStatus(int(prNum.Int64), mergeS.String)
 		out = append(out, c)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Second pass: populate FailureReason for failed cards. Done after the
+	// initial scan so we close the SELECT rows before issuing per-card
+	// lookups, avoiding a nested-query lock on the same connection.
+	for i := range out {
+		if !isFailedStatus(out[i].Status) {
+			continue
+		}
+		reason, err := s.failureReasonFor(ctx, out[i].ID)
+		if err != nil {
+			return nil, fmt.Errorf("fleet: failure reason for %q: %w", out[i].ID, err)
+		}
+		out[i].FailureReason = reason
+	}
+	return out, nil
+}
+
+// isFailedStatus reports whether a nebula status reflects a failure that may
+// carry a structured failure reason from its constellation_run.
+func isFailedStatus(status string) bool {
+	switch status {
+	case "failed", "canceled", "rejected":
+		return true
+	}
+	return false
+}
+
+// failureReasonFor returns the brief failure label for a nebula whose latest
+// constellation_run terminated in state='failed'. It reads the run's
+// dag_state_toml and extracts nodes._error.reason. Returns "" when no failed
+// run is found or the state has no recorded _error reason; the caller treats
+// the empty string as "no detail to display."
+func (s *Store) failureReasonFor(ctx context.Context, nebulaID string) (string, error) {
+	const q = `
+		SELECT dag_state_toml
+		FROM constellation_runs
+		WHERE nebula_id = ? AND state = 'failed' AND deleted_at IS NULL
+		ORDER BY completed_at DESC, updated_at DESC
+		LIMIT 1`
+	var dagState sql.NullString
+	switch err := s.db.QueryRowContext(ctx, q, nebulaID).Scan(&dagState); err {
+	case nil:
+	case sql.ErrNoRows:
+		return "", nil
+	default:
+		return "", err
+	}
+	if !dagState.Valid || strings.TrimSpace(dagState.String) == "" {
+		return "", nil
+	}
+	return parseErrorReason(dagState.String), nil
+}
+
+// parseErrorReason extracts nodes._error.reason from a serialized constellation
+// run state. Returns "" for any malformed input or when the _error node is
+// absent — the display always degrades to the bare status glyph.
+func parseErrorReason(dagStateTOML string) string {
+	var s struct {
+		Nodes map[string]map[string]any `toml:"nodes"`
+	}
+	if err := toml.Unmarshal([]byte(dagStateTOML), &s); err != nil {
+		return ""
+	}
+	errNode, ok := s.Nodes["_error"]
+	if !ok {
+		return ""
+	}
+	reason, _ := errNode["reason"].(string)
+	return reason
 }
 
 // Approve transitions a nebula to "approved" and enqueues an architect trigger,

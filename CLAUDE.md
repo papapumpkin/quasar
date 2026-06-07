@@ -22,14 +22,19 @@ internal/
   agent/         Agent types, roles, and the Invoker interface
   claude/        Claude CLI invoker (satisfies agent.Invoker)
   config/        Viper-based config loading (.quasar.yaml / env QUASAR_*)
-  integrations/  Forge-agnostic ticket sources + Forge stub + registry + secrets
-                 (github/ adapter; reach adapters only via integrations.Default())
-  gitops/        Vanilla-git output safety perimeter (reserved; lands in a later nebula)
+  sensors/       Poll-driven external integrations (Sensor interface, replacing
+                 the legacy TicketSource); github/ adapter; reach adapters only via
+                 sensors.Default()
+  gitops/        Vanilla-git output safety perimeter; every git write is routed here
   artifacts/     Embedded default stars/skills/constellations + per-repo override loader
-  constellations/ Constellation engine: Step/Fire walk, operators, budget + cycle guard
+  constellations/ Constellation engine: Step/Fire walk, operators, budget + cycle
+                 guard, and nested-constellation dispatch (master-review calls
+                 coder-reviewer as a real inner loop via NodeConstellation)
   fabric/        SQLite persistence (constellation_runs, star_invocations, nebulas)
-  loop/          In-process coder-reviewer loop (cmd `quasar run`, tests); being
-                 superseded by the coder-reviewer constellation as NodeConstellation lands
+  loop/          Legacy in-process coder-reviewer loop (still backs `quasar run`
+                 and its tests). Superseded by the coder-reviewer constellation now
+                 that NodeConstellation dispatches; deleting it + collapsing into a
+                 thin internal/runner/ shim is the remaining follow-up.
   nebula/        Multi-task orchestration (parse, validate, plan, apply)
   ui/            Stderr-based UI printer (ANSI colors)
 ```
