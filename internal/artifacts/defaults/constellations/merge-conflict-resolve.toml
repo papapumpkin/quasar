@@ -1,0 +1,22 @@
+name        = "merge-conflict-resolve"
+description = "PLACEHOLDER conflict resolver: escalate to a human until the specialist resolver lands."
+
+# PLACEHOLDER for Phase 03 of the merge-gate nebula. The real resolver receives
+# both workstreams' specs, both diffs against base, the entanglement state, and
+# any build error, then edits only files carrying conflict markers or build
+# errors — cycle-bounded (2) and budget-bounded ($5), with hard escalation on
+# config-file conflicts and same-file delete-vs-modify collisions.
+#
+# Until that lands, the conservative behavior is to escalate every conflict to a
+# human rather than silently picking a winner. This keeps merge-gate.toml a
+# complete, loadable, lint-clean DAG (its resolve_* nodes reference a real
+# sub-constellation) while leaving the resolution logic to Phase 03, which
+# replaces this file.
+[[nodes]]
+id   = "escalate"
+type = "builtin"
+op   = "notify_human"
+
+[[edges]]
+from = "escalate"
+to   = "_awaiting_human"

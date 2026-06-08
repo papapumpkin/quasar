@@ -1,5 +1,6 @@
 version = 1
 nebula_name = 'coordinated-parallel-execution'
+total_cost_usd = 18.040625749999997
 
 [phases]
 [phases.conflict-resolver-star]
@@ -16,12 +17,18 @@ updated_at = 2026-06-07T22:49:07.552515-04:00
 
 [phases.entanglement-lifecycle]
 bead_id = 'entanglement-lifecycle'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-07T22:49:07.552168-04:00
-updated_at = 2026-06-07T22:49:08.044354-04:00
+updated_at = 2026-06-07T23:45:38.728708-04:00
+
+[phases.entanglement-lifecycle.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'The entanglement-lifecycle phase ships a correct, well-tested declared→claimed→in_flight→fulfilled/withdrawn/deprecated state machine with all prior review findings resolved; the sole remaining note (no timestamp/GC for deprecated rows) is a minor, out-of-scope cosmetic concern I recommend accepting.'
 
 [phases.merge-gate]
 bead_id = 'merge-gate'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-07T22:49:07.552738-04:00
-updated_at = 2026-06-07T22:49:07.552738-04:00
+updated_at = 2026-06-07T23:45:38.765528-04:00

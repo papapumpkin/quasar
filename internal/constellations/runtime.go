@@ -70,6 +70,7 @@ type Runtime struct {
 	cacheMetrics     *telemetry.CacheMetricStore // Optional; nil disables cache-token recording.
 	checkpointer     Checkpointer                // Optional; nil disables per-dispatch worktree checkpoints.
 	entanglements    *fabric.EntanglementStore   // Optional; nil disables entanglement-lifecycle tracking.
+	merger           merger                      // Optional test seam; nil builds a gitops-backed merger from repoPath.
 }
 
 // Checkpointer snapshots a run's worktree after a successful coder dispatch and

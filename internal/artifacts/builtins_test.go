@@ -79,8 +79,8 @@ func TestEmbeddedDefaultsParse(t *testing.T) {
 	}
 
 	// Guard against an embed glob that silently matches nothing.
-	if constellations != 6 {
-		t.Errorf("expected 6 embedded constellation TOML files, parsed %d", constellations)
+	if constellations != 8 {
+		t.Errorf("expected 8 embedded constellation TOML files, parsed %d", constellations)
 	}
 	if markdown != 12 {
 		t.Errorf("expected 12 embedded star+skill Markdown files, parsed %d", markdown)

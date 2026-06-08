@@ -206,6 +206,36 @@ verify:
 	}
 }
 
+func TestLoadFromPath_MergeGate(t *testing.T) {
+	t.Run("override takes effect", func(t *testing.T) {
+		const yaml = `
+merge_gate:
+  verify_command: "make ci"
+  verify_timeout: "5m"
+`
+		cfg, err := LoadFromPath(writeConfig(t, yaml))
+		if err != nil {
+			t.Fatalf("LoadFromPath: %v", err)
+		}
+		if cfg.MergeGate.VerifyCommand != "make ci" {
+			t.Errorf("MergeGate.VerifyCommand = %q, want %q", cfg.MergeGate.VerifyCommand, "make ci")
+		}
+		if cfg.MergeGate.VerifyTimeout != "5m" {
+			t.Errorf("MergeGate.VerifyTimeout = %q, want %q", cfg.MergeGate.VerifyTimeout, "5m")
+		}
+	})
+
+	t.Run("absent block leaves fields empty for downstream defaults", func(t *testing.T) {
+		cfg, err := LoadFromPath(writeConfig(t, ""))
+		if err != nil {
+			t.Fatalf("LoadFromPath: %v", err)
+		}
+		if cfg.MergeGate.VerifyCommand != "" || cfg.MergeGate.VerifyTimeout != "" {
+			t.Errorf("MergeGate = %+v, want zero value when block absent", cfg.MergeGate)
+		}
+	})
+}
+
 func TestLoadFromPath_InlineTokenRejected(t *testing.T) {
 	cases := map[string]string{
 		"top_level":   "token: \"ghp_xxx\"\n",

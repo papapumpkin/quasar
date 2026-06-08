@@ -55,4 +55,6 @@ func init() {
 	registerOperator("verify_test", opVerify("test"))
 	registerOperator("verify_lint", opVerify("lint"))
 	registerOperator("verify_build", opVerify("build"))
+	registerOperator(opMergeAttemptName, opMergeAttempt)
+	registerOperator(opFulfillEntanglementsName, opFulfillEntanglements)
 }

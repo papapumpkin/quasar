@@ -35,6 +35,22 @@ type VerifyConfig struct {
 	Build string `mapstructure:"build"`
 }
 
+// MergeGateConfig holds the [merge_gate] section of a repo's .quasar.yaml. It
+// configures the cross-phase merge gate that re-verifies a merged tree before a
+// phase is declared fulfilled. A repo without a [merge_gate] block — or with an
+// empty field — falls back to the built-in default applied downstream
+// (gitops.DefaultVerifyCommand for the command), so the Go-centric default
+// works out of the box and a non-Go repo overrides it here.
+type MergeGateConfig struct {
+	// VerifyCommand runs in the merge worktree after a clean merge to confirm
+	// the merged tree still builds and tests pass. Empty uses the built-in
+	// default.
+	VerifyCommand string `mapstructure:"verify_command"`
+	// VerifyTimeout caps the verify command so a runaway build cannot block the
+	// gate forever. Parsed as a Go duration (e.g. "5m"). Empty disables the cap.
+	VerifyTimeout string `mapstructure:"verify_timeout"`
+}
+
 // GitHubConfig holds the [github] section of a repo's .quasar.yaml. It carries
 // top-level repo settings that are not adapter-specific (the GitHub ticket and
 // forge adapters keep their own [integrations.github]/[forge.github] blocks).
@@ -121,6 +137,10 @@ type Config struct {
 	// GC holds the [gc] section: garbage-collection TTLs and grace window for
 	// the global SQLite store. Defaults are conservative (see DefaultGCConfig).
 	GC GCConfig `mapstructure:"gc"`
+
+	// MergeGate holds the [merge_gate] section: the cross-phase merge gate's
+	// verify command and timeout override. Empty fields use built-in defaults.
+	MergeGate MergeGateConfig `mapstructure:"merge_gate"`
 }
 
 // ErrInlineToken indicates an integration or forge section stored a secret

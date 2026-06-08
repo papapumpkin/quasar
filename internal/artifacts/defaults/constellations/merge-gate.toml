@@ -1,0 +1,102 @@
+name        = "merge-gate"
+description = "Attempt a merge from the run's branch into its parent, classify the outcome, and route to the conflict-resolver on markers or build_failure."
+
+# FORWARD-LOOKING DEFAULT. This constellation ships as the authoring reference
+# for the cross-phase merge gate. Two pieces of its execution path land in later
+# phases of this nebula:
+#   - the `merge-conflict-resolve` sub-constellation (Phase 03), which the
+#     resolve_* nodes delegate to; and
+#   - the supervisor that fires merge-gate after a phase's coder-reviewer run
+#     reaches _done and threads the producing run's id into fulfill.
+# Until then the merge_attempt + fulfill_entanglements builtins it routes
+# through are live and unit-tested; see internal/constellations/operators_merge.go.
+
+# Attempt the merge. src_branch/dst_branch come from the supervisor that fires
+# this constellation (it sets them on the nebula snapshot before Fire).
+[[nodes]]
+id     = "attempt"
+type   = "builtin"
+op     = "merge_attempt"
+inputs = { src_branch = "${nebula.src_branch}", dst_branch = "${nebula.dst_branch}" }
+
+# Clean merge → fulfill the producing run's in_flight entanglements. The
+# supervisor commits merged_sha to the parent branch after this node.
+[[nodes]]
+id     = "fulfill"
+type   = "builtin"
+op     = "fulfill_entanglements"
+inputs = { merged_sha = "${nodes.attempt.merged_sha}" }
+
+# Marker conflicts → delegate to the conflict-resolver in "markers" mode. It
+# inherits the kept merge worktree and reports, via its [outputs], whether it
+# resolved and the resulting merge SHA.
+[[nodes]]
+id     = "resolve_markers"
+type   = "constellation"
+ref    = "merge-conflict-resolve"
+inputs = { worktree = "${nodes.attempt.worktree_path}", files = "${nodes.attempt.conflicted_files}", mode = "markers" }
+
+# Build failure with no markers → same resolver, "no_markers" mode for the
+# semantic-conflict case.
+[[nodes]]
+id     = "resolve_build_failure"
+type   = "constellation"
+ref    = "merge-conflict-resolve"
+inputs = { worktree = "${nodes.attempt.worktree_path}", build_output = "${nodes.attempt.build_output}", mode = "no_markers" }
+
+# After a resolver succeeds, fulfill. merged_sha comes from whichever resolver
+# ran; the expression language has no coalesce operator, so an empty() ternary
+# picks the populated one (the un-run node's output resolves to nil).
+[[nodes]]
+id     = "post_resolve_fulfill"
+type   = "builtin"
+op     = "fulfill_entanglements"
+inputs = { merged_sha = "${empty(nodes.resolve_markers.merged_sha) ? nodes.resolve_build_failure.merged_sha : nodes.resolve_markers.merged_sha}" }
+
+[[edges]]
+from = "attempt"
+to   = "fulfill"
+when = "nodes.attempt.result == 'clean'"
+
+[[edges]]
+from = "attempt"
+to   = "resolve_markers"
+when = "nodes.attempt.result == 'markers'"
+
+[[edges]]
+from = "attempt"
+to   = "resolve_build_failure"
+when = "nodes.attempt.result == 'build_failure'"
+
+[[edges]]
+from = "attempt"
+to   = "_failed"
+when = "nodes.attempt.result == 'merge_error'"
+
+[[edges]]
+from = "fulfill"
+to   = "_done"
+
+[[edges]]
+from = "resolve_markers"
+to   = "post_resolve_fulfill"
+when = "nodes.resolve_markers.state == 'done'"
+
+[[edges]]
+from = "resolve_markers"
+to   = "_awaiting_human"
+when = "nodes.resolve_markers.state != 'done'"
+
+[[edges]]
+from = "resolve_build_failure"
+to   = "post_resolve_fulfill"
+when = "nodes.resolve_build_failure.state == 'done'"
+
+[[edges]]
+from = "resolve_build_failure"
+to   = "_awaiting_human"
+when = "nodes.resolve_build_failure.state != 'done'"
+
+[[edges]]
+from = "post_resolve_fulfill"
+to   = "_done"
