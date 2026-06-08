@@ -26,7 +26,7 @@ const opEmitConflictTelemetryName = "emit_conflict_telemetry"
 //
 // Telemetry is a side channel: this node sits on the success path *before*
 // commit (decide → emit → commit → _done), so a Record failure (disk full,
-// permission error, cancelled ctx) must NOT abort the run — that would discard a
+// permission error, canceled ctx) must NOT abort the run — that would discard a
 // successfully-resolved merge for a logging hiccup. The error is logged to
 // stderr and swallowed, never returned, matching the project's non-fatal-error
 // convention. Output: {"recorded": <bool>} — true only when the row was written.
