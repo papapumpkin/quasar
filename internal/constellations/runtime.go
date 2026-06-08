@@ -45,11 +45,14 @@ type Loader interface {
 	LoadStar(name string) (*artifacts.Star, error)
 }
 
-// Committer is the git write seam. gitops.Client satisfies it. The runtime
+// Committer is the runtime's git seam. gitops.Client satisfies it. The runtime
 // holds a repo-bound committer and always passes the repo's [pre_commit]
 // config, so stars never see pre-commit and the runtime never decides per call.
+// Commit is the only write; Diff is a read the runtime uses to inspect a
+// just-created commit (e.g. to mark touched entanglements in flight).
 type Committer interface {
 	Commit(ctx context.Context, message string, opts gitops.CommitOpts) (string, error)
+	Diff(ctx context.Context, baseRef, headRef string) (string, error)
 }
 
 // Runtime executes constellation runs for a single repo. The supervisor owns
@@ -267,7 +270,14 @@ func (r *Runtime) Resume(ctx context.Context, runID string) error {
 func (r *Runtime) dispatch(ctx context.Context, run *fabric.RunRow, st *State, node *artifacts.ConstellationNode) (map[string]any, error) {
 	switch node.Type {
 	case artifacts.NodeBuiltin:
-		return r.dispatchBuiltin(ctx, st, node)
+		out, err := r.dispatchBuiltin(ctx, st, node)
+		if err == nil && node.Op == opCommitName {
+			// The commit node is the green-build gate: its [pre_commit] hooks ran
+			// and produced a commit. Mark every symbol the commit touched in
+			// flight so a sibling's pre-flight sees the freshest signature.
+			r.markInFlightFromCommit(ctx, run, out)
+		}
+		return out, err
 	case artifacts.NodeStar:
 		return r.dispatchStar(ctx, run, st, node)
 	case artifacts.NodeConstellation:
@@ -351,31 +361,6 @@ func (r *Runtime) terminate(ctx context.Context, run *fabric.RunRow, st *State, 
 	}
 	r.applyTerminalEntanglements(ctx, run.ID, state)
 	return state, nil
-}
-
-// applyTerminalEntanglements advances the run's entanglement lifecycle when the
-// run reaches a terminal state: fulfilled on _done, withdrawn on _failed or
-// _awaiting_human. Best-effort and nil-safe — a tracking failure is logged, not
-// fatal, since coordination is advisory and must never block a run from
-// terminating. (The cross-phase merge gate that gates Fulfill on a clean merge
-// arrives with the supervisor in a later phase; terminating _done here fulfills
-// the run's own in-flight symbols.)
-func (r *Runtime) applyTerminalEntanglements(ctx context.Context, runID, state string) {
-	if r.entanglements == nil {
-		return
-	}
-	var err error
-	switch state {
-	case StateDone:
-		err = r.entanglements.Fulfill(ctx, runID)
-	case StateFailed, StateAwaitingHuman:
-		err = r.entanglements.Withdraw(ctx, runID)
-	default:
-		return
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "constellations: entanglement lifecycle (run %s → %s): %v\n", runID, state, err)
-	}
 }
 
 // fail records the failure cause into State and marks the run failed.

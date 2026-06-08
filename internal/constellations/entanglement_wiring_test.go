@@ -69,6 +69,60 @@ func TestArchitectDeclaresProducerSymbols(t *testing.T) {
 	}
 }
 
+func TestMarkInFlightFromCommit(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("marks declared symbols touched by the commit in flight", func(t *testing.T) {
+		rt, entStore, _ := newEntanglementRuntime(t)
+		rt.committer = &fakeCommitter{diff: "+++ b/sensor.go\n+func Poll(ctx context.Context) error {\n+\treturn nil\n+}\n"}
+
+		// Architect declared Poll: run-agnostic, run_id NULL.
+		if err := entStore.Declare(ctx, fabric.Entanglement{
+			Producer: "phase-1", PhaseID: "phase-1", Kind: fabric.KindFunction, Name: "Poll",
+		}); err != nil {
+			t.Fatalf("Declare: %v", err)
+		}
+
+		rt.markInFlightFromCommit(ctx, &fabric.RunRow{ID: "run-c"}, map[string]any{"committed": true})
+
+		active, err := entStore.Active(ctx, "Poll")
+		if err != nil {
+			t.Fatalf("Active: %v", err)
+		}
+		if len(active) != 1 {
+			t.Fatalf("Active returned %d rows, want 1", len(active))
+		}
+		e := active[0]
+		if e.Status != fabric.StatusInFlight {
+			t.Errorf("status = %q, want in_flight", e.Status)
+		}
+		if e.CurrentSignature != "func Poll(ctx context.Context) error" {
+			t.Errorf("current_signature = %q", e.CurrentSignature)
+		}
+		if e.RunID != "run-c" {
+			t.Errorf("run_id = %q, want run-c (NULL declaration should bind to the run)", e.RunID)
+		}
+	})
+
+	t.Run("no-op when the commit wrote nothing", func(t *testing.T) {
+		rt, entStore, _ := newEntanglementRuntime(t)
+		rt.committer = &fakeCommitter{diff: "+func Poll() error {"}
+		if err := entStore.Declare(ctx, fabric.Entanglement{
+			Producer: "p", PhaseID: "p", Kind: fabric.KindFunction, Name: "Poll",
+		}); err != nil {
+			t.Fatalf("Declare: %v", err)
+		}
+		rt.markInFlightFromCommit(ctx, &fabric.RunRow{ID: "run-c"}, map[string]any{"committed": false})
+		assertStatus(t, entStore, "Poll", fabric.StatusDeclared)
+	})
+
+	t.Run("nil store is a no-op", func(t *testing.T) {
+		rt := New(runtimeOptsWithoutEntanglements(t))
+		rt.committer = &fakeCommitter{diff: "+func Poll() error {"}
+		rt.markInFlightFromCommit(ctx, &fabric.RunRow{ID: "run-c"}, map[string]any{"committed": true})
+	})
+}
+
 func TestApplyTerminalEntanglements(t *testing.T) {
 	ctx := context.Background()
 

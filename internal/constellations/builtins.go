@@ -49,7 +49,7 @@ func init() {
 	registerOperator("persist_phases", opPersistPhases)
 	registerOperator("master_review_decision", opMasterReviewDecision)
 	registerOperator("reviewer_decision", opReviewerDecision)
-	registerOperator("commit", opCommit)
+	registerOperator(opCommitName, opCommit)
 	registerOperator("notify_human", opNotifyHuman)
 	registerOperator("fail_run", opFailRun)
 	registerOperator("verify_test", opVerify("test"))

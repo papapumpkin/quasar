@@ -63,3 +63,41 @@ func declName(src string) string {
 	}
 	return m[2]
 }
+
+// Touched is a symbol an added diff line declares, paired with the declaration
+// text the runtime records as its in-flight signature.
+type Touched struct {
+	Name      string
+	Signature string
+}
+
+// DetectTouchedSymbols walks a unified diff and returns the top-level
+// func/type/var/const symbols that an added ("+") line declares, each paired
+// with the trimmed declaration text as its signature. The runtime feeds these to
+// MarkInFlight after a green build so a sibling's pre-flight coordination note
+// shows the freshest signature draft. The first added line for a name wins;
+// file headers ("+++") are skipped.
+func DetectTouchedSymbols(diff string) []Touched {
+	var out []Touched
+	seen := make(map[string]bool)
+	for _, line := range strings.Split(diff, "\n") {
+		if !strings.HasPrefix(line, "+") || strings.HasPrefix(line, "+++") {
+			continue
+		}
+		src := line[1:]
+		name := declName(src)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, Touched{Name: name, Signature: signatureOf(src)})
+	}
+	return out
+}
+
+// signatureOf normalizes a declaration line into a signature: trimmed of
+// surrounding whitespace and any trailing block-opening brace, so
+// "func Poll() error {" becomes "func Poll() error".
+func signatureOf(src string) string {
+	return strings.TrimSpace(strings.TrimRight(strings.TrimSpace(src), "{ \t"))
+}

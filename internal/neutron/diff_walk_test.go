@@ -75,3 +75,59 @@ func TestDetectDeletions(t *testing.T) {
 		})
 	}
 }
+
+func TestDetectTouchedSymbols(t *testing.T) {
+	tests := []struct {
+		name string
+		diff string
+		want []Touched
+	}{
+		{
+			name: "added function with trailing brace trimmed",
+			diff: `--- a/foo.go
++++ b/foo.go
+@@ -1 +1,3 @@
++func Poll(ctx context.Context) error {
++	return nil
++}`,
+			want: []Touched{{Name: "Poll", Signature: "func Poll(ctx context.Context) error"}},
+		},
+		{
+			name: "type and method receiver",
+			diff: `+type Sensor interface {
++func (b *Budget) CheckBefore() error {`,
+			want: []Touched{
+				{Name: "Sensor", Signature: "type Sensor interface"},
+				{Name: "CheckBefore", Signature: "func (b *Budget) CheckBefore() error"},
+			},
+		},
+		{
+			name: "file headers and removed lines ignored",
+			diff: `+++ b/x.go
+-func Removed() {}
+ func Context() {}`,
+			want: nil,
+		},
+		{
+			name: "first occurrence wins for duplicates",
+			diff: `+var Conf = 1
++var Conf = 2`,
+			want: []Touched{{Name: "Conf", Signature: "var Conf = 1"}},
+		},
+		{
+			name: "empty diff",
+			diff: "",
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := DetectTouchedSymbols(tt.diff)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DetectTouchedSymbols() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -77,16 +78,24 @@ func (s *EntanglementStore) Claim(ctx context.Context, runID, phaseID, name stri
 // MarkInFlight records that a green build has touched the symbol, updating
 // current_signature and in_flight_at atomically in a single statement. The
 // signature is what siblings read in their pre-flight coordination notes. It
-// affects only the run's own non-terminal rows (declared|claimed|in_flight) so a
-// later build refreshes the signature without resurrecting a withdrawn row.
+// affects only non-terminal rows (declared|claimed|in_flight) so a later build
+// refreshes the signature without resurrecting a withdrawn row.
+//
+// A row the architect declared carries a NULL run_id (the run that will act on
+// it is not yet known); MarkInFlight matches such an unbound row by name and
+// binds it to runID, the same way Claim does. That lets the runtime's
+// green-build hook advance an architect declaration even when no Claim ran
+// first. A row already bound to a different run is left untouched.
 func (s *EntanglementStore) MarkInFlight(ctx context.Context, runID, name, signature string) error {
 	const q = `
 		UPDATE entanglements
-		   SET status = ?, current_signature = ?, in_flight_at = ?
-		 WHERE run_id = ? AND name = ?
+		   SET status = ?, current_signature = ?, in_flight_at = ?, run_id = ?
+		 WHERE name = ?
+		   AND (run_id = ? OR run_id IS NULL)
 		   AND status IN (?, ?, ?)`
 	_, err := s.db.ExecContext(ctx, q,
-		StatusInFlight, signature, time.Now().Unix(), runID, name,
+		StatusInFlight, signature, time.Now().Unix(), runID,
+		name, runID,
 		StatusDeclared, StatusClaimed, StatusInFlight)
 	if err != nil {
 		return fmt.Errorf("fabric: mark in_flight entanglement %q: %w", name, err)
@@ -128,18 +137,19 @@ func (s *EntanglementStore) Fulfill(ctx context.Context, runID string) error {
 	return nil
 }
 
-// Withdraw transitions the run's non-terminal entanglements (declared, claimed,
-// in_flight, deprecated) to 'withdrawn', stamping terminated_at. Called by the
-// supervisor on terminal failure (failed or awaiting_human) so abandoned intent
-// stops showing up in sibling coordination notes.
+// Withdraw transitions the run's non-terminal entanglements to 'withdrawn',
+// stamping terminated_at. Called by the supervisor on terminal failure (failed
+// or awaiting_human) so abandoned intent stops showing up in sibling
+// coordination notes. The "non-terminal" set is exactly activeStatuses — the
+// same rows Active surfaces — so the two share that definition.
 func (s *EntanglementStore) Withdraw(ctx context.Context, runID string) error {
-	const q = `
+	clause, statusArgs := inClause(activeStatuses)
+	q := fmt.Sprintf(`
 		UPDATE entanglements
 		   SET status = ?, terminated_at = ?
-		 WHERE run_id = ? AND status IN (?, ?, ?, ?)`
-	_, err := s.db.ExecContext(ctx, q, StatusWithdrawn, time.Now().Unix(), runID,
-		StatusDeclared, StatusClaimed, StatusInFlight, StatusDeprecated)
-	if err != nil {
+		 WHERE run_id = ? AND status IN (%s)`, clause)
+	args := append([]any{StatusWithdrawn, time.Now().Unix(), runID}, statusArgs...)
+	if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
 		return fmt.Errorf("fabric: withdraw entanglements for run %q: %w", runID, err)
 	}
 	return nil
@@ -151,15 +161,15 @@ func (s *EntanglementStore) Withdraw(ctx context.Context, runID string) error {
 // about concurrent work and the latest in-flight signature draft. Terminal rows
 // (fulfilled, withdrawn) and legacy 'pending' rows are excluded.
 func (s *EntanglementStore) Active(ctx context.Context, name string) ([]Entanglement, error) {
-	const q = `
+	clause, statusArgs := inClause(activeStatuses)
+	q := fmt.Sprintf(`
 		SELECT id, producer, consumer, kind, name, signature, package, status,
 		       run_id, phase_id, current_signature,
 		       declared_at, claimed_at, in_flight_at, terminated_at, created_at
 		  FROM entanglements
-		 WHERE name = ? AND status IN (?, ?, ?, ?)
-		 ORDER BY COALESCE(in_flight_at, claimed_at, declared_at, 0) DESC, id DESC`
-	rows, err := s.db.QueryContext(ctx, q, name,
-		StatusDeclared, StatusClaimed, StatusInFlight, StatusDeprecated)
+		 WHERE name = ? AND status IN (%s)
+		 ORDER BY COALESCE(in_flight_at, claimed_at, declared_at, 0) DESC, id DESC`, clause)
+	rows, err := s.db.QueryContext(ctx, q, append([]any{name}, statusArgs...)...)
 	if err != nil {
 		return nil, fmt.Errorf("fabric: query active entanglements %q: %w", name, err)
 	}
@@ -204,6 +214,20 @@ func scanLifecycleRow(rows *sql.Rows) (Entanglement, error) {
 		e.CreatedAt = ts
 	}
 	return e, nil
+}
+
+// inClause builds the placeholder list ("?, ?, ?") and the matching argument
+// slice for a SQL `IN (...)` over the given statuses. It lets activeStatuses be
+// the single source of truth for which states count as active, so Active and
+// Withdraw can never drift from the documented set.
+func inClause(statuses []string) (string, []any) {
+	placeholders := make([]string, len(statuses))
+	args := make([]any, len(statuses))
+	for i, s := range statuses {
+		placeholders[i] = "?"
+		args[i] = s
+	}
+	return strings.Join(placeholders, ", "), args
 }
 
 // nullString maps an empty string to a SQL NULL so the run_id column stays NULL

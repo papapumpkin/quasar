@@ -58,8 +58,11 @@ const (
 )
 
 // activeStatuses enumerates the lifecycle states that signal in-flight intent.
-// EntanglementStore.Active returns only rows in one of these states; the
-// pre-flight coordination check (Phase 01) reads them to warn a sibling coder.
+// It is the single source of truth for "active": EntanglementStore.Active
+// queries exactly these states (and Withdraw transitions exactly these to
+// withdrawn), both building their SQL IN-clause from this slice so the query and
+// the documented set can never drift. The pre-flight coordination check
+// (Phase 01) reads the surfaced rows to warn a sibling coder.
 var activeStatuses = []string{StatusDeclared, StatusClaimed, StatusInFlight, StatusDeprecated}
 
 // Discovery kinds surfaced by agents during execution.

@@ -281,12 +281,18 @@ type fakeCommitter struct {
 	sha     string
 	err     error
 	calls   int
+	diff    string // returned by Diff to drive in-flight marking
+	diffErr error
 }
 
 func (f *fakeCommitter) Commit(_ context.Context, _ string, opts gitops.CommitOpts) (string, error) {
 	f.calls++
 	f.gotOpts = opts
 	return f.sha, f.err
+}
+
+func (f *fakeCommitter) Diff(_ context.Context, _, _ string) (string, error) {
+	return f.diff, f.diffErr
 }
 
 // newRuntimeWithCommitter builds a runtime wired to a committer and pre-commit

@@ -15,8 +15,18 @@ import (
 	"github.com/papapumpkin/quasar/internal/neutron"
 )
 
+// opCommitName is the registered name of the commit builtin. The dispatch loop
+// keys its post-commit in-flight hook off it.
+const opCommitName = "commit"
+
 // neutronKinds maps the Go keyword neutron reports to the fabric entanglement
-// kind the lifecycle stores.
+// kind the lifecycle stores. Fabric has no dedicated var/const kinds yet, so
+// both fold into KindType. That is intentionally lossy: because identity is
+// (producer, kind, name), a phase that declares both `var Foo` and `const Foo`
+// (or `type Foo` + `var Foo`) collapses to one (phase, type, Foo) row and the
+// later Declare is swallowed by ON CONFLICT DO NOTHING. The collision is rare,
+// entanglements are advisory, and adding distinct kinds is premature until
+// var/const coordination is actually needed downstream.
 var neutronKinds = map[string]string{
 	"func":  fabric.KindFunction,
 	"type":  fabric.KindType,
@@ -170,6 +180,57 @@ func (r *Runtime) declarePhaseSymbols(ctx context.Context, phaseID, body string)
 		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "constellations: declare entanglement %q for phase %q: %v\n", d.Name, phaseID, err)
+		}
+	}
+}
+
+// applyTerminalEntanglements advances the run's entanglement lifecycle when the
+// run reaches a terminal state: fulfilled on _done, withdrawn on _failed or
+// _awaiting_human. Best-effort and nil-safe — a tracking failure is logged, not
+// fatal, since coordination is advisory and must never block a run from
+// terminating. (The cross-phase merge gate that gates Fulfill on a clean merge
+// arrives with the supervisor in a later phase; terminating _done here fulfills
+// the run's own in-flight symbols.)
+func (r *Runtime) applyTerminalEntanglements(ctx context.Context, runID, state string) {
+	if r.entanglements == nil {
+		return
+	}
+	var err error
+	switch state {
+	case StateDone:
+		err = r.entanglements.Fulfill(ctx, runID)
+	case StateFailed, StateAwaitingHuman:
+		err = r.entanglements.Withdraw(ctx, runID)
+	default:
+		return
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "constellations: entanglement lifecycle (run %s → %s): %v\n", runID, state, err)
+	}
+}
+
+// markInFlightFromCommit advances the lifecycle after the green-build commit
+// node: it diffs the new commit (HEAD~1..HEAD) and marks every top-level symbol
+// the commit added or changed as in_flight under run, recording the declaration
+// text as the signature siblings will read in their pre-flight notes.
+// Best-effort and nil-safe — a diff or store failure is logged, never fatal,
+// since coordination is advisory and must not break a run. A commit that wrote
+// nothing (committed=false) is skipped.
+func (r *Runtime) markInFlightFromCommit(ctx context.Context, run *fabric.RunRow, out map[string]any) {
+	if r.entanglements == nil || r.committer == nil {
+		return
+	}
+	if committed, _ := out["committed"].(bool); !committed {
+		return
+	}
+	diff, err := r.committer.Diff(ctx, "HEAD~1", "HEAD")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "constellations: diff for in-flight marking (run %s): %v\n", run.ID, err)
+		return
+	}
+	for _, t := range neutron.DetectTouchedSymbols(diff) {
+		if err := r.entanglements.MarkInFlight(ctx, run.ID, t.Name, t.Signature); err != nil {
+			fmt.Fprintf(os.Stderr, "constellations: mark in_flight %q (run %s): %v\n", t.Name, run.ID, err)
 		}
 	}
 }
