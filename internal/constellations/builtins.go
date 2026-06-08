@@ -59,4 +59,5 @@ func init() {
 	registerOperator(opFulfillEntanglementsName, opFulfillEntanglements)
 	registerOperator(opRenderConflictContextName, opRenderConflictContext)
 	registerOperator(opConflictResolutionDecisionName, opConflictResolutionDecision)
+	registerOperator(opEmitConflictTelemetryName, opEmitConflictTelemetry)
 }

@@ -67,11 +67,12 @@ type Runtime struct {
 	preCommit        gitops.PreCommitConfig
 	budget           *Budget
 	defaultBudgetUSD float64
-	cacheMetrics     *telemetry.CacheMetricStore // Optional; nil disables cache-token recording.
-	checkpointer     Checkpointer                // Optional; nil disables per-dispatch worktree checkpoints.
-	entanglements    *fabric.EntanglementStore   // Optional; nil disables entanglement-lifecycle tracking.
-	merger           merger                      // Optional test seam; nil builds a gitops-backed merger from repoPath.
-	coordination     *Check                      // Optional; nil disables the pre-flight coordination check.
+	cacheMetrics     *telemetry.CacheMetricStore      // Optional; nil disables cache-token recording.
+	checkpointer     Checkpointer                     // Optional; nil disables per-dispatch worktree checkpoints.
+	entanglements    *fabric.EntanglementStore        // Optional; nil disables entanglement-lifecycle tracking.
+	merger           merger                           // Optional test seam; nil builds a gitops-backed merger from repoPath.
+	coordination     *Check                           // Optional; nil disables the pre-flight coordination check.
+	conflictLog      *telemetry.ConflictResolutionLog // Optional; nil disables conflict-resolution telemetry (emit node no-ops).
 }
 
 // Checkpointer snapshots a run's worktree after a successful coder dispatch and
@@ -124,6 +125,10 @@ type RuntimeOpts struct {
 	// each coordination-aware coder dispatch and injects sibling-aware notes into
 	// the prompt. Nil disables the check; the dispatch proceeds with no notes.
 	Coordination *Check
+	// ConflictLog, when non-nil, persists one conflict-resolution outcome row per
+	// merge-conflict-resolve run (via the emit_conflict_telemetry node) for
+	// `quasar conflicts report`. Nil disables recording; the emit node no-ops.
+	ConflictLog *telemetry.ConflictResolutionLog
 }
 
 // New constructs a Runtime. It panics on a nil required dependency, surfacing a
@@ -146,6 +151,7 @@ func New(opts RuntimeOpts) *Runtime {
 		checkpointer:     opts.Checkpointer,
 		entanglements:    opts.Entanglements,
 		coordination:     opts.Coordination,
+		conflictLog:      opts.ConflictLog,
 	}
 }
 

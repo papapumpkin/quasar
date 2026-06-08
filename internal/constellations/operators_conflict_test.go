@@ -2,11 +2,14 @@ package constellations
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/papapumpkin/quasar/internal/artifacts"
 	"github.com/papapumpkin/quasar/internal/fabric"
+	"github.com/papapumpkin/quasar/internal/telemetry"
 )
 
 // TestConflictResolverStarLoadable asserts the embedded conflict-resolver star
@@ -222,6 +225,68 @@ func TestOpConflictResolutionDecision(t *testing.T) {
 				t.Errorf("escalation_reason = %v, want %q", out["escalation_reason"], tc.wantReason)
 			}
 		})
+	}
+}
+
+// TestOpEmitConflictTelemetryRecords asserts the operator writes one row carrying
+// the run's cycle count and the decision's fields, coercing a TOML-round-tripped
+// numeric files_changed (int64) back to an int.
+func TestOpEmitConflictTelemetryRecords(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "conflict_resolutions.jsonl")
+	rt := &Runtime{conflictLog: telemetry.NewConflictResolutionLog(path)}
+	st := &State{Cycle: 2}
+
+	out, err := opEmitConflictTelemetry(context.Background(), rt, st, map[string]any{
+		"mode":          conflictModeMarkers,
+		"status":        conflictResolverStatusResolved,
+		"files_changed": int64(3), // mimic a TOML state round-trip
+		"files":         []any{"internal/sensors/sensors.go"},
+		"src_run_id":    "run-a",
+		"dst_run_id":    "run-b",
+	})
+	if err != nil {
+		t.Fatalf("opEmitConflictTelemetry: %v", err)
+	}
+	if out["recorded"] != true {
+		t.Errorf("recorded = %v, want true", out["recorded"])
+	}
+
+	events, err := rt.conflictLog.ReadSince(context.Background(), time.Time{})
+	if err != nil {
+		t.Fatalf("ReadSince: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("recorded %d events, want 1", len(events))
+	}
+	ev := events[0]
+	if ev.Mode != conflictModeMarkers || ev.Status != conflictResolverStatusResolved {
+		t.Errorf("mode/status = %q/%q, want markers/resolved", ev.Mode, ev.Status)
+	}
+	if ev.Cycles != 2 {
+		t.Errorf("cycles = %d, want 2 (from run State)", ev.Cycles)
+	}
+	if ev.FilesChanged != 3 {
+		t.Errorf("files_changed = %d, want 3 (int64 coerced)", ev.FilesChanged)
+	}
+	if ev.SrcRun != "run-a" || ev.DstRun != "run-b" {
+		t.Errorf("src/dst run = %q/%q, want run-a/run-b", ev.SrcRun, ev.DstRun)
+	}
+}
+
+// TestOpEmitConflictTelemetryNilLogNoOp asserts a runtime with no conflict log
+// wired never fails the run: the emit node degrades to a no-op.
+func TestOpEmitConflictTelemetryNilLogNoOp(t *testing.T) {
+	t.Parallel()
+	out, err := opEmitConflictTelemetry(context.Background(), &Runtime{}, &State{}, map[string]any{
+		"mode":   conflictModeMarkers,
+		"status": conflictResolverStatusResolved,
+	})
+	if err != nil {
+		t.Fatalf("opEmitConflictTelemetry with nil log: %v", err)
+	}
+	if out["recorded"] != false {
+		t.Errorf("recorded = %v, want false when no log wired", out["recorded"])
 	}
 }
 

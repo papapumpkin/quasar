@@ -2,11 +2,14 @@ package constellations
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/papapumpkin/quasar/internal/agent"
 	"github.com/papapumpkin/quasar/internal/artifacts"
+	"github.com/papapumpkin/quasar/internal/telemetry"
 )
 
 // conflictResolverInvoker role-plays the conflict-resolver star: the i-th
@@ -78,6 +81,48 @@ func TestMergeConflictResolveMarkersResolved(t *testing.T) {
 	}
 	if got := st.Nodes["commit"]["sha"]; got != "merged-sha" {
 		t.Errorf("commit sha = %v, want merged-sha", got)
+	}
+}
+
+// TestMergeConflictResolveEmitsTelemetry drives the markers happy path with a
+// conflict log wired and asserts the run records exactly one resolution-outcome
+// row (status=resolved) on the way to _done — proving the emit_conflict_telemetry
+// node sits on the terminal path, not just in unit tests.
+func TestMergeConflictResolveEmitsTelemetry(t *testing.T) {
+	inv := &conflictResolverInvoker{script: []string{
+		`{"status":"resolved","files_changed":["internal/sensors/sensors.go"],"build_passed":true,"escalation_reason":null}`,
+	}}
+	rt, nebID := newTestRuntime(t, artifacts.New(embeddedResolver{}), inv)
+	rt.committer = &fakeCommitter{sha: "merged-sha"}
+	logPath := filepath.Join(t.TempDir(), "conflict_resolutions.jsonl")
+	rt.conflictLog = telemetry.NewConflictResolutionLog(logPath)
+
+	ctx := context.Background()
+	runID, err := rt.Fire(ctx, "merge-conflict-resolve", nebID, "", 0)
+	if err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	if err := rt.seedChildInputs(ctx, runID, map[string]any{
+		"mode":     conflictModeMarkers,
+		"files":    []string{"internal/sensors/sensors.go"},
+		"worktree": "/tmp/wt",
+	}); err != nil {
+		t.Fatalf("seed inputs: %v", err)
+	}
+	driveToTerminal(ctx, t, rt, runID)
+
+	if run := mustRun(t, rt, runID); run.State != StateDone {
+		t.Fatalf("final state = %q, want done", run.State)
+	}
+	events, err := rt.conflictLog.ReadSince(ctx, time.Time{})
+	if err != nil {
+		t.Fatalf("ReadSince: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("recorded %d telemetry rows, want exactly 1", len(events))
+	}
+	if events[0].Status != conflictResolverStatusResolved || events[0].Mode != conflictModeMarkers {
+		t.Errorf("row status/mode = %q/%q, want resolved/markers", events[0].Status, events[0].Mode)
 	}
 }
 

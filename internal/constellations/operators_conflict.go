@@ -13,7 +13,7 @@ import (
 )
 
 // Registered builtin names the merge-conflict-resolve constellation routes
-// through.
+// through. (emit_conflict_telemetry lives in operators_conflict_telemetry.go.)
 const (
 	opRenderConflictContextName      = "render_conflict_context"
 	opConflictResolutionDecisionName = "conflict_resolution_decision"

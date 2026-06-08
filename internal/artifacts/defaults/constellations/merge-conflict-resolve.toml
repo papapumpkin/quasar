@@ -38,6 +38,18 @@ type   = "builtin"
 op     = "conflict_resolution_decision"
 inputs = { output = "${nodes.resolve.result}", files = "${inputs.files}", delete_modify = "${inputs.delete_modify}" }
 
+# Terminal telemetry: every resolution run — committed or escalated — passes
+# through here exactly once after the cycle loop settles, recording one outcome
+# row for `quasar conflicts report`. The back-edge (decide -> render) bypasses
+# this node, so a retried cycle is not double-counted; Cycles is read from run
+# State so the row reflects the final back-edge count. A runtime with no conflict
+# log injected makes this a no-op.
+[[nodes]]
+id     = "emit"
+type   = "builtin"
+op     = "emit_conflict_telemetry"
+inputs = { mode = "${inputs.mode}", files = "${inputs.files}", status = "${nodes.decide.status}", files_changed = "${nodes.decide.files_changed}", src_run_id = "${inputs.src_run_id}", dst_run_id = "${inputs.dst_run_id}" }
+
 # Resolved with a green build: commit the merged state and produce the merge SHA.
 [[nodes]]
 id     = "commit"
@@ -61,22 +73,33 @@ to   = "resolve"
 from = "resolve"
 to   = "decide"
 
-[[edges]]
-from = "decide"
-to   = "commit"
-when = "nodes.decide.status == 'resolved' && nodes.decide.build_passed"
-
 # Build still broken after this pass and a cycle remains: re-render and retry.
 # render is declared before decide, so this is a back-edge — it counts a cycle.
+# This is the only decide edge that bypasses the emit telemetry node, so a
+# retried cycle is never recorded as its own resolution outcome.
 [[edges]]
 from = "decide"
 to   = "render"
 when = "nodes.decide.status == 'resolved' && !nodes.decide.build_passed && cycle < meta.max_cycles"
 
+# Any terminal verdict — green resolution, human escalation, or an exhausted
+# cycle cap — flows through emit so the outcome is recorded before the run ends.
 [[edges]]
 from = "decide"
+to   = "emit"
+when = "(nodes.decide.status == 'resolved' && nodes.decide.build_passed) || nodes.decide.status == 'needs_human' || (nodes.decide.status == 'resolved' && !nodes.decide.build_passed && cycle >= meta.max_cycles)"
+
+# After recording, split on the same verdict the row captured: a green
+# resolution commits; everything else (escalation or exhausted cap) gives up.
+[[edges]]
+from = "emit"
+to   = "commit"
+when = "nodes.decide.status == 'resolved' && nodes.decide.build_passed"
+
+[[edges]]
+from = "emit"
 to   = "give_up"
-when = "nodes.decide.status == 'needs_human' || (nodes.decide.status == 'resolved' && !nodes.decide.build_passed && cycle >= meta.max_cycles)"
+when = "nodes.decide.status == 'needs_human' || (nodes.decide.status == 'resolved' && !nodes.decide.build_passed)"
 
 [[edges]]
 from = "commit"

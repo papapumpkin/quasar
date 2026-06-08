@@ -99,7 +99,7 @@ func TestOpVerify(t *testing.T) {
 
 func TestOperatorNamesRegistered(t *testing.T) {
 	got := OperatorNames()
-	want := []string{"commit", "conflict_resolution_decision", "fail_run", "fulfill_entanglements", "master_review_decision", "merge_attempt", "notify_human", "persist_phases", "render_conflict_context", "render_fix_prompt", "render_seed_prompt", "reviewer_decision", "verify_build", "verify_lint", "verify_test"}
+	want := []string{"commit", "conflict_resolution_decision", "emit_conflict_telemetry", "fail_run", "fulfill_entanglements", "master_review_decision", "merge_attempt", "notify_human", "persist_phases", "render_conflict_context", "render_fix_prompt", "render_seed_prompt", "reviewer_decision", "verify_build", "verify_lint", "verify_test"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("OperatorNames() = %v, want %v", got, want)
 	}
