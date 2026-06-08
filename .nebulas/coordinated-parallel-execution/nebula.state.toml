@@ -5,9 +5,9 @@ total_cost_usd = 34.704323499999994
 [phases]
 [phases.conflict-resolver-star]
 bead_id = 'conflict-resolver-star'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-06-07T22:49:07.552947-04:00
-updated_at = 2026-06-08T11:37:50.799868-04:00
+updated_at = 2026-06-08T11:56:22.549866-04:00
 
 [phases.coordination-preflight]
 bead_id = 'coordination-preflight'
