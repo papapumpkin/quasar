@@ -231,6 +231,19 @@ func conflictedFiles(ctx context.Context, wtGit runner) []string {
 // kill) is a verification failure, not a Go error: the merge gate routes on the
 // boolean. A positive timeout derives a deadline from ctx so a runaway verify is
 // killed and reported as a failure rather than blocking the gate forever.
+//
+// The naive form — exec.CommandContext + CombinedOutput — has a subtle
+// blocking bug for shell commands: ctx.Done sends SIGKILL to `sh`, but any
+// children sh spawned (e.g. `sleep 30`, a wedged `go test`) inherit the
+// stdout/stderr pipes and keep them open. CombinedOutput's pipe-drain wait
+// then blocks until those orphans exit on their own — the timeout fires but
+// the function does not return. Two mechanisms together fix it:
+//   - Setsid puts the verify subprocess in its own session/process group, so
+//     cmd.Cancel can kill the whole subtree (negative PID) on ctx.Done,
+//     reaping any children sh forked.
+//   - WaitDelay caps the post-kill pipe-drain wait as a backstop, so even if
+//     the group kill races or a child somehow escapes the group, this
+//     function still returns within bounded time.
 func runVerify(ctx context.Context, dir, command string, timeout time.Duration) (output string, ok bool) {
 	if timeout > 0 {
 		var cancel context.CancelFunc
@@ -239,6 +252,15 @@ func runVerify(ctx context.Context, dir, command string, timeout time.Duration) 
 	}
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	cmd.Dir = dir
+	cmd.SysProcAttr = verifySysProcAttr()
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return os.ErrProcessDone
+		}
+		_ = killVerifyGroup(cmd.Process.Pid)
+		return os.ErrProcessDone
+	}
+	cmd.WaitDelay = 2 * time.Second
 	out, err := cmd.CombinedOutput()
 	return string(out), err == nil
 }
