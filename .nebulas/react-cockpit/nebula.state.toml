@@ -1,0 +1,15 @@
+version = 1
+nebula_name = 'react-cockpit'
+
+[phases]
+[phases.cockpit-server]
+bead_id = 'cockpit-server'
+status = 'failed'
+created_at = 2026-06-08T16:47:44.067508-04:00
+updated_at = 2026-06-08T16:58:59.934136-04:00
+
+[phases.react-app-skeleton]
+bead_id = 'react-app-skeleton'
+status = 'created'
+created_at = 2026-06-08T16:47:44.06798-04:00
+updated_at = 2026-06-08T16:47:44.06798-04:00

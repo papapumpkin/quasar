@@ -19,6 +19,13 @@ var allowedGlobals = map[string][]string{
 	"artifacts": {
 		"DefaultsFS",
 	},
+	// cockpit: bundleFS is the //go:embed target for the built React cockpit
+	// static bundle (embed requires a package-level var). It is defined only
+	// under the `cockpit` build tag and is read-only after package init — the
+	// embedded FS is never reassigned.
+	"cockpit": {
+		"bundleFS",
+	},
 	// fabric: migrationsFS is the //go:embed target for the ordered SQL
 	// migrations applied after the base schema (embed requires a package-level
 	// var). It is read-only after package init — the embedded FS is never

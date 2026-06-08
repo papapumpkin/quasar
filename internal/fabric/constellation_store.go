@@ -332,6 +332,35 @@ func (s *ConstellationRunStore) CostBreakdown(ctx context.Context, runID string)
 	return out, rows.Err()
 }
 
+// InvocationsForRun returns every star/builtin invocation recorded for a run,
+// ordered by seq, so the cockpit run-detail view can render the step trace.
+func (s *ConstellationRunStore) InvocationsForRun(ctx context.Context, runID string) ([]*StarInvocationRow, error) {
+	const q = `
+		SELECT run_id, seq, node, star_name, state, cycle, cost_usd, duration_ms,
+		       COALESCE(rationale_blob_hash, ''), rationale_preview, parsed_result_toml,
+		       started_at, COALESCE(ended_at, 0)
+		FROM star_invocations WHERE run_id = ? ORDER BY seq`
+	rows, err := s.db.QueryContext(ctx, q, runID)
+	if err != nil {
+		return nil, fmt.Errorf("fabric: invocations for run %q: %w", runID, err)
+	}
+	defer rows.Close()
+
+	var out []*StarInvocationRow
+	for rows.Next() {
+		var inv StarInvocationRow
+		if err := rows.Scan(
+			&inv.RunID, &inv.Seq, &inv.Node, &inv.StarName, &inv.State, &inv.Cycle,
+			&inv.CostUSD, &inv.DurationMs, &inv.RationaleBlob, &inv.RationalePreview,
+			&inv.ParsedResultTOML, &inv.StartedAt, &inv.EndedAt,
+		); err != nil {
+			return nil, fmt.Errorf("fabric: scan star invocation: %w", err)
+		}
+		out = append(out, &inv)
+	}
+	return out, rows.Err()
+}
+
 // nullIfEmpty maps "" to a SQL NULL so REFERENCES/foreign keys stay nullable.
 func nullIfEmpty(s string) any {
 	if s == "" {

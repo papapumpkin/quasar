@@ -67,6 +67,21 @@ type GitHubConfig struct {
 	BaseBranch string `mapstructure:"base_branch"`
 }
 
+// CockpitConfig holds the [cockpit] section of a repo's .quasar.yaml. It
+// configures the optional React cockpit served from the supervisor process.
+// The cockpit is off by default in v1: with Enabled false, cmd/serve.go does
+// not register the HTTP routes and the embedded bundle is excluded from the
+// build (the //go:embed directive is guarded by the `cockpit` build tag).
+type CockpitConfig struct {
+	// Enabled turns the cockpit HTTP server on. Default: false.
+	Enabled bool `mapstructure:"enabled"`
+	// Addr is the listen address (host:port). Default: "127.0.0.1:7330".
+	Addr string `mapstructure:"addr"`
+	// TrustedProxies lists CIDRs/hosts trusted for X-Forwarded-For when the
+	// cockpit runs behind a reverse proxy. Empty disables proxy trust.
+	TrustedProxies []string `mapstructure:"trusted_proxies"`
+}
+
 // Config holds all runtime configuration for a quasar session.
 // Values are populated from .quasar.yaml, QUASAR_* env vars, and CLI flags.
 type Config struct {
@@ -149,6 +164,10 @@ type Config struct {
 	// MergeGate holds the [merge_gate] section: the cross-phase merge gate's
 	// verify command and timeout override. Empty fields use built-in defaults.
 	MergeGate MergeGateConfig `mapstructure:"merge_gate"`
+
+	// Cockpit holds the [cockpit] section: the optional React cockpit server.
+	// Disabled by default; see CockpitConfig.
+	Cockpit CockpitConfig `mapstructure:"cockpit"`
 }
 
 // ErrInlineToken indicates an integration or forge section stored a secret
@@ -205,6 +224,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("fix_effort", "low")
 	v.SetDefault("fallback_model", "")
 	v.SetDefault("pre_commit.fail_on_error", true)
+	v.SetDefault("cockpit.enabled", false)
+	v.SetDefault("cockpit.addr", "127.0.0.1:7330")
 	setGCDefaults(v)
 }
 
