@@ -202,6 +202,40 @@ func (s *EntanglementStore) Active(ctx context.Context, name string) ([]Entangle
 	return out, rows.Err()
 }
 
+// ActiveAll returns every entanglement whose status signals in-flight intent
+// (declared | claimed | in_flight | deprecated), across all symbols, most-recent
+// first. The pre-flight coordination check enumerates these to find the subset
+// that intersects a dispatching phase's scope; unlike Active it is not keyed by
+// a single symbol name, because the check does not know in advance which symbol
+// names a phase's files might reference. Terminal rows (fulfilled, withdrawn)
+// and legacy 'pending' rows are excluded, sharing activeStatuses with Active so
+// the two can never drift.
+func (s *EntanglementStore) ActiveAll(ctx context.Context) ([]Entanglement, error) {
+	clause, statusArgs := inClause(activeStatuses)
+	q := fmt.Sprintf(`
+		SELECT id, producer, consumer, kind, name, signature, package, status,
+		       run_id, phase_id, current_signature,
+		       declared_at, claimed_at, in_flight_at, terminated_at, created_at
+		  FROM entanglements
+		 WHERE status IN (%s)
+		 ORDER BY COALESCE(in_flight_at, claimed_at, declared_at, 0) DESC, id DESC`, clause)
+	rows, err := s.db.QueryContext(ctx, q, statusArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("fabric: query all active entanglements: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // iteration cleanup
+
+	var out []Entanglement
+	for rows.Next() {
+		e, err := scanLifecycleRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 // scanLifecycleRow scans a row carrying the lifecycle columns, coping with the
 // NULL-able run_id / timestamp / consumer columns that legacy rows leave unset.
 func scanLifecycleRow(rows *sql.Rows) (Entanglement, error) {

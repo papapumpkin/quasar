@@ -45,6 +45,13 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 		return nil, err
 	}
 
+	// Pre-flight coordination check: query active entanglements that intersect
+	// this phase's scope and inject sibling-aware notes into the prompt. Advisory
+	// only — a failed read (or a skipped check) never fails the run; the merge
+	// gate still catches any conflict the coder misses. Gated on the star opting
+	// in via coordination_aware (default true for coder-class stars).
+	prompt := r.coordinationPrompt(ctx, run, node, star, userPrompt(args, st))
+
 	started := time.Now()
 	res, err := r.invoker.Invoke(ctx, agent.Agent{
 		Role:          agent.RoleCoder,
@@ -65,7 +72,7 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 		// against these thresholds and kills a stalled/thrashing subprocess, so
 		// wall_clock_cap etc. in a star file have a real runtime effect.
 		Health: contextHealth(star.Health),
-	}, userPrompt(args, st), r.repoPath)
+	}, prompt, r.repoPath)
 	if err != nil {
 		// A dead-coder termination is distinct from a generic failure: the
 		// partial work persists in the worktree, so record terminated_health so
@@ -101,6 +108,33 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 		"cost_usd":   res.CostUSD,
 		"session_id": res.SessionID,
 	}, nil
+}
+
+// coordinationPrompt runs the pre-flight coordination check for a dispatching
+// coder and returns the user prompt with a `## Coordination notes` block
+// appended when sibling intents intersect the phase. It is a no-op — returning
+// the prompt unchanged — when no Check is wired or the star opts out via
+// coordination_aware = false. A read failure is logged and swallowed: the check
+// is advisory, so a missed note never blocks the dispatch.
+//
+// The PhaseContext is built from the run and node identity available here. Scope
+// and file resolution from the phase spec (which would let the symbol-name
+// content match fire) is threaded once phase scope reaches the run State; until
+// then package-scoped entanglements still match via the empty-scope path and the
+// mechanism, gating, and telemetry are fully exercised. See the phase summary.
+func (r *Runtime) coordinationPrompt(ctx context.Context, run *fabric.RunRow, node *artifacts.ConstellationNode, star *artifacts.Star, prompt string) string {
+	if r.coordination == nil || !star.CoordinationAware {
+		return prompt
+	}
+	notes, err := r.coordination.Notes(ctx, PhaseContext{
+		RunID:   run.ID,
+		PhaseID: node.ID,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "coordination check (run %s node %s): %v\n", run.ID, node.ID, err)
+		return prompt
+	}
+	return agent.AppendCoordinationNotes(prompt, notes)
 }
 
 // maybeCheckpoint snapshots the worktree after a successful coder dispatch when a

@@ -147,6 +147,125 @@ func TestFabricProtocolContent(t *testing.T) {
 	}
 }
 
+func TestAdviceForStatus(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"declared":   "A sibling phase intends to produce this symbol. Avoid the name collision.",
+		"claimed":    "A sibling coder has picked up work on this symbol. Coordinate or wait.",
+		"in_flight":  "Use the current signature shown above.",
+		"deprecated": "Do not introduce new uses. Use the replacement noted in the producer's spec.",
+		"unknown":    "A sibling phase is working on this symbol. Treat it as a constraint.",
+	}
+	for status, want := range cases {
+		status, want := status, want
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			if got := AdviceForStatus(status); got != want {
+				t.Errorf("AdviceForStatus(%q) = %q, want %q", status, got, want)
+			}
+		})
+	}
+}
+
+func TestAppendCoordinationNotes(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty notes leave prompt unchanged", func(t *testing.T) {
+		t.Parallel()
+		const prompt = "# Nebula: demo\n"
+		if got := AppendCoordinationNotes(prompt, nil); got != prompt {
+			t.Errorf("expected prompt unchanged with no notes, got:\n%q", got)
+		}
+	})
+
+	t.Run("golden block for each status", func(t *testing.T) {
+		t.Parallel()
+		notes := []CoordinationNote{
+			{
+				Name:             "Sensor.Poll",
+				Status:           "in_flight",
+				SiblingPhaseID:   "rename-integrations-to-sensors",
+				CurrentSignature: "Poll(ctx, cursor) ([]Event, json.RawMessage, error)",
+			},
+			{
+				Name:           "FromTicket",
+				Status:         "deprecated",
+				SiblingPhaseID: "rename-integrations-to-sensors",
+			},
+			{
+				Name:           "Scheduler",
+				Status:         "declared",
+				SiblingPhaseID: "github-sensor-produces-nebula",
+			},
+			{
+				Name:           "Cursor",
+				Status:         "claimed",
+				SiblingPhaseID: "github-sensor-produces-nebula",
+			},
+		}
+		const base = "# Nebula: demo"
+		got := AppendCoordinationNotes(base, notes)
+
+		const want = "# Nebula: demo\n" +
+			"\n" +
+			"## Coordination notes\n" +
+			"Other phases are currently in flight on symbols that overlap your scope.\n" +
+			"Both their work and yours are valid — treat these as constraints, not\n" +
+			"optional guidance.\n" +
+			"\n" +
+			"- **Sensor.Poll** (in_flight, phase `rename-integrations-to-sensors`)\n" +
+			"  Current signature: `Poll(ctx, cursor) ([]Event, json.RawMessage, error)`\n" +
+			"  Advice: Use the current signature shown above.\n" +
+			"\n" +
+			"- **FromTicket** (deprecated, phase `rename-integrations-to-sensors`)\n" +
+			"  Advice: Do not introduce new uses. Use the replacement noted in the producer's spec.\n" +
+			"\n" +
+			"- **Scheduler** (declared, phase `github-sensor-produces-nebula`)\n" +
+			"  Advice: A sibling phase intends to produce this symbol. Avoid the name collision.\n" +
+			"\n" +
+			"- **Cursor** (claimed, phase `github-sensor-produces-nebula`)\n" +
+			"  Advice: A sibling coder has picked up work on this symbol. Coordinate or wait.\n"
+
+		if got != want {
+			t.Errorf("rendered block mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, want)
+		}
+	})
+
+	t.Run("explicit advice overrides status-derived text", func(t *testing.T) {
+		t.Parallel()
+		notes := []CoordinationNote{{
+			Name:           "FromTicket",
+			Status:         "deprecated",
+			SiblingPhaseID: "p1",
+			Advice:         "Custom: use FromNebula instead.",
+		}}
+		got := AppendCoordinationNotes("base", notes)
+		if !strings.Contains(got, "Advice: Custom: use FromNebula instead.") {
+			t.Errorf("expected explicit advice to be rendered, got:\n%s", got)
+		}
+	})
+
+	t.Run("deterministic output", func(t *testing.T) {
+		t.Parallel()
+		notes := []CoordinationNote{{Name: "Foo", Status: "in_flight", SiblingPhaseID: "p"}}
+		first := AppendCoordinationNotes("base", notes)
+		second := AppendCoordinationNotes("base", notes)
+		if first != second {
+			t.Error("AppendCoordinationNotes must be deterministic for prompt-cache stability")
+		}
+	})
+
+	t.Run("prompt without trailing newline gets a clean separator", func(t *testing.T) {
+		t.Parallel()
+		notes := []CoordinationNote{{Name: "Foo", Status: "declared", SiblingPhaseID: "p"}}
+		got := AppendCoordinationNotes("no newline", notes)
+		if !strings.Contains(got, "no newline\n\n## Coordination notes") {
+			t.Errorf("expected single blank line between prompt and block, got:\n%q", got)
+		}
+	})
+}
+
 func TestBuildSystemPromptDeterministic(t *testing.T) {
 	t.Parallel()
 

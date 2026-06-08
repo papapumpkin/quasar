@@ -71,6 +71,7 @@ type Runtime struct {
 	checkpointer     Checkpointer                // Optional; nil disables per-dispatch worktree checkpoints.
 	entanglements    *fabric.EntanglementStore   // Optional; nil disables entanglement-lifecycle tracking.
 	merger           merger                      // Optional test seam; nil builds a gitops-backed merger from repoPath.
+	coordination     *Check                      // Optional; nil disables the pre-flight coordination check.
 }
 
 // Checkpointer snapshots a run's worktree after a successful coder dispatch and
@@ -119,6 +120,10 @@ type RuntimeOpts struct {
 	// fulfills a run's entanglements as it terminates. Nil disables tracking, so
 	// repos that do not coordinate cross-phase symbols pay nothing.
 	Entanglements *fabric.EntanglementStore
+	// Coordination, when non-nil, runs the pre-flight coordination check before
+	// each coordination-aware coder dispatch and injects sibling-aware notes into
+	// the prompt. Nil disables the check; the dispatch proceeds with no notes.
+	Coordination *Check
 }
 
 // New constructs a Runtime. It panics on a nil required dependency, surfacing a
@@ -140,6 +145,7 @@ func New(opts RuntimeOpts) *Runtime {
 		cacheMetrics:     opts.CacheMetrics,
 		checkpointer:     opts.Checkpointer,
 		entanglements:    opts.Entanglements,
+		coordination:     opts.Coordination,
 	}
 }
 
