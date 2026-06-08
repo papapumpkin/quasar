@@ -1,12 +1,24 @@
 package checkpoint
 
 // This file implements worktree *snapshots*: content-addressed captures of the
-// worktree taken on green-build signals so a coder killed mid-cycle forfeits at
-// most the work since the last known-good build. It is a distinct concern from
-// the cycle-state resume Checkpoint (checkpoint.go) that also lives in this
-// package — to keep the two greppable apart, every identifier here uses
-// "Snapshot" vocabulary, never "Checkpoint", except for the MaybeCheckpoint
-// trigger entrypoint named by the design spec.
+// worktree the runtime takes after a coder dispatch returns successfully, so a
+// coder killed mid-cycle can fall back to the latest captured tree instead of
+// only the partial worktree at the moment of death.
+//
+// Granularity is PER-DISPATCH (cross-cycle), not per-build. Because the coder's
+// tool calls run inside an opaque `claude` subprocess, the runtime has no
+// in-cycle "build just passed" signal — it only sees the dispatch as a whole
+// succeed or fail. So the snapshot a dead coder falls back to is the one taken
+// after a PRIOR successful dispatch (or none, if this is the first cycle). True
+// per-build granularity — "three green builds in one cycle, forfeit only the
+// work after the last" — requires the invoker to surface build-class tool
+// results from the subprocess (e.g. parsing `claude` stream-json tool events)
+// and is tracked as a follow-up; it is deliberately NOT implemented here.
+//
+// This is a distinct concern from the cycle-state resume Checkpoint
+// (checkpoint.go) that also lives in this package — to keep the two greppable
+// apart, every identifier here uses "Snapshot" vocabulary, never "Checkpoint",
+// except for the Checkpoint entrypoint the runtime calls.
 
 import (
 	"context"
@@ -22,16 +34,8 @@ import (
 	"github.com/papapumpkin/quasar/internal/blobstore"
 )
 
-// ErrNoSnapshot indicates a run has no green-build snapshot to restore from.
+// ErrNoSnapshot indicates a run has no snapshot to restore from.
 var ErrNoSnapshot = errors.New("checkpoint: no snapshot for run")
-
-// ToolResult is the minimal view of a completed tool call the Snapshotter needs
-// to decide whether to snapshot: the command that ran and its exit code. A
-// build-class command (see triggers) that exits 0 fires a snapshot.
-type ToolResult struct {
-	Command  string // the shell command the coder ran (e.g. "go build ./...")
-	ExitCode int    // process exit code; 0 means success
-}
 
 // FileRef pairs a repo-relative path with the blob hash of its exact bytes and
 // the file's permission bits, so a restore reproduces both content and mode.
@@ -64,50 +68,27 @@ type Store interface {
 	Latest(ctx context.Context, runID string) (*Snapshot, error)
 }
 
-// DefaultTriggers returns the Go-centric build-class commands that, on exit 0,
-// fire a snapshot. A fresh slice is returned each call so callers cannot mutate
-// shared state. A non-Go repo overrides these via the star's [checkpoint]
-// frontmatter.
-func DefaultTriggers() []string {
-	return []string{"go build ./...", "go vet ./...", "go test -short ./..."}
-}
-
-// Snapshotter captures the worktree on green-build signals. Captures are
-// content-addressed via the blobstore so multiple coders (different cycles,
+// Snapshotter captures the worktree after a successful coder dispatch. Captures
+// are content-addressed via the blobstore so multiple coders (different cycles,
 // different phases, different runs) share unchanged file blobs. A single
 // Snapshotter serves one worktree across many runs; the run ID is supplied per
 // call. It is not safe for concurrent use within a single run.
 type Snapshotter struct {
-	workdir  string
-	blobs    *blobstore.Store
-	store    Store
-	triggers []string
+	workdir string
+	blobs   *blobstore.Store
+	store   Store
 }
 
-// NewSnapshotter constructs a Snapshotter for one worktree. An empty triggers
-// slice falls back to DefaultTriggers, so a caller that omits triggers still
-// snapshots on Go green builds.
-func NewSnapshotter(workdir string, blobs *blobstore.Store, store Store, triggers []string) *Snapshotter {
-	if len(triggers) == 0 {
-		triggers = DefaultTriggers()
-	}
-	return &Snapshotter{workdir: workdir, blobs: blobs, store: store, triggers: triggers}
-}
-
-// MaybeCheckpoint is called after a tool result. It snapshots only when the tool
-// was a build-class trigger that exited 0, deduping against the run's latest
-// snapshot. Returns (nil, nil) for a non-trigger, a non-zero exit, or an
-// unchanged tree.
-func (s *Snapshotter) MaybeCheckpoint(ctx context.Context, runID string, cycle int, result ToolResult) (*Snapshot, error) {
-	if result.ExitCode != 0 || !s.isTrigger(result.Command) {
-		return nil, nil
-	}
-	return s.Checkpoint(ctx, runID, cycle, result.Command)
+// NewSnapshotter constructs a Snapshotter for one worktree.
+func NewSnapshotter(workdir string, blobs *blobstore.Store, store Store) *Snapshotter {
+	return &Snapshotter{workdir: workdir, blobs: blobs, store: store}
 }
 
 // Checkpoint captures the worktree for runID, deduping against the run's latest
 // snapshot: an unchanged tree (same manifest hash) writes no new row and returns
-// (nil, nil). This is the green-build entrypoint the runtime calls each cycle.
+// (nil, nil). This is the entrypoint the runtime calls after a coder dispatch
+// returns successfully (see the package comment on per-dispatch granularity).
+// trigger is a free-form label recording what prompted the capture.
 func (s *Snapshotter) Checkpoint(ctx context.Context, runID string, cycle int, trigger string) (*Snapshot, error) {
 	files, manifestHash, err := s.snapshotTree(ctx)
 	if err != nil {
@@ -232,7 +213,7 @@ func (s *Snapshotter) Restore(ctx context.Context, snap *Snapshot, destDir strin
 
 // RestoreForReview materializes, under baseDir, the two states a reviewer judges
 // after a dead-coder termination: partial/ (a copy of the live worktree at the
-// moment of death) and checkpoint/ (the latest green-build snapshot). It returns
+// moment of death) and checkpoint/ (the latest per-dispatch snapshot). It returns
 // ErrNoSnapshot when the run never produced a snapshot, leaving the caller to
 // fall back to reviewing the partial tree alone. baseDir must be outside the
 // worktree so the copy does not snapshot itself.
@@ -251,26 +232,6 @@ func (s *Snapshotter) RestoreForReview(ctx context.Context, runID, baseDir strin
 		return "", "", err
 	}
 	return partialDir, checkpointDir, nil
-}
-
-// isTrigger reports whether cmd is one of the configured build-class triggers.
-// Matching is whitespace-normalized and allows trailing arguments (e.g.
-// "go build ./... -v" still matches "go build ./...").
-func (s *Snapshotter) isTrigger(cmd string) bool {
-	norm := normalizeCmd(cmd)
-	for _, t := range s.triggers {
-		tn := normalizeCmd(t)
-		if tn != "" && (norm == tn || strings.HasPrefix(norm, tn+" ")) {
-			return true
-		}
-	}
-	return false
-}
-
-// normalizeCmd collapses runs of whitespace to single spaces and trims, so
-// trigger matching is insensitive to incidental spacing.
-func normalizeCmd(s string) string {
-	return strings.Join(strings.Fields(s), " ")
 }
 
 // scannedFile is one regular file discovered by scanFiles: its slash-separated

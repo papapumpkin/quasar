@@ -12,9 +12,10 @@ import (
 var ErrCheckpointNotFound = errors.New("fabric: checkpoint not found")
 
 // CheckpointStore is the typed API over the checkpoints and checkpoint_files
-// tables. The runtime inserts one checkpoint per green build during a cycle; on
-// a dead-coder termination the supervisor loads the latest to offer the reviewer
-// a known-good fallback state alongside the partial worktree.
+// tables. The runtime inserts one checkpoint after each successful coder dispatch
+// (per-dispatch granularity, not per-build); on a dead-coder termination the
+// supervisor loads the latest to offer the reviewer a known-good fallback state
+// alongside the partial worktree.
 type CheckpointStore struct {
 	db *sql.DB
 }
@@ -38,7 +39,7 @@ type CheckpointRow struct {
 	ID           int64
 	RunID        string
 	Cycle        int
-	Trigger      string // the build-class command that fired this checkpoint
+	Trigger      string // free-form label for what fired this checkpoint (e.g. "post-dispatch:coder")
 	ManifestHash string // blob hash of the canonical {path: blob_hash} manifest
 	CreatedAt    int64
 	Files        []CheckpointFile

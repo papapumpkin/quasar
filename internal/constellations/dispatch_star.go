@@ -75,9 +75,10 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 		if errors.As(err, &dead) {
 			status = "terminated_health"
 			// The coder was killed mid-cycle but its partial work persists in the
-			// worktree. Surface the latest green-build snapshot alongside it so the
-			// reviewer can choose a known-good fallback. Best-effort: a restore
-			// failure must not mask the original termination.
+			// worktree. Surface the latest per-dispatch snapshot (from a prior
+			// successful cycle) alongside it so the reviewer can choose a known-good
+			// fallback. Best-effort: a restore failure — including no prior snapshot
+			// to fall back to — must not mask the original termination.
 			r.restoreForReview(ctx, run.ID)
 		}
 		r.recordInvocation(ctx, run, node, star.Name, status, 0, started)
@@ -103,21 +104,31 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 }
 
 // maybeCheckpoint snapshots the worktree after a successful coder dispatch when a
-// checkpointer is wired and the star opts in via [checkpoint] enabled. It is the
-// runtime's coarsest green-build signal: a coder that returned without a
-// DeadCoderError left a usable tree. Best-effort — a snapshot failure is logged,
-// never fatal (correctness over throughput: a missed checkpoint only forfeits the
-// fallback, it never breaks the run).
+// checkpointer is wired and the star opts in via [checkpoint] enabled.
+//
+// Granularity is PER-DISPATCH, not per-build: the capture happens once, here on
+// the success path, because the coder's individual tool calls run inside an
+// opaque subprocess the runtime cannot observe mid-cycle. A coder that returned
+// without a DeadCoderError left a usable tree, so the next cycle's dead coder can
+// fall back to it. The headline "three green builds in one cycle, forfeit only
+// post-build work" guarantee requires per-build tool events from the invoker and
+// is a tracked follow-up — see the internal/checkpoint package comment.
+//
+// Best-effort — a snapshot failure is logged, never fatal (correctness over
+// throughput: a missed checkpoint only forfeits the fallback, it never breaks the
+// run). The trigger label is honest about what fired the capture: dispatch
+// completion, not a build command.
 func (r *Runtime) maybeCheckpoint(ctx context.Context, runID string, cycle int, star *artifacts.Star) {
 	if r.checkpointer == nil || !star.Checkpoint.Enabled {
 		return
 	}
-	if err := r.checkpointer.Checkpoint(ctx, runID, cycle, star.Name); err != nil {
+	trigger := "post-dispatch:" + star.Name
+	if err := r.checkpointer.Checkpoint(ctx, runID, cycle, trigger); err != nil {
 		fmt.Fprintf(os.Stderr, "checkpoint: run %s cycle %d: %v\n", runID, cycle, err)
 	}
 }
 
-// restoreForReview materializes the latest green-build snapshot next to a copy of
+// restoreForReview materializes the latest per-dispatch snapshot next to a copy of
 // the dead coder's partial worktree, logging both paths so the reviewer can
 // compare them. Best-effort: any failure (including no snapshot to fall back to)
 // is logged and swallowed so it never masks the coder termination.

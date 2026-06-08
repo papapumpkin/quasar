@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS checkpoints (
   id                 INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id             TEXT NOT NULL REFERENCES constellation_runs(id) ON DELETE CASCADE,
   cycle              INTEGER NOT NULL,
-  trigger_cmd        TEXT NOT NULL,             -- the build-class command that fired this checkpoint
+  trigger_cmd        TEXT NOT NULL,             -- free-form label for what fired this checkpoint (e.g. "post-dispatch:coder")
   manifest_blob_hash TEXT NOT NULL,             -- blob hash of canonical JSON {path: blob_hash}
   created_at         INTEGER NOT NULL
 );

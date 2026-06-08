@@ -71,17 +71,17 @@ func writeWorktree(t *testing.T, files map[string]string) string {
 	return root
 }
 
-func TestMaybeCheckpoint(t *testing.T) {
+func TestCheckpoint(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("writes a snapshot on an exit-0 trigger", func(t *testing.T) {
+	t.Run("writes a deduped snapshot", func(t *testing.T) {
 		work := writeWorktree(t, map[string]string{"main.go": "package main"})
 		store := &fakeStore{}
-		s := NewSnapshotter(work, newTestBlobs(t), store, nil)
+		s := NewSnapshotter(work, newTestBlobs(t), store)
 
-		snap, err := s.MaybeCheckpoint(ctx, "run-1", 1, ToolResult{Command: "go build ./...", ExitCode: 0})
+		snap, err := s.Checkpoint(ctx, "run-1", 1, "post-dispatch:coder")
 		if err != nil {
-			t.Fatalf("MaybeCheckpoint: %v", err)
+			t.Fatalf("Checkpoint: %v", err)
 		}
 		if snap == nil {
 			t.Fatal("expected a snapshot, got nil")
@@ -89,7 +89,7 @@ func TestMaybeCheckpoint(t *testing.T) {
 		if len(store.inserted) != 1 {
 			t.Fatalf("got %d rows, want 1", len(store.inserted))
 		}
-		if snap.Trigger != "go build ./..." || snap.RunID != "run-1" {
+		if snap.Trigger != "post-dispatch:coder" || snap.RunID != "run-1" {
 			t.Errorf("unexpected snapshot: %+v", snap)
 		}
 		if len(snap.Files) != 1 || snap.Files[0].Path != "main.go" {
@@ -97,46 +97,18 @@ func TestMaybeCheckpoint(t *testing.T) {
 		}
 	})
 
-	t.Run("does not snapshot on a non-zero exit", func(t *testing.T) {
-		work := writeWorktree(t, map[string]string{"main.go": "package main"})
-		store := &fakeStore{}
-		s := NewSnapshotter(work, newTestBlobs(t), store, nil)
-
-		snap, err := s.MaybeCheckpoint(ctx, "run-1", 1, ToolResult{Command: "go build ./...", ExitCode: 1})
-		if err != nil {
-			t.Fatalf("MaybeCheckpoint: %v", err)
-		}
-		if snap != nil || len(store.inserted) != 0 {
-			t.Fatalf("expected no snapshot, got %+v (%d rows)", snap, len(store.inserted))
-		}
-	})
-
-	t.Run("does not snapshot on a non-trigger command", func(t *testing.T) {
-		work := writeWorktree(t, map[string]string{"main.go": "package main"})
-		store := &fakeStore{}
-		s := NewSnapshotter(work, newTestBlobs(t), store, nil)
-
-		snap, err := s.MaybeCheckpoint(ctx, "run-1", 1, ToolResult{Command: "ls -la", ExitCode: 0})
-		if err != nil {
-			t.Fatalf("MaybeCheckpoint: %v", err)
-		}
-		if snap != nil || len(store.inserted) != 0 {
-			t.Fatalf("expected no snapshot, got %+v (%d rows)", snap, len(store.inserted))
-		}
-	})
-
 	t.Run("dedups an unchanged tree: no second row", func(t *testing.T) {
 		work := writeWorktree(t, map[string]string{"main.go": "package main"})
 		store := &fakeStore{}
-		s := NewSnapshotter(work, newTestBlobs(t), store, nil)
+		s := NewSnapshotter(work, newTestBlobs(t), store)
 
-		first, err := s.MaybeCheckpoint(ctx, "run-1", 1, ToolResult{Command: "go vet ./...", ExitCode: 0})
+		first, err := s.Checkpoint(ctx, "run-1", 1, "post-dispatch:coder")
 		if err != nil || first == nil {
-			t.Fatalf("first MaybeCheckpoint: snap=%v err=%v", first, err)
+			t.Fatalf("first Checkpoint: snap=%v err=%v", first, err)
 		}
-		second, err := s.MaybeCheckpoint(ctx, "run-1", 1, ToolResult{Command: "go vet ./...", ExitCode: 0})
+		second, err := s.Checkpoint(ctx, "run-1", 1, "post-dispatch:coder")
 		if err != nil {
-			t.Fatalf("second MaybeCheckpoint: %v", err)
+			t.Fatalf("second Checkpoint: %v", err)
 		}
 		if second != nil {
 			t.Errorf("expected dedup (nil), got %+v", second)
@@ -149,15 +121,15 @@ func TestMaybeCheckpoint(t *testing.T) {
 	t.Run("snapshots again after a file changes", func(t *testing.T) {
 		work := writeWorktree(t, map[string]string{"main.go": "package main"})
 		store := &fakeStore{}
-		s := NewSnapshotter(work, newTestBlobs(t), store, nil)
+		s := NewSnapshotter(work, newTestBlobs(t), store)
 
-		if _, err := s.MaybeCheckpoint(ctx, "run-1", 1, ToolResult{Command: "go build ./...", ExitCode: 0}); err != nil {
+		if _, err := s.Checkpoint(ctx, "run-1", 1, "post-dispatch:coder"); err != nil {
 			t.Fatalf("first: %v", err)
 		}
 		if err := os.WriteFile(filepath.Join(work, "main.go"), []byte("package main // edited"), 0o644); err != nil {
 			t.Fatalf("edit: %v", err)
 		}
-		snap, err := s.MaybeCheckpoint(ctx, "run-1", 2, ToolResult{Command: "go build ./...", ExitCode: 0})
+		snap, err := s.Checkpoint(ctx, "run-1", 2, "post-dispatch:coder")
 		if err != nil || snap == nil {
 			t.Fatalf("second: snap=%v err=%v", snap, err)
 		}
@@ -173,7 +145,7 @@ func TestSnapshotManifestDeterminism(t *testing.T) {
 		"internal/foo.go": "package internal",
 		"internal/bar.go": "package internal",
 	})
-	s := NewSnapshotter(work, newTestBlobs(t), &fakeStore{}, nil)
+	s := NewSnapshotter(work, newTestBlobs(t), &fakeStore{})
 
 	a, err := s.Capture(ctx, "run-1", 1, "go build ./...")
 	if err != nil {
@@ -199,7 +171,7 @@ func TestRestoreByteIdentical(t *testing.T) {
 		"docs/readme.txt": "hello\nworld\n",
 	}
 	work := writeWorktree(t, original)
-	s := NewSnapshotter(work, newTestBlobs(t), &fakeStore{}, nil)
+	s := NewSnapshotter(work, newTestBlobs(t), &fakeStore{})
 
 	snap, err := s.Capture(ctx, "run-1", 1, "go build ./...")
 	if err != nil {
@@ -237,7 +209,7 @@ func TestRestorePreservesMode(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	s := NewSnapshotter(work, newTestBlobs(t), &fakeStore{}, nil)
+	s := NewSnapshotter(work, newTestBlobs(t), &fakeStore{})
 	snap, err := s.Capture(ctx, "run-1", 1, "go build ./...")
 	if err != nil {
 		t.Fatalf("Capture: %v", err)
@@ -262,7 +234,7 @@ func TestRestoreForReview(t *testing.T) {
 	t.Run("produces partial and checkpoint trees", func(t *testing.T) {
 		work := writeWorktree(t, map[string]string{"main.go": "v1"})
 		store := &fakeStore{}
-		s := NewSnapshotter(work, newTestBlobs(t), store, nil)
+		s := NewSnapshotter(work, newTestBlobs(t), store)
 
 		if _, err := s.Capture(ctx, "run-1", 1, "go build ./..."); err != nil {
 			t.Fatalf("Capture: %v", err)
@@ -283,51 +255,17 @@ func TestRestoreForReview(t *testing.T) {
 			t.Errorf("partial = %q, want v2-broken", gotPartial)
 		}
 		if string(gotCheckpoint) != "v1" {
-			t.Errorf("checkpoint = %q, want v1 (last green build)", gotCheckpoint)
+			t.Errorf("checkpoint = %q, want v1 (last captured snapshot)", gotCheckpoint)
 		}
 	})
 
 	t.Run("returns ErrNoSnapshot when none exist", func(t *testing.T) {
 		work := writeWorktree(t, map[string]string{"main.go": "v1"})
-		s := NewSnapshotter(work, newTestBlobs(t), &fakeStore{}, nil)
+		s := NewSnapshotter(work, newTestBlobs(t), &fakeStore{})
 		if _, _, err := s.RestoreForReview(ctx, "run-1", t.TempDir()); err != ErrNoSnapshot {
 			t.Fatalf("err = %v, want ErrNoSnapshot", err)
 		}
 	})
-}
-
-func TestIsTrigger(t *testing.T) {
-	s := NewSnapshotter(t.TempDir(), nil, &fakeStore{}, []string{"go build ./...", "make test"})
-	cases := []struct {
-		cmd  string
-		want bool
-	}{
-		{"go build ./...", true},
-		{"go  build   ./...", true},    // whitespace-normalized
-		{"go build ./... -race", true}, // trailing args
-		{"make test", true},
-		{"go vet ./...", false}, // not in this snapshotter's triggers
-		{"go buildxyz", false},  // not a prefix-with-space match
-		{"", false},
-	}
-	for _, tc := range cases {
-		if got := s.isTrigger(tc.cmd); got != tc.want {
-			t.Errorf("isTrigger(%q) = %v, want %v", tc.cmd, got, tc.want)
-		}
-	}
-}
-
-func TestDefaultTriggersUsedWhenEmpty(t *testing.T) {
-	s := NewSnapshotter(t.TempDir(), nil, &fakeStore{}, nil)
-	if !s.isTrigger("go test -short ./...") {
-		t.Error("expected default Go triggers to be active when none provided")
-	}
-	// DefaultTriggers returns a fresh slice each call (no shared mutable state).
-	a := DefaultTriggers()
-	a[0] = "mutated"
-	if DefaultTriggers()[0] == "mutated" {
-		t.Error("DefaultTriggers leaks shared state")
-	}
 }
 
 // TestFabricStoreEndToEnd exercises the production NewFabricStore adapter against
@@ -349,7 +287,7 @@ func TestFabricStoreEndToEnd(t *testing.T) {
 	store := NewFabricStore(fabric.NewCheckpointStore(fab.DB()))
 
 	work := writeWorktree(t, map[string]string{"a.go": "package a", "b.go": "package b"})
-	s := NewSnapshotter(work, blobs, store, nil)
+	s := NewSnapshotter(work, blobs, store)
 
 	snap, err := s.Capture(ctx, "run-e2e", 3, "go test -short ./...")
 	if err != nil {

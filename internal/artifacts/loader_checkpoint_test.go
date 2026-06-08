@@ -5,9 +5,10 @@ import "testing"
 func TestParseStarCheckpoint(t *testing.T) {
 	t.Parallel()
 
-	t.Run("override triggers take effect", func(t *testing.T) {
+	t.Run("strict lint rejects an unsupported triggers key", func(t *testing.T) {
 		t.Parallel()
 		l, repo := newTestLoader(t)
+		l.Strict = true
 		writeFile(t, repo, "stars/pyworker.md", `+++
 name = "pyworker"
 model = "claude-sonnet-4-6"
@@ -19,25 +20,15 @@ triggers = ["python -m pytest --collect-only", "ruff check ."]
 
 You are a Python worker.
 `)
-		star, err := l.LoadStar("pyworker")
-		if err != nil {
-			t.Fatalf("LoadStar: %v", err)
-		}
-		if !star.Checkpoint.Enabled {
-			t.Error("Enabled = false, want true")
-		}
-		want := []string{"python -m pytest --collect-only", "ruff check ."}
-		if len(star.Checkpoint.Triggers) != len(want) {
-			t.Fatalf("triggers = %v, want %v", star.Checkpoint.Triggers, want)
-		}
-		for i := range want {
-			if star.Checkpoint.Triggers[i] != want[i] {
-				t.Errorf("triggers[%d] = %q, want %q", i, star.Checkpoint.Triggers[i], want[i])
-			}
+		// triggers is not a real knob (checkpointing is per-dispatch, not
+		// per-build), so strict loading must surface it rather than silently
+		// accept a list that has no effect.
+		if _, err := l.LoadStar("pyworker"); err == nil {
+			t.Fatal("expected strict load to reject the unknown 'triggers' key, got nil")
 		}
 	})
 
-	t.Run("absent block defaults to enabled with no overrides", func(t *testing.T) {
+	t.Run("absent block defaults to enabled", func(t *testing.T) {
 		t.Parallel()
 		l, repo := newTestLoader(t)
 		writeFile(t, repo, "stars/plain.md", `+++
@@ -53,9 +44,6 @@ A star with no checkpoint block.
 		}
 		if !star.Checkpoint.Enabled {
 			t.Error("absent [checkpoint] should default Enabled to true")
-		}
-		if len(star.Checkpoint.Triggers) != 0 {
-			t.Errorf("expected no triggers, got %v", star.Checkpoint.Triggers)
 		}
 	})
 

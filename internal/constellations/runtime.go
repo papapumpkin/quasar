@@ -65,13 +65,15 @@ type Runtime struct {
 	budget           *Budget
 	defaultBudgetUSD float64
 	cacheMetrics     *telemetry.CacheMetricStore // Optional; nil disables cache-token recording.
-	checkpointer     Checkpointer                // Optional; nil disables in-cycle worktree checkpoints.
+	checkpointer     Checkpointer                // Optional; nil disables per-dispatch worktree checkpoints.
 }
 
-// Checkpointer snapshots a run's worktree on green-build signals and restores the
-// latest known-good snapshot when a coder dies mid-cycle, so the reviewer can
-// fall back to a recoverable state instead of judging broken in-flight work. The
-// runtime calls it; the concrete blob-backed implementation
+// Checkpointer snapshots a run's worktree after a successful coder dispatch and
+// restores the latest snapshot when a later cycle's coder dies, so the reviewer
+// can fall back to a recoverable state instead of judging only broken in-flight
+// work. Granularity is per-dispatch (cross-cycle), not per-build — see the
+// internal/checkpoint package comment. The runtime calls it; the concrete
+// blob-backed implementation
 // (checkpoint.RuntimeCheckpointer) is injected from the cmd layer. The interface
 // is defined here, where it is consumed, so dispatchStar never imports the
 // blob/fabric machinery directly (preserving the dependency layering).
@@ -105,7 +107,7 @@ type RuntimeOpts struct {
 	CacheMetrics *telemetry.CacheMetricStore
 	// Checkpointer, when non-nil, snapshots the worktree after each successful
 	// coder dispatch and restores the latest snapshot on a dead-coder
-	// termination. Nil disables in-cycle checkpointing.
+	// termination. Nil disables per-dispatch checkpointing.
 	Checkpointer Checkpointer
 }
 

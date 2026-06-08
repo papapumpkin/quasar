@@ -71,14 +71,17 @@ type StarHealthPolicy struct {
 	CPUIdleCap           time.Duration // longest sub-1%-CPU stretch
 }
 
-// StarCheckpointPolicy configures in-cycle worktree checkpoints for a star,
-// parsed from its [checkpoint] frontmatter block. Triggers lists the build-class
-// commands that, on exit 0, snapshot the worktree; an empty list means the
-// runtime applies its built-in Go-centric defaults. Enabled defaults to true
-// when the block is absent, so checkpointing is opt-out rather than opt-in.
+// StarCheckpointPolicy configures per-dispatch worktree checkpoints for a star,
+// parsed from its [checkpoint] frontmatter block. Enabled defaults to true when
+// the block is absent, so checkpointing is opt-out rather than opt-in. The
+// runtime snapshots the worktree after each successful coder dispatch (see
+// internal/checkpoint: granularity is per-dispatch, not per-build). A
+// per-build-trigger knob is intentionally not exposed here: it would require the
+// invoker to surface build-class tool events from the subprocess, which is a
+// tracked follow-up — advertising a triggers list that the runtime ignored would
+// be a configuration knob that silently does nothing.
 type StarCheckpointPolicy struct {
-	Enabled  bool     // whether to checkpoint at all (default true)
-	Triggers []string // build-class commands that fire a checkpoint on exit 0
+	Enabled bool // whether to checkpoint at all (default true)
 }
 
 // StarContextBudget bounds how much context a star's invocation consumes. It

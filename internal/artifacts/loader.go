@@ -369,11 +369,13 @@ type starFrontmatter struct {
 		ToolCallWindow       int     `toml:"tool_call_window"`
 		CPUIdleCap           string  `toml:"cpu_idle_cap"`
 	} `toml:"health"`
-	// Checkpoint overrides in-cycle worktree checkpoint triggers. Enabled is a
-	// pointer so an absent block defaults to true rather than false.
+	// Checkpoint toggles per-dispatch worktree checkpoints. Enabled is a pointer
+	// so an absent block defaults to true rather than false. No triggers key is
+	// accepted: checkpoint granularity is per-dispatch, not per-build (see
+	// StarCheckpointPolicy), so a triggers list would have no runtime effect and
+	// `quasar lint --strict` flags it as an unknown key.
 	Checkpoint struct {
-		Enabled  *bool    `toml:"enabled"`
-		Triggers []string `toml:"triggers"`
+		Enabled *bool `toml:"enabled"`
 	} `toml:"checkpoint"`
 }
 
