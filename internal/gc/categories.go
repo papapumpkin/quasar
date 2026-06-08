@@ -150,15 +150,20 @@ func sweepRuns(ctx context.Context, db *sql.DB, audit *AuditLog, now time.Time, 
 			res.Err = err
 			return res
 		}
+		cps, err := childCount(ctx, db, "checkpoints", "run_id", id)
+		if err != nil {
+			res.Err = err
+			return res
+		}
 		if !dryRun {
-			if err := deleteWithChildren(ctx, db, "constellation_runs", "star_invocations", "run_id", id); err != nil {
+			if err := deleteRunWithChildren(ctx, db, id); err != nil {
 				res.Err = err
 				return res
 			}
 		}
 		res.Swept++
-		res.CascadedChildren += invs
-		_ = audit.Append(AuditEntry{Category: CategoryConstellationRuns, Action: ActionSweep, RunID: id, Count: invs, DryRun: dryRun})
+		res.CascadedChildren += invs + cps
+		_ = audit.Append(AuditEntry{Category: CategoryConstellationRuns, Action: ActionSweep, RunID: id, Count: invs + cps, DryRun: dryRun})
 	}
 	return res
 }
@@ -273,6 +278,42 @@ func deleteWithChildren(ctx context.Context, db *sql.DB, parentTable, childTable
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("gc: commit delete tx: %w", err)
+	}
+	return nil
+}
+
+// deleteRunWithChildren hard-deletes a constellation run and every row that hangs
+// off it — star_invocations, checkpoints, and the checkpoint_files grandchildren
+// — in one transaction. The store runs with foreign keys off, so the ON DELETE
+// CASCADE declared in the migrations does not fire automatically; deleting the
+// descendants here is what lets the blob sweep reclaim a reaped run's checkpoint
+// blobs. Without it, orphaned checkpoint_files rows keep the manifest and file
+// blobs referenced forever and the GC could never reclaim them.
+func deleteRunWithChildren(ctx context.Context, db *sql.DB, runID string) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("gc: begin run delete tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // rollback after commit is a no-op
+
+	// Grandchildren first: checkpoint_files reference checkpoints(id), which in
+	// turn reference constellation_runs(id).
+	const delFiles = `DELETE FROM checkpoint_files
+		WHERE checkpoint_id IN (SELECT id FROM checkpoints WHERE run_id = ?)`
+	if _, err := tx.ExecContext(ctx, delFiles, runID); err != nil {
+		return fmt.Errorf("gc: delete checkpoint_files of run %s: %w", runID, err)
+	}
+	for _, stmt := range []string{
+		"DELETE FROM checkpoints WHERE run_id = ?",
+		"DELETE FROM star_invocations WHERE run_id = ?",
+		"DELETE FROM constellation_runs WHERE id = ?",
+	} {
+		if _, err := tx.ExecContext(ctx, stmt, runID); err != nil {
+			return fmt.Errorf("gc: delete run %s descendants: %w", runID, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("gc: commit run delete tx: %w", err)
 	}
 	return nil
 }

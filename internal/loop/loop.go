@@ -2,13 +2,16 @@ package loop
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/papapumpkin/quasar/internal/agent"
+	"github.com/papapumpkin/quasar/internal/claude"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/filter"
+	"github.com/papapumpkin/quasar/internal/telemetry"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
 
@@ -47,6 +50,14 @@ type Loop struct {
 	CheckpointDir     string           // Directory for checkpoint files. Empty disables checkpointing.
 	FixEffort         string           // Effort level for lint/filter fix invocations (e.g. "low"). Empty = Claude's default.
 	FallbackModel     string           // Automatic fallback model passed to all agents.
+
+	// CacheMetrics, when non-nil, persists per-invocation prompt-cache token
+	// counts to the JSONL log so `quasar cache report` can measure hit rate.
+	// A nil store disables recording (e.g. in unit tests).
+	CacheMetrics *telemetry.CacheMetricStore
+	// NebulaID labels recorded cache metrics so they can be grouped by run.
+	// Empty for ad-hoc single-task runs that are not part of a nebula.
+	NebulaID string
 	// NewCheckpointHook, when non-nil, is called by RunTask and RunExistingTask
 	// to create a checkpoint hook that is prepended to Hooks. The function
 	// receives a state accessor (returning the current *CycleState) and must
@@ -905,10 +916,15 @@ func (l *Loop) coderAgent(budget float64) agent.Agent {
 			"Read", "Edit", "Write", "Glob", "Grep",
 			"Bash(go *)", "Bash(git diff *)", "Bash(git status)", "Bash(git log *)",
 		},
-		MCP:           l.MCP,
-		FallbackModel: l.FallbackModel,
+		MCP:               l.MCP,
+		FallbackModel:     l.FallbackModel,
+		CacheOptimization: l.CacheOptimization,
+		ContextBudget:     budgetPtr(agent.BudgetForRole(agent.RoleCoder)),
 	}
 }
+
+// budgetPtr returns a heap pointer to b so it can populate Agent.ContextBudget.
+func budgetPtr(b agent.ContextBudget) *agent.ContextBudget { return &b }
 
 // reviewerAgent builds the agent configuration for the reviewer role.
 // It uses the pre-computed system prompt cached at phase start by
@@ -932,8 +948,10 @@ func (l *Loop) reviewerAgent(budget float64) agent.Agent {
 			"Read", "Glob", "Grep",
 			"Bash(go vet *)", "Bash(git diff *)", "Bash(git log *)",
 		},
-		MCP:           l.MCP,
-		FallbackModel: l.FallbackModel,
+		MCP:               l.MCP,
+		FallbackModel:     l.FallbackModel,
+		CacheOptimization: l.CacheOptimization,
+		ContextBudget:     budgetPtr(agent.BudgetForRole(agent.RoleReviewer)),
 	}
 }
 
@@ -955,6 +973,21 @@ func (l *Loop) runCoderPhase(ctx context.Context, state *CycleState, perAgentBud
 
 	result, err := l.Invoker.Invoke(ctx, coder, prompt, l.WorkDir)
 	if err != nil {
+		// A healthcheck termination is not an ordinary failure: the partial
+		// work persists in the worktree and is worth a reviewer's judgement, so
+		// mark the cycle terminated_health and surface a distinct sentinel.
+		var dead *claude.DeadCoderError
+		if errors.As(err, &dead) {
+			state.Phase = PhaseError
+			l.emit(ctx, Event{
+				Kind:    EventCoderTerminatedHealth,
+				TaskID:  state.TaskID,
+				Cycle:   state.Cycle,
+				Agent:   "coder",
+				Message: fmt.Sprintf("terminated_health: %s (partial work at %s)", dead.Reason, dead.Workdir),
+			})
+			return fmt.Errorf("%w: %v", ErrCoderTerminatedHealth, dead)
+		}
 		state.Phase = PhaseError
 		return fmt.Errorf("coder invocation failed: %w", err)
 	}
@@ -1081,6 +1114,29 @@ func (l *Loop) trackCacheMetrics(ctx context.Context, state *CycleState, agentRo
 		Message: fmt.Sprintf("sys_prompt_hash=%s sys_prompt_len=%d user_prompt_len=%d cost=%.4f",
 			hash, result.SystemPromptLen, result.UserPromptLen, result.CostUSD),
 	})
+
+	l.recordCacheMetric(ctx, state, result)
+}
+
+// recordCacheMetric persists the invocation's prompt-cache token counts to the
+// JSONL log when a store is configured. Recording is best-effort: a write
+// failure is logged to stderr but never fails the loop, since telemetry is a
+// read-only side channel and must not block correct coder progress.
+func (l *Loop) recordCacheMetric(ctx context.Context, state *CycleState, result *agent.InvocationResult) {
+	if l.CacheMetrics == nil {
+		return
+	}
+	err := l.CacheMetrics.Record(ctx, telemetry.CacheMetric{
+		NebulaID:    l.NebulaID,
+		PhaseID:     state.TaskID,
+		CycleN:      state.Cycle,
+		InputTokens: result.InputTokens,
+		CacheCreate: result.CacheCreationTokens,
+		CacheRead:   result.CacheReadTokens,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[cache] failed to record metric: %v\n", err)
+	}
 }
 
 // checkBudget returns ErrBudgetExceeded if the total cost has reached the limit.

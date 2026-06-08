@@ -18,6 +18,7 @@ import (
 // interface body as monospace code.
 type EntanglementView struct {
 	Entanglements []fabric.Entanglement
+	Collisions    []EntanglementCollision // active scope collisions surfaced as warnings
 	Cursor        int
 	Width         int
 	Height        int
@@ -185,7 +186,7 @@ func (ev *EntanglementView) Update(msg tea.Msg) {
 
 // View renders the entanglement view with grouped, bordered cards inside a viewport.
 func (ev EntanglementView) View() string {
-	if len(ev.Entanglements) == 0 {
+	if len(ev.Entanglements) == 0 && len(ev.Collisions) == 0 {
 		return lipgloss.NewStyle().
 			Foreground(colorMuted).
 			PaddingLeft(2).
@@ -243,11 +244,14 @@ func (ev *EntanglementView) refreshContent() {
 	ev.viewport.SetContent(content)
 }
 
-// renderContent formats all entanglement cards into a single string for the viewport.
+// renderContent formats the collision warnings and all entanglement cards into
+// a single string for the viewport.
 func (ev EntanglementView) renderContent() string {
 	groups := groupEntanglements(ev.Entanglements)
+
+	warnings := ev.renderCollisions()
 	if len(groups) == 0 {
-		return ""
+		return warnings
 	}
 
 	cardWidth := ev.Width - 4
@@ -256,6 +260,7 @@ func (ev EntanglementView) renderContent() string {
 	}
 
 	var sb strings.Builder
+	sb.WriteString(warnings)
 	flatIdx := 0
 
 	for gi, group := range groups {
@@ -280,6 +285,29 @@ func (ev EntanglementView) renderContent() string {
 		}
 	}
 
+	return sb.String()
+}
+
+// renderCollisions formats active scope collisions as a warning block. It
+// returns an empty string when there are no collisions; otherwise the block
+// ends with a trailing blank line so it composes above the entanglement cards.
+func (ev EntanglementView) renderCollisions() string {
+	if len(ev.Collisions) == 0 {
+		return ""
+	}
+
+	headerStyle := lipgloss.NewStyle().Foreground(colorDanger).Bold(true)
+	lineStyle := lipgloss.NewStyle().Foreground(colorDanger)
+
+	var sb strings.Builder
+	sb.WriteString(headerStyle.Render(fmt.Sprintf("  ⚠ %d scope collision(s)", len(ev.Collisions))))
+	sb.WriteString("\n")
+	for _, c := range ev.Collisions {
+		line := fmt.Sprintf("  ⚠ %s ↔ %s want %s", c.PhaseID, c.OtherPhaseID, c.Scope)
+		sb.WriteString(lineStyle.Render(line))
+		sb.WriteString("\n")
+	}
+	sb.WriteString("\n")
 	return sb.String()
 }
 

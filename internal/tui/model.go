@@ -531,8 +531,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// --- Fabric bridge messages ---
 	case MsgEntanglementUpdate:
-		m.Entanglements = msg.Entanglements
-		m.EntanglementView.Entanglements = msg.Entanglements
+		// Entanglements and collisions arrive from independent emitters (the
+		// fabric publisher vs. the scheduler's collision check), so a nil field
+		// means "this update carries no news on that axis" — leave the existing
+		// value intact rather than clobbering the other emitter's data.
+		if msg.Entanglements != nil {
+			m.Entanglements = msg.Entanglements
+			m.EntanglementView.Entanglements = msg.Entanglements
+		}
+		if msg.Collisions != nil {
+			m.EntanglementView.Collisions = msg.Collisions
+		}
 		m.EntanglementView.ClampCursor()
 
 	case MsgDiscoveryPosted:

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/papapumpkin/quasar/internal/repos"
 )
@@ -66,6 +67,58 @@ func TestLoadStar(t *testing.T) {
 		}
 	})
 
+	t.Run("RouteQuery is exposed only when router-aware is referenced", func(t *testing.T) {
+		t.Parallel()
+		l, repo := newTestLoader(t)
+
+		// router-aware is intentionally NOT in the default coder's skills yet
+		// (no backing RouteQuery tool exists), so the coder must NOT get it.
+		coder, err := l.LoadStar("coder")
+		if err != nil {
+			t.Fatalf("LoadStar coder: %v", err)
+		}
+		if containsStr(coder.Tools.Allowed, "RouteQuery") {
+			t.Errorf("coder should not expose RouteQuery while router-aware is gated out: %v", coder.Tools.Allowed)
+		}
+
+		// A star that explicitly references router-aware DOES get RouteQuery —
+		// the union mechanism that will back the tool once it is wired.
+		writeFile(t, repo, "stars/routed.md", "+++\nname = \"routed\"\nskills = [\"router-aware\"]\n\n[tools]\nallowed = [\"Read\"]\n+++\n\nBody.\n")
+		routed, err := l.LoadStar("routed")
+		if err != nil {
+			t.Fatalf("LoadStar routed: %v", err)
+		}
+		if !containsStr(routed.Tools.Allowed, "RouteQuery") {
+			t.Errorf("router-aware should add RouteQuery when referenced: %v", routed.Tools.Allowed)
+		}
+	})
+
+	t.Run("context_budget frontmatter is parsed", func(t *testing.T) {
+		t.Parallel()
+		l, _ := newTestLoader(t)
+
+		star, err := l.LoadStar("coder")
+		if err != nil {
+			t.Fatalf("LoadStar: %v", err)
+		}
+		cb := star.ContextBudget
+		if cb.MaxReadsBeforeEdit != 8 {
+			t.Errorf("MaxReadsBeforeEdit = %d, want 8", cb.MaxReadsBeforeEdit)
+		}
+		if cb.MaxGrepsBeforeEdit != 6 {
+			t.Errorf("MaxGrepsBeforeEdit = %d, want 6", cb.MaxGrepsBeforeEdit)
+		}
+		if cb.MaxTotalReads != 30 {
+			t.Errorf("MaxTotalReads = %d, want 30", cb.MaxTotalReads)
+		}
+		if cb.ToolResultMaxBytes != 16384 {
+			t.Errorf("ToolResultMaxBytes = %d, want 16384", cb.ToolResultMaxBytes)
+		}
+		if cb.IncludeSiblingPhases {
+			t.Error("IncludeSiblingPhases should be false for the coder star")
+		}
+	})
+
 	t.Run("per-repo override wins", func(t *testing.T) {
 		t.Parallel()
 		l, repo := newTestLoader(t)
@@ -90,6 +143,45 @@ func TestLoadStar(t *testing.T) {
 
 		if _, err := l.LoadStar("bad"); err == nil {
 			t.Fatal("expected error for unknown skill")
+		}
+	})
+
+	t.Run("health frontmatter is parsed", func(t *testing.T) {
+		t.Parallel()
+		l, repo := newTestLoader(t)
+		writeFile(t, repo, "stars/coder.md",
+			"+++\nname = \"coder\"\n[health]\nwall_clock_cap = \"30m\"\nfile_write_idle_cap = \"3m\"\n"+
+				"token_rate_floor = 8\ncpu_idle_cap = \"45s\"\ntool_call_window = 15\n+++\n\nBody.\n")
+
+		star, err := l.LoadStar("coder")
+		if err != nil {
+			t.Fatalf("LoadStar: %v", err)
+		}
+		if star.Health.WallClockCap != 30*time.Minute {
+			t.Errorf("WallClockCap = %v, want 30m", star.Health.WallClockCap)
+		}
+		if star.Health.FileWriteIdleCap != 3*time.Minute {
+			t.Errorf("FileWriteIdleCap = %v, want 3m", star.Health.FileWriteIdleCap)
+		}
+		if star.Health.TokenRateFloor != 8 {
+			t.Errorf("TokenRateFloor = %v, want 8", star.Health.TokenRateFloor)
+		}
+		if star.Health.CPUIdleCap != 45*time.Second {
+			t.Errorf("CPUIdleCap = %v, want 45s", star.Health.CPUIdleCap)
+		}
+		if star.Health.ToolCallWindow != 15 {
+			t.Errorf("ToolCallWindow = %d, want 15", star.Health.ToolCallWindow)
+		}
+	})
+
+	t.Run("malformed health duration is an error", func(t *testing.T) {
+		t.Parallel()
+		l, repo := newTestLoader(t)
+		writeFile(t, repo, "stars/coder.md",
+			"+++\nname = \"coder\"\n[health]\nwall_clock_cap = \"not-a-duration\"\n+++\n\nBody.\n")
+
+		if _, err := l.LoadStar("coder"); err == nil {
+			t.Fatal("expected error for malformed [health] duration")
 		}
 	})
 }

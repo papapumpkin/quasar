@@ -1,0 +1,76 @@
+version = 1
+nebula_name = 'coder-runtime-hardening'
+total_cost_usd = 57.46264925
+
+[phases]
+[phases.context-budgeting]
+bead_id = 'context-budgeting'
+status = 'done'
+created_at = 2026-06-06T21:11:50.107277-04:00
+updated_at = 2026-06-07T15:07:46.57381-04:00
+
+[phases.context-budgeting.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'Cycle-2 correctly fixes both minor findings (structured-JSON truncation bypass + doc accuracy) with clean wiring and matching tests; approved, with one non-blocking dead-config note about the unused `IncludeSiblingPhases` knob.'
+
+[phases.dead-coder-detection]
+bead_id = 'dead-coder-detection'
+status = 'done'
+created_at = 2026-06-06T21:11:50.107852-04:00
+updated_at = 2026-06-07T15:13:06.639256-04:00
+
+[phases.dead-coder-detection.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A multi-signal dead-coder healthcheck (wall-clock + write-idle + CPU-idle live, token-rate/tool-ratio staged) that terminates stalled `claude` subprocesses via SIGTERM→SIGKILL and hands partial work to the reviewer as `terminated_health`; correct, race-clean, well-tested, and approved with two minor non-blocking nits.'
+
+[phases.entanglement-revival]
+bead_id = 'entanglement-revival'
+status = 'done'
+created_at = 2026-06-06T21:11:50.108373-04:00
+updated_at = 2026-06-07T15:30:00.378307-04:00
+
+[phases.entanglement-revival.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A correctly-diagnosed, observability-only change that wires the previously-dead `PhaseTracker.Collisions()` surface to the TUI via a race-clean, well-tested bus payload, leaving the already-working scope-deferral safety path untouched.'
+
+[phases.in-cycle-checkpointing]
+bead_id = 'in-cycle-checkpointing'
+status = 'done'
+created_at = 2026-06-06T21:11:50.108118-04:00
+updated_at = 2026-06-07T22:31:05.213623-04:00
+
+[phases.in-cycle-checkpointing.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'The coder honestly removed an inert per-star trigger knob and corrected overclaiming docs to reflect real per-dispatch granularity; both prior findings are resolved, build/vet/tests pass, and only two non-blocking minor issues remain.'
+
+[phases.model-routing]
+bead_id = 'model-routing'
+status = 'done'
+created_at = 2026-06-06T21:11:50.107566-04:00
+updated_at = 2026-06-07T10:15:01.242726-04:00
+
+[phases.model-routing.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A correctly-implemented, fully-tested Haiku sub-question router ships as gated infrastructure with all five prior findings resolved; the only open item is human sign-off on its intentional lack of live wiring.'
+
+[phases.prompt-cache-audit-and-fix]
+bead_id = 'prompt-cache-audit-and-fix'
+status = 'done'
+created_at = 2026-06-06T21:11:50.106858-04:00
+updated_at = 2026-06-06T21:44:43.179676-04:00
+
+[phases.prompt-cache-audit-and-fix.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'The coder cleanly resolved both remaining minor findings (honest cycle numbering, accurate concurrency documentation) with proportional fixes and regression-locking tests; build/vet/test all pass, and the only open item is the previously-deferred TUI fleet-view integration that warrants human architectural sign-off.'

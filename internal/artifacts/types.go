@@ -50,8 +50,52 @@ type Star struct {
 	Skills        []string // skill names referenced in frontmatter, pre-resolution
 	Tools         StarTools
 	Defaults      StarDefaults
+	ContextBudget StarContextBudget
+	Health        StarHealthPolicy
+	Checkpoint    StarCheckpointPolicy
 	Prompt        string // skill fragments + star body
 	SourcePath    string // for error reporting
+}
+
+// StarHealthPolicy overrides the dead-coder healthcheck thresholds for a star,
+// parsed from its [health] frontmatter block. Zero values mean "unset"; the
+// runtime falls back to claude.DefaultHealthPolicy for any unset field.
+// Durations are authored as Go duration strings (e.g. "25m", "90s").
+type StarHealthPolicy struct {
+	WallClockCap         time.Duration // absolute lifetime cap
+	FileWriteIdleCap     time.Duration // longest quiet stretch under the workdir
+	TokenRateFloor       float64       // min stream-token rate (tokens/sec)
+	TokenRateWindow      time.Duration // averaging window for the token rate
+	ToolCallRatioCeiling float64       // max Read:Edit ratio
+	ToolCallWindow       int           // recent tool calls feeding the ratio
+	CPUIdleCap           time.Duration // longest sub-1%-CPU stretch
+}
+
+// StarCheckpointPolicy configures per-dispatch worktree checkpoints for a star,
+// parsed from its [checkpoint] frontmatter block. Enabled defaults to true when
+// the block is absent, so checkpointing is opt-out rather than opt-in. The
+// runtime snapshots the worktree after each successful coder dispatch (see
+// internal/checkpoint: granularity is per-dispatch, not per-build). A
+// per-build-trigger knob is intentionally not exposed here: it would require the
+// invoker to surface build-class tool events from the subprocess, which is a
+// tracked follow-up — advertising a triggers list that the runtime ignored would
+// be a configuration knob that silently does nothing.
+type StarCheckpointPolicy struct {
+	Enabled bool // whether to checkpoint at all (default true)
+}
+
+// StarContextBudget bounds how much context a star's invocation consumes. It
+// is parsed from the star's [context_budget] frontmatter block. Zero values
+// mean "unset"; callers fall back to per-role defaults (see
+// agent.BudgetForRole).
+type StarContextBudget struct {
+	MaxReadsBeforeEdit   int  // soft Read-thrash limit before an Edit
+	MaxGrepsBeforeEdit   int  // soft Grep-thrash limit before an Edit
+	MaxTotalReads        int  // hard cap on Reads per invocation
+	ToolResultMaxBytes   int  // cap on a single tool result's size in bytes
+	IncludeSiblingPhases bool // when true, inject every phase spec (architect)
+	EnableToolHook       bool // when true, enforce Read/Grep caps via a CLI PreToolUse hook
+	ResultIsStructured   bool // when true, the result is a whole JSON payload; skip truncation
 }
 
 // StarTools is a star's tool permission policy.

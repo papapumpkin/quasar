@@ -2,6 +2,11 @@
 name = "coder"
 model = "claude-sonnet-4-6"
 fallback_model = "claude-haiku-4-5"
+# router-aware is intentionally NOT enabled by default: it adds the RouteQuery
+# tool, but no runtime tool is registered under that name yet (the MCP/CLI
+# bridge is a follow-up). Handing the CLI an unknown tool — and prompting the
+# coder to call it — would be a footgun. Re-add "router-aware" here once
+# RouteQuery is wired to agent.Router.
 skills = ["git-aware", "prompt-cache-aware"]
 
 [tools]
@@ -11,6 +16,42 @@ denied  = ["Bash(git push *)", "Bash(gh pr merge *)", "Bash(git reset *)", "Bash
 [defaults]
 max_budget_usd = 0.50
 effort = "medium"
+
+# Context budget bounds how much context each invocation consumes. Defaults are
+# conservative; a code-archaeology-heavy repo can raise tool_result_max_bytes
+# via a per-repo override. include_sibling_phases is false so only the current
+# phase's spec is injected (the coder cannot touch sibling phases).
+# tool_result_max_bytes caps every agent result the invoker returns (the coder's
+# output becomes the reviewer's input, so an unbounded result inflates the next
+# cycle). NOTE: under headless `claude -p` the Go layer never sees intermediate
+# Read/Grep results — only the final invocation result — so this cap bounds the
+# inter-agent handoff, NOT in-loop per-read size. Large in-loop reads are not
+# size-clipped; their cost is governed only by the count caps below
+# (max_reads_before_edit / max_total_reads) and the model's own behavior.
+# enable_tool_hook installs a Claude CLI PreToolUse hook that enforces the
+# Read/Grep caps on the live tool stream; it defaults to false because it relies
+# on the CLI hook contract — flip it on per-repo to make the caps binding.
+[context_budget]
+max_reads_before_edit = 8
+max_greps_before_edit = 6
+max_total_reads = 30
+tool_result_max_bytes = 16384
+include_sibling_phases = false
+enable_tool_hook = false
+
+# Health bounds the dead-coder healthcheck: a single claude invocation cannot
+# burn 60+ minutes silently. wall_clock_cap is the absolute lifetime ceiling
+# (25m default — conservative; raise per-repo if legitimate work routinely runs
+# longer). file_write_idle_cap kills a coder that has stopped writing files,
+# cpu_idle_cap one that is wedged at 0% CPU. A single red signal only degrades
+# (operator-visible); two or more, or the wall-clock cap, terminate the
+# subprocess and hand the partial worktree to the reviewer. Durations are Go
+# duration strings.
+[health]
+wall_clock_cap = "25m"
+file_write_idle_cap = "5m"
+token_rate_floor = 5
+cpu_idle_cap = "90s"
 +++
 
 You are the coder. Implement the task described to you as a single focused

@@ -70,9 +70,25 @@ func (l *Loader) LoadStar(name string) (*Star, error) {
 		Skills:        sf.Skills,
 		Tools:         StarTools{Allowed: sf.Tools.Allowed, Denied: sf.Tools.Denied},
 		Defaults:      StarDefaults{MaxBudgetUSD: sf.Defaults.MaxBudgetUSD, Effort: sf.Defaults.Effort},
-		Prompt:        strings.TrimSpace(body),
-		SourcePath:    src,
+		ContextBudget: StarContextBudget{
+			MaxReadsBeforeEdit:   sf.ContextBudget.MaxReadsBeforeEdit,
+			MaxGrepsBeforeEdit:   sf.ContextBudget.MaxGrepsBeforeEdit,
+			MaxTotalReads:        sf.ContextBudget.MaxTotalReads,
+			ToolResultMaxBytes:   sf.ContextBudget.ToolResultMaxBytes,
+			IncludeSiblingPhases: sf.ContextBudget.IncludeSiblingPhases,
+			EnableToolHook:       sf.ContextBudget.EnableToolHook,
+			ResultIsStructured:   sf.ContextBudget.ResultIsStructured,
+		},
+		Prompt:     strings.TrimSpace(body),
+		SourcePath: src,
 	}
+
+	health, err := parseStarHealth(sf, src)
+	if err != nil {
+		return nil, err
+	}
+	star.Health = health
+	star.Checkpoint = parseStarCheckpoint(sf)
 
 	if err := l.resolveSkills(star); err != nil {
 		return nil, err
@@ -334,41 +350,36 @@ type starFrontmatter struct {
 		MaxBudgetUSD float64 `toml:"max_budget_usd"`
 		Effort       string  `toml:"effort"`
 	} `toml:"defaults"`
+	ContextBudget struct {
+		MaxReadsBeforeEdit   int  `toml:"max_reads_before_edit"`
+		MaxGrepsBeforeEdit   int  `toml:"max_greps_before_edit"`
+		MaxTotalReads        int  `toml:"max_total_reads"`
+		ToolResultMaxBytes   int  `toml:"tool_result_max_bytes"`
+		IncludeSiblingPhases bool `toml:"include_sibling_phases"`
+		EnableToolHook       bool `toml:"enable_tool_hook"`
+		ResultIsStructured   bool `toml:"result_is_structured"`
+	} `toml:"context_budget"`
+	// Health overrides healthcheck thresholds; durations are strings, parsed in load.
+	Health struct {
+		WallClockCap         string  `toml:"wall_clock_cap"`
+		FileWriteIdleCap     string  `toml:"file_write_idle_cap"`
+		TokenRateFloor       float64 `toml:"token_rate_floor"`
+		TokenRateWindow      string  `toml:"token_rate_window"`
+		ToolCallRatioCeiling float64 `toml:"tool_call_ratio_ceiling"`
+		ToolCallWindow       int     `toml:"tool_call_window"`
+		CPUIdleCap           string  `toml:"cpu_idle_cap"`
+	} `toml:"health"`
+	// Checkpoint toggles per-dispatch worktree checkpoints. Enabled is a pointer
+	// so an absent block defaults to true rather than false. No triggers key is
+	// accepted: checkpoint granularity is per-dispatch, not per-build (see
+	// StarCheckpointPolicy), so a triggers list would have no runtime effect and
+	// `quasar lint --strict` flags it as an unknown key.
+	Checkpoint struct {
+		Enabled *bool `toml:"enabled"`
+	} `toml:"checkpoint"`
 }
 
 type skillFrontmatter struct {
 	Name     string   `toml:"name"`
 	ToolsAdd []string `toml:"tools_add"`
-}
-
-type constellationFile struct {
-	Name        string         `toml:"name"`
-	Description string         `toml:"description"`
-	Meta        map[string]any `toml:"meta"`
-	Nodes       []struct {
-		ID     string            `toml:"id"`
-		Type   string            `toml:"type"`
-		Star   string            `toml:"star"`
-		Ref    string            `toml:"ref"`
-		Op     string            `toml:"op"`
-		Inputs map[string]string `toml:"inputs"`
-	} `toml:"nodes"`
-	Edges []struct {
-		From string `toml:"from"`
-		To   string `toml:"to"`
-		When string `toml:"when"`
-	} `toml:"edges"`
-	Outputs map[string]string `toml:"outputs"`
-}
-
-type sensorFile struct {
-	Name         string         `toml:"name"`
-	Type         string         `toml:"type"`
-	PollInterval string         `toml:"poll_interval"`
-	MaxInflight  int            `toml:"max_inflight"`
-	Config       map[string]any `toml:"config"`
-	Triggers     []struct {
-		Constellation string `toml:"constellation"`
-		When          string `toml:"when"`
-	} `toml:"triggers"`
 }

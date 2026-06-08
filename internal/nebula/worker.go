@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -139,6 +138,39 @@ func (wg *WorkerGroup) wrapCallbacksForBus() {
 	}
 }
 
+// publishCollisions emits the current scope collisions — pending phases that
+// would overlap the in-flight set — to the bus so the TUI can show operators
+// why phases are being deferred, before a concurrent run silently loses work.
+// It is a no-op when no bus or tracker is configured. The emitted slice is
+// always non-nil (possibly empty) so that a resolved contention clears any
+// prior TUI warning rather than leaving it stale.
+func (wg *WorkerGroup) publishCollisions(ctx context.Context) {
+	if wg.Bus == nil || wg.tracker == nil {
+		return
+	}
+
+	wg.mu.Lock()
+	ids := make([]string, 0, len(wg.Nebula.Phases))
+	for i := range wg.Nebula.Phases {
+		ids = append(ids, wg.Nebula.Phases[i].ID)
+	}
+	cols := wg.tracker.Collisions(ids)
+	wg.mu.Unlock()
+
+	payload := make([]bus.CollisionPayload, 0, len(cols))
+	for _, c := range cols {
+		payload = append(payload, bus.CollisionPayload{
+			Scope:        c.Symbol,
+			PhaseID:      c.PhaseID,
+			OtherPhaseID: c.OtherPhaseID,
+		})
+	}
+
+	ev := bus.New(bus.KindEntanglementUpdate)
+	ev.Collisions = payload
+	_ = wg.Bus.Publish(ctx, ev)
+}
+
 // SnapshotNebula returns a deep copy of the Nebula under the WorkerGroup's
 // mutex, making it safe to call from any goroutine.
 func (wg *WorkerGroup) SnapshotNebula() *Nebula {
@@ -147,33 +179,22 @@ func (wg *WorkerGroup) SnapshotNebula() *Nebula {
 	return wg.Nebula.Snapshot()
 }
 
-// buildPhasePrompt prepends nebula context (goals, constraints) to the phase body.
+// buildPhasePrompt prepends nebula context (goals, constraints) to the phase
+// body. Only the current phase's spec is injected — sibling phase specs are
+// elided because the coder cannot touch them, bounding per-cycle input tokens.
+// Phase-spec injection is delegated to agent.RenderPhaseContext so the
+// phase-only policy is centralized and role-gated (the architect, which needs
+// every phase, uses the same renderer with RoleArchitect).
 func buildPhasePrompt(phase *PhaseSpec, ctx *Context) string {
-	if ctx == nil || (len(ctx.Goals) == 0 && len(ctx.Constraints) == 0) {
-		return phase.Body
+	in := agent.PhaseContextInput{
+		Role:         agent.RoleCoder,
+		CurrentPhase: phase.Body,
 	}
-
-	var sb strings.Builder
-	sb.WriteString("PROJECT CONTEXT:\n")
-	if len(ctx.Goals) > 0 {
-		sb.WriteString("Goals:\n")
-		for _, g := range ctx.Goals {
-			sb.WriteString("- ")
-			sb.WriteString(g)
-			sb.WriteString("\n")
-		}
+	if ctx != nil {
+		in.Goals = ctx.Goals
+		in.Constraints = ctx.Constraints
 	}
-	if len(ctx.Constraints) > 0 {
-		sb.WriteString("Constraints:\n")
-		for _, c := range ctx.Constraints {
-			sb.WriteString("- ")
-			sb.WriteString(c)
-			sb.WriteString("\n")
-		}
-	}
-	sb.WriteString("\nPHASE:\n")
-	sb.WriteString(phase.Body)
-	return sb.String()
+	return agent.RenderPhaseContext(in)
 }
 
 // ensureGater builds the Gater from the Prompter and manifest if not already set.
@@ -393,6 +414,11 @@ func (wg *WorkerGroup) Run(ctx context.Context) ([]WorkerResult, error) {
 		eligible, _ := wg.tychoScheduler.Eligible(ctx)
 		anyInFlight := wg.tychoScheduler.AnyInFlight()
 		wg.mu.Unlock()
+
+		// Surface scope collisions for the current in-flight set so operators
+		// see deferred-phase contention in the TUI. Emitted every iteration so
+		// the warning clears once the conflicting phase completes.
+		wg.publishCollisions(ctx)
 
 		// Notify the TUI that eligible phases are entering the fabric scan gate.
 		// Only fires when fabric is configured (OnScanning is wired) so legacy

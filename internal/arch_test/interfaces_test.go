@@ -33,6 +33,13 @@ var allowedColocations = map[string]map[string]bool{
 		"Bus":          true,
 		"Subscription": true,
 	},
+	// Checkpoint defines the Store interface consumed by Checkpointer alongside
+	// fabricStore, the canonical fabric-backed adapter. Tests use a fake Store;
+	// the runtime wires the fabric adapter. Same consumer-side-interface +
+	// canonical-implementation pattern as bus.Bus/MemoryBus and fabric.Fabric.
+	"checkpoint": {
+		"Store": true,
+	},
 	// Strategy pattern: multiple strategy implementations live alongside the interface.
 	"dag": {
 		"ReportStrategy": true,

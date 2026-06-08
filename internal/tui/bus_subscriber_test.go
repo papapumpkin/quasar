@@ -796,6 +796,55 @@ func TestMapEvent_UnknownKind_ReturnsNil(t *testing.T) {
 	}
 }
 
+func TestMapEvent_EntanglementUpdate_Collisions(t *testing.T) {
+	t.Parallel()
+	sub := &BusSubscriber{done: make(chan struct{})}
+
+	t.Run("collision-only event is mapped, not dropped", func(t *testing.T) {
+		ev := bus.New(bus.KindEntanglementUpdate)
+		ev.Collisions = []bus.CollisionPayload{
+			{Scope: "internal/runtime/**", PhaseID: "b", OtherPhaseID: "a"},
+		}
+		msg := sub.mapEvent(ev)
+		eu, ok := msg.(MsgEntanglementUpdate)
+		if !ok {
+			t.Fatalf("got %T, want MsgEntanglementUpdate", msg)
+		}
+		if len(eu.Collisions) != 1 {
+			t.Fatalf("got %d collisions, want 1", len(eu.Collisions))
+		}
+		if eu.Collisions[0].PhaseID != "b" || eu.Collisions[0].OtherPhaseID != "a" {
+			t.Errorf("collision = %+v, want {Scope, b, a}", eu.Collisions[0])
+		}
+		if eu.Entanglements != nil {
+			t.Errorf("Entanglements = %v, want nil", eu.Entanglements)
+		}
+	})
+
+	t.Run("empty non-nil collisions clears warnings", func(t *testing.T) {
+		ev := bus.New(bus.KindEntanglementUpdate)
+		ev.Collisions = []bus.CollisionPayload{}
+		msg := sub.mapEvent(ev)
+		eu, ok := msg.(MsgEntanglementUpdate)
+		if !ok {
+			t.Fatalf("got %T, want MsgEntanglementUpdate", msg)
+		}
+		if eu.Collisions == nil {
+			t.Error("Collisions is nil; want non-nil empty slice")
+		}
+		if len(eu.Collisions) != 0 {
+			t.Errorf("got %d collisions, want 0", len(eu.Collisions))
+		}
+	})
+
+	t.Run("no entanglements and no collisions returns nil", func(t *testing.T) {
+		ev := bus.New(bus.KindEntanglementUpdate)
+		if msg := sub.mapEvent(ev); msg != nil {
+			t.Fatalf("got %T, want nil", msg)
+		}
+	})
+}
+
 // ── Goroutine leak tests ─────────────────────────────────────────────────────
 
 func TestForwardGateAction_ExitsOnDone(t *testing.T) {

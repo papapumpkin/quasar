@@ -12,6 +12,11 @@ const (
 	RoleReviewer Role = "reviewer"
 	// RoleArchitect is the agent role that creates and refactors nebula phase files.
 	RoleArchitect Role = "architect"
+	// RoleRouter is the agent role for a routed sub-question: a bounded,
+	// read-only lookup delegated to the cheap model tier. It is neither coder
+	// nor reviewer, so it does not inherit their heavyweight context budgets;
+	// the Router sets a tight budget explicitly (see agent.Router).
+	RoleRouter Role = "router"
 )
 
 // MCPConfig holds optional MCP server configuration for an agent invocation.
@@ -30,6 +35,30 @@ type Agent struct {
 	ResumeSessionID string     // When set, passes --resume <id> to resume a prior session.
 	Effort          string     // "low", "medium", "high", or "" (Claude's default).
 	FallbackModel   string     // Automatic fallback model when primary is overloaded.
+	// CacheOptimization, when true, instructs the invoker to pass
+	// --exclude-dynamic-system-prompt-sections so the system-prompt prefix stays
+	// byte-stable across invocations and remains eligible for prompt caching.
+	CacheOptimization bool
+	// ContextBudget bounds how much context this invocation consumes. When nil,
+	// the invoker falls back to BudgetForRole(Role). It drives tool-result
+	// truncation (ToolResultMaxBytes) and, when EnableToolHook is set, per-tool
+	// budget enforcement via a Claude CLI PreToolUse hook.
+	ContextBudget *ContextBudget
+	// Health, when non-nil, turns on dead-coder monitoring for this invocation
+	// with the given thresholds: a stalled or thrashing subprocess is terminated
+	// and surfaced as a *claude.DeadCoderError. When nil, the invoker falls back
+	// to its own default policy (claude.Invoker.HealthDefault), so leaving this
+	// unset does not necessarily disable monitoring.
+	Health *HealthPolicy
+}
+
+// EffectiveContextBudget returns a.ContextBudget when set, otherwise the
+// per-role default from BudgetForRole. Callers always receive a usable budget.
+func (a Agent) EffectiveContextBudget() ContextBudget {
+	if a.ContextBudget != nil {
+		return *a.ContextBudget
+	}
+	return BudgetForRole(a.Role)
 }
 
 // InvocationResult holds the output and cost metrics from a single agent invocation.
@@ -41,6 +70,21 @@ type InvocationResult struct {
 	SystemPromptLen  int    // Length of the system prompt in bytes.
 	UserPromptLen    int    // Length of the user prompt in bytes.
 	SystemPromptHash string // SHA-256 hex digest of the system prompt for cache identity tracking.
+
+	// InputTokens is the count of fresh (uncached) input tokens billed at full
+	// rate for this invocation, as reported by the model's usage block.
+	InputTokens int
+	// OutputTokens is the count of tokens the model generated for this
+	// invocation, as reported by its usage block. The router records it to
+	// confirm a routed sub-question stayed cheap on the Haiku tier.
+	OutputTokens int
+	// CacheCreationTokens is the count of input tokens written into the prompt
+	// cache on this invocation (billed at the cache-write rate).
+	CacheCreationTokens int
+	// CacheReadTokens is the count of input tokens served from the prompt cache
+	// on this invocation (billed at the discounted cache-read rate). A non-zero
+	// value on a repeat invocation is the signal that caching is working.
+	CacheReadTokens int
 }
 
 // ReviewReport captures structured metadata from the reviewer's REPORT: block.

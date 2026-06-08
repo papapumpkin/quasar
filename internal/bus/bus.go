@@ -169,6 +169,25 @@ type Event struct {
 	// Fabric payloads — kept as any to avoid import cycles with the fabric package.
 	Entanglements   any // []fabric.Entanglement for KindEntanglementUpdate
 	FabricDiscovery any // fabric.Discovery for KindDiscoveryPosted
+
+	// Collisions carries scope-overlap conflicts for KindEntanglementUpdate.
+	// It is a concrete []CollisionPayload (not any) because CollisionPayload is
+	// defined in this package, so there is no import cycle to avoid.
+	Collisions []CollisionPayload
+}
+
+// CollisionPayload is a transport-neutral description of a scheduler scope
+// collision: two phases whose owned file scopes overlap and therefore cannot
+// run concurrently. It mirrors nebula.Collision without importing it, letting
+// the TUI surface deferred-phase contention without coupling to the
+// orchestrator package.
+type CollisionPayload struct {
+	// Scope is the overlapping scope pattern(s).
+	Scope string
+	// PhaseID is the candidate phase being deferred.
+	PhaseID string
+	// OtherPhaseID is the conflicting phase it would collide with.
+	OtherPhaseID string
 }
 
 // CycleSummaryPayload carries structured data for a completed coder-reviewer

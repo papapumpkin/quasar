@@ -20,6 +20,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/loop"
 	"github.com/papapumpkin/quasar/internal/nebula"
 	"github.com/papapumpkin/quasar/internal/snapshot"
+	"github.com/papapumpkin/quasar/internal/telemetry"
 	"github.com/papapumpkin/quasar/internal/tui"
 	"github.com/papapumpkin/quasar/internal/ui"
 )
@@ -46,6 +47,11 @@ func runNebulaApply(cmd *cobra.Command, args []string) error {
 
 	printer := ui.New()
 	invoker := claude.NewInvoker(ecfg.ClaudePath, ecfg.Verbose)
+	// Turn on dead-coder monitoring so a stalled/thrashing coder is terminated
+	// at the conservative caps instead of burning 60+ minutes silently. Per-star
+	// [health] blocks still override per invocation; this wires the telemetry
+	// sink read back by `quasar coder report`.
+	invoker.EnableHealth(telemetry.NewHealthEventStore(healthEventsPath))
 	engine := nebula.NewEngine(ecfg, nil, invoker)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -371,6 +377,8 @@ func runApplyWithStderr(
 		CheckpointDir:     ecfg.NebulaDir,
 		FixEffort:         ecfg.FixEffort,
 		FallbackModel:     ecfg.FallbackModel,
+		CacheMetrics:      telemetry.NewCacheMetricStore(cacheMetricsPath),
+		NebulaID:          n.Manifest.Nebula.Name,
 	}
 
 	isTTY := isStderrTTY()
@@ -447,6 +455,8 @@ func buildTUIWorkerOpts(
 		checkpointDir:    ecfg.NebulaDir,
 		fixEffort:        ecfg.FixEffort,
 		fallbackModel:    ecfg.FallbackModel,
+		cacheMetrics:     telemetry.NewCacheMetricStore(cacheMetricsPath),
+		nebulaID:         engine.GetNebula().Manifest.Nebula.Name,
 	}
 
 	opts := []nebula.Option{

@@ -168,11 +168,12 @@ func (s *BusSubscriber) mapEvent(ev bus.Event) tea.Msg {
 			RemediationTitle: ev.Healing.RemediationTitle,
 		}
 	case bus.KindEntanglementUpdate:
-		ents, ok := ev.Entanglements.([]fabric.Entanglement)
-		if !ok || len(ents) == 0 {
+		ents, _ := ev.Entanglements.([]fabric.Entanglement)
+		cols := mapCollisions(ev.Collisions)
+		if len(ents) == 0 && cols == nil {
 			return nil
 		}
-		return MsgEntanglementUpdate{Entanglements: ents}
+		return MsgEntanglementUpdate{Entanglements: ents, Collisions: cols}
 	case bus.KindDiscoveryPosted:
 		disc, ok := ev.FabricDiscovery.(fabric.Discovery)
 		if !ok {
@@ -321,6 +322,26 @@ func mapNebulaDone(ev bus.Event) tea.Msg {
 		}
 	}
 	return MsgNebulaDone{Results: results, Err: ev.DoneResults.Err}
+}
+
+// mapCollisions converts transport-neutral bus collision payloads into the
+// TUI's presentation type. It returns nil when there are no payloads so the
+// caller can distinguish "no collision data on this event" (leave the TUI's
+// current warnings untouched) from "contention resolved" (an explicit empty,
+// non-nil slice that clears them).
+func mapCollisions(payloads []bus.CollisionPayload) []EntanglementCollision {
+	if payloads == nil {
+		return nil
+	}
+	cols := make([]EntanglementCollision, 0, len(payloads))
+	for _, p := range payloads {
+		cols = append(cols, EntanglementCollision{
+			Scope:        p.Scope,
+			PhaseID:      p.PhaseID,
+			OtherPhaseID: p.OtherPhaseID,
+		})
+	}
+	return cols
 }
 
 // mapGatePrompt converts a KindGatePrompt event to MsgGatePrompt.

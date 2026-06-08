@@ -14,4 +14,7 @@ func init() {
 	blobstore.RegisterReference("phases", "diff_blob_hash")
 	// migration 004 (ALTER TABLE star_invocations ADD COLUMN)
 	blobstore.RegisterReference("star_invocations", "rationale_blob_hash")
+	// migration 008 (CREATE TABLE checkpoints / checkpoint_files)
+	blobstore.RegisterReference("checkpoints", "manifest_blob_hash")
+	blobstore.RegisterReference("checkpoint_files", "file_blob_hash")
 }
