@@ -130,6 +130,30 @@ func TestEntanglementStoreLifecycle(t *testing.T) {
 		}
 	})
 
+	t.Run("deprecate binds an architect-declared NULL-run row", func(t *testing.T) {
+		s := newEntStore(t)
+		// A removal phase: architect declares the symbol (NULL run_id) and the
+		// coder deletes it without ever marking it in_flight.
+		if err := s.Declare(ctx, Entanglement{
+			Producer: "phase-r", PhaseID: "phase-r", Kind: KindFunction, Name: "Doomed",
+		}); err != nil {
+			t.Fatalf("Declare: %v", err)
+		}
+		if err := s.Deprecate(ctx, "run-r", "Doomed"); err != nil {
+			t.Fatalf("Deprecate: %v", err)
+		}
+		active, err := s.Active(ctx, "Doomed")
+		if err != nil {
+			t.Fatalf("Active: %v", err)
+		}
+		if len(active) != 1 || active[0].Status != StatusDeprecated {
+			t.Fatalf("Active = %+v, want one deprecated row", active)
+		}
+		if active[0].RunID != "run-r" {
+			t.Errorf("run_id = %q, want run-r (NULL declaration should bind)", active[0].RunID)
+		}
+	})
+
 	t.Run("declare is idempotent on producer/kind/name", func(t *testing.T) {
 		s := newEntStore(t)
 		e := Entanglement{Producer: "phase-d", RunID: "run-4", PhaseID: "phase-d", Kind: KindType, Name: "Widget"}

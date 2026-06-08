@@ -209,10 +209,15 @@ func (r *Runtime) applyTerminalEntanglements(ctx context.Context, runID, state s
 	}
 }
 
-// markInFlightFromCommit advances the lifecycle after the green-build commit
-// node: it diffs the new commit (HEAD~1..HEAD) and marks every top-level symbol
-// the commit added or changed as in_flight under run, recording the declaration
-// text as the signature siblings will read in their pre-flight notes.
+// markInFlightFromCommit advances the lifecycle from the green-build commit
+// node, reusing the commit diff (HEAD~1..HEAD) for two transitions:
+//   - every top-level symbol the commit added or changed is marked in_flight
+//     under run, recording the declaration text as the signature siblings read
+//     in their pre-flight notes; and
+//   - every top-level symbol the commit deleted is deprecated, so a downstream
+//     consumer's pre-flight warns it not to reintroduce a use of the removed
+//     symbol (the exact post-merge build failure this lifecycle exists to avoid).
+//
 // Best-effort and nil-safe — a diff or store failure is logged, never fatal,
 // since coordination is advisory and must not break a run. A commit that wrote
 // nothing (committed=false) is skipped.
@@ -231,6 +236,11 @@ func (r *Runtime) markInFlightFromCommit(ctx context.Context, run *fabric.RunRow
 	for _, t := range neutron.DetectTouchedSymbols(diff) {
 		if err := r.entanglements.MarkInFlight(ctx, run.ID, t.Name, t.Signature); err != nil {
 			fmt.Fprintf(os.Stderr, "constellations: mark in_flight %q (run %s): %v\n", t.Name, run.ID, err)
+		}
+	}
+	for _, name := range neutron.DetectDeletions(diff) {
+		if err := r.entanglements.Deprecate(ctx, run.ID, name); err != nil {
+			fmt.Fprintf(os.Stderr, "constellations: deprecate %q (run %s): %v\n", name, run.ID, err)
 		}
 	}
 }

@@ -104,6 +104,27 @@ func TestMarkInFlightFromCommit(t *testing.T) {
 		}
 	})
 
+	t.Run("deprecates symbols the commit deletes", func(t *testing.T) {
+		rt, entStore, _ := newEntanglementRuntime(t)
+		// A removal-phase commit: the diff deletes Legacy and adds nothing.
+		rt.committer = &fakeCommitter{diff: "--- a/legacy.go\n+++ b/legacy.go\n-func Legacy() error {\n-\treturn nil\n-}\n"}
+		if err := entStore.Declare(ctx, fabric.Entanglement{
+			Producer: "phase-r", PhaseID: "phase-r", Kind: fabric.KindFunction, Name: "Legacy",
+		}); err != nil {
+			t.Fatalf("Declare: %v", err)
+		}
+
+		rt.markInFlightFromCommit(ctx, &fabric.RunRow{ID: "run-c"}, map[string]any{"committed": true})
+
+		active, err := entStore.Active(ctx, "Legacy")
+		if err != nil {
+			t.Fatalf("Active: %v", err)
+		}
+		if len(active) != 1 || active[0].Status != fabric.StatusDeprecated {
+			t.Fatalf("Active = %+v, want one deprecated row (downstream must see the removal)", active)
+		}
+	})
+
 	t.Run("no-op when the commit wrote nothing", func(t *testing.T) {
 		rt, entStore, _ := newEntanglementRuntime(t)
 		rt.committer = &fakeCommitter{diff: "+func Poll() error {"}

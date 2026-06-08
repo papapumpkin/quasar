@@ -86,6 +86,16 @@ func (s *EntanglementStore) Claim(ctx context.Context, runID, phaseID, name stri
 // binds it to runID, the same way Claim does. That lets the runtime's
 // green-build hook advance an architect declaration even when no Claim ran
 // first. A row already bound to a different run is left untouched.
+//
+// Precise binding depends on Phase 01's Claim running first: Claim binds the
+// specific run to its declaration before any build, so by the time MarkInFlight
+// fires the row is already run-bound and the NULL-match never triggers. The
+// NULL-match is therefore a pre-Claim fallback, not the steady state. Without
+// Claim, if two phases declare the same symbol name (both NULL run_id), the
+// first run to touch it binds every matching NULL row to itself, and the other
+// phase's run can no longer advance its own declaration. Concurrent same-name
+// declarations require max_workers > 1 (default is 1) and coordination is
+// advisory, so the degradation is bounded until Claim lands.
 func (s *EntanglementStore) MarkInFlight(ctx context.Context, runID, name, signature string) error {
 	const q = `
 		UPDATE entanglements
@@ -103,17 +113,23 @@ func (s *EntanglementStore) MarkInFlight(ctx context.Context, runID, name, signa
 	return nil
 }
 
-// Deprecate transitions any of the run's non-terminal entanglements for the
-// symbol to 'deprecated'. Called by neutron when a diff deletes the symbol's
-// declaration so downstream consumers learn not to reintroduce a use of it.
+// Deprecate transitions the symbol's non-terminal entanglements to 'deprecated'
+// and binds them to runID. Called when a commit diff deletes the symbol's
+// declaration so a downstream consumer's pre-flight learns not to reintroduce a
+// use of it. Like MarkInFlight it matches both the run's own rows and any
+// architect-declared row still carrying a NULL run_id (a "phase whose purpose is
+// removal" never marks the symbol in_flight first), binding the latter to runID.
+// The same pre-Claim NULL-match caveat as MarkInFlight applies.
 func (s *EntanglementStore) Deprecate(ctx context.Context, runID, name string) error {
 	const q = `
 		UPDATE entanglements
-		   SET status = ?
-		 WHERE run_id = ? AND name = ?
+		   SET status = ?, run_id = ?
+		 WHERE name = ?
+		   AND (run_id = ? OR run_id IS NULL)
 		   AND status IN (?, ?, ?)`
 	_, err := s.db.ExecContext(ctx, q,
-		StatusDeprecated, runID, name,
+		StatusDeprecated, runID,
+		name, runID,
 		StatusDeclared, StatusClaimed, StatusInFlight)
 	if err != nil {
 		return fmt.Errorf("fabric: deprecate entanglement %q: %w", name, err)
