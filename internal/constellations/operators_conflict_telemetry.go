@@ -3,6 +3,7 @@ package constellations
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/papapumpkin/quasar/internal/telemetry"
 )
@@ -23,7 +24,12 @@ const opEmitConflictTelemetryName = "emit_conflict_telemetry"
 // that wiring lands (see merge-conflict-resolve.toml). A runtime with no conflict
 // log injected makes Record a no-op, so the node never fails a run.
 //
-// Output: {"recorded": <bool>} — true when a log was wired and the row written.
+// Telemetry is a side channel: this node sits on the success path *before*
+// commit (decide → emit → commit → _done), so a Record failure (disk full,
+// permission error, cancelled ctx) must NOT abort the run — that would discard a
+// successfully-resolved merge for a logging hiccup. The error is logged to
+// stderr and swallowed, never returned, matching the project's non-fatal-error
+// convention. Output: {"recorded": <bool>} — true only when the row was written.
 func opEmitConflictTelemetry(ctx context.Context, rt *Runtime, st *State, args map[string]any) (map[string]any, error) {
 	ev := telemetry.ConflictResolutionEvent{
 		SrcRun:       stringArg(args, "src_run_id"),
@@ -35,7 +41,8 @@ func opEmitConflictTelemetry(ctx context.Context, rt *Runtime, st *State, args m
 		Files:        toStringSlice(args["files"]),
 	}
 	if err := rt.conflictLog.Record(ctx, ev); err != nil {
-		return nil, fmt.Errorf("emit_conflict_telemetry: %w", err)
+		fmt.Fprintf(os.Stderr, "constellations: emit_conflict_telemetry: record outcome row: %v\n", err)
+		return map[string]any{"recorded": false}, nil
 	}
 	return map[string]any{"recorded": rt.conflictLog != nil}, nil
 }

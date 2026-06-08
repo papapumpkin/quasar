@@ -2,6 +2,7 @@ package constellations
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -271,6 +272,34 @@ func TestOpEmitConflictTelemetryRecords(t *testing.T) {
 	}
 	if ev.SrcRun != "run-a" || ev.DstRun != "run-b" {
 		t.Errorf("src/dst run = %q/%q, want run-a/run-b", ev.SrcRun, ev.DstRun)
+	}
+}
+
+// TestOpEmitConflictTelemetryRecordErrorIsSwallowed asserts a Record failure
+// never aborts the run. The emit node sits on the success path before commit, so
+// returning the error would discard a successfully-resolved merge for a logging
+// hiccup. A log path whose parent is a regular file forces Record's MkdirAll to
+// fail; the operator must still return (nil error, recorded=false).
+func TestOpEmitConflictTelemetryRecordErrorIsSwallowed(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "not-a-dir")
+	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+		t.Fatalf("seed blocker file: %v", err)
+	}
+	// Record will MkdirAll(blocker) — fails with ENOTDIR since blocker is a file.
+	badPath := filepath.Join(blocker, "conflict_resolutions.jsonl")
+	rt := &Runtime{conflictLog: telemetry.NewConflictResolutionLog(badPath)}
+
+	out, err := opEmitConflictTelemetry(context.Background(), rt, &State{Cycle: 1}, map[string]any{
+		"mode":   conflictModeMarkers,
+		"status": conflictResolverStatusResolved,
+	})
+	if err != nil {
+		t.Fatalf("opEmitConflictTelemetry returned error %v; a telemetry write failure must not abort the run", err)
+	}
+	if out["recorded"] != false {
+		t.Errorf("recorded = %v, want false when the write failed", out["recorded"])
 	}
 }
 
