@@ -129,6 +129,15 @@ func isSelf(e fabric.Entanglement, phase PhaseContext, selfSymbols map[string]st
 // intersectsScope reports whether the entanglement is relevant to the phase:
 // its symbol name appears as text in any of the phase's files (a cheap content
 // match), or its package overlaps one of the phase's scope globs.
+//
+// KNOWN LIMITATION (deliberate): the symbol test is a raw substring match, so a
+// short or embedded name over-reports — "Poll" matches "Polling"/"Pollster" and
+// any occurrence inside a comment or string literal; "Run"/"ID" match almost any
+// Go file. This is the spec's intended "cheap content match": the notes are
+// advisory and the merge gate is the authoritative backstop, so a false positive
+// costs only one extra (harmless) note. If `coordination report` shows the notes
+// growing noisy at scale, tighten this to a word-boundary/token match for short
+// names — see the phase summary.
 func intersectsScope(e fabric.Entanglement, scope []string, fileContents []string) bool {
 	if e.Name != "" {
 		for _, content := range fileContents {

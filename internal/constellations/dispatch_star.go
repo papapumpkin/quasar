@@ -117,11 +117,20 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 // coordination_aware = false. A read failure is logged and swallowed: the check
 // is advisory, so a missed note never blocks the dispatch.
 //
-// The PhaseContext is built from the run and node identity available here. Scope
-// and file resolution from the phase spec (which would let the symbol-name
-// content match fire) is threaded once phase scope reaches the run State; until
-// then package-scoped entanglements still match via the empty-scope path and the
-// mechanism, gating, and telemetry are fully exercised. See the phase summary.
+// KNOWN LIMITATION — this wiring produces NO notes in the runtime today, by
+// design for this phase. The PhaseContext is built from run/node identity only:
+// Scope and Files are empty, so packageOverlapsScope ranges over an empty slice
+// and the symbol-name content match has no files to scan — Notes always returns
+// zero. What IS exercised end-to-end is the coordination_aware gate and exactly
+// one zero-count telemetry row per coordination-aware dispatch. The override
+// allowlists (PhaseContext.Ignore{Deprecations,Signatures}) are likewise inert
+// here: they are not populated, and the `[coordination]` frontmatter that would
+// source them is not yet parsed in internal/artifacts/loader.go. Package
+// matching, symbol matching, and override suppression are validated by unit
+// tests (coordination_test.go) but are NOT reachable through this call until a
+// follow-up threads the phase spec's scope/files and the [coordination]
+// frontmatter into the run State. Do not assume coordination notes back the
+// merge gate until that wiring lands.
 func (r *Runtime) coordinationPrompt(ctx context.Context, run *fabric.RunRow, node *artifacts.ConstellationNode, star *artifacts.Star, prompt string) string {
 	if r.coordination == nil || !star.CoordinationAware {
 		return prompt
