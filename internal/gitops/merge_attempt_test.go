@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // gitFixture is a throwaway git repo used to exercise MergeAttempt against real
@@ -140,6 +141,33 @@ func TestMergeAttemptTry(t *testing.T) {
 		}
 		if out.MergedSHA == "" {
 			t.Error("MergedSHA empty: a build_failure still produced a merge commit")
+		}
+	})
+
+	t.Run("verify timeout kills a runaway verify and reports build_failure", func(t *testing.T) {
+		f := newGitFixture(t)
+		f.branchFrom("quasar/feature", func() {
+			f.write("added.go", "package main\n")
+			f.git("add", "added.go")
+			f.git("commit", "-m", "add file")
+		})
+
+		ma := &MergeAttempt{Client: New(f.dir)}
+		start := time.Now()
+		out, err := ma.Try(context.Background(), TryOpts{
+			SrcBranch:     "quasar/feature",
+			DstBranch:     "main",
+			VerifyCommand: "sleep 30",
+			Timeout:       100 * time.Millisecond,
+		})
+		if err != nil {
+			t.Fatalf("Try: %v", err)
+		}
+		if out.Result != MergeBuildFailure {
+			t.Fatalf("Result = %q, want build_failure (timed-out verify)", out.Result)
+		}
+		if elapsed := time.Since(start); elapsed > 10*time.Second {
+			t.Errorf("verify ran for %s; timeout did not cut it short", elapsed)
 		}
 	})
 

@@ -3,6 +3,7 @@ package constellations
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/papapumpkin/quasar/internal/gitops"
 )
@@ -104,13 +105,14 @@ func TestOpMergeAttempt(t *testing.T) {
 		}
 	})
 
-	t.Run("verify_command and run_id are threaded into TryOpts", func(t *testing.T) {
+	t.Run("verify_command, verify_timeout, and run_id are threaded into TryOpts", func(t *testing.T) {
 		fm := &fakeMerger{outcome: gitops.MergeOutcome{Result: gitops.MergeClean}}
 		rt := &Runtime{merger: fm}
 		_, err := opMergeAttempt(context.Background(), rt, nil, map[string]any{
 			"src_branch":     "quasar/feature",
 			"dst_branch":     "main",
 			"verify_command": "make ci",
+			"verify_timeout": "5m",
 			"run_id":         "run-xyz",
 		})
 		if err != nil {
@@ -119,11 +121,25 @@ func TestOpMergeAttempt(t *testing.T) {
 		if fm.gotOpts.VerifyCommand != "make ci" {
 			t.Errorf("VerifyCommand = %q, want %q", fm.gotOpts.VerifyCommand, "make ci")
 		}
+		if fm.gotOpts.Timeout != 5*time.Minute {
+			t.Errorf("Timeout = %v, want 5m", fm.gotOpts.Timeout)
+		}
 		if fm.gotOpts.RunID != "run-xyz" {
 			t.Errorf("RunID = %q, want %q", fm.gotOpts.RunID, "run-xyz")
 		}
 		if !fm.gotOpts.KeepWorktree {
 			t.Error("KeepWorktree should be set so a resolver can inherit the worktree")
+		}
+	})
+
+	t.Run("malformed verify_timeout errors", func(t *testing.T) {
+		rt := &Runtime{merger: &fakeMerger{}}
+		if _, err := opMergeAttempt(context.Background(), rt, nil, map[string]any{
+			"src_branch":     "quasar/feature",
+			"dst_branch":     "main",
+			"verify_timeout": "soon",
+		}); err == nil {
+			t.Fatal("expected error for an unparseable verify_timeout")
 		}
 	})
 }

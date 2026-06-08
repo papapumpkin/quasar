@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // DefaultVerifyCommand is the verification command MergeAttempt runs after a
@@ -63,6 +64,10 @@ type TryOpts struct {
 	// VerifyCommand runs in the merge worktree after a clean merge. Empty uses
 	// DefaultVerifyCommand.
 	VerifyCommand string
+	// Timeout caps the verify command so a runaway build cannot block the gate
+	// forever. Non-positive means no cap (the parent ctx still applies). A
+	// timed-out verify is reported as a build_failure, not a Go error.
+	Timeout time.Duration
 	// KeepWorktree leaves the merge worktree in place on return so a conflict
 	// resolver can inherit the merge-state worktree. Default false removes it.
 	KeepWorktree bool
@@ -134,7 +139,7 @@ func (m *MergeAttempt) Try(ctx context.Context, opts TryOpts) (MergeOutcome, err
 	if strings.TrimSpace(verify) == "" {
 		verify = DefaultVerifyCommand
 	}
-	if out, ok := runVerify(ctx, worktree, verify); !ok {
+	if out, ok := runVerify(ctx, worktree, verify, opts.Timeout); !ok {
 		outcome.Result = MergeBuildFailure
 		outcome.BuildOutput = out
 		outcome.MergedSHA = mergedSHA
@@ -209,9 +214,16 @@ func conflictedFiles(ctx context.Context, wtGit runner) []string {
 }
 
 // runVerify runs command via `sh -c` in dir and reports its combined output and
-// whether it succeeded. A non-zero exit (or any run error) is a verification
-// failure, not a Go error: the merge gate routes on the boolean.
-func runVerify(ctx context.Context, dir, command string) (output string, ok bool) {
+// whether it succeeded. A non-zero exit (or any run error, including a timeout
+// kill) is a verification failure, not a Go error: the merge gate routes on the
+// boolean. A positive timeout derives a deadline from ctx so a runaway verify is
+// killed and reported as a failure rather than blocking the gate forever.
+func runVerify(ctx context.Context, dir, command string, timeout time.Duration) (output string, ok bool) {
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()

@@ -2,17 +2,22 @@ name        = "merge-gate"
 description = "Attempt a merge from the run's branch into its parent, classify the outcome, and route to the conflict-resolver on markers or build_failure."
 
 # FORWARD-LOOKING DEFAULT. This constellation ships as the authoring reference
-# for the cross-phase merge gate. Two pieces of its execution path land in later
-# phases of this nebula:
+# for the cross-phase merge gate. Pieces of its execution path land in later
+# phases; the gaps are tracked in docs/constellation-runtime-followup.md
+# ("merge-gate phase — delivered & deferred"), not just here:
 #   - the `merge-conflict-resolve` sub-constellation (Phase 03), which the
-#     resolve_* nodes delegate to; and
+#     resolve_* nodes delegate to (a placeholder ships meanwhile);
 #   - the supervisor that fires merge-gate after a phase's coder-reviewer run
-#     reaches _done and threads the producing run's id into fulfill.
-# Until then the merge_attempt + fulfill_entanglements builtins it routes
-# through are live and unit-tested; see internal/constellations/operators_merge.go.
+#     reaches _done, threads the producing run's id into the fulfill nodes, and
+#     injects the repo's merge_gate.verify_command / verify_timeout overrides.
+# The merge_attempt + fulfill_entanglements builtins it routes through are live
+# and unit-tested; see internal/constellations/operators_merge.go.
 
 # Attempt the merge. src_branch/dst_branch come from the supervisor that fires
-# this constellation (it sets them on the nebula snapshot before Fire).
+# this constellation (it sets them on the nebula snapshot before Fire). The
+# verify_command / verify_timeout inputs are intentionally omitted here: the
+# operator falls back to the Go-centric default until the firing supervisor
+# threads the repo's [merge_gate] config in (deferred — see the doc above).
 [[nodes]]
 id     = "attempt"
 type   = "builtin"

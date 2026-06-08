@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/papapumpkin/quasar/internal/gitops"
 )
@@ -42,7 +43,9 @@ func (r *Runtime) mergeAttempter() (merger, error) {
 // worktree and reports the classified outcome for the merge-gate constellation
 // to route on. The worktree is kept only for a markers or build_failure
 // outcome, where a downstream conflict resolver inherits it; a clean or
-// merge_error outcome cleans it up immediately. Output:
+// merge_error outcome cleans it up immediately. The optional verify_command and
+// verify_timeout inputs override the Go-centric defaults (the config → input
+// plumbing for these lands with the merge-gate-firing supervisor). Output:
 //
 //	{result, conflicted_files, build_output, merged_sha, worktree_path}
 func opMergeAttempt(ctx context.Context, rt *Runtime, _ *State, args map[string]any) (map[string]any, error) {
@@ -53,6 +56,10 @@ func opMergeAttempt(ctx context.Context, rt *Runtime, _ *State, args map[string]
 	}
 	verify, _ := args["verify_command"].(string)
 	runID, _ := args["run_id"].(string)
+	timeout, err := parseTimeout(args["verify_timeout"])
+	if err != nil {
+		return nil, err
+	}
 
 	m, err := rt.mergeAttempter()
 	if err != nil {
@@ -64,6 +71,7 @@ func opMergeAttempt(ctx context.Context, rt *Runtime, _ *State, args map[string]
 		SrcBranch:     src,
 		DstBranch:     dst,
 		VerifyCommand: verify,
+		Timeout:       timeout,
 		RunID:         runID,
 		KeepWorktree:  true,
 	})
@@ -85,6 +93,22 @@ func opMergeAttempt(ctx context.Context, rt *Runtime, _ *State, args map[string]
 		"merged_sha":       outcome.MergedSHA,
 		"worktree_path":    outcome.Worktree,
 	}, nil
+}
+
+// parseTimeout coerces the verify_timeout input into a duration. It accepts a
+// Go duration string (e.g. "5m", matching the .quasar.yaml merge_gate format)
+// or nil/empty for no cap. A malformed value is an error so a typo surfaces
+// rather than silently disabling the runaway-verify guard.
+func parseTimeout(v any) (time.Duration, error) {
+	s, ok := v.(string)
+	if !ok || strings.TrimSpace(s) == "" {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(strings.TrimSpace(s))
+	if err != nil {
+		return 0, fmt.Errorf("merge_attempt: invalid verify_timeout %q: %w", s, err)
+	}
+	return d, nil
 }
 
 // opFulfillEntanglements transitions a producing run's in_flight entanglements

@@ -96,6 +96,41 @@ constellation as a real, executable loop and added the operator that drives it.
 | `internal/loop/` deleted; `internal/runner/runner.go` < 50 LOC thin `runtime.Fire` shim | **Deferred** | Same blocker as the cycle-limit phase: the runtime cannot yet execute a `NodeConstellation`, so `master-review` cannot call `coder-reviewer` as a child. `internal/loop` is still the only working coder-reviewer for `quasar run` (`cmd/run.go` → `buildLoop`); deleting it would break the build and all `quasar run` CLI tests. The package layout also differs from the phase's assumptions: the engine is `internal/constellations` (not `internal/runtime`) and there is no `runtime.Open`/`Overrides`/`RunResult` API of the shape the shim assumes. Revisit when `NodeConstellation` lands. |
 | `CLAUDE.md` rewritten to an `internal/runner` + `internal/runtime` + `internal/stars` structure | **Superseded** | Those directories do not exist; writing that block would be false documentation. `CLAUDE.md`'s structure section was instead updated to reflect the real packages (`constellations/`, `artifacts/`, and the still-present `loop/`). |
 
+## merge-gate phase — delivered & deferred
+
+The `merge-gate` phase adds the cross-phase merge gate: a primitive that merges a
+phase's branch into its parent in a throwaway worktree and classifies the
+outcome, the operators that surface it to a constellation, and the routing DAG.
+
+**Delivered this cycle (green, tested):**
+
+- `internal/gitops/merge_attempt.go` — `MergeAttempt.Try` merges `SrcBranch` into
+  `DstBranch` in a detached worktree under `<git-common-dir>/quasar-merge/` (the
+  main working tree is never touched) and classifies `clean` / `markers` /
+  `build_failure` / `merge_error`. `TryOpts.Timeout` caps the verify command
+  (`context.WithTimeout`); `KeepWorktree` controls cleanup. Fixture-repo tests
+  cover every outcome plus cleanup and the untouched-main-tree invariant.
+- `internal/constellations/operators_merge.go` — the `merge_attempt` and
+  `fulfill_entanglements` builtins. `merge_attempt` reads `src_branch`,
+  `dst_branch`, and the optional `verify_command` / `verify_timeout` / `run_id`
+  inputs, keeps the worktree only for resolver-hand-off outcomes, and emits the
+  documented output schema. `fulfill_entanglements` transitions a producing run's
+  in-flight entanglements once given its `run_id`.
+- `internal/artifacts/defaults/constellations/merge-gate.toml` — routes each
+  `MergeResult` to the documented next node; `internal/artifacts/defaults/
+  constellations/merge-conflict-resolve.toml` ships as a conservative
+  escalate-to-human placeholder (Phase 03 replaces it).
+- `internal/config/config.go` — the `[merge_gate]` block (`verify_command`,
+  `verify_timeout`) as the per-repo landing surface, loaded and tested.
+
+**Deferred to the merge-gate-firing supervisor follow-on (tracked, not dropped):**
+
+| Acceptance criterion | Status | Notes for follow-up |
+|----------------------|--------|---------------------|
+| Supervisor fires `merge-gate` after a phase's primary run reaches `_done`, and does not mark the phase fulfilled until the gate reaches `_done` | **Deferred** | There is no supervisor / `internal/runtime/supervisor.go` yet (the engine is `internal/constellations`; per-phase dispatch via `phase_iterator` is still `ErrNodeTypeUnsupported`). Same dependency as the supervisor rows above. The primitive + operators + DAG are ready for it to drive. |
+| `fulfill_entanglements` receives the producing run's `run_id` (the `fulfill` nodes in `merge-gate.toml` pass only `merged_sha` today) | **Deferred** | State carries no run id in the expression namespace, so the firing supervisor must thread the producing `run_id` into both `fulfill` inputs. `opFulfillEntanglements` already accepts and acts on `run_id`; until supplied it is a no-op (`fulfilled=false`). |
+| Per-repo `merge_gate.verify_command` / `verify_timeout` override takes effect end-to-end | **Partial** | The primitive (`TryOpts.VerifyCommand`/`Timeout`) and operator (`verify_command`/`verify_timeout` inputs) honor overrides and are tested. The missing link is config → constellation input, whose natural injection point is the merge-gate-firing supervisor; `cfg.MergeGate` has no consumer until then. |
+
 ## Sequencing note
 
 The deferred items are not independent: `constellation`/`phase_iterator`
