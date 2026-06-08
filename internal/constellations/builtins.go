@@ -57,4 +57,6 @@ func init() {
 	registerOperator("verify_build", opVerify("build"))
 	registerOperator(opMergeAttemptName, opMergeAttempt)
 	registerOperator(opFulfillEntanglementsName, opFulfillEntanglements)
+	registerOperator(opRenderConflictContextName, opRenderConflictContext)
+	registerOperator(opConflictResolutionDecisionName, opConflictResolutionDecision)
 }

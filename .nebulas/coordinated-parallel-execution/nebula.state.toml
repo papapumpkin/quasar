@@ -1,13 +1,13 @@
 version = 1
 nebula_name = 'coordinated-parallel-execution'
-total_cost_usd = 29.678621749999994
+total_cost_usd = 34.704323499999994
 
 [phases]
 [phases.conflict-resolver-star]
 bead_id = 'conflict-resolver-star'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-07T22:49:07.552947-04:00
-updated_at = 2026-06-08T10:19:57.380891-04:00
+updated_at = 2026-06-08T11:37:50.799868-04:00
 
 [phases.coordination-preflight]
 bead_id = 'coordination-preflight'
@@ -35,6 +35,12 @@ summary = 'The entanglement-lifecycle phase ships a correct, well-tested declare
 
 [phases.merge-gate]
 bead_id = 'merge-gate'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-07T22:49:07.552738-04:00
-updated_at = 2026-06-08T11:11:58.816601-04:00
+updated_at = 2026-06-08T11:37:50.764463-04:00
+
+[phases.merge-gate.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A correct, well-tested cross-phase merge-gate infrastructure slice — primitive, builtins, routing constellation, and config — with two prior minor findings appropriately resolved via forward-pointing caveats; the only open item is human sign-off on the intentionally-deferred supervisor wiring.'

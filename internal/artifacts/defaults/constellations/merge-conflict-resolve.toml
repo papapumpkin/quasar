@@ -1,22 +1,90 @@
 name        = "merge-conflict-resolve"
-description = "PLACEHOLDER conflict resolver: escalate to a human until the specialist resolver lands."
+description = "Resolve a merge conflict using the conflict-resolver star and a rich prompt context that preserves both workstreams' intent. Up to [meta].max_cycles attempts, then escalates."
 
-# PLACEHOLDER for Phase 03 of the merge-gate nebula. The real resolver receives
-# both workstreams' specs, both diffs against base, the entanglement state, and
-# any build error, then edits only files carrying conflict markers or build
-# errors — cycle-bounded (2) and budget-bounded ($5), with hard escalation on
-# config-file conflicts and same-file delete-vs-modify collisions.
-#
-# Until that lands, the conservative behavior is to escalate every conflict to a
-# human rather than silently picking a winner. This keeps merge-gate.toml a
-# complete, loadable, lint-clean DAG (its resolve_* nodes reference a real
-# sub-constellation) while leaving the resolution logic to Phase 03, which
-# replaces this file.
+# The resolve-then-judge loop. render -> resolve -> decide, with a decide ->
+# render back-edge that re-renders the context and re-invokes the resolver for
+# one more pass. Each back-edge is one cycle, counted by the same runtime
+# back-edge counter every other loop uses, so [meta].max_cycles is enforced with
+# no Go constant. Beyond the cap (or on a needs_human verdict) the run escalates
+# to _awaiting_human rather than committing work the resolver could not green.
+[meta]
+max_cycles = 2
+
+# Assemble the structured context: both workstreams' specs, both diffs, both
+# phases' entanglements, and either the conflicted files (markers) or the build
+# error output (no_markers). The src_*/dst_* spec and diff inputs are threaded by
+# the firing supervisor (deferred); merge-gate supplies mode, files/build_output,
+# and the worktree today.
 [[nodes]]
-id   = "escalate"
+id   = "render"
 type = "builtin"
-op   = "notify_human"
+op   = "render_conflict_context"
+inputs = { mode = "${inputs.mode}", files = "${inputs.files}", build_output = "${inputs.build_output}", worktree = "${inputs.worktree}", src_run_id = "${inputs.src_run_id}", dst_run_id = "${inputs.dst_run_id}" }
+
+# Invoke the conflict-resolver star. It Edits only files carrying conflict markers
+# or build errors, then emits a conflict-resolution-result-v1 JSON object.
+[[nodes]]
+id     = "resolve"
+type   = "star"
+star   = "conflict-resolver"
+inputs = { prompt = "${nodes.render.context}", worktree = "${inputs.worktree}" }
+
+# Parse the resolver's JSON and apply the universal escalation guards (config
+# file, delete-vs-modify on protected paths) — those short-circuit to
+# needs_human regardless of what the resolver claimed.
+[[nodes]]
+id     = "decide"
+type   = "builtin"
+op     = "conflict_resolution_decision"
+inputs = { output = "${nodes.resolve.result}", files = "${inputs.files}", delete_modify = "${inputs.delete_modify}" }
+
+# Resolved with a green build: commit the merged state and produce the merge SHA.
+[[nodes]]
+id     = "commit"
+type   = "builtin"
+op     = "commit"
+inputs = { message = "resolve merge conflict between workstreams" }
+
+# Cycle cap exhausted or the resolver requested human review: terminate with a
+# structured reason; the unconditional edge to _awaiting_human surfaces it.
+[[nodes]]
+id     = "give_up"
+type   = "builtin"
+op     = "fail_run"
+inputs = { reason = "conflict-resolver could not produce a green build", detail = "${nodes.decide.escalation_reason}" }
 
 [[edges]]
-from = "escalate"
+from = "render"
+to   = "resolve"
+
+[[edges]]
+from = "resolve"
+to   = "decide"
+
+[[edges]]
+from = "decide"
+to   = "commit"
+when = "nodes.decide.status == 'resolved' && nodes.decide.build_passed"
+
+# Build still broken after this pass and a cycle remains: re-render and retry.
+# render is declared before decide, so this is a back-edge — it counts a cycle.
+[[edges]]
+from = "decide"
+to   = "render"
+when = "nodes.decide.status == 'resolved' && !nodes.decide.build_passed && cycle < meta.max_cycles"
+
+[[edges]]
+from = "decide"
+to   = "give_up"
+when = "nodes.decide.status == 'needs_human' || (nodes.decide.status == 'resolved' && !nodes.decide.build_passed && cycle >= meta.max_cycles)"
+
+[[edges]]
+from = "commit"
+to   = "_done"
+
+[[edges]]
+from = "give_up"
 to   = "_awaiting_human"
+
+[outputs]
+merged_sha = "${nodes.commit.sha}"
