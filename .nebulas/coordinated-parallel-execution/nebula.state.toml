@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'coordinated-parallel-execution'
-total_cost_usd = 18.040625749999997
+total_cost_usd = 29.678621749999994
 
 [phases]
 [phases.conflict-resolver-star]
@@ -11,9 +11,15 @@ updated_at = 2026-06-08T10:19:57.380891-04:00
 
 [phases.coordination-preflight]
 bead_id = 'coordination-preflight'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-07T22:49:07.552515-04:00
-updated_at = 2026-06-08T10:19:57.893733-04:00
+updated_at = 2026-06-08T11:11:58.760287-04:00
+
+[phases.coordination-preflight.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = "Comment-only fixes that make three previously-misleading doc comments accurately describe the coordination feature's deliberate runtime gap; verified truthful against the code and gates pass — approved."
 
 [phases.entanglement-lifecycle]
 bead_id = 'entanglement-lifecycle'
@@ -29,6 +35,6 @@ summary = 'The entanglement-lifecycle phase ships a correct, well-tested declare
 
 [phases.merge-gate]
 bead_id = 'merge-gate'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-07T22:49:07.552738-04:00
-updated_at = 2026-06-08T10:19:57.380248-04:00
+updated_at = 2026-06-08T11:11:58.816601-04:00
