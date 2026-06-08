@@ -45,6 +45,13 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 		return nil, err
 	}
 
+	// Pre-flight coordination check: query active entanglements that intersect
+	// this phase's scope and inject sibling-aware notes into the prompt. Advisory
+	// only — a failed read (or a skipped check) never fails the run; the merge
+	// gate still catches any conflict the coder misses. Gated on the star opting
+	// in via coordination_aware (default true for coder-class stars).
+	prompt := r.coordinationPrompt(ctx, run, node, star, userPrompt(args, st))
+
 	started := time.Now()
 	res, err := r.invoker.Invoke(ctx, agent.Agent{
 		Role:          agent.RoleCoder,
@@ -65,7 +72,7 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 		// against these thresholds and kills a stalled/thrashing subprocess, so
 		// wall_clock_cap etc. in a star file have a real runtime effect.
 		Health: contextHealth(star.Health),
-	}, userPrompt(args, st), r.repoPath)
+	}, prompt, r.repoPath)
 	if err != nil {
 		// A dead-coder termination is distinct from a generic failure: the
 		// partial work persists in the worktree, so record terminated_health so
@@ -101,6 +108,42 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 		"cost_usd":   res.CostUSD,
 		"session_id": res.SessionID,
 	}, nil
+}
+
+// coordinationPrompt runs the pre-flight coordination check for a dispatching
+// coder and returns the user prompt with a `## Coordination notes` block
+// appended when sibling intents intersect the phase. It is a no-op — returning
+// the prompt unchanged — when no Check is wired or the star opts out via
+// coordination_aware = false. A read failure is logged and swallowed: the check
+// is advisory, so a missed note never blocks the dispatch.
+//
+// KNOWN LIMITATION — this wiring produces NO notes in the runtime today, by
+// design for this phase. The PhaseContext is built from run/node identity only:
+// Scope and Files are empty, so packageOverlapsScope ranges over an empty slice
+// and the symbol-name content match has no files to scan — Notes always returns
+// zero. What IS exercised end-to-end is the coordination_aware gate and exactly
+// one zero-count telemetry row per coordination-aware dispatch. The override
+// allowlists (PhaseContext.Ignore{Deprecations,Signatures}) are likewise inert
+// here: they are not populated, and the `[coordination]` frontmatter that would
+// source them is not yet parsed in internal/artifacts/loader.go. Package
+// matching, symbol matching, and override suppression are validated by unit
+// tests (coordination_test.go) but are NOT reachable through this call until a
+// follow-up threads the phase spec's scope/files and the [coordination]
+// frontmatter into the run State. Do not assume coordination notes back the
+// merge gate until that wiring lands.
+func (r *Runtime) coordinationPrompt(ctx context.Context, run *fabric.RunRow, node *artifacts.ConstellationNode, star *artifacts.Star, prompt string) string {
+	if r.coordination == nil || !star.CoordinationAware {
+		return prompt
+	}
+	notes, err := r.coordination.Notes(ctx, PhaseContext{
+		RunID:   run.ID,
+		PhaseID: node.ID,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "coordination check (run %s node %s): %v\n", run.ID, node.ID, err)
+		return prompt
+	}
+	return agent.AppendCoordinationNotes(prompt, notes)
 }
 
 // maybeCheckpoint snapshots the worktree after a successful coder dispatch when a

@@ -89,6 +89,7 @@ func (l *Loader) LoadStar(name string) (*Star, error) {
 	}
 	star.Health = health
 	star.Checkpoint = parseStarCheckpoint(sf)
+	star.CoordinationAware = sf.CoordinationAware == nil || *sf.CoordinationAware
 
 	if err := l.resolveSkills(star); err != nil {
 		return nil, err
@@ -377,6 +378,9 @@ type starFrontmatter struct {
 	Checkpoint struct {
 		Enabled *bool `toml:"enabled"`
 	} `toml:"checkpoint"`
+	// CoordinationAware is a pointer so an absent key defaults to true (opt-out),
+	// matching Checkpoint.Enabled: coder-class stars coordinate by default.
+	CoordinationAware *bool `toml:"coordination_aware"`
 }
 
 type skillFrontmatter struct {

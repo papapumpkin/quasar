@@ -53,8 +53,15 @@ type Star struct {
 	ContextBudget StarContextBudget
 	Health        StarHealthPolicy
 	Checkpoint    StarCheckpointPolicy
-	Prompt        string // skill fragments + star body
-	SourcePath    string // for error reporting
+	// CoordinationAware opts the star into the pre-flight coordination check: the
+	// runtime queries active entanglements intersecting the phase scope and
+	// injects sibling-aware notes into the coder's prompt. Defaults to true (the
+	// `coordination_aware` frontmatter key is opt-out), so coder-class stars
+	// coordinate by default while a star that works at a different abstraction
+	// layer (e.g. the architect) can set it false to skip the check entirely.
+	CoordinationAware bool
+	Prompt            string // skill fragments + star body
+	SourcePath        string // for error reporting
 }
 
 // StarHealthPolicy overrides the dead-coder healthcheck thresholds for a star,

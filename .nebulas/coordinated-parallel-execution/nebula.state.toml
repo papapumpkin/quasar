@@ -1,0 +1,52 @@
+version = 1
+nebula_name = 'coordinated-parallel-execution'
+total_cost_usd = 45.07443274999999
+
+[phases]
+[phases.conflict-resolver-star]
+bead_id = 'conflict-resolver-star'
+status = 'done'
+created_at = 2026-06-07T22:49:07.552947-04:00
+updated_at = 2026-06-08T15:50:02.044077-04:00
+
+[phases.conflict-resolver-star.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'The coder made the conflict-telemetry emit node non-fatal so a logging hiccup can no longer discard a successfully-resolved merge, with an honest `recorded` flag and a deterministic test proving the error is swallowed — fully resolves the prior [major] finding with no new issues.'
+
+[phases.coordination-preflight]
+bead_id = 'coordination-preflight'
+status = 'done'
+created_at = 2026-06-07T22:49:07.552515-04:00
+updated_at = 2026-06-08T11:11:58.760287-04:00
+
+[phases.coordination-preflight.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = "Comment-only fixes that make three previously-misleading doc comments accurately describe the coordination feature's deliberate runtime gap; verified truthful against the code and gates pass — approved."
+
+[phases.entanglement-lifecycle]
+bead_id = 'entanglement-lifecycle'
+status = 'done'
+created_at = 2026-06-07T22:49:07.552168-04:00
+updated_at = 2026-06-07T23:45:38.728708-04:00
+
+[phases.entanglement-lifecycle.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'The entanglement-lifecycle phase ships a correct, well-tested declared→claimed→in_flight→fulfilled/withdrawn/deprecated state machine with all prior review findings resolved; the sole remaining note (no timestamp/GC for deprecated rows) is a minor, out-of-scope cosmetic concern I recommend accepting.'
+
+[phases.merge-gate]
+bead_id = 'merge-gate'
+status = 'done'
+created_at = 2026-06-07T22:49:07.552738-04:00
+updated_at = 2026-06-08T11:37:50.764463-04:00
+
+[phases.merge-gate.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A correct, well-tested cross-phase merge-gate infrastructure slice — primitive, builtins, routing constellation, and config — with two prior minor findings appropriately resolved via forward-pointing caveats; the only open item is human sign-off on the intentionally-deferred supervisor wiring.'

@@ -45,11 +45,14 @@ type Loader interface {
 	LoadStar(name string) (*artifacts.Star, error)
 }
 
-// Committer is the git write seam. gitops.Client satisfies it. The runtime
+// Committer is the runtime's git seam. gitops.Client satisfies it. The runtime
 // holds a repo-bound committer and always passes the repo's [pre_commit]
 // config, so stars never see pre-commit and the runtime never decides per call.
+// Commit is the only write; Diff is a read the runtime uses to inspect a
+// just-created commit (e.g. to mark touched entanglements in flight).
 type Committer interface {
 	Commit(ctx context.Context, message string, opts gitops.CommitOpts) (string, error)
+	Diff(ctx context.Context, baseRef, headRef string) (string, error)
 }
 
 // Runtime executes constellation runs for a single repo. The supervisor owns
@@ -64,8 +67,12 @@ type Runtime struct {
 	preCommit        gitops.PreCommitConfig
 	budget           *Budget
 	defaultBudgetUSD float64
-	cacheMetrics     *telemetry.CacheMetricStore // Optional; nil disables cache-token recording.
-	checkpointer     Checkpointer                // Optional; nil disables per-dispatch worktree checkpoints.
+	cacheMetrics     *telemetry.CacheMetricStore      // Optional; nil disables cache-token recording.
+	checkpointer     Checkpointer                     // Optional; nil disables per-dispatch worktree checkpoints.
+	entanglements    *fabric.EntanglementStore        // Optional; nil disables entanglement-lifecycle tracking.
+	merger           merger                           // Optional test seam; nil builds a gitops-backed merger from repoPath.
+	coordination     *Check                           // Optional; nil disables the pre-flight coordination check.
+	conflictLog      *telemetry.ConflictResolutionLog // Optional; nil disables conflict-resolution telemetry (emit node no-ops).
 }
 
 // Checkpointer snapshots a run's worktree after a successful coder dispatch and
@@ -109,6 +116,19 @@ type RuntimeOpts struct {
 	// coder dispatch and restores the latest snapshot on a dead-coder
 	// termination. Nil disables per-dispatch checkpointing.
 	Checkpointer Checkpointer
+	// Entanglements, when non-nil, drives the entanglement lifecycle: the
+	// architect operator declares producer symbols and the runtime withdraws or
+	// fulfills a run's entanglements as it terminates. Nil disables tracking, so
+	// repos that do not coordinate cross-phase symbols pay nothing.
+	Entanglements *fabric.EntanglementStore
+	// Coordination, when non-nil, runs the pre-flight coordination check before
+	// each coordination-aware coder dispatch and injects sibling-aware notes into
+	// the prompt. Nil disables the check; the dispatch proceeds with no notes.
+	Coordination *Check
+	// ConflictLog, when non-nil, persists one conflict-resolution outcome row per
+	// merge-conflict-resolve run (via the emit_conflict_telemetry node) for
+	// `quasar conflicts report`. Nil disables recording; the emit node no-ops.
+	ConflictLog *telemetry.ConflictResolutionLog
 }
 
 // New constructs a Runtime. It panics on a nil required dependency, surfacing a
@@ -129,6 +149,9 @@ func New(opts RuntimeOpts) *Runtime {
 		defaultBudgetUSD: opts.DefaultBudgetUSD,
 		cacheMetrics:     opts.CacheMetrics,
 		checkpointer:     opts.Checkpointer,
+		entanglements:    opts.Entanglements,
+		coordination:     opts.Coordination,
+		conflictLog:      opts.ConflictLog,
 	}
 }
 
@@ -260,7 +283,14 @@ func (r *Runtime) Resume(ctx context.Context, runID string) error {
 func (r *Runtime) dispatch(ctx context.Context, run *fabric.RunRow, st *State, node *artifacts.ConstellationNode) (map[string]any, error) {
 	switch node.Type {
 	case artifacts.NodeBuiltin:
-		return r.dispatchBuiltin(ctx, st, node)
+		out, err := r.dispatchBuiltin(ctx, st, node)
+		if err == nil && node.Op == opCommitName {
+			// The commit node is the green-build gate: its [pre_commit] hooks ran
+			// and produced a commit. Mark every symbol the commit touched in
+			// flight so a sibling's pre-flight sees the freshest signature.
+			r.markInFlightFromCommit(ctx, run, out)
+		}
+		return out, err
 	case artifacts.NodeStar:
 		return r.dispatchStar(ctx, run, st, node)
 	case artifacts.NodeConstellation:
@@ -342,6 +372,7 @@ func (r *Runtime) terminate(ctx context.Context, run *fabric.RunRow, st *State, 
 			fmt.Fprintf(os.Stderr, "constellations: set nebula %s awaiting_human: %v\n", run.NebulaID, err)
 		}
 	}
+	r.applyTerminalEntanglements(ctx, run.ID, state)
 	return state, nil
 }
 
@@ -357,5 +388,6 @@ func (r *Runtime) fail(ctx context.Context, run *fabric.RunRow, st *State, cause
 	if err := r.runStore.Complete(ctx, run.ID, StateFailed); err != nil {
 		return "", err
 	}
+	r.applyTerminalEntanglements(ctx, run.ID, StateFailed)
 	return StateFailed, cause
 }

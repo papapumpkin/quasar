@@ -36,11 +36,34 @@ const (
 )
 
 // Entanglement statuses.
+//
+// StatusPending and StatusDisputed predate the lifecycle model; the remaining
+// six form the lifecycle introduced by migration 009. A symbol moves
+// declared → claimed → in_flight → fulfilled on the happy path, with withdrawn
+// (terminal failure) and deprecated (producer removed the symbol) as the two
+// branches off that spine. The transitions are not strictly linear: deprecated
+// may follow in_flight (the producer changed its mind mid-cycle) or be the
+// initial declaration (a phase whose entire purpose is removal).
 const (
 	StatusFulfilled = "fulfilled"
 	StatusDisputed  = "disputed"
 	StatusPending   = "pending"
+
+	// Lifecycle statuses (migration 009).
+	StatusDeclared   = "declared"   // spec asserts the phase will produce/modify/remove the symbol
+	StatusClaimed    = "claimed"    // a coder picked up the phase and intends to act on it
+	StatusInFlight   = "in_flight"  // a green build has touched the symbol at least once
+	StatusWithdrawn  = "withdrawn"  // the producing run terminated failed/awaiting_human
+	StatusDeprecated = "deprecated" // the producer removed the symbol (diff deletes the declaration)
 )
+
+// activeStatuses enumerates the lifecycle states that signal in-flight intent.
+// It is the single source of truth for "active": EntanglementStore.Active
+// queries exactly these states (and Withdraw transitions exactly these to
+// withdrawn), both building their SQL IN-clause from this slice so the query and
+// the documented set can never drift. The pre-flight coordination check
+// (Phase 01) reads the surfaced rows to warn a sibling coder.
+var activeStatuses = []string{StatusDeclared, StatusClaimed, StatusInFlight, StatusDeprecated}
 
 // Discovery kinds surfaced by agents during execution.
 const (
@@ -75,7 +98,13 @@ func ValidatePulseKind(kind string) error {
 	return nil
 }
 
-// Entanglement represents an interface entanglement published by a completed phase.
+// Entanglement represents an interface entanglement published by a phase.
+//
+// The original fields (Producer..CreatedAt) describe a completed-phase symbol.
+// The lifecycle fields below (added by migration 009) carry time-anchored
+// bookkeeping so the TUI can show "declared 4m ago by phase X" and the
+// coordination pre-flight can rank active intents by recency. They are zero on
+// rows written by the legacy publisher path and populated by EntanglementStore.
 type Entanglement struct {
 	ID        int64     `json:"id"`
 	Producer  string    `json:"producer"`
@@ -87,6 +116,15 @@ type Entanglement struct {
 	File      string    `json:"file,omitempty"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
+
+	// Lifecycle bookkeeping (migration 009).
+	RunID            string `json:"run_id,omitempty"`
+	PhaseID          string `json:"phase_id,omitempty"`
+	CurrentSignature string `json:"current_signature,omitempty"` // signature at the most recent in_flight update
+	DeclaredAt       int64  `json:"declared_at,omitempty"`       // unix seconds
+	ClaimedAt        int64  `json:"claimed_at,omitempty"`        // unix seconds
+	InFlightAt       int64  `json:"in_flight_at,omitempty"`      // unix seconds
+	TerminatedAt     int64  `json:"terminated_at,omitempty"`     // unix seconds
 }
 
 // Discovery represents an agent-surfaced issue that may require human or
