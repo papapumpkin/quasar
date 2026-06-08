@@ -2,23 +2,23 @@ package claude
 
 // CLIResponse is the JSON object the claude CLI emits with --output-format json.
 type CLIResponse struct {
-	Type          string      `json:"type"`
-	Subtype       string      `json:"subtype"`
-	IsError       bool        `json:"is_error"`
-	DurationMs    int64       `json:"duration_ms"`
-	DurationAPIMs int64       `json:"duration_api_ms"`
-	NumTurns      int         `json:"num_turns"`
-	Result        string      `json:"result"`
-	SessionID     string      `json:"session_id"`
-	TotalCostUSD  float64     `json:"total_cost_usd"`
-	Usage         ClaudeUsage `json:"usage"`
+	Type          string  `json:"type"`
+	Subtype       string  `json:"subtype"`
+	IsError       bool    `json:"is_error"`
+	DurationMs    int64   `json:"duration_ms"`
+	DurationAPIMs int64   `json:"duration_api_ms"`
+	NumTurns      int     `json:"num_turns"`
+	Result        string  `json:"result"`
+	SessionID     string  `json:"session_id"`
+	TotalCostUSD  float64 `json:"total_cost_usd"`
+	Usage         Usage   `json:"usage"`
 }
 
-// ClaudeUsage captures the token-accounting block from a claude CLI response.
-// The cache fields are the signal used to verify prompt caching is effective:
+// Usage captures the token-accounting block from a claude CLI response. The
+// cache fields are the signal used to verify prompt caching is effective:
 // CacheReadInputTokens counts tokens served from the cache (discounted), while
 // CacheCreationInputTokens counts tokens written into the cache (full rate).
-type ClaudeUsage struct {
+type Usage struct {
 	InputTokens              int `json:"input_tokens"`
 	OutputTokens             int `json:"output_tokens"`
 	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`

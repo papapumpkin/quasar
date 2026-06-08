@@ -533,7 +533,7 @@ func TestInvoke_ParsesCacheTokens(t *testing.T) {
 	resp := CLIResponse{
 		Result:    "ok",
 		SessionID: "sess-cache",
-		Usage: ClaudeUsage{
+		Usage: Usage{
 			InputTokens:              200,
 			OutputTokens:             50,
 			CacheCreationInputTokens: 1400,

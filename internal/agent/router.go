@@ -25,7 +25,7 @@ const RouterModel = "claude-haiku-4-5-20251001"
 
 // defaultRouterLatency bounds a single routed call. A routed question is a
 // bounded lookup; if Haiku has not answered within this window the call is
-// cancelled so a stuck sub-question never stalls the coder.
+// canceled so a stuck sub-question never stalls the coder.
 const defaultRouterLatency = 15 * time.Second
 
 // routerCacheCapacity is the number of distinct sub-questions the in-process LRU

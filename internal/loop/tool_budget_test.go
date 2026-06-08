@@ -70,7 +70,9 @@ func TestBudgetReadsBeforeEdit(t *testing.T) {
 			}
 			return last
 		}
-		if mk() != mk() {
+		first := mk()
+		second := mk()
+		if first != second {
 			t.Error("advisory text must be deterministic for golden assertions")
 		}
 	})

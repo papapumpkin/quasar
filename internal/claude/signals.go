@@ -197,9 +197,9 @@ func (m *tokenRateMeter) Rate(now time.Time) (float64, bool) {
 // accounting. The CLI nests usage under "message" for assistant events and may
 // also surface a top-level "usage" on the final result.
 type streamEvent struct {
-	Usage   *ClaudeUsage `json:"usage"`
+	Usage   *Usage `json:"usage"`
 	Message *struct {
-		Usage *ClaudeUsage `json:"usage"`
+		Usage *Usage `json:"usage"`
 	} `json:"message"`
 }
 
@@ -290,7 +290,7 @@ func psPercentCPU(pid int) (float64, error) {
 	return strconv.ParseFloat(field, 64)
 }
 
-// runCPUPoller polls the CPU at interval until ctx is cancelled. It is started
+// runCPUPoller polls the CPU at interval until ctx is canceled. It is started
 // by the Invoker alongside the healthcheck.
 func runCPUPoller(ctx context.Context, p *cpuPoller, interval time.Duration) {
 	if interval <= 0 {

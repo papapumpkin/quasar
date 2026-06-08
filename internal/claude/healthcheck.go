@@ -200,7 +200,7 @@ func (h *Healthcheck) snapshot(start, now time.Time) healthSnapshot {
 }
 
 // Run blocks until the subprocess exits (signaled by exited being closed), the
-// context is cancelled, or the coder is declared Dead and terminated. It
+// context is canceled, or the coder is declared Dead and terminated. It
 // returns a *DeadCoderError only in the last case; otherwise nil.
 func (h *Healthcheck) Run(ctx context.Context, exited <-chan struct{}) error {
 	policy := h.Policy.WithDefaults()
