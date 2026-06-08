@@ -5,15 +5,15 @@ total_cost_usd = 18.040625749999997
 [phases]
 [phases.conflict-resolver-star]
 bead_id = 'conflict-resolver-star'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-07T22:49:07.552947-04:00
-updated_at = 2026-06-07T22:49:07.552947-04:00
+updated_at = 2026-06-08T00:08:57.732452-04:00
 
 [phases.coordination-preflight]
 bead_id = 'coordination-preflight'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-07T22:49:07.552515-04:00
-updated_at = 2026-06-07T22:49:07.552515-04:00
+updated_at = 2026-06-08T00:09:00.098051-04:00
 
 [phases.entanglement-lifecycle]
 bead_id = 'entanglement-lifecycle'
@@ -29,6 +29,6 @@ summary = 'The entanglement-lifecycle phase ships a correct, well-tested declare
 
 [phases.merge-gate]
 bead_id = 'merge-gate'
-status = 'in_progress'
+status = 'failed'
 created_at = 2026-06-07T22:49:07.552738-04:00
-updated_at = 2026-06-07T23:45:38.765528-04:00
+updated_at = 2026-06-08T00:08:55.53559-04:00
