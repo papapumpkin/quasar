@@ -1,0 +1,27 @@
+version = 1
+nebula_name = 'coordinated-parallel-execution'
+
+[phases]
+[phases.conflict-resolver-star]
+bead_id = 'conflict-resolver-star'
+status = 'created'
+created_at = 2026-06-07T22:49:07.552947-04:00
+updated_at = 2026-06-07T22:49:07.552947-04:00
+
+[phases.coordination-preflight]
+bead_id = 'coordination-preflight'
+status = 'created'
+created_at = 2026-06-07T22:49:07.552515-04:00
+updated_at = 2026-06-07T22:49:07.552515-04:00
+
+[phases.entanglement-lifecycle]
+bead_id = 'entanglement-lifecycle'
+status = 'in_progress'
+created_at = 2026-06-07T22:49:07.552168-04:00
+updated_at = 2026-06-07T22:49:08.044354-04:00
+
+[phases.merge-gate]
+bead_id = 'merge-gate'
+status = 'created'
+created_at = 2026-06-07T22:49:07.552738-04:00
+updated_at = 2026-06-07T22:49:07.552738-04:00

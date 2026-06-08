@@ -66,6 +66,7 @@ type Runtime struct {
 	defaultBudgetUSD float64
 	cacheMetrics     *telemetry.CacheMetricStore // Optional; nil disables cache-token recording.
 	checkpointer     Checkpointer                // Optional; nil disables per-dispatch worktree checkpoints.
+	entanglements    *fabric.EntanglementStore   // Optional; nil disables entanglement-lifecycle tracking.
 }
 
 // Checkpointer snapshots a run's worktree after a successful coder dispatch and
@@ -109,6 +110,11 @@ type RuntimeOpts struct {
 	// coder dispatch and restores the latest snapshot on a dead-coder
 	// termination. Nil disables per-dispatch checkpointing.
 	Checkpointer Checkpointer
+	// Entanglements, when non-nil, drives the entanglement lifecycle: the
+	// architect operator declares producer symbols and the runtime withdraws or
+	// fulfills a run's entanglements as it terminates. Nil disables tracking, so
+	// repos that do not coordinate cross-phase symbols pay nothing.
+	Entanglements *fabric.EntanglementStore
 }
 
 // New constructs a Runtime. It panics on a nil required dependency, surfacing a
@@ -129,6 +135,7 @@ func New(opts RuntimeOpts) *Runtime {
 		defaultBudgetUSD: opts.DefaultBudgetUSD,
 		cacheMetrics:     opts.CacheMetrics,
 		checkpointer:     opts.Checkpointer,
+		entanglements:    opts.Entanglements,
 	}
 }
 
@@ -342,7 +349,33 @@ func (r *Runtime) terminate(ctx context.Context, run *fabric.RunRow, st *State, 
 			fmt.Fprintf(os.Stderr, "constellations: set nebula %s awaiting_human: %v\n", run.NebulaID, err)
 		}
 	}
+	r.applyTerminalEntanglements(ctx, run.ID, state)
 	return state, nil
+}
+
+// applyTerminalEntanglements advances the run's entanglement lifecycle when the
+// run reaches a terminal state: fulfilled on _done, withdrawn on _failed or
+// _awaiting_human. Best-effort and nil-safe — a tracking failure is logged, not
+// fatal, since coordination is advisory and must never block a run from
+// terminating. (The cross-phase merge gate that gates Fulfill on a clean merge
+// arrives with the supervisor in a later phase; terminating _done here fulfills
+// the run's own in-flight symbols.)
+func (r *Runtime) applyTerminalEntanglements(ctx context.Context, runID, state string) {
+	if r.entanglements == nil {
+		return
+	}
+	var err error
+	switch state {
+	case StateDone:
+		err = r.entanglements.Fulfill(ctx, runID)
+	case StateFailed, StateAwaitingHuman:
+		err = r.entanglements.Withdraw(ctx, runID)
+	default:
+		return
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "constellations: entanglement lifecycle (run %s → %s): %v\n", runID, state, err)
+	}
 }
 
 // fail records the failure cause into State and marks the run failed.
@@ -357,5 +390,6 @@ func (r *Runtime) fail(ctx context.Context, run *fabric.RunRow, st *State, cause
 	if err := r.runStore.Complete(ctx, run.ID, StateFailed); err != nil {
 		return "", err
 	}
+	r.applyTerminalEntanglements(ctx, run.ID, StateFailed)
 	return StateFailed, cause
 }

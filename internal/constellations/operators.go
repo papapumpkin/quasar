@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -11,7 +12,17 @@ import (
 
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/gitops"
+	"github.com/papapumpkin/quasar/internal/neutron"
 )
+
+// neutronKinds maps the Go keyword neutron reports to the fabric entanglement
+// kind the lifecycle stores.
+var neutronKinds = map[string]string{
+	"func":  fabric.KindFunction,
+	"type":  fabric.KindType,
+	"var":   fabric.KindType,
+	"const": fabric.KindType,
+}
 
 // opRenderSeedPrompt renders a seed nebula into a Markdown brief the architect
 // star consumes. It reads the nebula snapshot already in State, so it makes no
@@ -131,8 +142,36 @@ func opPersistPhases(ctx context.Context, rt *Runtime, st *State, args map[strin
 		}); err != nil {
 			return nil, fmt.Errorf("persist_phases: insert %q: %w", p.ID, err)
 		}
+		rt.declarePhaseSymbols(ctx, p.ID, p.Body)
 	}
 	return map[string]any{"count": len(spec.Phases)}, nil
+}
+
+// declarePhaseSymbols seeds 'declared' entanglements for the producer symbols a
+// phase's spec names in its "## Files" and "## Solution" sections. The run_id is
+// left unset here — a later coder pre-flight binds it via Claim — so the symbol
+// identity (producer + kind + name) carries the linkage. Best-effort and
+// nil-safe: coordination is advisory, so a tracking failure is logged, never
+// fatal to phase persistence.
+func (r *Runtime) declarePhaseSymbols(ctx context.Context, phaseID, body string) {
+	if r.entanglements == nil {
+		return
+	}
+	for _, d := range neutron.ExtractDeclarations(body) {
+		kind, ok := neutronKinds[d.Kind]
+		if !ok {
+			continue
+		}
+		err := r.entanglements.Declare(ctx, fabric.Entanglement{
+			Producer: phaseID,
+			PhaseID:  phaseID,
+			Kind:     kind,
+			Name:     d.Name,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "constellations: declare entanglement %q for phase %q: %v\n", d.Name, phaseID, err)
+		}
+	}
 }
 
 // opCommit commits the working tree through the runtime's git seam. The runtime
