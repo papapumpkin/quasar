@@ -18,6 +18,10 @@ description = "Attempt a merge from the run's branch into its parent, classify t
 # verify_command / verify_timeout inputs are intentionally omitted here: the
 # operator falls back to the Go-centric default until the firing supervisor
 # threads the repo's [merge_gate] config in (deferred — see the doc above).
+# The firing supervisor must also bind run_id here (e.g. run_id =
+# "${nebula.run_id}"): the operator plumbs it end-to-end, but without it the
+# merge worktree path falls back to the source branch and is not collision-safe
+# under concurrent gate runs, and merged_sha cannot be anchored to a per-run ref.
 [[nodes]]
 id     = "attempt"
 type   = "builtin"

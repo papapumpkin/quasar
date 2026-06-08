@@ -78,6 +78,14 @@ func opMergeAttempt(ctx context.Context, rt *Runtime, _ *State, args map[string]
 	if err != nil {
 		return nil, fmt.Errorf("merge_attempt: %w", err)
 	}
+	// CAVEAT for the merge-gate-firing supervisor (deferred): on a clean
+	// outcome the merge commit lives ONLY on this throwaway worktree's detached
+	// HEAD. Removing the worktree here unanchors merged_sha — no ref reaches it,
+	// so it becomes GC-eligible. The supervisor consumes merged_sha to commit it
+	// onto the parent branch; before this Cleanup it must durably anchor the SHA
+	// (keep the worktree until the parent-branch commit lands, or
+	// `git update-ref refs/quasar/merge-<run-id> <sha>`). Safe today only because
+	// the supervisor is deferred and GC won't fire in this window.
 	if outcome.Result == gitops.MergeClean || outcome.Result == gitops.MergeError {
 		m.Cleanup(ctx, outcome.Worktree)
 	}

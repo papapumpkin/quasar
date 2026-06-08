@@ -128,6 +128,12 @@ func (m *MergeAttempt) Try(ctx context.Context, opts TryOpts) (MergeOutcome, err
 	}
 
 	// Clean merge: capture the merge SHA, then run verify against the merged tree.
+	// CAVEAT: this commit is reachable ONLY from the throwaway worktree's detached
+	// HEAD. When KeepWorktree is false (or the caller cleans up afterward) the SHA
+	// is unanchored and GC-eligible. A consumer that needs merged_sha to outlive
+	// the worktree (e.g. the supervisor committing it to the parent branch) must
+	// anchor it first — keep the worktree until the parent commit lands, or
+	// `git update-ref refs/quasar/merge-<run-id> <sha>`.
 	stdout, _, headErr := wtGit(ctx, "rev-parse", "HEAD")
 	if headErr != nil {
 		outcome.Result = MergeError
@@ -163,6 +169,13 @@ func (m *MergeAttempt) worktreePath(ctx context.Context, opts TryOpts) (string, 
 	if !filepath.IsAbs(gitDir) {
 		gitDir = filepath.Join(m.Client.workDir, gitDir)
 	}
+	// The path is deterministic per run-id by design. The SrcBranch fallback keeps
+	// a stand-alone Try (no RunID) working, but it is NOT collision-safe: two
+	// concurrent attempts merging the same source branch would target the same
+	// directory and clobber each other. Safe today because gate execution is
+	// single-flight; when the firing supervisor introduces concurrency it must
+	// thread a unique RunID (the operator already plumbs run_id end-to-end — only
+	// the merge-gate.toml `attempt` input binding is missing).
 	name := opts.RunID
 	if strings.TrimSpace(name) == "" {
 		name = opts.SrcBranch
