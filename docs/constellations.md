@@ -207,8 +207,9 @@ a small expression language compiled to an `Expression` AST
 (`internal/artifacts/expr.go:12-18`). Two entry points compile source:
 
 - **`Parse`** (`expr.go:58-73`) — a *bare* expression, used for edge `when`
-  guards. It lexes, runs a precedence-climbing parser
-  (`internal/artifacts/expr_parse.go`), and rejects trailing tokens.
+  guards. It lexes (`lex`, `internal/artifacts/expr_parse.go:53`), runs a
+  precedence-climbing parser (`parseExpr`, `expr_parse.go:225`, with the operator
+  precedence table `binPrec` at `expr_parse.go:202`), and rejects trailing tokens.
 - **`ParseTemplate`** (`expr.go:80-115`) — a *string interpolation* template,
   used for node inputs and outputs. A value that is exactly `${expr}` evaluates to
   the raw, type-preserving value of `expr`; a mix of literal text and `${...}`
