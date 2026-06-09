@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'documentation-refresh'
-total_cost_usd = 12.76433775
+total_cost_usd = 17.2664376
 
 [phases]
 [phases.config-and-handbook]
@@ -29,9 +29,15 @@ summary = 'A README rewrite plus three new docs (architecture, glossary, index) 
 
 [phases.runtime-internals]
 bead_id = 'runtime-internals'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-08T23:30:57.76041-04:00
-updated_at = 2026-06-09T16:43:22.698997-04:00
+updated_at = 2026-06-09T16:53:34.766652-04:00
+
+[phases.runtime-internals.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A one-line citation tightening on top of three already-accurate runtime-internals docs (constellations/runtime/fabric); all citations, diagrams, schema coverage, lint, and link-check verified against current source — approved.'
 
 [phases.safety-and-ops]
 bead_id = 'safety-and-ops'
@@ -47,6 +53,6 @@ summary = 'A faithful, citation-verified rewrite of `docs/safety.md` plus new `d
 
 [phases.sensors]
 bead_id = 'sensors'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-08T23:30:57.761117-04:00
-updated_at = 2026-06-09T16:43:22.592815-04:00
+updated_at = 2026-06-09T16:53:34.779068-04:00
