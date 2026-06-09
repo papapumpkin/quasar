@@ -180,7 +180,7 @@ func (s *State) ExprState() artifacts.State {
 		"inputs": mapOrEmpty(s.Inputs),
 		"nodes":  nodes,
 		"nebula": nebulaMap,
-		"cycle": s.Cycle,
+		"cycle":  s.Cycle,
 		"meta": map[string]any{
 			"total_cost_usd": s.Meta.TotalCostUSD,
 			"run_started_at": s.Meta.RunStartedAt,

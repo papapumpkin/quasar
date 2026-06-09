@@ -27,7 +27,19 @@ var allowedColocations = map[string]map[string]bool{
 	// production implementer; consumers that import the supervisor get the
 	// interface type.
 	"constellations": {
-		"Firer": true,
+		// Firer + Stepper are the testability seams for the supervisor and
+		// step driver. Both carry a repoPath so multi-repo implementations
+		// route to the correct per-repo Runtime. *Runtime is bound to one
+		// repo so it does NOT satisfy either interface directly — the
+		// adapters (SingleRepoFirer/RuntimeCacheFirer,
+		// SingleRepoStepper/RuntimeCacheStepper) live alongside it.
+		"Firer":   true,
+		"Stepper": true,
+		// forgeOpener is the test seam for the gh_open_pr operator — the
+		// production opener (defaultForgeOpener) delegates to forge.OpenPR;
+		// tests swap a fake via activeForgeOpener (module-level var so the
+		// operator signature stays fixed).
+		"forgeOpener": true,
 	},
 	// Beads defines Client alongside CLI, the canonical beads CLI wrapper.
 	// Consumers (loop, nebula, cmd) import the interface type.

@@ -22,12 +22,15 @@ as a link exists now.
 
 ## Core mechanics
 
-- `constellations.md` — the declarative TOML workflow format and the default
-  constellations (planned in this nebula).
-- `runtime.md` — the constellation runtime: Fire, Step, back-edges, cycle
-  counting, and nested dispatch (planned in this nebula).
-- `fabric.md` — the SQLite schema and the stores layered over it (planned in
-  this nebula).
+- [constellations.md](constellations.md) — the declarative TOML workflow format,
+  the four node types, the expression mini-language, and every default
+  constellation walked through with Mermaid DAGs.
+- [runtime.md](runtime.md) — the constellation runtime: Fire, Step, back-edges,
+  cycle counting, nested dispatch, budget enforcement, the supervisor, the
+  dead-coder healthcheck, and prompt-cache telemetry.
+- [fabric.md](fabric.md) — the SQLite schema, every table's purpose and
+  writer/reader sites, the blob store, cascading deletes, and the DB-only TUI
+  rule.
 
 ## Coordination + safety
 
@@ -40,9 +43,11 @@ as a link exists now.
 
 ## Operations
 
-- `cli.md` — the full command and flag reference (planned in this nebula).
-- `gc.md` — garbage collection of completed nebulas, runs, blobs, and stale
-  worktrees (planned in this nebula).
+- [cli.md](cli.md) — the full command and flag reference: every subcommand, its
+  flags, and a one-hop pointer to the `cmd/<name>.go` that implements it.
+- [gc.md](gc.md) — garbage collection of completed nebulas, runs, blobs, and
+  stale worktrees: the mark→grace→sweep lifecycle, per-category TTLs, the blob
+  and worktree reapers, the audit log, and the `gc_runs` ledger.
 - `configuration.md` — `.quasar.yaml`, environment variables, and precedence
   (planned in this nebula).
 - [deployment.md](deployment.md) — running Quasar as an always-on multi-repo
