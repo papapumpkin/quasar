@@ -58,10 +58,10 @@ as a link exists now.
 
 ## Extending Quasar
 
-- `sensors.md` — the sensor model and how a draft becomes a nebula (planned in
-  this nebula).
-- `sensor-authoring.md` — a walkthrough for adding a new sensor adapter (planned
-  in this nebula).
+- [sensors.md](sensors.md) — the sensor model: poll/cursor/dedup contracts, the
+  scheduler, the GitHub sensor walkthrough, and how a draft becomes a nebula.
+- [sensor-authoring.md](sensor-authoring.md) — a walkthrough for adding a new
+  sensor adapter, with a complete compiling worked example.
 
 ## Contributor handbook
 
@@ -82,10 +82,9 @@ shipped.
 - [constellation-runtime-followup.md](constellation-runtime-followup.md) — a
   design follow-up log for the constellation runtime; superseded by the shipped
   runtime and this docs set.
-- [integrations.md](integrations.md) — **superseded.** Describes the retired
-  `TicketSource` interface and `internal/integrations/` package, both renamed to
-  the sensors model; see `sensors.md` (planned in this nebula) for the current
-  design.
+- [integrations.md](integrations.md) — **superseded.** Now a one-line redirect:
+  the `TicketSource` interface and `internal/integrations/` package were renamed
+  to the sensors model; see [sensors.md](sensors.md) for the current design.
 - [superpowers/specs/2026-06-03-quasar-autonomous-issue-to-pr-design.md](superpowers/specs/2026-06-03-quasar-autonomous-issue-to-pr-design.md)
   — the original autonomous issue-to-PR design spec; historical context for the
   flows now documented in [architecture.md](architecture.md).
