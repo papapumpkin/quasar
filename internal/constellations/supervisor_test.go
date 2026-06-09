@@ -22,13 +22,18 @@ type fakeFirer struct {
 }
 
 type fakeFireCall struct {
+	RepoPath          string
 	ConstellationName string
 	NebulaID          string
 }
 
-func (f *fakeFirer) Fire(_ context.Context, constellation, nebulaID, _ string, _ float64) (string, error) {
+func (f *fakeFirer) Fire(_ context.Context, repoPath, constellation, nebulaID string) (string, error) {
 	f.counter.Add(1)
-	f.calls = append(f.calls, fakeFireCall{ConstellationName: constellation, NebulaID: nebulaID})
+	f.calls = append(f.calls, fakeFireCall{
+		RepoPath:          repoPath,
+		ConstellationName: constellation,
+		NebulaID:          nebulaID,
+	})
 	if f.failOn != "" && constellation == f.failOn {
 		return "", errors.New("synthetic fire failure")
 	}
@@ -187,6 +192,33 @@ func TestSupervisorTickDoubleClaimSafe(t *testing.T) {
 	}
 	if firer.counter.Load() != 1 {
 		t.Errorf("Fire called %d times across two ticks, want 1", firer.counter.Load())
+	}
+}
+
+func TestSupervisorTickForwardsRepoPathToFirer(t *testing.T) {
+	t.Parallel()
+	// The Firer's repoPath argument is how multi-repo wiring routes a
+	// trigger to the correct per-repo Runtime; the supervisor must read
+	// repo_path off the row and pass it through.
+	db := newSupervisorTestDB(t)
+	seedTrigger(t, db, "neb-a", "architect", "/srv/repos/papapumpkin/quasar")
+	seedTrigger(t, db, "neb-b", "architect", "/srv/repos/papapumpkin/relativity")
+
+	firer := &fakeFirer{}
+	sup := &Supervisor{DB: db, Firer: firer}
+	if _, err := sup.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	gotPaths := map[string]string{}
+	for _, c := range firer.calls {
+		gotPaths[c.NebulaID] = c.RepoPath
+	}
+	if gotPaths["neb-a"] != "/srv/repos/papapumpkin/quasar" {
+		t.Errorf("neb-a repoPath = %q, want %q", gotPaths["neb-a"], "/srv/repos/papapumpkin/quasar")
+	}
+	if gotPaths["neb-b"] != "/srv/repos/papapumpkin/relativity" {
+		t.Errorf("neb-b repoPath = %q, want %q", gotPaths["neb-b"], "/srv/repos/papapumpkin/relativity")
 	}
 }
 

@@ -14,11 +14,31 @@ import (
 // work and so per-fire failures don't compound into a long tail.
 const defaultSupervisorBatchLimit = 8
 
-// Firer is the subset of Runtime the trigger consumer needs. Defined here
-// (where consumed) per project convention so the Supervisor is testable
-// without a fully-constructed Runtime; *Runtime satisfies it.
+// Firer is the trigger-consumer's seam onto whatever materializes a
+// constellation run for the supervisor. It carries the trigger row's
+// repoPath so multi-repo implementations can route to the correct per-repo
+// Runtime — single-repo or test implementations ignore it.
+//
+// *Runtime is bound to a single repo at construction and does NOT satisfy
+// this interface directly; use SingleRepoFirer to wrap one, or
+// RuntimeCacheFirer (constellations/runtime_cache.go) to route across many.
 type Firer interface {
-	Fire(ctx context.Context, constellationName, nebulaID, parentRunID string, budgetOverride float64) (string, error)
+	Fire(ctx context.Context, repoPath, constellationName, nebulaID string) (string, error)
+}
+
+// SingleRepoFirer adapts a single *Runtime to the Firer interface, ignoring
+// the supervisor's repoPath argument. Useful in tests and in single-repo
+// deployments where every trigger row targets the same Runtime.
+type SingleRepoFirer struct {
+	Runtime *Runtime
+}
+
+// Fire ignores the supervisor's repoPath and dispatches to the wrapped
+// Runtime. The empty parent_run_id and zero budgetOverride are correct: a
+// trigger row launches a top-level run, and budget resolution falls back to
+// the nebula manifest (or the runtime's DefaultBudgetUSD).
+func (s *SingleRepoFirer) Fire(ctx context.Context, _, constellationName, nebulaID string) (string, error) {
+	return s.Runtime.Fire(ctx, constellationName, nebulaID, "", 0)
 }
 
 // Supervisor drains trigger_queue rows by firing a constellation run for each
@@ -75,10 +95,12 @@ func (s *Supervisor) Tick(ctx context.Context) (int, error) {
 		}
 		// Fire after the claim so a crash between claim and Fire is
 		// auditable (the row is consumed but the run isn't there). The
-		// operator can re-approve from the fleet view.
-		if _, err := s.Firer.Fire(ctx, t.ConstellationName, t.NebulaID, "", 0); err != nil {
-			s.logf("trigger %d: fire %q on nebula %q: %v",
-				t.ID, t.ConstellationName, t.NebulaID, err)
+		// operator can re-approve from the fleet view. RepoPath is
+		// forwarded so multi-repo implementations route to the per-repo
+		// Runtime; single-repo implementations ignore it.
+		if _, err := s.Firer.Fire(ctx, t.RepoPath, t.ConstellationName, t.NebulaID); err != nil {
+			s.logf("trigger %d: fire %q on nebula %q (repo %q): %v",
+				t.ID, t.ConstellationName, t.NebulaID, t.RepoPath, err)
 			continue
 		}
 		fired++
