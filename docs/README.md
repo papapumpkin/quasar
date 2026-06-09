@@ -34,10 +34,15 @@ as a link exists now.
 
 ## Coordination + safety
 
-- `entanglements.md` — the cross-phase symbol-claim lifecycle (planned in this
-  nebula).
-- `multi-repo.md` — the fleet view, the supervisor, `trigger_queue`, and
-  per-repo runtime routing (planned in this nebula).
+- [entanglements.md](entanglements.md) — the cross-phase symbol-lifecycle
+  (declared → in_flight → fulfilled | withdrawn | deprecated), the neutron diff
+  walker, the coordination pre-flight, and the advisory contract.
+- [multi-repo.md](multi-repo.md) — the fleet view, the supervisor, the step
+  driver, `trigger_queue`, the per-repo runtime cache, and the end-to-end
+  approval flow.
+- [conflict-resolution.md](conflict-resolution.md) — the merge gate, the
+  conflict-resolver star, the two collision modes, escalation rules, and the
+  `quasar conflicts report` telemetry.
 - [safety.md](safety.md) — the git output safety perimeter: what Quasar can and
   cannot do, sandboxing, pre-commit enforcement, and token scopes.
 
@@ -48,8 +53,8 @@ as a link exists now.
 - [gc.md](gc.md) — garbage collection of completed nebulas, runs, blobs, and
   stale worktrees: the mark→grace→sweep lifecycle, per-category TTLs, the blob
   and worktree reapers, the audit log, and the `gc_runs` ledger.
-- `configuration.md` — `.quasar.yaml`, environment variables, and precedence
-  (planned in this nebula).
+- [configuration.md](configuration.md) — the single reference for every
+  `.quasar.yaml` key, environment variables, precedence, and token resolution.
 - [deployment.md](deployment.md) — running Quasar as an always-on multi-repo
   service (system requirements, directory layout, `systemd`, upgrades, backups).
 - [per-repo-config.md](per-repo-config.md) — authoring a repo's `.quasar.yaml`
@@ -65,10 +70,12 @@ as a link exists now.
 
 ## Contributor handbook
 
-- `development.md` — local development workflow beyond the handbook (planned in
-  this nebula).
-- [CLAUDE.md](../CLAUDE.md) — the developer handbook: build and test commands,
-  package layout, Go conventions, and nebula authoring rules.
+- [development.md](development.md) — the human contributor handbook: local
+  setup, repo layout, the arch tests, style, and how to add a sub-package,
+  constellation, star, or nebula.
+- [CLAUDE.md](../CLAUDE.md) — the *agent* handbook: the rules an LLM follows
+  when authoring nebulas and editing this repo (Go conventions, nebula
+  authoring). `development.md` is its human-facing counterpart.
 
 ## Historical
 

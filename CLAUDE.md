@@ -39,6 +39,11 @@ internal/
   ui/            Stderr-based UI printer (ANSI colors)
 ```
 
+The list above is an abbreviated subset. The **canonical, complete** directory
+table — every package under `internal/` with a one-line description — lives in
+[docs/development.md](docs/development.md); keep this block consistent with it
+(development.md is the source of truth).
+
 The coder-reviewer pair runs as a declarative constellation
 (`internal/artifacts/defaults/constellations/coder-reviewer.toml`): the coder
 writes a diff, the runtime commits it, the reviewer judges it (parsed by the
@@ -127,6 +132,10 @@ previous PLACEHOLDER routed within-cap fixes to `_awaiting_human`.
 2. Environment variables (`QUASAR_*`)
 3. `.quasar.yaml` config file
 4. Built-in defaults (lowest)
+
+For the full `.quasar.yaml` surface — every key, its type, default, and what
+reads it, plus environment variables and token resolution — see
+[docs/configuration.md](docs/configuration.md).
 
 ## Nebula Authoring
 

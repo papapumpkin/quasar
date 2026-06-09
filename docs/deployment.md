@@ -33,6 +33,10 @@ A conventional single-host install:
 /srv/repos/<owner>/<name>/         # checked-out repositories
 ```
 
+For every key the global `quasar.yaml` and the per-repo `.quasar.yaml` accept,
+see [configuration.md](configuration.md); for per-repo authoring see
+[per-repo-config.md](per-repo-config.md).
+
 SQLite runs in WAL mode so concurrent sensor schedulers can read while a writer
 commits. The blob store is content-addressed (SHA-256, git-style two-char
 fanout), so it is safe to back up with a plain file copy.

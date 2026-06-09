@@ -12,6 +12,11 @@ Read [constellations.md](constellations.md) first for the declarative surface
 the structs, the Fire → Step → terminate walk, nested dispatch, budget, the
 supervisor, the dead-coder healthcheck, and prompt-cache telemetry. State storage
 is in [fabric.md](fabric.md); the git/safety perimeter is in [safety.md](safety.md).
+Three subsystems built on this engine have their own docs:
+[multi-repo.md](multi-repo.md) (the supervisor + step driver that drive Fire and
+Step across repos), [entanglements.md](entanglements.md) (the symbol-lifecycle
+hooks the runtime fires), and [conflict-resolution.md](conflict-resolution.md)
+(the merge gate and nested conflict-resolver constellation).
 
 ---
 

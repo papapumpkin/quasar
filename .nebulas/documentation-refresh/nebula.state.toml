@@ -1,19 +1,19 @@
 version = 1
 nebula_name = 'documentation-refresh'
-total_cost_usd = 17.2664376
+total_cost_usd = 19.79414985
 
 [phases]
 [phases.config-and-handbook]
 bead_id = 'config-and-handbook'
-status = 'created'
+status = 'in_progress'
 created_at = 2026-06-08T23:30:57.761358-04:00
-updated_at = 2026-06-09T16:43:22.593025-04:00
+updated_at = 2026-06-09T17:12:14.026888-04:00
 
 [phases.coordination]
 bead_id = 'coordination'
-status = 'created'
+status = 'failed'
 created_at = 2026-06-08T23:30:57.76066-04:00
-updated_at = 2026-06-09T16:43:22.592299-04:00
+updated_at = 2026-06-09T17:12:14.02457-04:00
 
 [phases.foundation]
 bead_id = 'foundation'
@@ -53,6 +53,12 @@ summary = 'A faithful, citation-verified rewrite of `docs/safety.md` plus new `d
 
 [phases.sensors]
 bead_id = 'sensors'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-08T23:30:57.761117-04:00
-updated_at = 2026-06-09T16:53:34.779068-04:00
+updated_at = 2026-06-09T16:59:10.862053-04:00
+
+[phases.sensors.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'New `docs/sensors.md` + `docs/sensor-authoring.md` and a redirect-only `docs/integrations.md` accurately document the sensor subsystem with verified file:line citations and a compiling worked example; all acceptance criteria and checks pass.'

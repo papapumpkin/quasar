@@ -1,5 +1,14 @@
 # Constellation Runtime — Delivered Slice & Tracked Follow-up
 
+> **Mostly superseded — one live tracker remains.** The runtime slice described
+> here has shipped and is now documented in [runtime.md](runtime.md) and
+> [constellations.md](constellations.md). This log is retained because it is
+> still the source of truth for the one deferred item: wiring `cfg.MergeGate`
+> (the `[merge_gate]` block in [configuration.md](configuration.md)) into the
+> merge-gate constellation's inputs via the merge-gate-firing supervisor. When
+> that lands, this document can be retired. Treat the "Delivered" section below
+> as historical and the deferred rows as the remaining work.
+
 The `constellation-runtime` phase is the "load-bearing" phase: the engine that
 executes constellations. It is genuinely large. This cycle delivered a
 **coherent, independently-valuable, fully-tested runtime slice**; the remaining

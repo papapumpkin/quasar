@@ -11,6 +11,11 @@ applied in `NewSQLiteFabric`, `sqlite.go:86-124`); ordered migrations layer on t
 (`internal/fabric/migrate.go`). For who *reads* this state, see
 [runtime.md](runtime.md) (the engine) and [architecture.md](architecture.md). The
 TUI's read-only contract is in [§7](#7-reading-from-outside-the-runtime).
+The `entanglements` table and its lifecycle are documented in
+[entanglements.md](entanglements.md); the `repos` / `trigger_queue` tables and
+per-repo routing in [multi-repo.md](multi-repo.md); the
+`conflict_resolutions.jsonl` telemetry in
+[conflict-resolution.md](conflict-resolution.md).
 
 ---
 

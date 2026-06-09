@@ -211,6 +211,12 @@ How approval becomes a pull request. Note the first constellation fired is the
 - [docs/safety.md](safety.md) — the gitops perimeter, token scopes, and what
   Quasar can and cannot do.
 - [docs/glossary.md](glossary.md) — every term above, tied to its code location.
-- `docs/runtime.md`, `docs/constellations.md`, `docs/fabric.md`,
-  `docs/multi-repo.md`, `docs/entanglements.md` — per-subsystem deep dives
-  (planned in this nebula).
+- [docs/runtime.md](runtime.md), [docs/constellations.md](constellations.md),
+  [docs/fabric.md](fabric.md) — the execution, declarative, and persistence
+  deep dives.
+- [docs/entanglements.md](entanglements.md) — the cross-phase symbol-lifecycle
+  that coordinates parallel coders.
+- [docs/multi-repo.md](multi-repo.md) — the fleet view, supervisor, step driver,
+  and per-repo runtime cache that let one instance serve many repos.
+- [docs/conflict-resolution.md](conflict-resolution.md) — the merge gate and
+  conflict-resolver star that turn a collision into a routed recovery.
