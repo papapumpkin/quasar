@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -154,25 +155,98 @@ func runGCBlobs(cmd *cobra.Command, _ []string) error {
 
 func runGCAudit(cmd *cobra.Command, _ []string) error {
 	since, _ := cmd.Flags().GetDuration("since")
+	cutoff := time.Now().Add(-since)
 	path := gcAuditPath(fabricDBPath())
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			fmt.Fprintln(os.Stderr, "gc: no audit log yet")
-			return nil
+		} else {
+			return fmt.Errorf("open gc audit log: %w", err)
 		}
-		return fmt.Errorf("open gc audit log: %w", err)
-	}
-	defer f.Close() //nolint:errcheck // read-only handle
+	} else {
+		defer f.Close() //nolint:errcheck // read-only handle
 
-	entries, err := gc.ReadAuditSince(f, time.Now().Add(-since))
+		entries, err := gc.ReadAuditSince(f, cutoff)
+		if err != nil {
+			return err
+		}
+		for _, e := range entries {
+			fmt.Fprintf(os.Stderr, "%s  %-18s %-6s %s\n", e.TS, e.Category, e.Action, auditDetail(e))
+		}
+		fmt.Fprintf(os.Stderr, "gc: %d audit entries in the last %s\n", len(entries), since)
+	}
+
+	// Walk gc_runs for the same window. The JSONL log carries per-action
+	// entries (one row per mark/sweep decision); gc_runs is the ledger of
+	// sweep passes themselves (one row per category run, with totals and
+	// any error). Both views complement each other: JSONL is fine-grained
+	// post-mortem, gc_runs is aggregate trend.
+	if err := printGCRunsSummary(cmd.Context(), fabricDBPath(), cutoff); err != nil {
+		// Non-fatal: a missing or unreadable database should not mask the
+		// JSONL output the operator already saw.
+		fmt.Fprintf(os.Stderr, "gc: gc_runs summary unavailable: %v\n", err)
+	}
+	return nil
+}
+
+// printGCRunsSummary aggregates gc_runs rows in the audit window and renders a
+// per-category table to stderr. Categories with no rows in the window are
+// elided so output stays terse. Reads only — never mutates.
+func printGCRunsSummary(ctx context.Context, dbPath string, cutoff time.Time) error {
+	fab, err := fabric.NewSQLiteFabric(ctx, dbPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("open fabric: %w", err)
 	}
-	for _, e := range entries {
-		fmt.Fprintf(os.Stderr, "%s  %-18s %-6s %s\n", e.TS, e.Category, e.Action, auditDetail(e))
+	defer fab.Close() //nolint:errcheck // read-only handle
+
+	const q = `
+		SELECT category,
+		       COUNT(*) AS passes,
+		       COALESCE(SUM(swept_count), 0) AS swept,
+		       COALESCE(SUM(reclaimed_bytes), 0) AS reclaimed,
+		       SUM(CASE WHEN error IS NOT NULL AND error <> '' THEN 1 ELSE 0 END) AS errs,
+		       MAX(started_at) AS last_started
+		  FROM gc_runs
+		 WHERE started_at >= ?
+		 GROUP BY category
+		 ORDER BY category`
+	rows, err := fab.DB().QueryContext(ctx, q, cutoff.Unix())
+	if err != nil {
+		return fmt.Errorf("query gc_runs: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "gc: %d audit entries in the last %s\n", len(entries), since)
+	defer rows.Close()
+
+	type catRow struct {
+		category    string
+		passes      int
+		swept       int64
+		reclaimed   int64
+		errs        int
+		lastStarted int64
+	}
+	var collected []catRow
+	for rows.Next() {
+		var c catRow
+		if err := rows.Scan(&c.category, &c.passes, &c.swept, &c.reclaimed, &c.errs, &c.lastStarted); err != nil {
+			return fmt.Errorf("scan gc_runs: %w", err)
+		}
+		collected = append(collected, c)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate gc_runs: %w", err)
+	}
+	if len(collected) == 0 {
+		fmt.Fprintln(os.Stderr, "gc: gc_runs ledger empty in window")
+		return nil
+	}
+	fmt.Fprintln(os.Stderr, "gc: gc_runs ledger:")
+	fmt.Fprintf(os.Stderr, "    %-22s %6s %8s %12s %6s  %s\n", "category", "passes", "swept", "reclaimedB", "errors", "last_started")
+	for _, c := range collected {
+		fmt.Fprintf(os.Stderr, "    %-22s %6d %8d %12d %6d  %s\n",
+			c.category, c.passes, c.swept, c.reclaimed, c.errs,
+			time.Unix(c.lastStarted, 0).Format(time.RFC3339))
+	}
 	return nil
 }
 

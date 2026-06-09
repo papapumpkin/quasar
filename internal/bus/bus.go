@@ -49,22 +49,26 @@ type Kind string
 
 // Phase lifecycle event kinds — correspond to MsgPhase* TUI messages.
 const (
-	KindPhaseTaskStarted      Kind = "phase.task.started"
-	KindPhaseTaskComplete     Kind = "phase.task.complete"
-	KindPhaseCycleStart       Kind = "phase.cycle.start"
-	KindPhaseAgentStart       Kind = "phase.agent.start"
-	KindPhaseAgentDone        Kind = "phase.agent.done"
-	KindPhaseAgentOutput      Kind = "phase.agent.output"
-	KindPhaseAgentDiff        Kind = "phase.agent.diff"
-	KindPhaseCycleSummary     Kind = "phase.cycle.summary"
-	KindPhaseIssuesFound      Kind = "phase.issues.found"
-	KindPhaseApproved         Kind = "phase.approved"
-	KindPhaseError            Kind = "phase.error"
-	KindPhaseInfo             Kind = "phase.info"
-	KindPhaseBeadUpdate       Kind = "phase.bead.update"
-	KindPhaseHotAdded         Kind = "phase.hot.added"
-	KindPhaseScanning         Kind = "phase.scanning"
-	KindPhaseFindingLifecycle Kind = "phase.finding.lifecycle"
+	KindPhaseTaskStarted  Kind = "phase.task.started"
+	KindPhaseTaskComplete Kind = "phase.task.complete"
+	KindPhaseCycleStart   Kind = "phase.cycle.start"
+	KindPhaseAgentStart   Kind = "phase.agent.start"
+	KindPhaseAgentDone    Kind = "phase.agent.done"
+	KindPhaseAgentOutput  Kind = "phase.agent.output"
+	KindPhaseAgentDiff    Kind = "phase.agent.diff"
+	KindPhaseCycleSummary Kind = "phase.cycle.summary"
+	KindPhaseIssuesFound  Kind = "phase.issues.found"
+	KindPhaseApproved     Kind = "phase.approved"
+	KindPhaseError        Kind = "phase.error"
+	KindPhaseInfo         Kind = "phase.info"
+	KindPhaseBeadUpdate   Kind = "phase.bead.update"
+	KindPhaseHotAdded     Kind = "phase.hot.added"
+	KindPhaseScanning     Kind = "phase.scanning"
+	// KindPhaseFindingLifecycle was removed in the 2026-06-08 audit. The
+	// BusUIBridge.FindingLifecycle method (required by ui.UI for the loop's
+	// per-cycle reporting) had no publisher and the TUI subscriber's case
+	// dropped silently. The Printer still renders the data in stderr mode;
+	// re-add this Kind only when there is a TUI rendering target for it.
 )
 
 // Single-task lifecycle event kinds — correspond to Msg* TUI messages (loop mode).

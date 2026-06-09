@@ -52,12 +52,12 @@ func TestEntanglementStoreLifecycle(t *testing.T) {
 			t.Fatalf("after Declare status = %q, want declared", got)
 		}
 
-		if err := s.Claim(ctx, "run-1", "phase-a", "Sensor.Poll"); err != nil {
-			t.Fatalf("Claim: %v", err)
-		}
-		if got := statusOf(t, s, "Sensor.Poll"); got != StatusClaimed {
-			t.Fatalf("after Claim status = %q, want claimed", got)
-		}
+		// Note: the lifecycle no longer transitions through 'claimed' in
+		// production — Claim was removed in the 2026-06-08 audit because
+		// the runtime never invoked it at coder pickup. MarkInFlight's
+		// WHERE clause still accepts StatusClaimed for forward compatibility,
+		// but the timestamps below assert the actual production path:
+		// declared → in_flight, skipping claimed_at.
 
 		// Two MarkInFlight calls: the second must refresh the signature.
 		if err := s.MarkInFlight(ctx, "run-1", "Sensor.Poll", "func Poll(ctx context.Context) error"); err != nil {
@@ -81,8 +81,8 @@ func TestEntanglementStoreLifecycle(t *testing.T) {
 		if e.CurrentSignature != "func Poll(ctx context.Context) (Ticket, error)" {
 			t.Fatalf("current_signature = %q, want the latest draft", e.CurrentSignature)
 		}
-		if e.DeclaredAt == 0 || e.ClaimedAt == 0 || e.InFlightAt == 0 {
-			t.Fatalf("expected declared/claimed/in_flight timestamps set, got %+v", e)
+		if e.DeclaredAt == 0 || e.InFlightAt == 0 {
+			t.Fatalf("expected declared/in_flight timestamps set, got %+v", e)
 		}
 
 		if err := s.Fulfill(ctx, "run-1"); err != nil {
@@ -100,9 +100,9 @@ func TestEntanglementStoreLifecycle(t *testing.T) {
 	t.Run("declare then withdraw on terminal failure", func(t *testing.T) {
 		s := newEntStore(t)
 		mustDeclare(t, s, "run-2", "phase-b", "Budget.CheckBefore")
-		if err := s.Claim(ctx, "run-2", "phase-b", "Budget.CheckBefore"); err != nil {
-			t.Fatalf("Claim: %v", err)
-		}
+		// Withdraw matches StatusDeclared directly — the old call to Claim
+		// in between was unnecessary since the lifecycle skips 'claimed' in
+		// production (see the audit note in entanglement_store.go).
 		if err := s.Withdraw(ctx, "run-2"); err != nil {
 			t.Fatalf("Withdraw: %v", err)
 		}

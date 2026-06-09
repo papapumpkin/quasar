@@ -21,6 +21,14 @@ var allowedColocations = map[string]map[string]bool{
 	"artifacts": {
 		"Expression": true,
 	},
+	// Constellations defines Firer as a testability seam — the trigger-queue
+	// Supervisor depends on Firer rather than *Runtime so its tests use a
+	// fake without constructing the full runtime graph. *Runtime is the only
+	// production implementer; consumers that import the supervisor get the
+	// interface type.
+	"constellations": {
+		"Firer": true,
+	},
 	// Beads defines Client alongside CLI, the canonical beads CLI wrapper.
 	// Consumers (loop, nebula, cmd) import the interface type.
 	"beads": {

@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -311,8 +312,22 @@ func executeTUIRun(
 		}
 	}
 
+	// postCompleteTimeout caps PostComplete's git workflow (push --set-upstream)
+	// so a hung remote (no SSH key, network stall, prompt for auth) cannot
+	// keep the worker goroutine alive past TUI exit. Without this, the
+	// orphaned git child inherits the controlling TTY and the shell prompt
+	// never returns until the user Ctrl+Cs the parent.
+	const postCompleteTimeout = 30 * time.Second
+	// shutdownGrace bounds how long executeTUIRun waits for the worker
+	// goroutine after the TUI quits. It must exceed postCompleteTimeout so a
+	// clean PostComplete still finishes; padding accommodates the bus.Send
+	// drain that follows it.
+	const shutdownGrace = postCompleteTimeout + 5*time.Second
+
 	prog := tuiProgram
+	workerDone := make(chan struct{})
 	go func() {
+		defer close(workerDone)
 		if isResume {
 			prog.Send(tui.MsgInfo{Msg: fmt.Sprintf("resume mode: found %d checkpoint(s)", cpCount)})
 		}
@@ -321,7 +336,12 @@ func executeTUIRun(
 			cleanupCheckpoints(cpDir)
 		}
 		prog.Send(tui.MsgNebulaDone{Results: results, Err: runErr})
-		if gitResult := engine.PostComplete(context.Background()); gitResult != nil {
+		// Background ctx (not ctx) so PostComplete still runs after the user
+		// quits the TUI — we want to push their work — but with a deadline so
+		// the git push child can't outlive the process.
+		postCtx, postCancel := context.WithTimeout(context.Background(), postCompleteTimeout)
+		defer postCancel()
+		if gitResult := engine.PostComplete(postCtx); gitResult != nil {
 			prog.Send(tui.MsgGitPostCompletion{Result: gitResult})
 		}
 	}()
@@ -330,6 +350,16 @@ func executeTUIRun(
 	cancel()
 	busSub.Stop()
 	eventBus.Close()
+
+	// Wait for the worker goroutine so any child processes it spawned
+	// (claude, git push) exit before executeTUIRun returns. Without this
+	// wait, the children can inherit the controlling TTY and the shell
+	// prompt blocks. The grace window is bounded so a genuinely stuck
+	// PostComplete still releases the foreground.
+	select {
+	case <-workerDone:
+	case <-time.After(shutdownGrace):
+	}
 
 	if tuiErr != nil {
 		return tui.AppModel{}, fmt.Errorf("TUI error: %w", tuiErr)

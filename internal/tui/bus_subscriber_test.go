@@ -169,15 +169,9 @@ func TestMapEvent_PhaseLifecycle(t *testing.T) {
 				}
 			},
 		},
-		{
-			name:  "PhaseFindingLifecycle_nil",
-			event: bus.Event{Kind: bus.KindPhaseFindingLifecycle, PhaseID: "p1"},
-			check: func(t *testing.T, msg tea.Msg) {
-				if msg != nil {
-					t.Fatalf("expected nil, got %T", msg)
-				}
-			},
-		},
+		// KindPhaseFindingLifecycle test was removed alongside the Kind in the
+		// 2026-06-08 audit (it asserted the dead behavior: subscriber returns
+		// nil because no publisher exists).
 	}
 
 	for _, tc := range tests {

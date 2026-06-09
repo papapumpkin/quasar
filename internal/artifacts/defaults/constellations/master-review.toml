@@ -1,5 +1,5 @@
 name        = "master-review"
-description = "Reviews a completed nebula's full diff and decides ship vs spawn-fix vs escalate, failing the run once the declarative cycle cap is exhausted."
+description = "Reviews a completed nebula's full diff and decides ship vs spawn-fix vs escalate. Within-cap fixes dispatch the coder-reviewer constellation as a real inner loop; the outer cycle counter advances on each back-edge so meta.max_cycles eventually trips."
 
 # max_cycles is the declarative cap on master-review fix cycles. It is the
 # embedded default; a repo's constellations/master-review.toml may override it at
@@ -24,6 +24,21 @@ type   = "builtin"
 op     = "master_review_decision"
 inputs = { output = "${nodes.review.result}" }
 
+# fix dispatches the coder-reviewer constellation as a child run. The
+# reviewer's feedback becomes the synthetic phase body the inner coder reads;
+# the inner constellation runs to its own terminal state before this node
+# completes. The unconditional edge back to `review` is the load-bearing
+# back-edge: each traversal increments `cycle` on the outer run, so
+# meta.max_cycles eventually trips and routes through give-up → _failed.
+# NodeConstellation dispatch (constellations/dispatch_constellation.go) makes
+# this real; the PLACEHOLDER routing this used to carry to _awaiting_human is
+# gone.
+[[nodes]]
+id     = "fix"
+type   = "constellation"
+ref    = "coder-reviewer"
+inputs = { phase_body = "${nodes.decide.feedback}", phase_title = "master-review fix", review = "''" }
+
 # give-up terminates the run with a structured failure reason when the master
 # reviewer still wants changes after the cycle cap is exhausted. Its output feeds
 # the unconditional _failed edge below, so no PR is opened.
@@ -47,26 +62,33 @@ from = "decide"
 to   = "_awaiting_human"
 when = "nodes.decide.decision == 'escalate'"
 
-# PLACEHOLDER — the within-cap fix edge cannot yet loop. The real loop is a
-# back-edge into an inner coder-reviewer constellation node, but constellation
-# nodes are not executable by the runtime yet (NodeConstellation returns
-# ErrNodeTypeUnsupported); see runtime.go dispatch. Until that node lands there
-# is no back-edge here, so `cycle` never increments and the give-up edge below is
-# unreachable on this artifact. We therefore route a within-cap fix to
-# _awaiting_human, NOT _done: a run that needs changes must never be marked
-# successful (which would let PR-open proceed). The runtime's cycle-counting and
-# give-up→_failed path are exercised end-to-end by the looping fixture in the
-# constellations package tests; wiring the real back-edge is a follow-up phase.
-# When that lands, change `to` here to the inner coder-reviewer node.
+# Within-cap fix: dispatch the inner coder-reviewer constellation. It runs to
+# completion before this node's outputs land.
 [[edges]]
 from = "decide"
-to   = "_awaiting_human"
+to   = "fix"
 when = "nodes.decide.decision == 'fix' && cycle < meta.max_cycles"
 
 [[edges]]
 from = "decide"
 to   = "give-up"
 when = "nodes.decide.decision == 'fix' && cycle >= meta.max_cycles"
+
+# Back-edge: a successful coder-reviewer pass re-enters review so the master
+# reviewer can judge the freshly-applied fix. The runtime detects the
+# back-edge (target precedes source in node order) and increments cycle.
+[[edges]]
+from = "fix"
+to   = "review"
+when = "nodes.fix.state == 'done'"
+
+# If the inner coder-reviewer itself fails (e.g. its own cycle cap exhausted),
+# propagate the failure to the outer run rather than looping. The parent's
+# fail_run path already records a structured _error from the dispatch.
+[[edges]]
+from = "fix"
+to   = "_failed"
+when = "nodes.fix.state != 'done'"
 
 [[edges]]
 from = "give-up"

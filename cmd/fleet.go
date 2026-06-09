@@ -1,16 +1,31 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
+	"github.com/papapumpkin/quasar/internal/blobstore"
+	"github.com/papapumpkin/quasar/internal/claude"
+	"github.com/papapumpkin/quasar/internal/config"
+	"github.com/papapumpkin/quasar/internal/constellations"
 	"github.com/papapumpkin/quasar/internal/fabric"
+	"github.com/papapumpkin/quasar/internal/gitops"
 	"github.com/papapumpkin/quasar/internal/tui/fleet"
 )
+
+// triggerSupervisorInterval is how often the fleet's background supervisor
+// polls trigger_queue while the dashboard is open. One second balances
+// approval latency (operators expect their [a] keystroke to actually launch
+// a run promptly) against database churn (the query is cheap on the
+// well-indexed pending row count).
+const triggerSupervisorInterval = time.Second
 
 // fleetCmd launches the multi-repo fleet dashboard: a three-lane home view
 // (awaiting-approval drafts, in-flight runs, recent terminal nebulas) grouped
@@ -51,6 +66,17 @@ func runFleet(cmd *cobra.Command, _ []string) error {
 	}
 	defer fab.Close() //nolint:errcheck // close error is non-fatal for a read-mostly TUI
 
+	// Start the trigger-queue supervisor in the background so fleet
+	// approvals actually fire constellation runs. Construction is
+	// best-effort: if claude or the blobstore is unavailable, the fleet
+	// dashboard still opens — the operator just won't see approvals
+	// propagate. A diagnostic line lands in the supervisor log either way.
+	supCtx, stopSupervisor := context.WithCancel(cmd.Context())
+	defer stopSupervisor()
+	if err := startTriggerSupervisor(supCtx, fab, dbPath); err != nil {
+		fmt.Fprintf(os.Stderr, "fleet: trigger supervisor disabled: %v\n", err)
+	}
+
 	statePath := filepath.Join(filepath.Dir(dbPath), "tui-state.json")
 	model := fleet.NewModel(cmd.Context(), fleet.NewStore(fab.DB()), statePath)
 
@@ -59,4 +85,85 @@ func runFleet(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("fleet TUI error: %w", err)
 	}
 	return nil
+}
+
+// startTriggerSupervisor constructs a per-repo Runtime cache and runs the
+// constellations.Supervisor in a background goroutine. Errors during
+// construction return a non-nil error so the caller can disable the
+// supervisor cleanly; once Run starts, per-tick errors are logged to the
+// supervisor log file and the loop keeps going until ctx is canceled.
+//
+// The supervisor's stderr would corrupt the Bubble Tea altscreen, so all
+// diagnostics route to .quasar/supervisor.log alongside the fabric DB.
+// Tail it during TUI sessions to see what the consumer is doing.
+func startTriggerSupervisor(ctx context.Context, fab *fabric.SQLiteFabric, dbPath string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	blobs, err := blobstore.New(filepath.Dir(dbPath), fab.DB())
+	if err != nil {
+		return fmt.Errorf("open blobstore: %w", err)
+	}
+
+	invoker := claude.NewInvoker(cfg.ClaudePath, cfg.Verbose)
+	if err := invoker.Validate(); err != nil {
+		return fmt.Errorf("validate claude invoker: %w", err)
+	}
+
+	cache, err := constellations.NewRuntimeCache(constellations.RuntimeCacheOpts{
+		DB:               fab.DB(),
+		Blobs:            blobs,
+		Invoker:          invoker,
+		DefaultBudgetUSD: cfg.MaxBudgetUSD,
+		PreCommitFor:     repoPreCommitFor,
+	})
+	if err != nil {
+		return fmt.Errorf("build runtime cache: %w", err)
+	}
+
+	logger := openSupervisorLog(dbPath)
+	sup := &constellations.Supervisor{
+		DB:     fab.DB(),
+		Firer:  &constellations.RuntimeCacheFirer{Cache: cache},
+		Logger: logger,
+	}
+	go func() {
+		sup.Run(ctx, triggerSupervisorInterval)
+		if logger != nil {
+			_ = logger.(io.Closer).Close()
+		}
+	}()
+	return nil
+}
+
+// openSupervisorLog opens the supervisor's append-mode log file alongside
+// the fabric DB. A failure to open it routes diagnostics to io.Discard —
+// the alternative (stderr) would corrupt the Bubble Tea altscreen.
+func openSupervisorLog(dbPath string) io.Writer {
+	logPath := filepath.Join(filepath.Dir(dbPath), "supervisor.log")
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return io.Discard
+	}
+	return f
+}
+
+// repoPreCommitFor reads the per-repo .quasar.yaml and returns its pre-commit
+// policy. A missing file is not an error — the repo just runs without a
+// pre-commit gate, matching the legacy single-repo behavior.
+func repoPreCommitFor(repoPath string) (gitops.PreCommitConfig, error) {
+	configPath := filepath.Join(repoPath, ".quasar.yaml")
+	if _, err := os.Stat(configPath); err != nil {
+		return gitops.PreCommitConfig{}, nil
+	}
+	cfg, err := config.LoadFromPath(configPath)
+	if err != nil {
+		return gitops.PreCommitConfig{}, err
+	}
+	return gitops.PreCommitConfig{
+		Commands:    cfg.PreCommit.Commands,
+		FailOnError: cfg.PreCommit.FailOnError,
+	}, nil
 }
