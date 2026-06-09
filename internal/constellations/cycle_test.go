@@ -77,11 +77,14 @@ func TestOpFailRun(t *testing.T) {
 }
 
 // TestMasterReviewCycleRouting drives the embedded master-review constellation's
-// decide-node edges directly, asserting that an exhausted cycle cap routes to
-// the give-up node (and onward to _failed). A within-cap fix routes to
-// _awaiting_human, not _done: until the inner coder-reviewer back-edge lands a
-// needs-changes verdict must escalate to a human rather than masquerade as a
-// successful run (which would let PR-open proceed). See master-review.toml.
+// edges directly, asserting that:
+//   - a within-cap "fix" verdict routes to the inner coder-reviewer
+//     constellation node (`fix`), which dispatches synchronously and produces
+//     outputs.state that the back-edge to `review` routes on;
+//   - an exhausted cycle cap routes to the give-up node and onward to _failed;
+//   - an "escalate" verdict routes to _awaiting_human regardless of cycle.
+//
+// See master-review.toml.
 func TestMasterReviewCycleRouting(t *testing.T) {
 	t.Parallel()
 	loader := artifacts.New(embeddedResolver{})
@@ -107,10 +110,10 @@ func TestMasterReviewCycleRouting(t *testing.T) {
 		max   int
 		want  string
 	}{
-		{"within cap escalates to human (placeholder, no inner loop yet)", 1, 3, artifacts.TermAwaitingHuman},
+		{"within cap dispatches inner coder-reviewer", 1, 3, "fix"},
 		{"at cap gives up", 3, 3, "give-up"},
 		{"over cap gives up", 4, 3, "give-up"},
-		{"override raises cap, within cap escalates to human", 4, 5, artifacts.TermAwaitingHuman},
+		{"override raises cap, within cap dispatches inner coder-reviewer", 4, 5, "fix"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -125,8 +128,37 @@ func TestMasterReviewCycleRouting(t *testing.T) {
 		})
 	}
 
+	// fix → review (back-edge) on a successful inner-loop pass: each traversal
+	// increments the outer cycle counter so the cap eventually trips.
+	fixDoneState := func() artifacts.State {
+		st := NewState(NebulaSnapshot{}, 0)
+		st.RecordNode("fix", map[string]any{"state": "done"})
+		return st.ExprState()
+	}
+	got, err := nextTarget(con, "fix", fixDoneState())
+	if err != nil {
+		t.Fatalf("nextTarget(fix, done): %v", err)
+	}
+	if got != "review" {
+		t.Errorf("nextTarget(fix, done) = %q, want %q (back-edge)", got, "review")
+	}
+
+	// fix → _failed when the inner coder-reviewer terminates non-done.
+	fixFailedState := func() artifacts.State {
+		st := NewState(NebulaSnapshot{}, 0)
+		st.RecordNode("fix", map[string]any{"state": "failed"})
+		return st.ExprState()
+	}
+	got, err = nextTarget(con, "fix", fixFailedState())
+	if err != nil {
+		t.Fatalf("nextTarget(fix, failed): %v", err)
+	}
+	if got != artifacts.TermFailed {
+		t.Errorf("nextTarget(fix, failed) = %q, want %q", got, artifacts.TermFailed)
+	}
+
 	// give-up is a terminal failure: its sole edge is unconditional to _failed.
-	got, err := nextTarget(con, "give-up", NewState(NebulaSnapshot{}, 0).ExprState())
+	got, err = nextTarget(con, "give-up", NewState(NebulaSnapshot{}, 0).ExprState())
 	if err != nil {
 		t.Fatalf("nextTarget(give-up): %v", err)
 	}

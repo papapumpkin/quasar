@@ -243,8 +243,18 @@ func TestBusUIBridgeMaxCyclesReached(t *testing.T) {
 	bridge.MaxCyclesReached(5)
 
 	ev := mustDrain(t, sub)
-	if ev.Kind != bus.KindPhaseError {
-		t.Errorf("Kind = %q, want %q", ev.Kind, bus.KindPhaseError)
+	// The bridge fires the TYPED kind so the TUI's MsgMaxCyclesReached
+	// handler (bus_subscriber.go) can render the dedicated termination UI;
+	// a KindPhaseError would only surface as a generic error message and
+	// lose the cycle-cap context.
+	if ev.Kind != bus.KindMaxCyclesReached {
+		t.Errorf("Kind = %q, want %q", ev.Kind, bus.KindMaxCyclesReached)
+	}
+	if ev.MaxCycles != 5 {
+		t.Errorf("MaxCycles = %d, want 5", ev.MaxCycles)
+	}
+	if ev.PhaseID != "phase-9" {
+		t.Errorf("PhaseID = %q, want %q", ev.PhaseID, "phase-9")
 	}
 	if ev.Message == "" {
 		t.Error("Message is empty, expected descriptive message")
@@ -262,8 +272,20 @@ func TestBusUIBridgeBudgetExceeded(t *testing.T) {
 	bridge.BudgetExceeded(12.50, 10.0)
 
 	ev := mustDrain(t, sub)
-	if ev.Kind != bus.KindPhaseError {
-		t.Errorf("Kind = %q, want %q", ev.Kind, bus.KindPhaseError)
+	// As with MaxCyclesReached, the typed KindBudgetExceeded is what the
+	// TUI's MsgBudgetExceeded handler routes on; Spent/Limit carry the
+	// numbers that handler renders, and PhaseID attributes the cause.
+	if ev.Kind != bus.KindBudgetExceeded {
+		t.Errorf("Kind = %q, want %q", ev.Kind, bus.KindBudgetExceeded)
+	}
+	if ev.Spent != 12.50 {
+		t.Errorf("Spent = %v, want 12.50", ev.Spent)
+	}
+	if ev.Limit != 10.0 {
+		t.Errorf("Limit = %v, want 10.0", ev.Limit)
+	}
+	if ev.PhaseID != "phase-10" {
+		t.Errorf("PhaseID = %q, want %q", ev.PhaseID, "phase-10")
 	}
 	if ev.Message == "" {
 		t.Error("Message is empty, expected descriptive message")

@@ -41,9 +41,12 @@ func TestConstellationRunStore(t *testing.T) {
 			RepoPath:          "/repo",
 			NebulaID:          nebID,
 			ConstellationName: "ship",
-			Snapshot:          []byte("name = 'ship'"),
-			CurrentNode:       "start",
-			DAGStateTOML:      "cycle = 0",
+			// Snapshot deliberately omitted: the audit on 2026-06-08 elided
+			// the constellation_snapshot column from the INSERT/SELECT
+			// because nothing in production deserialized it. The field is
+			// retained on RunRow at zero size for ABI stability.
+			CurrentNode:  "start",
+			DAGStateTOML: "cycle = 0",
 		})
 		if err != nil {
 			t.Fatalf("InsertRun: %v", err)
@@ -55,8 +58,10 @@ func TestConstellationRunStore(t *testing.T) {
 		if got.NebulaID != nebID || got.ConstellationName != "ship" {
 			t.Fatalf("unexpected run: %+v", got)
 		}
-		if string(got.Snapshot) != "name = 'ship'" {
-			t.Errorf("snapshot not persisted: %q", got.Snapshot)
+		// Snapshot is now always zero on read; the assertion that asked it
+		// round-tripped the input bytes was pinning the dead behavior.
+		if len(got.Snapshot) != 0 {
+			t.Errorf("Snapshot = %q, want empty (column elided)", got.Snapshot)
 		}
 		if got.State != "running" {
 			t.Errorf("default state = %q, want running", got.State)

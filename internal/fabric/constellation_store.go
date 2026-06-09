@@ -30,17 +30,23 @@ type RunRow struct {
 	RepoPath          string
 	NebulaID          string
 	ConstellationName string
-	Snapshot          []byte // snapshotted constellation TOML at Fire time
-	ParentRunID       string // "" when this is a root run
-	State             string // running|paused|blocked_on_review|crashed|killed|done|failed
-	CurrentNode       string
-	StepIndex         int
-	Cycle             int
-	DAGStateTOML      string
-	CreatedAt         int64
-	UpdatedAt         int64
-	CompletedAt       int64
-	HeartbeatAt       int64
+	// Snapshot was the constellation_runs.constellation_snapshot BLOB. The
+	// 2026-06-08 audit found it was written at Fire time but never
+	// deserialized — Resume reloads the constellation by name from the loader
+	// instead. The field is retained at zero size so InsertRun / GetRun can
+	// elide the column without breaking external struct consumers; remove
+	// after a v1 schema lock drops the underlying column.
+	Snapshot     []byte
+	ParentRunID  string // "" when this is a root run
+	State        string // running|paused|blocked_on_review|crashed|killed|done|failed
+	CurrentNode  string
+	StepIndex    int
+	Cycle        int
+	DAGStateTOML string
+	CreatedAt    int64
+	UpdatedAt    int64
+	CompletedAt  int64
+	HeartbeatAt  int64
 }
 
 // StarInvocationRow records one star (or builtin) node firing within a run, so
@@ -81,14 +87,17 @@ func (s *ConstellationRunStore) InsertRun(ctx context.Context, r RunRow) (string
 		r.State = "running"
 	}
 
+	// constellation_snapshot is omitted (column elided per audit 2026-06-08;
+	// see RunRow.Snapshot doc). The column's default NULL makes the elision
+	// safe against the existing schema.
 	const q = `
 		INSERT INTO constellation_runs
-			(id, repo_path, nebula_id, constellation_name, constellation_snapshot,
+			(id, repo_path, nebula_id, constellation_name,
 			 parent_run_id, state, current_node, step_index, cycle, dag_state_toml,
 			 created_at, updated_at, heartbeat_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	if _, err := s.db.ExecContext(ctx, q,
-		r.ID, r.RepoPath, r.NebulaID, r.ConstellationName, r.Snapshot,
+		r.ID, r.RepoPath, r.NebulaID, r.ConstellationName,
 		nullIfEmpty(r.ParentRunID), r.State, r.CurrentNode, r.StepIndex, r.Cycle, r.DAGStateTOML,
 		r.CreatedAt, r.UpdatedAt, r.HeartbeatAt,
 	); err != nil {
@@ -99,16 +108,18 @@ func (s *ConstellationRunStore) InsertRun(ctx context.Context, r RunRow) (string
 
 // GetRun loads a run by ID. Returns ErrRunNotFound when absent.
 func (s *ConstellationRunStore) GetRun(ctx context.Context, id string) (*RunRow, error) {
+	// constellation_snapshot is omitted from the SELECT (column elided per
+	// audit 2026-06-08; see RunRow.Snapshot doc). Callers that read .Snapshot
+	// get the zero value.
 	const q = `
 		SELECT id, repo_path, nebula_id, constellation_name,
-		       COALESCE(constellation_snapshot, x''),
 		       COALESCE(parent_run_id, ''), state, current_node, step_index, cycle,
 		       COALESCE(dag_state_toml, ''),
 		       created_at, updated_at, COALESCE(completed_at, 0), heartbeat_at
 		FROM constellation_runs WHERE id = ?`
 	var r RunRow
 	err := s.db.QueryRowContext(ctx, q, id).Scan(
-		&r.ID, &r.RepoPath, &r.NebulaID, &r.ConstellationName, &r.Snapshot,
+		&r.ID, &r.RepoPath, &r.NebulaID, &r.ConstellationName,
 		&r.ParentRunID, &r.State, &r.CurrentNode, &r.StepIndex, &r.Cycle, &r.DAGStateTOML,
 		&r.CreatedAt, &r.UpdatedAt, &r.CompletedAt, &r.HeartbeatAt,
 	)

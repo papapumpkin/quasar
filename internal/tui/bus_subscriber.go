@@ -100,9 +100,9 @@ func (s *BusSubscriber) mapEvent(ev bus.Event) tea.Msg {
 		return MsgPhaseHotAdded{PhaseID: ev.PhaseID, Title: ev.HotAdd.Title, DependsOn: ev.HotAdd.DependsOn}
 	case bus.KindPhaseScanning:
 		return MsgPhaseScanning{PhaseID: ev.PhaseID}
-	case bus.KindPhaseFindingLifecycle:
-		// Finding lifecycle is currently a no-op in the bridge; drop silently.
-		return nil
+	// KindPhaseFindingLifecycle was removed in the 2026-06-08 audit (no
+	// publisher, this case dropped silently). The Printer still renders the
+	// per-cycle Fixed/StillPresent/Regressed counts in stderr mode.
 
 	// ── Single-task lifecycle (loop mode) ─────────────────────────────
 	case bus.KindTaskStarted:

@@ -59,21 +59,15 @@ func (s *EntanglementStore) Declare(ctx context.Context, e Entanglement) error {
 	return nil
 }
 
-// Claim transitions a declaration to 'claimed' when a coder picks up the phase,
-// stamping run_id, phase_id, and claimed_at. It is a no-op when no row for the
-// symbol is in 'declared' (the lifecycle has already advanced or never started).
-func (s *EntanglementStore) Claim(ctx context.Context, runID, phaseID, name string) error {
-	const q = `
-		UPDATE entanglements
-		   SET status = ?, run_id = ?, phase_id = ?, claimed_at = ?
-		 WHERE name = ? AND status = ?`
-	_, err := s.db.ExecContext(ctx, q,
-		StatusClaimed, nullString(runID), phaseID, time.Now().Unix(), name, StatusDeclared)
-	if err != nil {
-		return fmt.Errorf("fabric: claim entanglement %q: %w", name, err)
-	}
-	return nil
-}
+// NOTE: A Claim(runID, phaseID, name) method that transitioned declared →
+// claimed used to live here. The 2026-06-08 audit found it had no production
+// caller — the runtime never invoked it at coder pickup, so claimed_at was
+// always NULL and the 'claimed' status was unreachable in practice. The
+// lifecycle now skips directly from declared → in_flight via MarkInFlight,
+// which still matches StatusClaimed in its WHERE clause (and Deprecate does
+// likewise) for forward-compatibility if a coder-pickup hook is added later.
+// The schema columns (claimed_at, phase_id) remain in migrations/009
+// unchanged so re-adding Claim does not require another migration.
 
 // MarkInFlight records that a green build has touched the symbol, updating
 // current_signature and in_flight_at atomically in a single statement. The

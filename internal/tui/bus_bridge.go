@@ -140,17 +140,30 @@ func (b *BusUIBridge) Approved() {
 	b.scratchpad("approved")
 }
 
-// MaxCyclesReached publishes KindPhaseError with a descriptive message.
+// MaxCyclesReached publishes the typed KindMaxCyclesReached event so the TUI's
+// MsgMaxCyclesReached handler can render the dedicated termination UI. Carries
+// MaxCycles for that handler and PhaseID for phase-view attribution; the
+// human-readable Message mirrors the prior KindPhaseError text so any
+// fallback subscriber still gets it.
 func (b *BusUIBridge) MaxCyclesReached(max int) {
-	ev := bus.NewPhase(bus.KindPhaseError, b.phaseID)
+	ev := bus.New(bus.KindMaxCyclesReached)
+	ev.PhaseID = b.phaseID
+	ev.MaxCycles = max
 	ev.Message = fmt.Sprintf("max cycles reached (%d)", max)
 	b.publish(ev)
 	b.scratchpad(ev.Message)
 }
 
-// BudgetExceeded publishes KindPhaseError with a descriptive message.
+// BudgetExceeded publishes the typed KindBudgetExceeded event so the TUI's
+// MsgBudgetExceeded handler can render the dedicated termination UI. Carries
+// Spent / Limit for that handler and PhaseID for phase-view attribution; the
+// human-readable Message mirrors the prior KindPhaseError text so any
+// fallback subscriber still gets it.
 func (b *BusUIBridge) BudgetExceeded(spent, limit float64) {
-	ev := bus.NewPhase(bus.KindPhaseError, b.phaseID)
+	ev := bus.New(bus.KindBudgetExceeded)
+	ev.PhaseID = b.phaseID
+	ev.Spent = spent
+	ev.Limit = limit
 	ev.Message = fmt.Sprintf("budget exceeded ($%.2f / $%.2f)", spent, limit)
 	b.publish(ev)
 	b.scratchpad(ev.Message)

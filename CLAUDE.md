@@ -46,19 +46,33 @@ writes a diff, the runtime commits it, the reviewer judges it (parsed by the
 times before the run fails. The inner cycle cap is enforced by the same runtime
 back-edge counter as every other loop — no Go constant, no special-casing.
 
-## Integrations & Safety
+The outer master-review constellation
+(`internal/artifacts/defaults/constellations/master-review.toml`) wraps the
+above as a nested constellation: a `fix` verdict dispatches the coder-reviewer
+constellation synchronously via `NodeConstellation`, and a back-edge to
+`review` re-judges the freshly-applied fix. `meta.max_cycles` (default 3)
+bounds the outer loop. This wiring landed in the 2026-06-08 audit; the
+previous PLACEHOLDER routed within-cap fixes to `_awaiting_human`.
 
-- **`TicketSource`** (read) and **`Forge`** (write, reserved) interfaces live in
-  `internal/integrations/`. Adapters register from `init()` and are looked up by
-  name via `integrations.Default()` — never imported directly by the cmd layer.
+## Sensors & Safety
+
+- **`Sensor`** (poll-driven) interface lives in `internal/sensors/`. Adapters
+  register from `init()` and are looked up by name via `sensors.Default()` —
+  never imported directly by the cmd layer. (The legacy `TicketSource`
+  interface and `internal/integrations/` package were retired in the
+  rename-integrations-to-sensors phase.)
 - **Output safety perimeter**: all git *writes* are confined to the
   `internal/gitops/` wrapper (vanilla git), which only permits pushes to
   `quasar/*` refs and rejects destructive ops. `gh` is confined to the GitHub
-  adapter for ticket reading only. See [docs/safety.md](docs/safety.md).
-- **Adding an adapter** (e.g. Jira, Linear): follow the walkthrough in
-  [docs/integrations.md](docs/integrations.md).
+  sensor for issue reading only. See [docs/safety.md](docs/safety.md).
+- **Adding a sensor** (e.g. Linear, Slack, cron): follow the walkthrough in
+  [docs/authoring-a-sensor.md](docs/authoring-a-sensor.md) when it ships
+  (planned in `additional-sensors`); meantime, model after
+  `internal/sensors/github/`.
 - **Secrets** are never inlined in `.quasar.yaml`: use `token_env` or
-  `token_file`. An inline `token:` is a config-load error.
+  `token_file`. An inline `token:` is a config-load error. The
+  `<key>_ssm` form is reserved for the SSM resolver shipped by
+  `deployment-cookbook`.
 
 ## Go Conventions
 
@@ -138,7 +152,9 @@ max_workers = 1           # concurrent workers
 max_review_cycles = 5     # max coder-reviewer cycles per phase
 max_budget_usd = 50.0     # budget cap
 model = ""                # model override (empty = default)
-gate = ""                 # gate mode: trust | review | approve | watch
+# gate = "trust" (default and only mode going forward — the manual review/
+# approve/watch modes are being removed from the codebase; never author with
+# a non-trust gate)
 
 [context]
 repo = "github.com/papapumpkin/quasar"
@@ -196,7 +212,6 @@ How to solve it, including code snippets if useful.
 | `max_review_cycles` | no | Override per-phase cycle limit |
 | `max_budget_usd` | no | Override per-phase budget |
 | `model` | no | Override model for this phase |
-| `gate` | no | Override gate mode for this phase |
 | `blocks` | no | Reverse deps: inject as dependency of listed phases |
 | `scope` | no | Glob patterns for owned files/dirs |
 | `allow_scope_overlap` | no | Permit scope overlap with other phases |
