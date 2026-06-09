@@ -1,0 +1,39 @@
+version = 1
+nebula_name = 'documentation-refresh'
+
+[phases]
+[phases.config-and-handbook]
+bead_id = 'config-and-handbook'
+status = 'created'
+created_at = 2026-06-08T23:30:57.761358-04:00
+updated_at = 2026-06-08T23:30:57.761358-04:00
+
+[phases.coordination]
+bead_id = 'coordination'
+status = 'created'
+created_at = 2026-06-08T23:30:57.76066-04:00
+updated_at = 2026-06-08T23:30:57.76066-04:00
+
+[phases.foundation]
+bead_id = 'foundation'
+status = 'in_progress'
+created_at = 2026-06-08T23:30:57.760059-04:00
+updated_at = 2026-06-08T23:30:57.871666-04:00
+
+[phases.runtime-internals]
+bead_id = 'runtime-internals'
+status = 'created'
+created_at = 2026-06-08T23:30:57.76041-04:00
+updated_at = 2026-06-08T23:30:57.76041-04:00
+
+[phases.safety-and-ops]
+bead_id = 'safety-and-ops'
+status = 'created'
+created_at = 2026-06-08T23:30:57.760901-04:00
+updated_at = 2026-06-08T23:30:57.760901-04:00
+
+[phases.sensors]
+bead_id = 'sensors'
+status = 'created'
+created_at = 2026-06-08T23:30:57.761117-04:00
+updated_at = 2026-06-08T23:30:57.761117-04:00
