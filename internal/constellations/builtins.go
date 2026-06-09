@@ -60,4 +60,6 @@ func init() {
 	registerOperator(opRenderConflictContextName, opRenderConflictContext)
 	registerOperator(opConflictResolutionDecisionName, opConflictResolutionDecision)
 	registerOperator(opEmitConflictTelemetryName, opEmitConflictTelemetry)
+	registerOperator(opGitopsPushName, opGitopsPush)
+	registerOperator(opGHOpenPRName, opGHOpenPR)
 }
