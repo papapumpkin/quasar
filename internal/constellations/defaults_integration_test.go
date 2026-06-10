@@ -2,6 +2,7 @@ package constellations
 
 import (
 	"context"
+	"encoding/json"
 	"io/fs"
 	"path"
 	"strings"
@@ -110,11 +111,12 @@ func TestEmbeddedDefaultReferencesResolve(t *testing.T) {
 func TestArchitectConstellationWiresPreCommitAndPersists(t *testing.T) {
 	ctx := context.Background()
 	loader := artifacts.New(embeddedResolver{})
-	inv := &fakeInvoker{result: agent.InvocationResult{ResultText: "" +
-		"[[phases]]\n" +
-		"id = \"p1\"\n" +
-		"title = \"Do the work\"\n" +
-		"body = \"implement it\"\n"}}
+	// The architect star declares output_schema = "phases-v1", so the runtime
+	// requests structured output and persist consumes result_json. The fake
+	// returns the schema-valid object the real invoker would have produced.
+	inv := &fakeInvoker{result: agent.InvocationResult{
+		StructuredOutput: json.RawMessage(`{"phases":[{"id":"p1","title":"Do the work","body":"implement it"}]}`),
+	}}
 	rt, nebID := newTestRuntime(t, loader, inv)
 	rt.preCommit = gitops.PreCommitConfig{Commands: []string{"gofmt -l .", "go test ./..."}}
 

@@ -2,6 +2,7 @@
 name = "master-reviewer-star"
 model = "claude-sonnet-4-6"
 fallback_model = "claude-haiku-4-5"
+output_schema = "master-review-decision-v1"
 skills = ["git-aware", "master-review-rubric"]
 
 [tools]

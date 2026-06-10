@@ -1,6 +1,9 @@
 package agent
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 // Role identifies the function an agent plays in the coder-reviewer loop.
 type Role string
@@ -50,6 +53,14 @@ type Agent struct {
 	// to its own default policy (claude.Invoker.HealthDefault), so leaving this
 	// unset does not necessarily disable monitoring.
 	Health *HealthPolicy
+	// OutputSchema, when non-nil, is a JSON Schema the invocation's result must
+	// satisfy. The invoker enforces it through the backend's structured-output
+	// mechanism (e.g. claude's --json-schema constrained decoding) when the
+	// backend supports it, otherwise a prompt+extract+validate fallback, and
+	// returns the validated object in InvocationResult.StructuredOutput. It is
+	// backend-neutral by construction: plain JSON Schema is what every major LLM
+	// structured-output mechanism consumes, so any coder backend can honor it.
+	OutputSchema []byte
 }
 
 // EffectiveContextBudget returns a.ContextBudget when set, otherwise the
@@ -70,6 +81,12 @@ type InvocationResult struct {
 	SystemPromptLen  int    // Length of the system prompt in bytes.
 	UserPromptLen    int    // Length of the user prompt in bytes.
 	SystemPromptHash string // SHA-256 hex digest of the system prompt for cache identity tracking.
+
+	// StructuredOutput holds the schema-validated JSON object produced when the
+	// Agent set OutputSchema; nil otherwise. Consumers unmarshal it into their
+	// typed form instead of re-parsing ResultText, so fenced/prose-wrapped output
+	// can never corrupt an inter-stage hand-off.
+	StructuredOutput json.RawMessage
 
 	// InputTokens is the count of fresh (uncached) input tokens billed at full
 	// rate for this invocation, as reported by the model's usage block.

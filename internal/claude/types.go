@@ -1,5 +1,7 @@
 package claude
 
+import "encoding/json"
+
 // CLIResponse is the JSON object the claude CLI emits with --output-format json.
 type CLIResponse struct {
 	Type          string  `json:"type"`
@@ -12,6 +14,10 @@ type CLIResponse struct {
 	SessionID     string  `json:"session_id"`
 	TotalCostUSD  float64 `json:"total_cost_usd"`
 	Usage         Usage   `json:"usage"`
+	// StructuredOutput is the schema-validated object the CLI returns when
+	// invoked with --json-schema (constrained decoding). Empty when no schema was
+	// requested or the running CLI predates the flag.
+	StructuredOutput json.RawMessage `json:"structured_output"`
 }
 
 // Usage captures the token-accounting block from a claude CLI response. The

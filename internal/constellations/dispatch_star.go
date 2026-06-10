@@ -42,6 +42,17 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 	if err != nil {
 		return nil, fmt.Errorf("constellations: load star %q: %w", node.Star, err)
 	}
+	// Resolve the star's declared structured-output schema (if any). The invoker
+	// enforces it against the backend; an unknown name is an authoring error, not
+	// a silent unstructured run.
+	var outputSchema []byte
+	if star.OutputSchema != "" {
+		s, ok := SchemaByName(star.OutputSchema)
+		if !ok {
+			return nil, fmt.Errorf("constellations: star %q declares unknown output_schema %q", star.Name, star.OutputSchema)
+		}
+		outputSchema = s
+	}
 	args, err := evalInputs(node, st.ExprState())
 	if err != nil {
 		return nil, err
@@ -81,6 +92,10 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 		// against these thresholds and kills a stalled/thrashing subprocess, so
 		// wall_clock_cap etc. in a star file have a real runtime effect.
 		Health: contextHealth(star.Health),
+		// Schema-enforced structured output when the star declares one: the
+		// invoker returns a validated JSON object the downstream operator consumes
+		// via result_json, so no stage ever re-parses fenced/prose-wrapped text.
+		OutputSchema: outputSchema,
 	}, prompt, r.repoPath)
 	if err != nil {
 		// A dead-coder termination is distinct from a generic failure: the
@@ -113,9 +128,13 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 	r.recordCacheMetric(ctx, run, node, st, &res)
 	r.maybeCheckpoint(ctx, run.ID, st.Cycle, star)
 	return map[string]any{
-		"result":     res.ResultText,
-		"cost_usd":   res.CostUSD,
-		"session_id": res.SessionID,
+		"result": res.ResultText,
+		// result_json is the schema-validated JSON object when the star declared an
+		// output_schema (empty otherwise). Downstream builtin operators consume it
+		// instead of re-parsing result text.
+		"result_json": string(res.StructuredOutput),
+		"cost_usd":    res.CostUSD,
+		"session_id":  res.SessionID,
 	}, nil
 }
 

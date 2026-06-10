@@ -2,6 +2,7 @@
 name = "reviewer"
 model = "claude-sonnet-4-6"
 fallback_model = "claude-haiku-4-5"
+output_schema = "reviewer-decision-v1"
 skills = ["git-aware"]
 
 [tools]

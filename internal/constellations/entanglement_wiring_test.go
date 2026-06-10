@@ -2,6 +2,7 @@ package constellations
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
@@ -45,7 +46,11 @@ func TestArchitectDeclaresProducerSymbols(t *testing.T) {
 	st := NewState(NebulaSnapshot{ID: nebID}, 1)
 
 	body := "## Solution\n\nIntroduce `type Sensor interface` and `func NewSensor`.\n\n## Tests\n\nfunc Unscanned()\n"
-	args := map[string]any{"phases_toml": "[[phases]]\nid = \"p1\"\ntitle = \"t\"\nbody = \"\"\"" + body + "\"\"\"\n"}
+	phasesJSON, err := json.Marshal(map[string]any{"phases": []map[string]string{{"id": "p1", "title": "t", "body": body}}})
+	if err != nil {
+		t.Fatalf("marshal phases: %v", err)
+	}
+	args := map[string]any{"phases_json": string(phasesJSON)}
 
 	if _, err := opPersistPhases(ctx, rt, st, args); err != nil {
 		t.Fatalf("opPersistPhases: %v", err)

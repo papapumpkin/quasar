@@ -2,6 +2,7 @@ package constellations
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -35,7 +36,9 @@ func (i *rolePlayInvoker) Invoke(_ context.Context, a agent.Agent, _ string, _ s
 			idx = len(i.reviewerScript) - 1
 		}
 		i.reviewerCalls++
-		return agent.InvocationResult{ResultText: i.reviewerScript[idx]}, nil
+		// The reviewer star declares output_schema, so the real invoker returns the
+		// decision as a schema-validated StructuredOutput (surfaced as result_json).
+		return agent.InvocationResult{StructuredOutput: json.RawMessage(i.reviewerScript[idx])}, nil
 	}
 	i.coderCalls++
 	return agent.InvocationResult{ResultText: "implemented the change"}, nil

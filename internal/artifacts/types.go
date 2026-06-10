@@ -61,7 +61,12 @@ type Star struct {
 	// layer (e.g. the architect) can set it false to skip the check entirely.
 	CoordinationAware bool
 	Prompt            string // skill fragments + star body
-	SourcePath        string // for error reporting
+	// OutputSchema names a registered structured-output JSON Schema (see
+	// constellations.SchemaByName). When set, the runtime requests schema-enforced
+	// JSON from the star's backend and the downstream operator consumes the
+	// validated object instead of re-parsing free text. "" means unstructured.
+	OutputSchema string
+	SourcePath   string // for error reporting
 }
 
 // StarHealthPolicy overrides the dead-coder healthcheck thresholds for a star,
