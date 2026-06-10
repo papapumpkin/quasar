@@ -68,6 +68,13 @@ func TestNoInlineTokens(t *testing.T) {
 			if e.IsDir() || !isYAML(e.Name()) {
 				continue
 			}
+			// In the repo root, only .quasar.yaml is a Quasar config. Other root
+			// YAMLs (e.g. .goreleaser.yml, whose token: references a
+			// {{ .Env.* }} value, not an inline literal) are third-party tool
+			// configs outside this invariant.
+			if dir == root && e.Name() != ".quasar.yaml" {
+				continue
+			}
 			path := filepath.Join(dir, e.Name())
 			assertNoInlineToken(t, path)
 		}
