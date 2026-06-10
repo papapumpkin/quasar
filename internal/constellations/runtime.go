@@ -233,7 +233,12 @@ func (r *Runtime) Step(ctx context.Context, runID string) (string, error) {
 		return r.fail(ctx, run, st, fmt.Errorf("%w: %q", ErrUnknownNode, run.CurrentNode))
 	}
 
+	// Keep the run's heartbeat fresh across a potentially minutes-long dispatch
+	// (a star invocation, or an entire nested-constellation walk) so a crash
+	// reaper can distinguish a live long step from a dead process.
+	stopHeartbeat := r.startHeartbeat(ctx, run.ID, heartbeatInterval)
 	output, err := r.dispatch(ctx, run, st, node)
+	stopHeartbeat()
 	if err != nil {
 		if errors.Is(err, ErrBudgetExhausted) {
 			return r.failBudget(ctx, run, st, node)
@@ -260,23 +265,6 @@ func (r *Runtime) Step(ctx context.Context, runID string) (string, error) {
 		return r.terminate(ctx, run, st, next)
 	}
 	return r.persistTransition(ctx, run, st, next)
-}
-
-// Resume restores a run interrupted mid-flight. The DAG state and current node
-// already live in the row, so resume is a heartbeat refresh that re-asserts the
-// run as live; the supervisor then drives Step from the persisted node.
-func (r *Runtime) Resume(ctx context.Context, runID string) error {
-	run, err := r.runStore.GetRun(ctx, runID)
-	if err != nil {
-		return err
-	}
-	if isTerminalState(run.State) {
-		return ErrTerminal
-	}
-	if _, err := UnmarshalState(run.DAGStateTOML); err != nil {
-		return fmt.Errorf("constellations: resume %q: corrupt dag state: %w", runID, err)
-	}
-	return r.runStore.Heartbeat(ctx, runID)
 }
 
 // dispatch executes a single node by type and returns its outputs.

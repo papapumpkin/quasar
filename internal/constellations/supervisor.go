@@ -190,3 +190,53 @@ func (s *Supervisor) logf(format string, args ...any) {
 	}
 	fmt.Fprintf(w, "constellations.Supervisor: "+format+"\n", args...)
 }
+
+// heartbeatInterval is how often an in-flight Step refreshes its run's liveness
+// timestamp. It must stay comfortably below any crash reaper's stale cutoff so
+// a healthy long step is never mistaken for a dead process.
+const heartbeatInterval = 30 * time.Second
+
+// startHeartbeat refreshes runID's liveness timestamp every `interval` until
+// the returned stop func is called. A star invocation can block for minutes and
+// a nested constellation for an entire child walk; without a periodic refresh,
+// a heartbeat-based crash reaper would mistake a healthy long-running step for a
+// dead process. Heartbeat write failures are non-fatal and logged. Call stop
+// exactly once (Step does so right after dispatch returns). interval is a
+// parameter so tests can drive it without mutating shared state.
+func (r *Runtime) startHeartbeat(ctx context.Context, runID string, interval time.Duration) (stop func()) {
+	done := make(chan struct{})
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if err := r.runStore.Heartbeat(ctx, runID); err != nil {
+					fmt.Fprintf(os.Stderr, "constellations: heartbeat run %s: %v\n", runID, err)
+				}
+			}
+		}
+	}()
+	return func() { close(done) }
+}
+
+// Resume restores a run interrupted mid-flight. The DAG state and current node
+// already live in the row, so resume is a heartbeat refresh that re-asserts the
+// run as live; the supervisor then drives Step from the persisted node.
+func (r *Runtime) Resume(ctx context.Context, runID string) error {
+	run, err := r.runStore.GetRun(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if isTerminalState(run.State) {
+		return ErrTerminal
+	}
+	if _, err := UnmarshalState(run.DAGStateTOML); err != nil {
+		return fmt.Errorf("constellations: resume %q: corrupt dag state: %w", runID, err)
+	}
+	return r.runStore.Heartbeat(ctx, runID)
+}
