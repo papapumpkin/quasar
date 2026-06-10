@@ -1,0 +1,167 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/papapumpkin/quasar/internal/cockpit"
+)
+
+// stepStatePillClass maps a star-invocation state to its pill color classes,
+// reusing the same palette as statusPill but keyed to invocation states.
+func stepStatePillClass(state string) string {
+	switch state {
+	case "done":
+		return "bg-green/[.09] text-green border border-green/20"
+	case "running":
+		return "bg-cyan/[.09] text-cyan border border-cyan/20"
+	case "failed":
+		return "bg-red/[.09] text-red border border-red/20"
+	default:
+		return "bg-[#172131] text-[#6b7686] border border-[#1f2c3f]"
+	}
+}
+
+// stepStateGlyph returns the leading glyph for a step state pill.
+func stepStateGlyph(state string) string {
+	switch state {
+	case "done":
+		return "✓"
+	case "running":
+		return "●"
+	case "failed":
+		return "✕"
+	default:
+		return "·"
+	}
+}
+
+// durationLabel formats a duration_ms value as a compact human label:
+// sub-second, seconds, or minutes.
+func durationLabel(ms int64) string {
+	switch {
+	case ms <= 0:
+		return "—"
+	case ms < 1000:
+		return fmt.Sprintf("%dms", ms)
+	case ms < 60_000:
+		return fmt.Sprintf("%.1fs", float64(ms)/1000)
+	default:
+		return fmt.Sprintf("%dm", ms/60_000)
+	}
+}
+
+// runStateColor returns the run-header accent color class for a run state.
+func runStateColor(state string) string {
+	switch state {
+	case "running":
+		return "text-cyan"
+	case "done":
+		return "text-green"
+	case "failed", "killed", "crashed":
+		return "text-red"
+	case "paused", "blocked_on_review":
+		return "text-amber"
+	default:
+		return "text-[#6b7686]"
+	}
+}
+
+// StepRowView renders one star-invocation row in the step trace.
+templ StepRowView(s cockpit.StepRow) {
+	<div class="flex items-start gap-[10px] py-[9px] px-[11px] border-b border-[#0f1926] hover:bg-[#0c1422]/60 transition-colors">
+		<span class="font-mono text-[10px] text-[#475061] w-[28px] flex-shrink-0 text-right pt-[2px]">{ fmt.Sprintf("%d", s.Seq) }</span>
+		<div class="flex-1 min-w-0">
+			<div class="flex items-center gap-[8px] flex-wrap">
+				<span class="font-mono text-[12px] font-semibold text-[#eef2f8]">{ s.Star }</span>
+				<span class="font-mono text-[9.5px] text-[#475061]">{ s.Node }</span>
+				<span class={ "font-mono text-[9.5px] font-semibold py-[2px] px-[7px] rounded-[5px] flex items-center gap-1 tracking-[.03em]", stepStatePillClass(s.State) }>
+					<span>{ stepStateGlyph(s.State) }</span> { s.State }
+				</span>
+				<span class="ml-auto flex items-center gap-[10px] font-mono text-[10px] text-[#6b7686]">
+					if s.CostUSD > 0 {
+						<span class="text-amber">{ fmt.Sprintf("$%.4f", s.CostUSD) }</span>
+					}
+					<span>{ durationLabel(s.DurationMS) }</span>
+					if s.Cycle > 0 {
+						<span class="text-[#475061]">c{ fmt.Sprintf("%d", s.Cycle) }</span>
+					}
+				</span>
+			</div>
+			if s.RationalePreview != "" {
+				<div class="mt-[5px] font-mono text-[10px] text-[#7d8aa0] leading-[1.5] truncate max-w-[720px]">{ s.RationalePreview }</div>
+			}
+		</div>
+	</div>
+}
+
+// RunDetailPage renders the Mission Control run-detail page: a sticky topbar
+// back-link, a run header card, and a scrollable step trace.
+templ RunDetailPage(d cockpit.RunDetail) {
+	@Shell("Quasar Cockpit — Run " + d.Run.ID) {
+		<!-- topbar -->
+		<div
+			class="sticky top-0 z-10 flex items-center gap-[18px] py-[13px] px-1 border-b border-[#172131] backdrop-blur-md mb-5 bg-[#070a0f]/90"
+		>
+			<div class="flex items-center gap-[9px] font-bold tracking-[.06em] text-[14px]">
+				<span class="w-[13px] h-[13px] rounded-[3px] bg-[conic-gradient(from_45deg,#22d3ee,#a78bfa,#22d3ee)] shadow-[0_0_14px_rgba(34,211,238,.5)]"></span>
+				<b class="text-white">QUASAR</b><span class="text-cyan">cockpit</span>
+			</div>
+			<a
+				href="/"
+				class="flex items-center gap-[6px] font-mono text-[11px] text-[#6b7686] hover:text-cyan transition-colors no-underline"
+			>
+				‹ fleet
+			</a>
+			<div class="flex-1"></div>
+			<span class="font-mono text-[10px] text-[#475061]">{ d.Run.ConstellationName }</span>
+			<span class="font-mono text-[10px] text-[#475061] truncate max-w-[240px]">{ d.Run.ID }</span>
+		</div>
+		<!-- run header card -->
+		<div class="bg-gradient-to-b from-[#0c1422] to-[#0a1019] border border-cyan/20 rounded-[9px] p-[14px] mb-[18px] relative overflow-hidden">
+			<span class="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-cyan to-green"></span>
+			<div class="flex items-start gap-[10px] flex-wrap">
+				<div class="flex-1 min-w-0">
+					<div class="text-[#eef2f8] font-semibold text-[14px] leading-snug">{ d.Run.Title }</div>
+					<div class="font-mono text-[10.5px] text-[#475061] mt-[3px]">{ d.Run.ConstellationName }</div>
+				</div>
+				<span class={ "font-mono text-[10px] font-semibold py-[3px] px-[10px] rounded-[6px] border", stepStatePillClass(d.Run.State) }>
+					{ d.Run.State }
+				</span>
+			</div>
+			<div class="grid grid-cols-2 md:grid-cols-4 gap-[10px] mt-[13px]">
+				<div class="bg-[#060a10] border border-[#172131] rounded-[6px] py-[8px] px-[10px]">
+					<div class="font-mono text-[9px] tracking-[.1em] uppercase text-[#475061] mb-[3px]">current node</div>
+					<div class="font-mono text-[12px] text-cyan">{ d.Run.CurrentNode }</div>
+				</div>
+				<div class="bg-[#060a10] border border-[#172131] rounded-[6px] py-[8px] px-[10px]">
+					<div class="font-mono text-[9px] tracking-[.1em] uppercase text-[#475061] mb-[3px]">cost</div>
+					<div class="font-mono text-[12px] text-amber">{ fmt.Sprintf("$%.4f", d.Run.CostUSD) }</div>
+				</div>
+				<div class="bg-[#060a10] border border-[#172131] rounded-[6px] py-[8px] px-[10px]">
+					<div class="font-mono text-[9px] tracking-[.1em] uppercase text-[#475061] mb-[3px]">cycle</div>
+					<div class="font-mono text-[12px] text-[#dde3ec]">{ cycleLabel(d.Run) }</div>
+				</div>
+				<div class="bg-[#060a10] border border-[#172131] rounded-[6px] py-[8px] px-[10px]">
+					<div class="font-mono text-[9px] tracking-[.1em] uppercase text-[#475061] mb-[3px]">steps</div>
+					<div class="font-mono text-[12px] text-[#dde3ec]">{ fmt.Sprintf("%d / %d", d.Run.StepIndex, d.Run.StepCount) }</div>
+				</div>
+			</div>
+		</div>
+		<!-- step trace -->
+		<div class="border border-[#172131] rounded-[9px] overflow-hidden">
+			<div class="flex items-center gap-[8px] py-[10px] px-[11px] border-b border-[#172131] bg-[#0c111a]">
+				<span class="font-mono text-[9.5px] tracking-[.14em] uppercase text-[#475061]">step trace</span>
+				<span class="ml-auto font-mono text-[9px] text-[#475061] bg-[#0c111a] border border-[#172131] rounded-[10px] px-[6px]">{ fmt.Sprintf("%d", len(d.Steps)) }</span>
+			</div>
+			if len(d.Steps) == 0 {
+				<div class="font-mono text-[10px] text-[#475061] text-center py-[24px]">— no steps recorded yet —</div>
+			} else {
+				<div class="overflow-y-auto max-h-[640px] bg-[#08101a]">
+					for i := len(d.Steps) - 1; i >= 0; i-- {
+						@StepRowView(d.Steps[i])
+					}
+				</div>
+			}
+		</div>
+	}
+}

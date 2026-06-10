@@ -18,6 +18,31 @@ func (s *Server) handleFleet(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleRunDetail loads a single constellation run and its star-invocation step
+// trace, then renders the run-detail page via the injected RunDetailRenderer.
+// Returns 400 when the id path value is missing, 404 when the run is not
+// found, and 500 on a DB or render error.
+func (s *Server) handleRunDetail(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		http.Error(w, "missing run id", http.StatusBadRequest)
+		return
+	}
+	d, found, err := LoadRunDetail(r.Context(), s.db, id)
+	if err != nil {
+		s.logf("cockpit: LoadRunDetail %s: %v", id, err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "run not found", http.StatusNotFound)
+		return
+	}
+	if err := s.renderRunDetail(r.Context(), w, d); err != nil {
+		s.logf("cockpit: render run detail %s: %v", id, err)
+	}
+}
+
 // handleApprove approves the nebula identified by the {id} path segment via the
 // injected RuntimeActions, then publishes a lane-change event so every connected
 // operator's board updates. The board refresh is delivered over SSE, so the POST

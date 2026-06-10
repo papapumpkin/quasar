@@ -36,31 +36,41 @@ type PageRenderer func(ctx context.Context, w http.ResponseWriter, f Fleet) erro
 // wired by the cmd layer. If nil, New substitutes a no-op.
 type RunRenderer func(ctx context.Context, w io.Writer, rc RunCard) error
 
+// RunDetailRenderer renders the run-detail page into the response writer.
+// Injecting this as a function breaks the import cycle between package cockpit
+// and its child package views (which imports cockpit for its data types).
+// The canonical implementation is views.RunDetailPage(d).Render(ctx, w),
+// wired by the cmd layer. If nil, New substitutes a no-op that writes an
+// empty 200.
+type RunDetailRenderer func(ctx context.Context, w http.ResponseWriter, d RunDetail) error
+
 // Opts holds the dependencies required to construct a Server.
 type Opts struct {
-	DB         *sql.DB
-	Runtime    RuntimeActions
-	Notifier   *Notifier
-	GitHub     GitHubBadger
-	Token      string
-	Assets     fs.FS
-	RenderPage PageRenderer
-	RenderRun  RunRenderer
-	Logf       func(string, ...any)
+	DB               *sql.DB
+	Runtime          RuntimeActions
+	Notifier         *Notifier
+	GitHub           GitHubBadger
+	Token            string
+	Assets           fs.FS
+	RenderPage       PageRenderer
+	RenderRun        RunRenderer
+	RenderRunDetail  RunDetailRenderer
+	Logf             func(string, ...any)
 }
 
 // Server is the cockpit HTTP server. It serves the fleet dashboard and
 // provides SSE, approve, and reject endpoints.
 type Server struct {
-	db         *sql.DB
-	rt         RuntimeActions
-	notifier   *Notifier
-	github     GitHubBadger
-	token      string
-	assets     fs.FS
-	renderPage PageRenderer
-	renderRun  RunRenderer
-	logf       func(string, ...any)
+	db              *sql.DB
+	rt              RuntimeActions
+	notifier        *Notifier
+	github          GitHubBadger
+	token           string
+	assets          fs.FS
+	renderPage      PageRenderer
+	renderRun       RunRenderer
+	renderRunDetail RunDetailRenderer
+	logf            func(string, ...any)
 }
 
 // New constructs a Server from the given Opts. DB and Token are required.
@@ -91,16 +101,25 @@ func New(o Opts) (*Server, error) {
 	if rr == nil {
 		rr = func(_ context.Context, _ io.Writer, _ RunCard) error { return nil }
 	}
+	rrd := o.RenderRunDetail
+	if rrd == nil {
+		rrd = func(_ context.Context, w http.ResponseWriter, _ RunDetail) error {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, err := fmt.Fprint(w, "<html><body>cockpit (no run-detail renderer configured)</body></html>")
+			return err
+		}
+	}
 	return &Server{
-		db:         o.DB,
-		rt:         o.Runtime,
-		notifier:   o.Notifier,
-		github:     o.GitHub,
-		token:      o.Token,
-		assets:     o.Assets,
-		renderPage: rp,
-		renderRun:  rr,
-		logf:       lf,
+		db:              o.DB,
+		rt:              o.Runtime,
+		notifier:        o.Notifier,
+		github:          o.GitHub,
+		token:           o.Token,
+		assets:          o.Assets,
+		renderPage:      rp,
+		renderRun:       rr,
+		renderRunDetail: rrd,
+		logf:            lf,
 	}, nil
 }
 

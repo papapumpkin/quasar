@@ -141,15 +141,16 @@ func buildCockpitServer(fab *fabric.SQLiteFabric, notifier *cockpit.Notifier) (*
 		return nil, err
 	}
 	server, err := cockpit.New(cockpit.Opts{
-		DB:         fab.DB(),
-		Runtime:    fleet.NewStore(fab.DB()),
-		Notifier:   notifier,
-		GitHub:     nil, // see comment above: no clean PR-status surface today
-		Token:      token,
-		Assets:     cockpit.Assets(),
-		RenderPage: renderCockpitPage,
-		RenderRun:  renderCockpitRun,
-		Logf:       func(f string, a ...any) { fmt.Fprintf(os.Stderr, "cockpit: "+f+"\n", a...) },
+		DB:              fab.DB(),
+		Runtime:         fleet.NewStore(fab.DB()),
+		Notifier:        notifier,
+		GitHub:          nil, // see comment above: no clean PR-status surface today
+		Token:           token,
+		Assets:          cockpit.Assets(),
+		RenderPage:      renderCockpitPage,
+		RenderRun:       renderCockpitRun,
+		RenderRunDetail: renderCockpitRunDetail,
+		Logf:            func(f string, a ...any) { fmt.Fprintf(os.Stderr, "cockpit: "+f+"\n", a...) },
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build cockpit server: %w", err)
@@ -206,4 +207,11 @@ func renderCockpitPage(ctx context.Context, w http.ResponseWriter, f cockpit.Fle
 // the templ-generated views.RunCardView component.
 func renderCockpitRun(ctx context.Context, w io.Writer, rc cockpit.RunCard) error {
 	return views.RunCardView(rc).Render(ctx, w)
+}
+
+// renderCockpitRunDetail is the cockpit.RunDetailRenderer: it renders the
+// run-detail page via the templ-generated views.RunDetailPage component.
+func renderCockpitRunDetail(ctx context.Context, w http.ResponseWriter, d cockpit.RunDetail) error {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return views.RunDetailPage(d).Render(ctx, w)
 }
