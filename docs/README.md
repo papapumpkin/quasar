@@ -57,6 +57,9 @@ as a link exists now.
   `.quasar.yaml` key, environment variables, precedence, and token resolution.
 - [deployment.md](deployment.md) — running Quasar as an always-on multi-repo
   service (system requirements, directory layout, `systemd`, upgrades, backups).
+- [cockpit.md](cockpit.md) — the browser fleet dashboard: the go-native
+  templ + Tailwind + Datastar/SSE stack, `quasar serve --cockpit`, the bearer
+  token, the build tag + feature flag, and what's deferred.
 - [per-repo-config.md](per-repo-config.md) — authoring a repo's `.quasar.yaml`
   and its per-repo `sensors/`, `stars/`, `skills/`, and `constellations/`
   override directories.
