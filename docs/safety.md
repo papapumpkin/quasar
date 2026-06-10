@@ -74,21 +74,30 @@ This is enforced by an architecture test, not by review discipline alone.
 parses every non-test `.go` file under `cmd/` and `internal/` and fails the
 build if any of them calls `exec.Command("git", …)` outside the perimeter.
 
-Two intentional carve-outs exist:
+One intentional carve-out remains:
 
-- **Migration exceptions.** A handful of files predate the perimeter and are
-  grandfathered in the `gitExecExceptions` map
-  (`internal/arch_test/safety_test.go:30-38`): `internal/loop/git.go`,
+- **Migration exceptions (reads only).** A handful of files predate the
+  perimeter and are grandfathered in the `gitExecExceptions` map
+  (`internal/arch_test/safety_test.go`): `internal/loop/git.go`,
   `internal/nebula/git.go`, `internal/nebula/branch.go`,
   `internal/checkpoint/checkpoint.go`, `internal/fabric/publisher.go`,
-  `internal/snapshot/scanner.go`, and `internal/tui/bridge.go`. These are
-  *known* direct callers; new ones are **not** exempt and will fail the wall.
-  The list shrinking to empty is the migration's definition of done
-  (`internal/arch_test/safety_test.go:28-29`).
-- **A temporary warn gate.** `QUASAR_ARCH_TEST_GIT_WALL=warn`
-  (`internal/arch_test/safety_test.go:21`) downgrades violations to log lines so
-  a package owner mid-migration can keep a green suite. With the variable unset
-  — the CI default — every violation is a hard failure.
+  `internal/snapshot/scanner.go`, and `internal/tui/bridge.go`. They still call
+  `git` directly for **read-only** queries (`rev-parse`, `diff`, `status`, …);
+  new direct callers are **not** exempt and fail the wall. The list shrinking to
+  empty is the migration's definition of done.
+
+  Critically, the exemption no longer covers *destructive* operations.
+  `TestNoDestructiveGitArgsOutsideGitops` inspects the full argument list of
+  every `git` invocation in `cmd/`+`internal/` (except the gitops perimeter) and
+  fails on a `reset --hard`, unconditional force push, `branch -D`, or
+  `clean -fd` regardless of the exceptions list — so a grandfathered file can do
+  reads but never a destructive write. The legacy nebula/loop hard resets and
+  the nebula end-of-run push now route through `internal/gitops`
+  (`ResetHard`/`PushUpstream`), which refuse a protected base branch and confine
+  writes to the Quasar-owned `quasar/*` (and legacy `nebula/*`) namespaces.
+
+The former `QUASAR_ARCH_TEST_GIT_WALL=warn` escape hatch has been removed: the
+wall is always enforced, so a stray env var can never silently disable it.
 
 The `gh` CLI is confined the same way. `TestNoDirectGHExecOutsideAllowedPackages`
 (`internal/arch_test/safety_test.go:121`) permits `exec.Command("gh", …)` only

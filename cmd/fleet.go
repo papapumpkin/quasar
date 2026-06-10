@@ -185,10 +185,18 @@ func startSupervisorAndDriver(ctx context.Context, fab *fabric.SQLiteFabric, cac
 			driver.Run(ctx, stepDriverInterval)
 		}()
 		wg.Wait()
-		if c, ok := logger.(io.Closer); ok {
-			_ = c.Close()
-		}
+		closeIfCloser(logger)
 	}()
+}
+
+// closeIfCloser closes w only when it implements io.Closer. The supervisor log
+// writer is an *os.File on success but io.Discard on open failure; io.Discard
+// is non-nil yet has no Close method, so a bare logger.(io.Closer) assertion
+// would panic on exactly the misconfiguration the fallback exists to tolerate.
+func closeIfCloser(w io.Writer) {
+	if c, ok := w.(io.Closer); ok {
+		_ = c.Close()
+	}
 }
 
 // openSupervisorLog opens the supervisor's append-mode log file alongside

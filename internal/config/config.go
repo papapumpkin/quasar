@@ -275,8 +275,24 @@ func checkInlineTokens(prefix string, settings map[string]any) error {
 		if strings.EqualFold(key, "token") {
 			return fmt.Errorf("config: [%s] contains an inline token: %w", path, ErrInlineToken)
 		}
-		if nested, ok := val.(map[string]any); ok {
-			if err := checkInlineTokens(path, nested); err != nil {
+		if err := checkInlineTokensValue(path, val); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkInlineTokensValue recurses into a single decoded value, descending into
+// nested tables AND through sequences ([]any) so a token tucked inside an
+// array-of-tables (e.g. `[[sensors]]\n token = "..."`) is caught too — the
+// plain map walk alone would miss it.
+func checkInlineTokensValue(path string, val any) error {
+	switch v := val.(type) {
+	case map[string]any:
+		return checkInlineTokens(path, v)
+	case []any:
+		for i, elem := range v {
+			if err := checkInlineTokensValue(fmt.Sprintf("%s[%d]", path, i), elem); err != nil {
 				return err
 			}
 		}

@@ -98,9 +98,10 @@ func TestLoad_PreCommitFailOnErrorOverride(t *testing.T) {
 
 func TestLoad_InlineTokenRejected(t *testing.T) {
 	cases := map[string]string{
-		"integrations": "integrations:\n  github:\n    token: \"ghp_xxx\"\n",
-		"forge":        "forge:\n  github:\n    token: \"ghp_xxx\"\n",
-		"uppercase":    "integrations:\n  github:\n    TOKEN: \"ghp_xxx\"\n",
+		"integrations":  "integrations:\n  github:\n    token: \"ghp_xxx\"\n",
+		"forge":         "forge:\n  github:\n    token: \"ghp_xxx\"\n",
+		"uppercase":     "integrations:\n  github:\n    TOKEN: \"ghp_xxx\"\n",
+		"array_nesting": "sensors:\n  - name: gh\n    token: \"ghp_xxx\"\n",
 	}
 	for name, yaml := range cases {
 		t.Run(name, func(t *testing.T) {

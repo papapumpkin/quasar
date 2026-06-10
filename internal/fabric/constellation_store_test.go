@@ -94,33 +94,37 @@ func TestConstellationRunStore(t *testing.T) {
 		}
 	})
 
-	t.Run("reaper marks stale running runs crashed", func(t *testing.T) {
+	t.Run("step attempt bump increments and resets on progress", func(t *testing.T) {
 		store, nebID := newRunStoreTest(t)
 		id, _ := store.InsertRun(ctx, RunRow{
-			NebulaID: nebID, ConstellationName: "x", CurrentNode: "a", HeartbeatAt: 1,
+			NebulaID: nebID, ConstellationName: "x", CurrentNode: "a",
 		})
-		n, err := store.ReapStale(ctx, 1000)
-		if err != nil {
-			t.Fatalf("ReapStale: %v", err)
+		// Each bump returns the new persisted count, surviving across calls
+		// (it would survive a process crash too — the increment autocommits).
+		for want := 1; want <= 3; want++ {
+			got, err := store.BumpStepAttempt(ctx, id)
+			if err != nil {
+				t.Fatalf("BumpStepAttempt: %v", err)
+			}
+			if got != want {
+				t.Fatalf("attempt = %d, want %d", got, want)
+			}
 		}
-		if n != 1 {
-			t.Fatalf("reaped %d, want 1", n)
+		// A successful transition (SaveProgress) resets the counter.
+		run, _ := store.GetRun(ctx, id)
+		run.CurrentNode = "b"
+		if err := store.SaveProgress(ctx, run); err != nil {
+			t.Fatalf("SaveProgress: %v", err)
 		}
-		got, _ := store.GetRun(ctx, id)
-		if got.State != "crashed" {
-			t.Errorf("state = %q, want crashed", got.State)
+		if got, _ := store.BumpStepAttempt(ctx, id); got != 1 {
+			t.Errorf("attempt after reset = %d, want 1", got)
 		}
 	})
 
-	t.Run("fresh heartbeat survives reaper", func(t *testing.T) {
-		store, nebID := newRunStoreTest(t)
-		id, _ := store.InsertRun(ctx, RunRow{NebulaID: nebID, ConstellationName: "x", CurrentNode: "a"})
-		if _, err := store.ReapStale(ctx, 1); err != nil {
-			t.Fatalf("ReapStale: %v", err)
-		}
-		got, _ := store.GetRun(ctx, id)
-		if got.State != "running" {
-			t.Errorf("state = %q, want running", got.State)
+	t.Run("bump on missing run is not found", func(t *testing.T) {
+		store, _ := newRunStoreTest(t)
+		if _, err := store.BumpStepAttempt(ctx, "nope"); err == nil {
+			t.Error("expected not-found error bumping a missing run")
 		}
 	})
 

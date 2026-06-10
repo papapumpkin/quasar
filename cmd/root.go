@@ -72,8 +72,17 @@ func initConfig() {
 	viper.SetEnvPrefix("QUASAR")
 	viper.AutomaticEnv()
 
-	// It's fine if no config file is found; we use defaults.
-	_ = viper.ReadInConfig()
+	// A missing config file is fine — we fall back to defaults. A config file
+	// that exists but fails to parse is NOT: silently using defaults would mask
+	// a real misconfiguration (wrong budget cap, missing sensor/pre-commit
+	// config). This init runs before the Bubble Tea altscreen, so stderr is
+	// safe here.
+	if err := viper.ReadInConfig(); err != nil {
+		var notFound viper.ConfigFileNotFoundError
+		if !errors.As(err, &notFound) {
+			fmt.Fprintf(os.Stderr, "quasar: failed to read config %q: %v\n", viper.ConfigFileUsed(), err)
+		}
+	}
 }
 
 // runRootDefault auto-launches the TUI when .nebulas/ exists in the cwd.

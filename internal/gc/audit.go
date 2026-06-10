@@ -48,6 +48,13 @@ type AuditLog struct {
 	mu  sync.Mutex
 	w   io.Writer
 	now func() time.Time
+	// logf, when set, receives a diagnostic if an Append fails to marshal or
+	// write. The audit trail records destructive GC actions, so a dropped
+	// append must not be silent — but writing the diagnostic to the audit
+	// writer itself would be circular (that write just failed), and stderr
+	// would corrupt the fleet TUI's altscreen. The owner (the GC engine)
+	// injects its own logger via SetLogf.
+	logf func(format string, args ...any)
 }
 
 // NewAuditLog returns an AuditLog writing to w. The now function stamps each
@@ -59,13 +66,31 @@ func NewAuditLog(w io.Writer, now func() time.Time) *AuditLog {
 	return &AuditLog{w: w, now: now}
 }
 
+// SetLogf installs a diagnostic sink invoked when an Append fails. Safe on a
+// nil AuditLog so callers need not guard.
+func (a *AuditLog) SetLogf(logf func(format string, args ...any)) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.logf = logf
+}
+
 // Append writes one entry as a JSON line. The TS field is set from the clock
 // when the caller left it empty. A nil AuditLog is a no-op so callers need not
-// guard every call site.
-func (a *AuditLog) Append(e AuditEntry) error {
+// guard every call site. Failures are returned AND surfaced to the configured
+// logf, so a caller that discards the error still leaves a trace — the audit
+// log records destructive actions and must not gap silently.
+func (a *AuditLog) Append(e AuditEntry) (err error) {
 	if a == nil {
 		return nil
 	}
+	defer func() {
+		if err != nil && a.logf != nil {
+			a.logf("gc: audit append dropped (%s/%s): %v", e.Category, e.Action, err)
+		}
+	}()
 	if e.TS == "" {
 		e.TS = a.now().UTC().Format(time.RFC3339)
 	}
