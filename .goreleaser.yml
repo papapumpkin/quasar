@@ -2,6 +2,12 @@ version: 2
 
 builds:
   - binary: quasar
+    # The cockpit (browser fleet dashboard) is gated behind the `cockpit` build
+    # tag: without it, embed_disabled.go ships an empty asset FS and the cockpit
+    # serves no CSS/Datastar. The committed *_templ.go and cockpit.css mean no
+    # codegen is needed at release time — just the tag.
+    flags:
+      - -tags=cockpit
     env:
       - CGO_ENABLED=0
     goos:
@@ -51,6 +57,10 @@ changelog:
 
 brews:
   - name: quasar
+    # Write the formula to Formula/quasar.rb — the canonical path Homebrew reads.
+    # Without this GoReleaser writes quasar.rb at the tap root, which a stale
+    # Formula/quasar.rb then shadows, so `brew upgrade` never sees the new version.
+    directory: Formula
     repository:
       owner: papapumpkin
       name: homebrew-tap
