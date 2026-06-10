@@ -55,7 +55,7 @@ func TestStartHeartbeatRefreshesUntilStopped(t *testing.T) {
 }
 
 // TestStartHeartbeatStopsOnContextCancel verifies the ticker goroutine exits
-// when its context is cancelled, even if stop is never called — no leak.
+// when its context is canceled, even if stop is never called — no leak.
 func TestStartHeartbeatStopsOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	rt, nebID := newTestRuntime(t, &fakeLoader{}, &fakeInvoker{})
