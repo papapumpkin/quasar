@@ -73,6 +73,17 @@ type Runtime struct {
 	merger           merger                           // Optional test seam; nil builds a gitops-backed merger from repoPath.
 	coordination     *Check                           // Optional; nil disables the pre-flight coordination check.
 	conflictLog      *telemetry.ConflictResolutionLog // Optional; nil disables conflict-resolution telemetry (emit node no-ops).
+	events           EventSink                        // Optional; nil disables live event emission (cockpit SSE).
+}
+
+// EventSink receives live state-change events that a subscriber (the cockpit's
+// SSE fan-out today) pushes to connected operators. It is defined here, where
+// events are emitted, with primitive argument types so the runtime never imports
+// the cockpit package. A nil sink disables emission, so a fleet running without
+// the cockpit pays nothing. The cmd layer injects a cockpit-backed adapter only
+// when the cockpit is enabled.
+type EventSink interface {
+	Emit(topic, typ string, data map[string]any)
 }
 
 // Checkpointer snapshots a run's worktree after a successful coder dispatch and
@@ -129,6 +140,9 @@ type RuntimeOpts struct {
 	// merge-conflict-resolve run (via the emit_conflict_telemetry node) for
 	// `quasar conflicts report`. Nil disables recording; the emit node no-ops.
 	ConflictLog *telemetry.ConflictResolutionLog
+	// Events, when non-nil, receives live run/fleet state-change events for the
+	// cockpit's SSE fan-out. Nil disables emission.
+	Events EventSink
 }
 
 // New constructs a Runtime. It panics on a nil required dependency, surfacing a
@@ -152,6 +166,15 @@ func New(opts RuntimeOpts) *Runtime {
 		entanglements:    opts.Entanglements,
 		coordination:     opts.Coordination,
 		conflictLog:      opts.ConflictLog,
+		events:           opts.Events,
+	}
+}
+
+// emit publishes a live state-change event when an EventSink is configured.
+// Nil-safe: a runtime without the cockpit emits nothing.
+func (r *Runtime) emit(topic, typ string, data map[string]any) {
+	if r.events != nil {
+		r.events.Emit(topic, typ, data)
 	}
 }
 
@@ -346,6 +369,9 @@ func (r *Runtime) persistTransition(ctx context.Context, run *fabric.RunRow, st 
 	if err := r.runStore.SaveProgress(ctx, run); err != nil {
 		return "", err
 	}
+	// Live update: the cockpit re-renders this run's card in place (it re-reads
+	// the run by id, so only the run_id is needed in the payload).
+	r.emit("runs", "step_completed", map[string]any{"run_id": run.ID, "node": next})
 	return StateRunning, nil
 }
 
@@ -373,6 +399,9 @@ func (r *Runtime) terminate(ctx context.Context, run *fabric.RunRow, st *State, 
 		}
 	}
 	r.applyTerminalEntanglements(ctx, run.ID, state)
+	// Live update: the run left the in-flight lane, so signal a board refresh
+	// (the card moves to recent / awaiting-human on every operator's screen).
+	r.emit("fleet", "nebula_status_changed", map[string]any{"nebula_id": run.NebulaID, "state": state})
 	return state, nil
 }
 

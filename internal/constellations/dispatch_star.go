@@ -36,6 +36,8 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 	if err := r.budget.CheckBefore(ctx, run.ID); err != nil {
 		return nil, err
 	}
+	// Live update: the cockpit marks this run's current node active.
+	r.emit("runs", "step_started", map[string]any{"run_id": run.ID, "node": node.ID})
 	star, err := r.loader.LoadStar(node.Star)
 	if err != nil {
 		return nil, fmt.Errorf("constellations: load star %q: %w", node.Star, err)
