@@ -6,11 +6,13 @@ import (
 	"net/http"
 )
 
-// cookieName is the name of the session cookie carrying the bearer token.
-const cookieName = "quasar_cockpit"
+// CookieName is the name of the session cookie carrying the bearer token.
+// Exported so that external test packages and cmd wiring can reference it
+// without re-declaring the string literal.
+const CookieName = "quasar_cockpit"
 
 // requireAuth is an HTTP middleware that gate-keeps next behind the bearer
-// token stored in the cookieName cookie. Token comparison is constant-time to
+// token stored in the CookieName cookie. Token comparison is constant-time to
 // prevent timing attacks.
 //
 // SSE endpoints (path == "/sse" or the Datastar request header set) return 401
@@ -18,7 +20,7 @@ const cookieName = "quasar_cockpit"
 // credentials.
 func requireAuth(token string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie(cookieName)
+		c, err := r.Cookie(CookieName)
 		if err == nil && subtle.ConstantTimeCompare([]byte(c.Value), []byte(token)) == 1 {
 			next.ServeHTTP(w, r)
 			return
@@ -43,7 +45,7 @@ func loginHandler(token string) http.Handler {
 			submitted := r.FormValue("token")
 			if subtle.ConstantTimeCompare([]byte(submitted), []byte(token)) == 1 {
 				http.SetCookie(w, &http.Cookie{
-					Name:     cookieName,
+					Name:     CookieName,
 					Value:    token,
 					Path:     "/",
 					HttpOnly: true,

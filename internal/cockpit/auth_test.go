@@ -19,7 +19,7 @@ func TestRequireAuthRejectsMissing(t *testing.T) {
 func TestRequireAuthAcceptsCookie(t *testing.T) {
 	h := requireAuth("secret", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) }))
 	r := httptest.NewRequest("GET", "/", nil)
-	r.AddCookie(&http.Cookie{Name: cookieName, Value: "secret"})
+	r.AddCookie(&http.Cookie{Name: CookieName, Value: "secret"})
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	if w.Code != 200 {
@@ -30,7 +30,7 @@ func TestRequireAuthAcceptsCookie(t *testing.T) {
 func TestRequireAuthRejectsWrongToken(t *testing.T) {
 	h := requireAuth("secret", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) }))
 	r := httptest.NewRequest("GET", "/", nil)
-	r.AddCookie(&http.Cookie{Name: cookieName, Value: "wrong"})
+	r.AddCookie(&http.Cookie{Name: CookieName, Value: "wrong"})
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusSeeOther {
@@ -59,7 +59,7 @@ func TestLoginSetsCookieOnValidToken(t *testing.T) {
 	}
 	found := false
 	for _, c := range w.Result().Cookies() {
-		if c.Name == cookieName && c.Value == "secret" && c.HttpOnly {
+		if c.Name == CookieName && c.Value == "secret" && c.HttpOnly {
 			found = true
 		}
 	}
