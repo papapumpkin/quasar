@@ -1,0 +1,12 @@
+# GitHub issues sensor: turns matching issues into draft nebulas in the
+# awaiting-approval lane. `type` matches the registered sensor (github_issues).
+name = "github"
+type = "github_issues"
+
+[config]
+# Owner/repo. If omitted, the sensor falls back to this repo's origin remote.
+repo = "papapumpkin/quasar"
+# Token: NEVER inline a token here (that's a load error). With no token set, the
+# sensor defers to `gh`'s own auth (you're already `gh auth login`'d). To use a
+# PAT instead, set token_env to the env var holding it:
+# token_env = "GITHUB_TOKEN"
