@@ -106,19 +106,35 @@ func runFleet(cmd *cobra.Command, _ []string) error {
 // diagnostics route to .quasar/supervisor.log alongside the fabric DB.
 // Tail it during TUI sessions to see what the consumer is doing.
 func startTriggerSupervisor(ctx context.Context, fab *fabric.SQLiteFabric, dbPath string) error {
+	cache, err := buildRuntimeCache(fab, dbPath, nil)
+	if err != nil {
+		return err
+	}
+	logger := openSupervisorLog(dbPath)
+	startSupervisorAndDriver(ctx, fab, cache, logger)
+	return nil
+}
+
+// buildRuntimeCache constructs the shared RuntimeCache used by both the fleet
+// dashboard's background supervisor and `quasar serve`. The optional events
+// sink, when non-nil, is threaded into every per-repo Runtime so live
+// state-change events reach the cockpit's SSE fan-out; a nil sink disables
+// emission. Construction is best-effort: a config-load, blobstore, or invoker
+// failure returns a non-nil error so the caller can degrade cleanly.
+func buildRuntimeCache(fab *fabric.SQLiteFabric, dbPath string, events constellations.EventSink) (*constellations.RuntimeCache, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return nil, fmt.Errorf("load config: %w", err)
 	}
 
 	blobs, err := blobstore.New(filepath.Dir(dbPath), fab.DB())
 	if err != nil {
-		return fmt.Errorf("open blobstore: %w", err)
+		return nil, fmt.Errorf("open blobstore: %w", err)
 	}
 
 	invoker := claude.NewInvoker(cfg.ClaudePath, cfg.Verbose)
 	if err := invoker.Validate(); err != nil {
-		return fmt.Errorf("validate claude invoker: %w", err)
+		return nil, fmt.Errorf("validate claude invoker: %w", err)
 	}
 
 	cache, err := constellations.NewRuntimeCache(constellations.RuntimeCacheOpts{
@@ -127,12 +143,19 @@ func startTriggerSupervisor(ctx context.Context, fab *fabric.SQLiteFabric, dbPat
 		Invoker:          invoker,
 		DefaultBudgetUSD: cfg.MaxBudgetUSD,
 		PreCommitFor:     repoPreCommitFor,
+		Events:           events,
 	})
 	if err != nil {
-		return fmt.Errorf("build runtime cache: %w", err)
+		return nil, fmt.Errorf("build runtime cache: %w", err)
 	}
+	return cache, nil
+}
 
-	logger := openSupervisorLog(dbPath)
+// startSupervisorAndDriver runs the trigger-queue Supervisor and the StepDriver
+// in a single background goroutine bound to ctx. Both share the supplied logger
+// handle, which is closed once after both return (ctx cancellation triggers
+// both). This is the shared launch path for `quasar fleet` and `quasar serve`.
+func startSupervisorAndDriver(ctx context.Context, fab *fabric.SQLiteFabric, cache *constellations.RuntimeCache, logger io.Writer) {
 	sup := &constellations.Supervisor{
 		DB:     fab.DB(),
 		Firer:  &constellations.RuntimeCacheFirer{Cache: cache},
@@ -164,7 +187,6 @@ func startTriggerSupervisor(ctx context.Context, fab *fabric.SQLiteFabric, dbPat
 		wg.Wait()
 		closeIfCloser(logger)
 	}()
-	return nil
 }
 
 // closeIfCloser closes w only when it implements io.Closer. The supervisor log

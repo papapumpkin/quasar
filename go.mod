@@ -3,6 +3,7 @@ module github.com/papapumpkin/quasar
 go 1.25.11
 
 require (
+	github.com/a-h/templ v0.3.960
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0

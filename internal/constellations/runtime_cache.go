@@ -40,6 +40,11 @@ type RuntimeCacheOpts struct {
 	// resolver that errors is logged and the Runtime is still constructed
 	// with an empty policy.
 	PreCommitFor func(repoPath string) (gitops.PreCommitConfig, error)
+	// Events, when non-nil, is threaded into every per-repo Runtime so live
+	// run/fleet state-change events flow to a single subscriber (the cockpit's
+	// SSE fan-out). Nil-safe: a fleet running without the cockpit sets nothing
+	// and pays no emission cost.
+	Events EventSink
 }
 
 // RuntimeCache lazily constructs and caches one *Runtime per repo. It is the
@@ -125,6 +130,7 @@ func (c *RuntimeCache) Get(_ context.Context, repoPath string) (*Runtime, error)
 		PreCommit:        preCommit,
 		DefaultBudgetUSD: c.opts.DefaultBudgetUSD,
 		Entanglements:    c.entStore,
+		Events:           c.opts.Events,
 	})
 	c.runtimes[abs] = rt
 	return rt, nil

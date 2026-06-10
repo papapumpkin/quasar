@@ -1,0 +1,25 @@
+package views
+
+// Shell is the full HTML document chrome for the cockpit: it links the built
+// Tailwind CSS and the vendored Datastar runtime, and opens the live SSE
+// stream on load via data-on-load. Page content is injected as children.
+templ Shell(title string) {
+	<!DOCTYPE html>
+	<html lang="en" class="h-full">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title }</title>
+			<link rel="stylesheet" href="/assets/cockpit.css"/>
+			<script type="module" src="/assets/datastar.js"></script>
+		</head>
+		<body
+			class="min-h-full bg-[#070a0f] text-[#dde3ec] font-sans text-[13px]"
+			data-on-load="@get('/sse')"
+		>
+			<div class="max-w-[1320px] mx-auto px-5 pb-[60px]">
+				{ children... }
+			</div>
+		</body>
+	</html>
+}

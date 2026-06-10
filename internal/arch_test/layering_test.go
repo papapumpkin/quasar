@@ -15,6 +15,12 @@ var layers = map[string]int{
 	"beads":     0,
 	"blobstore": 0,
 	"bus":       0,
+	// cockpit is the browser dashboard's read model, HTTP server, and templ
+	// views. Its non-test code imports no other internal package (data types
+	// and renderers are injected from the cmd layer to avoid a views↔cockpit
+	// cycle), so it sits at layer 0 alongside config, which embeds
+	// cockpit.Config for the [cockpit] .quasar.yaml section.
+	"cockpit":   0,
 	"config":    0,
 	"dag":       0,
 	"filter":    0,

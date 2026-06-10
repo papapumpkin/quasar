@@ -64,6 +64,7 @@ is this documentation set. The packages under `internal/`:
 | `internal/bus` | Typed in-process publish/subscribe event bus decoupling producers (workers) from consumers (TUI, telemetry). |
 | `internal/checkpoint` | Serializable coder-reviewer loop state (cycle, phase, SHA) so a run can resume after a restart. |
 | `internal/claude` | Runs the `claude` CLI as a subprocess, parses its JSON, and applies context budgets and the dead-coder healthcheck. |
+| `internal/cockpit` | The browser fleet dashboard (build-tag gated): server-rendered `templ` views, Tailwind CSS, and live updates over SSE/Datastar. See [cockpit.md](cockpit.md). |
 | `internal/config` | Viper-backed `.quasar.yaml` loading; the `Config` struct is the canonical config surface (see [configuration.md](configuration.md)). |
 | `internal/constellations` | The runtime DAG engine: Fire/Step walk, operators, budget + cycle guard, and nested-constellation dispatch. |
 | `internal/dag` | Generic DAG primitives: topological sort, cycle detection, impact scoring. |
