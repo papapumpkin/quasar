@@ -148,11 +148,17 @@ func (d *StepDriver) selectRunning(ctx context.Context) ([]runningRunRow, error)
 	if limit <= 0 {
 		limit = defaultStepDriverBatchLimit
 	}
+	// parent_run_id IS NULL restricts the driver to top-level runs. A child run
+	// is owned and driven to terminal synchronously by its parent's Step
+	// (dispatchConstellation); claiming one here would let the driver re-step a
+	// node whose side effect already ran — e.g. a child left 'running' after a
+	// dispatch error, or any second driver/process racing the parent.
 	const q = `
 		SELECT id, COALESCE(repo_path, '')
 		  FROM constellation_runs
 		 WHERE state = 'running'
 		   AND deleted_at IS NULL
+		   AND parent_run_id IS NULL
 		 ORDER BY heartbeat_at ASC
 		 LIMIT ?`
 	rows, err := d.DB.QueryContext(ctx, q, limit)

@@ -352,7 +352,10 @@ func (r *Runtime) persistTransition(ctx context.Context, run *fabric.RunRow, st 
 // terminate maps a reserved terminal target onto a run state and persists it.
 func (r *Runtime) terminate(ctx context.Context, run *fabric.RunRow, st *State, target string) (string, error) {
 	state := terminalState(target)
-	if dag, err := MarshalState(st); err == nil {
+	dag, err := MarshalState(st)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "constellations: marshal final state (run %s): %v\n", run.ID, err)
+	} else {
 		run.DAGStateTOML = dag
 		run.CurrentNode = target
 		// Keep the cycle column authoritative, symmetric with persistTransition.
@@ -379,7 +382,10 @@ func (r *Runtime) terminate(ctx context.Context, run *fabric.RunRow, st *State, 
 // fail records the failure cause into State and marks the run failed.
 func (r *Runtime) fail(ctx context.Context, run *fabric.RunRow, st *State, cause error) (string, error) {
 	st.RecordNode("_error", map[string]any{"message": cause.Error(), "node": run.CurrentNode})
-	if dag, err := MarshalState(st); err == nil {
+	dag, err := MarshalState(st)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "constellations: marshal failure state (run %s): %v\n", run.ID, err)
+	} else {
 		run.DAGStateTOML = dag
 		if err := r.runStore.SaveProgress(ctx, run); err != nil {
 			fmt.Fprintf(os.Stderr, "constellations: save failure state (run %s): %v\n", run.ID, err)

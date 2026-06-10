@@ -248,3 +248,41 @@ func TestStepDriverTickIgnoresNonRunningRows(t *testing.T) {
 		t.Errorf("driver advanced terminal run; advanced=%d, calls=%d", advanced, st.counter.Load())
 	}
 }
+
+func TestStepDriverTickIgnoresChildRuns(t *testing.T) {
+	t.Parallel()
+	// A child run (parent_run_id set) is driven to terminal synchronously by
+	// its parent's Step (dispatchConstellation). The driver must NOT claim it,
+	// or a node whose side effect already ran could be re-stepped.
+	db, _ := newStepDriverTestDB(t)
+	seedRunningRun(t, db, "run-parent", "neb-parent", "/r", 100)
+	// A running child of run-parent, with a fresher (smaller) heartbeat so it
+	// would sort first and be claimed if the filter were absent.
+	_, err := db.Exec(`INSERT OR IGNORE INTO nebulas (id, name, status, created_at, updated_at)
+		VALUES ('neb-child','neb-child-name','running', strftime('%s','now'), strftime('%s','now'))`)
+	if err != nil {
+		t.Fatalf("seed child nebula: %v", err)
+	}
+	_, err = db.Exec(`INSERT INTO constellation_runs
+		(id, nebula_id, constellation_name, state, current_node, step_index, cycle,
+		 created_at, updated_at, heartbeat_at, repo_path, parent_run_id)
+		VALUES ('run-child','neb-child','t','running','x',0,0,1,1,1,'/r','run-parent')`)
+	if err != nil {
+		t.Fatalf("seed child run: %v", err)
+	}
+
+	st := &fakeStepper{disp: map[string]stepDisposition{}}
+	d := &StepDriver{DB: db, Stepper: st}
+	advanced, err := d.Tick(context.Background())
+	if err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if advanced != 1 {
+		t.Errorf("advanced = %d, want 1 (parent only)", advanced)
+	}
+	for _, c := range st.calls {
+		if c.RunID == "run-child" {
+			t.Errorf("driver claimed child run %q; children are parent-driven", c.RunID)
+		}
+	}
+}

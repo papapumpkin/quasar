@@ -63,7 +63,7 @@ func New(opts Opts) (*Engine, error) {
 	if maxAge <= 0 {
 		maxAge = 24 * time.Hour
 	}
-	return &Engine{
+	e := &Engine{
 		db:             opts.DB,
 		cfg:            opts.Config,
 		blobs:          opts.Blobs,
@@ -72,7 +72,11 @@ func New(opts Opts) (*Engine, error) {
 		clock:          clock,
 		logger:         opts.Logger,
 		worktreeMaxAge: maxAge,
-	}, nil
+	}
+	// Route dropped-audit-append diagnostics through the engine's logger so a
+	// silently-failing audit trail becomes visible. No-op when audit is nil.
+	e.audit.SetLogf(e.logf)
+	return e, nil
 }
 
 // RunOnceOpts parameterizes a single GC pass.
