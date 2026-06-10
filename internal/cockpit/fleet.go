@@ -170,6 +170,34 @@ func loadInFlight(ctx context.Context, db *sql.DB, repo string) ([]RunCard, erro
 	return out, rows.Err()
 }
 
+// loadRun fetches a single constellation_run by its ID, returning the RunCard
+// and a found flag. The query mirrors loadInFlight but filters by run id.
+func loadRun(ctx context.Context, db *sql.DB, runID string) (RunCard, bool, error) {
+	const q = `
+		SELECT r.id, r.nebula_id, n.name, r.constellation_name, r.current_node,
+		       r.step_index, r.step_count, r.state, r.cycle,
+		       COALESCE((SELECT SUM(cost_usd) FROM star_invocations WHERE run_id = r.id), 0)
+		FROM constellation_runs r
+		JOIN nebulas n ON n.id = r.nebula_id
+		WHERE r.id = ?`
+	var (
+		c    RunCard
+		name sql.NullString
+	)
+	err := db.QueryRowContext(ctx, q, runID).Scan(
+		&c.ID, &c.NebulaID, &name, &c.ConstellationName,
+		&c.CurrentNode, &c.StepIndex, &c.StepCount, &c.State, &c.Cycle, &c.CostUSD,
+	)
+	if err == sql.ErrNoRows {
+		return RunCard{}, false, nil
+	}
+	if err != nil {
+		return RunCard{}, false, fmt.Errorf("cockpit: load run %q: %w", runID, err)
+	}
+	c.Title = name.String
+	return c, true, nil
+}
+
 // scanCards runs a nebula card query and maps rows to NebulaCards.
 func scanCards(ctx context.Context, db *sql.DB, now time.Time, q string, args ...any) ([]NebulaCard, error) {
 	rows, err := db.QueryContext(ctx, q, args...)

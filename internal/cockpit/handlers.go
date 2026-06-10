@@ -18,14 +18,6 @@ func (s *Server) handleFleet(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleSSE streams fleet state-change events to the client via Server-Sent
-// Events. Replaced in Task 9.
-//
-// TODO(task 9): implement real SSE fan-out via s.notifier.
-func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "not implemented", http.StatusNotImplemented)
-}
-
 // handleApprove approves the nebula identified by the {id} path segment.
 // Replaced in Task 10.
 //

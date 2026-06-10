@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
@@ -29,6 +30,12 @@ type GitHubBadger interface {
 // If nil, New substitutes a no-op that writes an empty 200.
 type PageRenderer func(ctx context.Context, w http.ResponseWriter, f Fleet) error
 
+// RunRenderer renders a single RunCard fragment into an io.Writer.
+// Injecting this as a function avoids the import cycle with package views.
+// The canonical implementation is views.RunCardView(rc).Render(ctx, w),
+// wired by the cmd layer. If nil, New substitutes a no-op.
+type RunRenderer func(ctx context.Context, w io.Writer, rc RunCard) error
+
 // Opts holds the dependencies required to construct a Server.
 type Opts struct {
 	DB         *sql.DB
@@ -38,6 +45,7 @@ type Opts struct {
 	Token      string
 	Assets     fs.FS
 	RenderPage PageRenderer
+	RenderRun  RunRenderer
 	Logf       func(string, ...any)
 }
 
@@ -51,6 +59,7 @@ type Server struct {
 	token      string
 	assets     fs.FS
 	renderPage PageRenderer
+	renderRun  RunRenderer
 	logf       func(string, ...any)
 }
 
@@ -78,6 +87,10 @@ func New(o Opts) (*Server, error) {
 			return err
 		}
 	}
+	rr := o.RenderRun
+	if rr == nil {
+		rr = func(_ context.Context, _ io.Writer, _ RunCard) error { return nil }
+	}
 	return &Server{
 		db:         o.DB,
 		rt:         o.Runtime,
@@ -86,6 +99,7 @@ func New(o Opts) (*Server, error) {
 		token:      o.Token,
 		assets:     o.Assets,
 		renderPage: rp,
+		renderRun:  rr,
 		logf:       lf,
 	}, nil
 }
