@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/papapumpkin/quasar/internal/gitops"
 )
 
 // CycleCommitter creates git commits at coder-cycle boundaries.
@@ -150,12 +152,11 @@ func (g *gitCycleCommitter) ResetTo(ctx context.Context, sha string) error {
 		return fmt.Errorf("sha %s is not a valid ancestor of HEAD: %w: %s", sha, err, strings.TrimSpace(verifyStderr.String()))
 	}
 
-	// Perform the hard reset.
-	resetCmd := exec.CommandContext(ctx, "git", "-C", g.dir, "reset", "--hard", sha)
-	var resetStderr bytes.Buffer
-	resetCmd.Stderr = &resetStderr
-	if err := resetCmd.Run(); err != nil {
-		return fmt.Errorf("git reset --hard %s: %w: %s", sha, err, strings.TrimSpace(resetStderr.String()))
+	// Perform the hard reset through the gitops perimeter so it is refused if
+	// the worktree is somehow on a protected base branch — defense in depth
+	// beyond ensureBranch above.
+	if err := gitops.New(g.dir).ResetHard(ctx, sha); err != nil {
+		return fmt.Errorf("reset to %s: %w", sha, err)
 	}
 	return nil
 }

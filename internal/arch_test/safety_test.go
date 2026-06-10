@@ -12,14 +12,6 @@ import (
 	"testing"
 )
 
-// gitWallEnv gates the output-safety arch tests during the incremental
-// migration of scattered git calls into internal/gitops. With the variable
-// unset (or any value other than "warn") violations are real test failures.
-// Setting it to "warn" downgrades every violation to a logged message so a
-// package owner mid-migration can still get a green suite. This escape hatch is
-// temporary and is removed in Nebula 3 once all callers are migrated.
-const gitWallEnv = "QUASAR_ARCH_TEST_GIT_WALL"
-
 // gitExecExceptions are files that still call exec.Command("git", …) directly
 // and predate the internal/gitops perimeter. They are grandfathered so this
 // phase can land without a tree-wide migration; new direct callers are NOT
@@ -57,44 +49,12 @@ type gitExec struct {
 	line    int
 }
 
-// gitWallEnforced reports whether wall violations are hard failures. They are,
-// unless QUASAR_ARCH_TEST_GIT_WALL is exactly "warn".
-func gitWallEnforced() bool {
-	return os.Getenv(gitWallEnv) != "warn"
-}
-
-// reportf fails the test, or merely logs, depending on the wall mode.
+// reportf fails the test. The output-safety perimeter is always enforced; the
+// former QUASAR_ARCH_TEST_GIT_WALL=warn escape hatch was removed so a stray env
+// var can never silently disable the wall.
 func reportf(t *testing.T, format string, args ...any) {
 	t.Helper()
-	if !gitWallEnforced() {
-		t.Logf("[git-wall warn] "+format, args...)
-		return
-	}
 	t.Errorf(format, args...)
-}
-
-// TestGitWallModeGate verifies the env gate: unset or any value other than
-// "warn" enforces hard failures; "warn" downgrades violations to logs so a
-// mid-migration suite stays green.
-func TestGitWallModeGate(t *testing.T) {
-	t.Run("unset enforces", func(t *testing.T) {
-		t.Setenv(gitWallEnv, "")
-		if !gitWallEnforced() {
-			t.Error("unset should enforce (hard failures)")
-		}
-	})
-	t.Run("warn downgrades", func(t *testing.T) {
-		t.Setenv(gitWallEnv, "warn")
-		if gitWallEnforced() {
-			t.Error("warn should downgrade violations to logs")
-		}
-	})
-	t.Run("other value enforces", func(t *testing.T) {
-		t.Setenv(gitWallEnv, "on")
-		if !gitWallEnforced() {
-			t.Error("any non-warn value should enforce")
-		}
-	})
 }
 
 // TestNoDirectGitExecOutsideGitops verifies that no production code outside
@@ -172,6 +132,52 @@ func forbiddenSubcommandSmell(lit string) string {
 	return ""
 }
 
+// TestNoDestructiveGitArgsOutsideGitops inspects the actual argument list of
+// every exec.Command("git", …) call site in cmd/ and internal/ (except the
+// gitops perimeter itself and this scanner) for destructive operations. Unlike
+// the single-literal smell detector it sees the whole multi-arg invocation, so
+// a destructive op cannot hide in a file that is still grandfathered onto
+// gitExecExceptions for its (safe) read calls. Destructive writes must go
+// through internal/gitops, where they are guarded.
+func TestNoDestructiveGitArgsOutsideGitops(t *testing.T) {
+	t.Parallel()
+
+	for _, call := range findGitExecArgs(t) {
+		if strings.HasPrefix(call.relPath, "internal/gitops/") ||
+			strings.HasPrefix(call.relPath, "internal/arch_test/") {
+			continue
+		}
+		if smell := destructiveGitSmell(call.args); smell != "" {
+			reportf(t, "%s:%d runs a destructive git op (%s) outside internal/gitops; route it through the perimeter",
+				call.relPath, call.line, smell)
+		}
+	}
+}
+
+// destructiveGitSmell returns a description if a git argument list looks like a
+// destructive operation, or "" otherwise.
+func destructiveGitSmell(args []string) string {
+	has := func(s string) bool {
+		for _, a := range args {
+			if a == s {
+				return true
+			}
+		}
+		return false
+	}
+	switch {
+	case has("reset") && has("--hard"):
+		return "hard reset"
+	case has("push") && has("--force") && !has("--force-with-lease"):
+		return "unconditional force push"
+	case has("branch") && has("-D"):
+		return "force branch delete"
+	case has("clean") && (has("-fd") || has("-fdx") || has("-xfd") || has("-df") || has("-ffd")):
+		return "working-tree clean"
+	}
+	return ""
+}
+
 // isGHAllowed reports whether relPath is in a package permitted to exec gh.
 func isGHAllowed(relPath string) bool {
 	if strings.HasPrefix(relPath, "internal/arch_test/") {
@@ -240,6 +246,79 @@ func execCallsInFile(t *testing.T, path, cmdName string) []gitExec {
 		return true
 	})
 	return hits
+}
+
+// gitCall is a detected exec.Command("git", …) site with its string-literal
+// argument list (everything after the "git" command name).
+type gitCall struct {
+	relPath string
+	line    int
+	args    []string
+}
+
+// findGitExecArgs walks cmd/ and internal/ for non-test .go files and returns
+// every exec.Command("git", …) call with its string-literal argument list, so a
+// caller can inspect the whole invocation rather than one literal at a time.
+func findGitExecArgs(t *testing.T) []gitCall {
+	t.Helper()
+
+	root := repoRoot(t)
+	var calls []gitCall
+	for _, sub := range []string{"cmd", "internal"} {
+		base := filepath.Join(root, sub)
+		err := filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				return nil
+			}
+			calls = append(calls, gitCallsInFile(t, path)...)
+			return nil
+		})
+		if err != nil && !os.IsNotExist(err) {
+			t.Fatalf("walking %s: %v", base, err)
+		}
+	}
+	return calls
+}
+
+// gitCallsInFile parses one file and returns each exec.Command/CommandContext
+// site whose command argument is the literal "git", with its literal args.
+func gitCallsInFile(t *testing.T, path string) []gitCall {
+	t.Helper()
+
+	fset := token.NewFileSet()
+	node, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		t.Fatalf("parsing %s: %v", path, err)
+	}
+	rel := relForSafety(t, path)
+
+	var calls []gitCall
+	ast.Inspect(node, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		argIdx, ok := execCommandArgIndex(call)
+		if !ok || argIdx >= len(call.Args) || !literalEquals(call.Args[argIdx], "git") {
+			return true
+		}
+		var args []string
+		for _, a := range call.Args[argIdx+1:] {
+			lit, ok := a.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				continue
+			}
+			if v, err := strconv.Unquote(lit.Value); err == nil {
+				args = append(args, v)
+			}
+		}
+		calls = append(calls, gitCall{relPath: rel, line: fset.Position(call.Pos()).Line, args: args})
+		return true
+	})
+	return calls
 }
 
 // execCommandArgIndex reports the index of the command-name argument if call is

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/papapumpkin/quasar/internal/gitops"
 )
 
 // GitCommitter creates commits at phase boundaries.
@@ -198,12 +200,11 @@ func (g *gitCommitter) ResetTo(ctx context.Context, sha string) error {
 		return fmt.Errorf("sha %s is not a valid ancestor of HEAD: %w: %s", sha, err, strings.TrimSpace(verifyStderr.String()))
 	}
 
-	// Perform the hard reset.
-	resetCmd := exec.CommandContext(ctx, "git", "-C", g.dir, "reset", "--hard", sha)
-	var resetStderr bytes.Buffer
-	resetCmd.Stderr = &resetStderr
-	if err := resetCmd.Run(); err != nil {
-		return fmt.Errorf("git reset --hard %s: %w: %s", sha, err, strings.TrimSpace(resetStderr.String()))
+	// Perform the hard reset through the gitops perimeter so it is refused if
+	// the worktree is somehow on a protected base branch — defense in depth
+	// beyond ensureBranch above.
+	if err := gitops.New(g.dir).ResetHard(ctx, sha); err != nil {
+		return fmt.Errorf("reset to %s: %w", sha, err)
 	}
 	return nil
 }
@@ -270,12 +271,11 @@ func PostCompletion(ctx context.Context, dir, branch string) *PostCompletionResu
 		result.CommitErr = err
 	}
 
-	// Push with --set-upstream to handle branches with no upstream.
-	pushCmd := exec.CommandContext(ctx, "git", "-C", dir, "push", "--set-upstream", "origin", branch)
-	var pushStderr bytes.Buffer
-	pushCmd.Stderr = &pushStderr
-	if err := pushCmd.Run(); err != nil {
-		result.PushErr = fmt.Errorf("%w: %s", err, strings.TrimSpace(pushStderr.String()))
+	// Push through the gitops perimeter so the branch namespace and
+	// forbidden-base-branch guards apply — the in-process engine can no longer
+	// push outside the Quasar-owned (quasar/* or nebula/*) namespace.
+	if err := gitops.New(dir).PushUpstream(ctx, branch); err != nil {
+		result.PushErr = err
 	}
 
 	return result
