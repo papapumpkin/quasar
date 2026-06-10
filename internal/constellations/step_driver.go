@@ -60,12 +60,20 @@ func (s *RuntimeCacheStepper) Step(ctx context.Context, repoPath, runID string) 
 // entry node — Fire creates the row, Step advances it, and nothing else
 // called Step from production code before this driver shipped.
 //
-// Concurrency model: SQLite's row-level serialization plus the Step
-// implementation's atomic transition makes calling Step on the same run
-// twice idempotent (the second call sees a terminal state and returns
-// ErrTerminal). The driver claims a batch of running rows per Tick and
-// dispatches them serially — parallel Step across runs is correct but the
-// added supervision surface isn't needed for v1.
+// Crash recovery: the driver is also how interrupted runs resume. A process
+// that dies mid-run leaves rows in state='running'; on restart the driver
+// selects and re-steps them from their persisted current_node — no separate
+// resume call or boot-time reaping is needed (an earlier ReapStale primitive
+// that marked such rows terminally 'crashed' was removed because it would have
+// halted this auto-resume). Step's heartbeat ticker keeps a live long-running
+// step from looking dead, and Step's poison-node guard (a durable per-run
+// attempt counter, see maxStepAttempts) fails a node that crash-loops on every
+// restart rather than letting it take the fleet down repeatedly.
+//
+// Concurrency model: the driver claims only top-level rows (parent_run_id IS
+// NULL — child runs are driven by their parent's Step) and dispatches them
+// serially per Tick. SQLite's single-writer serialization plus Step's atomic
+// transition make a terminal run's re-step a no-op (it returns ErrTerminal).
 type StepDriver struct {
 	// DB is the fabric database. Required.
 	DB *sql.DB
@@ -148,11 +156,17 @@ func (d *StepDriver) selectRunning(ctx context.Context) ([]runningRunRow, error)
 	if limit <= 0 {
 		limit = defaultStepDriverBatchLimit
 	}
+	// parent_run_id IS NULL restricts the driver to top-level runs. A child run
+	// is owned and driven to terminal synchronously by its parent's Step
+	// (dispatchConstellation); claiming one here would let the driver re-step a
+	// node whose side effect already ran — e.g. a child left 'running' after a
+	// dispatch error, or any second driver/process racing the parent.
 	const q = `
 		SELECT id, COALESCE(repo_path, '')
 		  FROM constellation_runs
 		 WHERE state = 'running'
 		   AND deleted_at IS NULL
+		   AND parent_run_id IS NULL
 		 ORDER BY heartbeat_at ASC
 		 LIMIT ?`
 	rows, err := d.DB.QueryContext(ctx, q, limit)

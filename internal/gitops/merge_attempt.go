@@ -100,7 +100,7 @@ func (m *MergeAttempt) Try(ctx context.Context, opts TryOpts) (MergeOutcome, err
 	// `worktree add` fail; clear it first so the attempt is idempotent.
 	m.cleanup(ctx, worktree)
 
-	if _, stderr, addErr := m.Client.runGit(ctx, "worktree", "add", "--detach", worktree, opts.DstBranch); addErr != nil {
+	if _, stderr, addErr := m.Client.runGit(ctx, "worktree", "add", "--detach", worktree, "--", opts.DstBranch); addErr != nil {
 		// Could not even check out the destination — treat as a git-level error
 		// the constellation routes to _failed, not a setup fault.
 		outcome.Result = MergeError
@@ -113,7 +113,7 @@ func (m *MergeAttempt) Try(ctx context.Context, opts TryOpts) (MergeOutcome, err
 
 	wtGit := defaultRunGit(worktree)
 
-	if _, stderr, mergeErr := wtGit(ctx, "merge", "--no-edit", opts.SrcBranch); mergeErr != nil {
+	if _, stderr, mergeErr := wtGit(ctx, "merge", "--no-edit", "--", opts.SrcBranch); mergeErr != nil {
 		// A failed merge is either a conflict (unmerged paths present) or a
 		// git-level error (missing ref, corrupt object) with no unmerged paths.
 		conflicted := conflictedFiles(ctx, wtGit)

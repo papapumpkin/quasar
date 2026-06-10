@@ -34,19 +34,20 @@ follow-up phase lands, delete the corresponding rows.
 - Crash-safe resume: `dag_state_toml` persisted after every transition;
   `Resume` restores `State` and continues from `current_node`.
 - Storage: `internal/fabric/constellation_store.go` (`ConstellationRunStore`
-  typed API incl. `ReapStale`, `Heartbeat`, `ListByState`) + migration
+  typed API incl. `Heartbeat`, `ListByState`, `BumpStepAttempt`) + migration
   `internal/fabric/migrations/004_constellation_runtime.sql` (additive columns
-  over the `003` runtime tables).
+  over the `003` runtime tables) and `011_step_attempts.sql` (the poison-node
+  counter).
 
 ## Deferred to follow-up phase(s)
 
 | Acceptance criterion | Status | Notes for follow-up |
 |----------------------|--------|---------------------|
 | `constellation` node type (child run with `parent_run_id`, parent waits via dispatch loop) | **Deferred** | Currently returns `ErrNodeTypeUnsupported` in `dispatch` (`runtime.go`). Needs the supervisor dispatch loop to drive child runs. |
-| `phase_iterator` node type (one sub-constellation per `nebula.Phases`, `inputs.parallel` cap) | **Deferred** | Same dependency on the dispatch loop; `ReapStale`/`ListByState`/parent-run columns already exist to support it. |
-| `internal/supervisor/` — boot, per-repo `Runtime` + `gitops.Client`, per-(repo,sensor) schedulers | **Deferred** | Store-side primitives (`ListByState`, `ReapStale`, `Heartbeat`) are in place for it to drive. |
-| Supervisor reaper (mark `status='running'` with stale heartbeat as `crashed`) | **Partial** | `ConstellationRunStore.ReapStale` exists and is tested; nothing calls it yet. |
-| Supervisor boot-time resume of in-flight runs | **Partial** | `Runtime.Resume` exists and is tested; the supervisor that calls it on boot does not. |
+| `phase_iterator` node type (one sub-constellation per `nebula.Phases`, `inputs.parallel` cap) | **Deferred** | Same dependency on the dispatch loop; `ListByState`/parent-run columns already exist to support it. |
+| `internal/supervisor/` — boot, per-repo `Runtime` + `gitops.Client`, per-(repo,sensor) schedulers | **Deferred** | Store-side primitives (`ListByState`, `Heartbeat`) are in place for it to drive. |
+| Supervisor reaper (mark `status='running'` with stale heartbeat as `crashed`) | **Won't do** | Superseded by the auto-resume model: the `StepDriver` re-steps in-flight runs on restart, so reaping them terminal would *halt* recovery. The `ReapStale` primitive was removed; a poison-node guard (`step_attempts` + panic recovery in `Step`) bounds crash-loops instead. |
+| Supervisor boot-time resume of in-flight runs | **Done (implicit)** | The `StepDriver` selects `state='running'` rows and re-steps them from `current_node` on restart — no explicit boot resume call needed. `Runtime.Resume` remains for manual liveness refresh. |
 | Single-instance guard + heartbeat + SIGTERM graceful shutdown | **Deferred** | Needs `supervisor_state` row (PID + heartbeat) and signal handling. |
 | `trigger_queue` typed API + dispatch loop + sensor backpressure (`max_inflight`) | **Deferred** | `trigger_queue` table exists (migrations `003`/`004`); the drain loop and per-(repo,sensor) inflight cap are not wired. |
 | `cmd/supervise.go` — `quasar supervise` entrypoint | **Deferred** | systemd-unit entrypoint; depends on the supervisor type. |

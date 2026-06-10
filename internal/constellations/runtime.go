@@ -233,7 +233,23 @@ func (r *Runtime) Step(ctx context.Context, runID string) (string, error) {
 		return r.fail(ctx, run, st, fmt.Errorf("%w: %q", ErrUnknownNode, run.CurrentNode))
 	}
 
-	output, err := r.dispatch(ctx, run, st, node)
+	// Poison-node guard: bump the durable attempt counter before dispatching.
+	// A node that crash-loops (panic-on-restart, OOM) is failed here rather
+	// than re-dispatched forever, so it can't take the fleet down on every boot.
+	// handled means the guard already failed the run (state+cause mirror the
+	// normal fail path); a non-nil err with handled=false is a store error.
+	if state, handled, err := r.guardAttempt(ctx, run, st, node); handled || err != nil {
+		return state, err
+	}
+
+	// Keep the run's heartbeat fresh across a potentially minutes-long dispatch
+	// (a star invocation, or an entire nested-constellation walk) so a crash
+	// reaper can distinguish a live long step from a dead process. dispatchSafely
+	// recovers a node panic into a normal failure so one bad node can't crash
+	// the fleet process.
+	stopHeartbeat := r.startHeartbeat(ctx, run.ID, heartbeatInterval)
+	output, err := r.dispatchSafely(ctx, run, st, node)
+	stopHeartbeat()
 	if err != nil {
 		if errors.Is(err, ErrBudgetExhausted) {
 			return r.failBudget(ctx, run, st, node)
@@ -260,23 +276,6 @@ func (r *Runtime) Step(ctx context.Context, runID string) (string, error) {
 		return r.terminate(ctx, run, st, next)
 	}
 	return r.persistTransition(ctx, run, st, next)
-}
-
-// Resume restores a run interrupted mid-flight. The DAG state and current node
-// already live in the row, so resume is a heartbeat refresh that re-asserts the
-// run as live; the supervisor then drives Step from the persisted node.
-func (r *Runtime) Resume(ctx context.Context, runID string) error {
-	run, err := r.runStore.GetRun(ctx, runID)
-	if err != nil {
-		return err
-	}
-	if isTerminalState(run.State) {
-		return ErrTerminal
-	}
-	if _, err := UnmarshalState(run.DAGStateTOML); err != nil {
-		return fmt.Errorf("constellations: resume %q: corrupt dag state: %w", runID, err)
-	}
-	return r.runStore.Heartbeat(ctx, runID)
 }
 
 // dispatch executes a single node by type and returns its outputs.
@@ -352,7 +351,10 @@ func (r *Runtime) persistTransition(ctx context.Context, run *fabric.RunRow, st 
 // terminate maps a reserved terminal target onto a run state and persists it.
 func (r *Runtime) terminate(ctx context.Context, run *fabric.RunRow, st *State, target string) (string, error) {
 	state := terminalState(target)
-	if dag, err := MarshalState(st); err == nil {
+	dag, err := MarshalState(st)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "constellations: marshal final state (run %s): %v\n", run.ID, err)
+	} else {
 		run.DAGStateTOML = dag
 		run.CurrentNode = target
 		// Keep the cycle column authoritative, symmetric with persistTransition.
@@ -379,7 +381,10 @@ func (r *Runtime) terminate(ctx context.Context, run *fabric.RunRow, st *State, 
 // fail records the failure cause into State and marks the run failed.
 func (r *Runtime) fail(ctx context.Context, run *fabric.RunRow, st *State, cause error) (string, error) {
 	st.RecordNode("_error", map[string]any{"message": cause.Error(), "node": run.CurrentNode})
-	if dag, err := MarshalState(st); err == nil {
+	dag, err := MarshalState(st)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "constellations: marshal failure state (run %s): %v\n", run.ID, err)
+	} else {
 		run.DAGStateTOML = dag
 		if err := r.runStore.SaveProgress(ctx, run); err != nil {
 			fmt.Fprintf(os.Stderr, "constellations: save failure state (run %s): %v\n", run.ID, err)

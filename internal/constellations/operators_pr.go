@@ -3,6 +3,7 @@ package constellations
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/papapumpkin/quasar/internal/forge"
@@ -25,16 +26,22 @@ type gitopsPusher interface {
 }
 
 // forgeOpener is the subset of forge that the gh_open_pr operator needs.
-// *forge.OpenPR is a free function, so this exists to inject a fake in tests.
+// forge.OpenPR/FindOpenPR are free functions, so this exists to inject a fake
+// in tests.
 type forgeOpener interface {
+	FindOpenPR(ctx context.Context, workDir, head string) (forge.PRResult, bool, error)
 	OpenPR(ctx context.Context, opts forge.PROpts) (forge.PRResult, error)
 }
 
-// defaultForgeOpener delegates to the real forge.OpenPR.
+// defaultForgeOpener delegates to the real forge functions.
 type defaultForgeOpener struct{}
 
 func (defaultForgeOpener) OpenPR(ctx context.Context, opts forge.PROpts) (forge.PRResult, error) {
 	return forge.OpenPR(ctx, opts)
+}
+
+func (defaultForgeOpener) FindOpenPR(ctx context.Context, workDir, head string) (forge.PRResult, bool, error) {
+	return forge.FindOpenPR(ctx, workDir, head)
 }
 
 // activeForgeOpener is the injection seam — production uses defaultForgeOpener;
@@ -111,6 +118,23 @@ func opGHOpenPR(ctx context.Context, rt *Runtime, st *State, args map[string]any
 	body, _ := args["body"].(string)
 	if strings.TrimSpace(body) == "" {
 		body = synthesizePRBody(st)
+	}
+
+	// Idempotency guard. Step performs this side effect BEFORE persisting the
+	// node transition, so a crash or a persist failure leaves current_node on
+	// this node and a re-step re-enters here. `gh pr create` errors when an
+	// open PR already exists for the head branch, which would fail the whole
+	// run; returning the existing PR makes the re-step a no-op instead. The
+	// lookup is best-effort — a failed list must not block opening a PR, since
+	// OpenPR will still surface gh's own "already exists" error if one does.
+	if existing, found, err := activeForgeOpener.FindOpenPR(ctx, rt.repoPath, head); err != nil {
+		fmt.Fprintf(os.Stderr, "gh_open_pr: check existing PR for %q: %v\n", head, err)
+	} else if found {
+		return map[string]any{
+			"pr_opened": true,
+			"pr_url":    existing.URL,
+			"pr_number": existing.Number,
+		}, nil
 	}
 
 	result, err := activeForgeOpener.OpenPR(ctx, forge.PROpts{

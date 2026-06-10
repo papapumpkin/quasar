@@ -549,6 +549,11 @@ func TestGitCommitter_ResetTo(t *testing.T) {
 			t.Fatal("expected non-nil committer")
 		}
 
+		// Quasar works on a quasar/* feature branch, never the base branch; a
+		// hard reset is refused on a protected base branch (main/master), so
+		// move off it to mirror production.
+		run(ctx, t, dir, "git", "checkout", "-b", "quasar/reset-test")
+
 		// Record initial SHA.
 		baseSHA := headSHA(ctx, t, dir)
 

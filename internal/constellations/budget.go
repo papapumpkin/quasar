@@ -145,7 +145,10 @@ func (r *Runtime) failBudget(ctx context.Context, run *fabric.RunRow, st *State,
 		"detail": r.budgetDetail(ctx, run.ID, node.ID),
 		"node":   node.ID,
 	})
-	if dag, err := MarshalState(st); err == nil {
+	dag, err := MarshalState(st)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "constellations: marshal budget-failure state (run %s): %v\n", run.ID, err)
+	} else {
 		run.DAGStateTOML = dag
 		if err := r.runStore.SaveProgress(ctx, run); err != nil {
 			fmt.Fprintf(os.Stderr, "constellations: save budget-failure state (run %s): %v\n", run.ID, err)
