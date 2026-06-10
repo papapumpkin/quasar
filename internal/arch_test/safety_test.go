@@ -44,6 +44,10 @@ var gitExecExceptions = map[string]bool{
 // edit later.
 var ghExecAllowedPrefixes = []string{
 	"internal/sensors/github/",
+	// Sibling read-side adapter for GitHub Discussions. Same shape and
+	// confinement as the issues adapter — gh is used only to read
+	// discussion threads, never to write.
+	"internal/sensors/discussions/",
 	"internal/forge/",
 }
 
