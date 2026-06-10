@@ -254,7 +254,7 @@ builtin (`opEmitConflictTelemetry`,
 `internal/constellations/operators_conflict_telemetry.go:33`), placed as a
 terminal node that the retry back-edge bypasses so a retried cycle is never
 double-counted (`merge-conflict-resolve.toml:41-51`, `:80-90`). The row is a
-`ConflictResolutionEvent` (`internal/telemetry/conflict_resolutions.go:14`),
+`ConflictResolutionEvent` (`internal/telemetry/conflict_resolutions.go:22`),
 appended as one JSON line to `.quasar/telemetry/conflict_resolutions.jsonl`
 (`cmd/conflicts.go:15`). Telemetry is a non-fatal side channel: a record failure
 is logged to stderr and never aborts a successfully-resolved merge
