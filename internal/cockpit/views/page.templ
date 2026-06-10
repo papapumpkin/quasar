@@ -1,0 +1,66 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/papapumpkin/quasar/internal/cockpit"
+)
+
+// fleetSpend sums the in-flight cost across every repo's running runs.
+func fleetSpend(f cockpit.Fleet) float64 {
+	var total float64
+	for _, r := range f.Repos {
+		for _, rc := range r.InFlight {
+			total += rc.CostUSD
+		}
+	}
+	return total
+}
+
+// runningCount returns the number of in-flight runs across the whole fleet.
+func runningCount(f cockpit.Fleet) int {
+	n := 0
+	for _, r := range f.Repos {
+		n += len(r.InFlight)
+	}
+	return n
+}
+
+// Page renders the full Mission Control dashboard: the sticky topbar followed
+// by one repo rack per registered repository.
+templ Page(f cockpit.Fleet) {
+	@Shell("Quasar Cockpit — Fleet Dashboard") {
+		<div
+			class="sticky top-0 z-10 flex items-center gap-[18px] py-[13px] px-1 border-b border-[#172131] backdrop-blur-md mb-5 bg-[#070a0f]/90"
+		>
+			<div class="flex items-center gap-[9px] font-bold tracking-[.06em] text-[14px]">
+				<span class="w-[13px] h-[13px] rounded-[3px] bg-[conic-gradient(from_45deg,#22d3ee,#a78bfa,#22d3ee)] shadow-[0_0_14px_rgba(34,211,238,.5)]"></span>
+				<b class="text-white">QUASAR</b><span class="text-cyan">cockpit</span>
+			</div>
+			<div class="flex-1 max-w-[380px] flex items-center gap-2 bg-[#0c111a] border border-[#172131] rounded-lg py-[7px] px-[11px] text-[#6b7686]">
+				<span class="text-[12px]">⌕</span>
+				<input
+					class="bg-transparent border-none outline-none text-[#dde3ec] font-sans text-[12.5px] w-full"
+					placeholder="Filter repos, nebulas, runs…"
+				/>
+				<kbd class="font-mono text-[10px] text-[#475061] border border-[#1f2c3f] rounded px-[5px]">/</kbd>
+			</div>
+			<div class="flex-1"></div>
+			<div class="flex items-center gap-[7px] font-mono text-[11px] text-[#6b7686]">
+				<span class="text-[#475061] text-[9.5px] tracking-[.08em] uppercase">fleet&nbsp;spend</span>
+				<b class="text-[#dde3ec] font-semibold">{ fmt.Sprintf("$%.2f", fleetSpend(f)) }</b>
+			</div>
+			<div class="flex items-center gap-[7px] font-mono text-[11px] text-[#6b7686]">
+				<span class="text-[#475061] text-[9.5px] tracking-[.08em] uppercase">running</span>
+				<b class="text-cyan font-semibold">{ fmt.Sprintf("%d", runningCount(f)) }</b>
+			</div>
+			<div class="flex items-center gap-[7px] text-[11.5px] text-[#6b7686] bg-[#0c111a] border border-[#172131] rounded-[20px] py-1 px-[11px]">
+				<span class="w-[7px] h-[7px] rounded-full bg-green animate-[pulse_1.8s_infinite]"></span>
+				live
+			</div>
+		</div>
+		for _, r := range f.Repos {
+			@Rack(r)
+		}
+	}
+}

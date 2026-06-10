@@ -1,0 +1,81 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/papapumpkin/quasar/internal/cockpit"
+)
+
+// statusPill renders a small mono status pill. The color family and glyph are
+// derived from the nebula status so the awaiting/recent lanes share one helper.
+templ statusPill(status string) {
+	<span class={ "font-mono text-[9.5px] font-semibold py-[2px] px-[7px] rounded-[5px] flex items-center gap-1 tracking-[.03em]", pillClass(status) }>
+		<span>{ pillGlyph(status) }</span> { pillLabel(status) }
+	</span>
+}
+
+// pillClass maps a nebula status to its Tailwind color-family classes.
+func pillClass(status string) string {
+	switch status {
+	case "awaiting_approval", "draft":
+		return "bg-amber/10 text-amber border border-amber/20"
+	case "merged", "done", "shipped":
+		return "bg-green/[.09] text-green border border-green/20"
+	case "open_pr", "approved":
+		return "bg-violet/10 text-violet border border-violet/20"
+	case "failed", "canceled", "rejected", "orphaned":
+		return "bg-red/[.09] text-red border border-red/20"
+	default:
+		return "bg-cyan/[.09] text-cyan border border-cyan/20"
+	}
+}
+
+// pillGlyph maps a status to its leading glyph.
+func pillGlyph(status string) string {
+	switch status {
+	case "awaiting_approval", "draft":
+		return "●"
+	case "merged", "done", "shipped":
+		return "✓"
+	case "open_pr", "approved":
+		return "⊙"
+	case "failed", "canceled", "rejected", "orphaned":
+		return "✕"
+	default:
+		return "●"
+	}
+}
+
+// pillLabel maps a status to its short human label.
+func pillLabel(status string) string {
+	switch status {
+	case "awaiting_approval", "draft":
+		return "draft"
+	case "open_pr":
+		return "open PR"
+	default:
+		return status
+	}
+}
+
+// prOrIssueLink renders the trailing provenance link: a PR link when the card
+// carries a PR number, otherwise an issue link when an IssueURL is present.
+templ prOrIssueLink(c cockpit.NebulaCard) {
+	if c.PRNumber > 0 {
+		<a class="font-mono text-[10px] text-[#60a5fa] no-underline hover:underline" href={ linkHref(c.IssueURL) }>
+			{ fmt.Sprintf("PR #%d ↗", c.PRNumber) }
+		</a>
+	} else if c.IssueURL != "" {
+		<a class="font-mono text-[10px] text-[#60a5fa] no-underline hover:underline" href={ linkHref(c.IssueURL) }>
+			issue ↗
+		</a>
+	}
+}
+
+// linkHref falls back to "#" when no URL is known so the anchor stays inert.
+func linkHref(url string) templ.SafeURL {
+	if url == "" {
+		return templ.SafeURL("#")
+	}
+	return templ.URL(url)
+}

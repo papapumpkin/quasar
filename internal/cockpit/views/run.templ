@@ -1,0 +1,96 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/papapumpkin/quasar/internal/cockpit"
+)
+
+// progressPct computes the run's progress-bar fill percentage from its step
+// position, clamped to [0,100]. A run with no known step count reads as empty.
+func progressPct(rc cockpit.RunCard) int {
+	if rc.StepCount <= 0 {
+		return 0
+	}
+	pct := (rc.StepIndex * 100) / rc.StepCount
+	if pct < 0 {
+		return 0
+	}
+	if pct > 100 {
+		return 100
+	}
+	return pct
+}
+
+// cycleLabel renders the "cycle N/M" pill text. When MaxCycles is unknown it
+// degrades to a bare cycle index.
+func cycleLabel(rc cockpit.RunCard) string {
+	if rc.MaxCycles > 0 {
+		return fmt.Sprintf("cycle %d/%d", rc.Cycle, rc.MaxCycles)
+	}
+	return fmt.Sprintf("cycle %d", rc.Cycle)
+}
+
+// flowSteps is the canonical coder-reviewer step flow rendered in the run card.
+var flowSteps = []string{"implement", "commit", "review", "decide"}
+
+// stepStateClass classifies a flow step relative to the run's current node:
+// done (before the active node), active (the current node), or pending.
+func stepStateClass(rc cockpit.RunCard, step string, idx int) string {
+	active := -1
+	for i, s := range flowSteps {
+		if s == rc.CurrentNode {
+			active = i
+			break
+		}
+	}
+	switch {
+	case active >= 0 && idx < active:
+		return "text-green"
+	case active >= 0 && idx == active:
+		return "text-cyan"
+	default:
+		return "text-[#475061]"
+	}
+}
+
+// RunCardView renders a live in-flight constellation run: the step flow,
+// progress bar, cost/cycle meta, and a stdout-tail placeholder. The stable
+// id="run-<id>" lets SSE fragment merges replace the card in place.
+templ RunCardView(rc cockpit.RunCard) {
+	<div
+		id={ "run-" + rc.ID }
+		class="bg-gradient-to-b from-[#0c1422] to-[#0a1019] border border-cyan/20 rounded-[9px] p-[11px] mb-[9px] relative overflow-hidden"
+	>
+		<span class="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-cyan to-green"></span>
+		<div class="text-[#eef2f8] font-semibold text-[12.5px]">{ rc.Title }</div>
+		<div class="flex items-center gap-[6px] mt-[10px] font-mono text-[10px] flex-wrap">
+			for i, step := range flowSteps {
+				if i > 0 {
+					<span class="text-[#475061]">›</span>
+				}
+				<span class={ "flex items-center gap-[5px]", stepStateClass(rc, step, i) }>
+					<span class="w-[4px] h-[4px] rounded-full bg-current opacity-60"></span>{ step }
+				</span>
+			}
+		</div>
+		<div class="h-[4px] bg-[#13202f] rounded-[4px] mt-[11px] overflow-hidden relative">
+			<i
+				class="block h-full bg-gradient-to-r from-cyan to-green rounded-[4px] shadow-[0_0_10px_rgba(34,211,238,.4)]"
+				style={ fmt.Sprintf("width:%d%%", progressPct(rc)) }
+			></i>
+		</div>
+		<div class="flex items-center gap-[10px] mt-[9px] font-mono text-[10px] text-[#6b7686]">
+			<span class="text-amber">{ fmt.Sprintf("$%.2f", rc.CostUSD) }</span>
+			<span class="text-[#6b7686]">{ rc.State }</span>
+			<span class="ml-auto flex gap-[5px]">
+				<span class="font-mono text-[9.5px] font-semibold py-[2px] px-[7px] rounded-[5px] flex items-center gap-1 bg-cyan/[.09] text-cyan border border-cyan/20">{ cycleLabel(rc) }</span>
+			</span>
+		</div>
+		<div class="mt-[9px] bg-[#060a10] border border-[#172131] rounded-[6px] py-[7px] px-2 font-mono text-[9.5px] leading-[1.55] text-[#7d8aa0] max-h-[54px] overflow-hidden relative">
+			<div class="text-[#8b93a3]">
+				<span class="text-[#475061]">{ rc.CurrentNode } ›</span> awaiting live output…<span class="inline-block w-[6px] h-[11px] bg-cyan align-middle animate-[blink_1s_steps(1)_infinite]"></span>
+			</div>
+		</div>
+	</div>
+}

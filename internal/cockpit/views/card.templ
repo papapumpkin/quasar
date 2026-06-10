@@ -1,0 +1,56 @@
+package views
+
+import (
+	"strings"
+
+	"github.com/papapumpkin/quasar/internal/cockpit"
+)
+
+// cardSub builds the muted provenance subline, e.g. "github · issue · 14m ago".
+func cardSub(c cockpit.NebulaCard) string {
+	var parts []string
+	if c.SourceName != "" {
+		parts = append(parts, c.SourceName)
+	}
+	if c.AgeLabel != "" {
+		parts = append(parts, c.AgeLabel+" ago")
+	}
+	return strings.Join(parts, " · ")
+}
+
+// isAwaiting reports whether a card belongs in the awaiting-approval lane and
+// should therefore render Approve/Reject actions.
+func isAwaiting(status string) bool {
+	return status == "awaiting_approval" || status == "draft"
+}
+
+// NebulaCardView renders one nebula card. Awaiting-approval cards carry
+// Approve/Reject actions wired to the Datastar action endpoints; terminal
+// cards render their status pill and provenance link only.
+templ NebulaCardView(c cockpit.NebulaCard) {
+	<div class="bg-gradient-to-b from-[#101725] to-[#0d1320] border border-[#1f2c3f] rounded-[9px] py-[10px] px-[11px] mb-[9px] transition-[border-color,transform] duration-100 hover:border-[#2c3c54] hover:-translate-y-px relative">
+		<div class="text-[#eef2f8] font-semibold text-[12.5px] leading-[1.35] -tracking-[.005em]">{ c.Title }</div>
+		if sub := cardSub(c); sub != "" {
+			<div class="font-mono text-[10px] text-[#475061] mt-[3px]">{ sub }</div>
+		}
+		<div class="flex items-center gap-[7px] mt-[9px] flex-wrap">
+			@statusPill(c.Status)
+			@prOrIssueLink(c)
+			if !isAwaiting(c.Status) {
+				<span class="font-mono text-[9.5px] text-[#475061] ml-auto">{ c.AgeLabel }</span>
+			}
+		</div>
+		if isAwaiting(c.Status) {
+			<div class="flex gap-[6px] mt-[10px]">
+				<div
+					class="flex-1 text-[11px] font-semibold py-[5px] rounded-[6px] text-center cursor-pointer border border-green/30 bg-green/[.12] text-green hover:bg-green/20 transition"
+					data-on-click={ "@post('/nebulas/" + c.ID + "/approve')" }
+				>Approve</div>
+				<div
+					class="flex-1 text-[11px] font-semibold py-[5px] rounded-[6px] text-center cursor-pointer border border-[#1f2c3f] bg-transparent text-[#6b7686] hover:text-red hover:border-red/30 transition"
+					data-on-click={ "@post('/nebulas/" + c.ID + "/reject')" }
+				>Reject</div>
+			</div>
+		}
+	</div>
+}

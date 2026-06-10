@@ -1,0 +1,77 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/papapumpkin/quasar/internal/cockpit"
+)
+
+// laneShell is the shared column wrapper: a uppercase mono header with a count
+// pill, then the lane body.
+templ laneShell(label string, count int, live bool) {
+	<div class="bg-[#0e1420] p-3 min-h-[120px]">
+		<div class="flex items-center gap-[7px] font-mono text-[9.5px] tracking-[.14em] uppercase text-[#475061] mb-[11px]">
+			if live {
+				<span class="w-[7px] h-[7px] rounded-full bg-green animate-[pulse_1.8s_infinite]"></span>
+			} else {
+				<span>{ glyphFor(label) }</span>
+			}
+			{ label }
+			<span class="ml-auto text-[#6b7686] bg-[#0c111a] border border-[#172131] rounded-[10px] px-[6px] text-[9px]">{ fmt.Sprintf("%d", count) }</span>
+		</div>
+		{ children... }
+	</div>
+}
+
+// glyphFor returns the lane-header glyph matching the mockup.
+func glyphFor(label string) string {
+	switch label {
+	case "Awaiting approval":
+		return "◆"
+	case "Recent":
+		return "▸"
+	default:
+		return "•"
+	}
+}
+
+// emptyState renders the centered "nothing here" placeholder.
+templ emptyState(msg string) {
+	<div class="font-mono text-[10px] text-[#475061] text-center py-[18px]">— { msg } —</div>
+}
+
+// AwaitingLane lists the awaiting-approval nebula cards.
+templ AwaitingLane(cards []cockpit.NebulaCard) {
+	@laneShell("Awaiting approval", len(cards), false) {
+		if len(cards) == 0 {
+			@emptyState("nothing waiting")
+		}
+		for _, c := range cards {
+			@NebulaCardView(c)
+		}
+	}
+}
+
+// InFlightLane lists the live constellation run cards.
+templ InFlightLane(runs []cockpit.RunCard) {
+	@laneShell("In-flight", len(runs), true) {
+		if len(runs) == 0 {
+			@emptyState("idle")
+		}
+		for _, rc := range runs {
+			@RunCardView(rc)
+		}
+	}
+}
+
+// RecentLane lists the recently terminal nebula cards.
+templ RecentLane(cards []cockpit.NebulaCard) {
+	@laneShell("Recent", len(cards), false) {
+		if len(cards) == 0 {
+			@emptyState("nothing recent")
+		}
+		for _, c := range cards {
+			@NebulaCardView(c)
+		}
+	}
+}

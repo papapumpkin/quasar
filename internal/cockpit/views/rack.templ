@@ -1,0 +1,55 @@
+package views
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/papapumpkin/quasar/internal/cockpit"
+)
+
+// repoOwner splits a "owner/name" display name into its owner segment (the
+// muted prefix) and the highlighted repo segment.
+func repoOwner(display string) string {
+	if i := strings.LastIndex(display, "/"); i >= 0 {
+		return display[:i]
+	}
+	return display
+}
+
+// repoName returns the "/name" suffix of a display name, or "" when there is
+// no owner segment.
+func repoName(display string) string {
+	if i := strings.LastIndex(display, "/"); i >= 0 {
+		return display[i:]
+	}
+	return ""
+}
+
+// Rack renders one repository: a header with per-lane counts, then the three
+// lane columns (awaiting / in-flight / recent).
+templ Rack(r cockpit.RepoLane) {
+	<div class="border border-[#172131] rounded-[14px] bg-gradient-to-b from-[#0c111a] to-[#0c111a]/60 mb-[18px] overflow-hidden">
+		<div class="flex items-center gap-3 py-[13px] px-4 border-b border-[#172131]">
+			<span class="w-2 h-2 rounded-[2px] bg-cyan"></span>
+			<div class="font-[650] text-white text-[13.5px] -tracking-[.01em]">
+				{ repoOwner(r.DisplayName) }<span class="text-[#6b7686]">{ repoName(r.DisplayName) }</span>
+			</div>
+			<div class="ml-auto flex gap-[14px] font-mono text-[10.5px]">
+				<div class="flex items-center gap-[5px] text-[#6b7686]">
+					<span class="w-[6px] h-[6px] rounded-full bg-amber"></span><b class="text-[#dde3ec]">{ fmt.Sprintf("%d", len(r.Awaiting)) }</b> awaiting
+				</div>
+				<div class="flex items-center gap-[5px] text-[#6b7686]">
+					<span class="w-[6px] h-[6px] rounded-full bg-cyan"></span><b class="text-[#dde3ec]">{ fmt.Sprintf("%d", len(r.InFlight)) }</b> running
+				</div>
+				<div class="flex items-center gap-[5px] text-[#6b7686]">
+					<span class="w-[6px] h-[6px] rounded-full bg-[#475061]"></span><b class="text-[#dde3ec]">{ fmt.Sprintf("%d", len(r.Recent)) }</b> recent
+				</div>
+			</div>
+		</div>
+		<div class="grid grid-cols-1 md:grid-cols-3 gap-px bg-[#172131]">
+			@AwaitingLane(r.Awaiting)
+			@InFlightLane(r.InFlight)
+			@RecentLane(r.Recent)
+		</div>
+	</div>
+}
