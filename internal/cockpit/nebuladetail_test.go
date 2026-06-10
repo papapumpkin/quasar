@@ -47,7 +47,7 @@ func TestLoadNebulaDetail(t *testing.T) {
 		t.Fatalf("insert nebula: %v", err)
 	}
 
-	// Insert two phases in order; verify ORDER BY seq is honoured.
+	// Insert two phases in order; verify ORDER BY seq is honored.
 	if err := nebulas.InsertPhase(ctx, nebID, fabric.PhaseRow{
 		ID:    "phase-b",
 		Seq:   2,

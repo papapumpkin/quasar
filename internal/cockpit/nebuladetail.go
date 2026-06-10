@@ -58,11 +58,11 @@ func loadNebulaCard(ctx context.Context, db *sql.DB, nebulaID string) (NebulaCar
 		FROM nebulas
 		WHERE id = ?`
 	var (
-		c                            NebulaCard
-		name, desc, srcName, srcID   sql.NullString
-		srcURL                       sql.NullString
-		created                      int64
-		prNum                        sql.NullInt64
+		c                          NebulaCard
+		name, desc, srcName, srcID sql.NullString
+		srcURL                     sql.NullString
+		created                    int64
+		prNum                      sql.NullInt64
 	)
 	err := db.QueryRowContext(ctx, q, nebulaID).Scan(
 		&c.ID, &name, &desc, &c.Status, &srcName, &srcID, &srcURL,

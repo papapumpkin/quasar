@@ -36,6 +36,7 @@ templ NebulaCardView(c cockpit.NebulaCard) {
 		<div class="flex items-center gap-[7px] mt-[9px] flex-wrap">
 			@statusPill(c.Status)
 			@prOrIssueLink(c)
+			@prStatePill(c.PRState)
 			if !isAwaiting(c.Status) {
 				<span class="font-mono text-[9.5px] text-[#475061] ml-auto">{ c.AgeLabel }</span>
 			}

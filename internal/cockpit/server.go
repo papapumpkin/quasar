@@ -54,33 +54,33 @@ type NebulaDetailRenderer func(ctx context.Context, w http.ResponseWriter, d Neb
 
 // Opts holds the dependencies required to construct a Server.
 type Opts struct {
-	DB                  *sql.DB
-	Runtime             RuntimeActions
-	Notifier            *Notifier
-	GitHub              GitHubBadger
-	Token               string
-	Assets              fs.FS
-	RenderPage          PageRenderer
-	RenderRun           RunRenderer
-	RenderRunDetail     RunDetailRenderer
-	RenderNebulaDetail  NebulaDetailRenderer
-	Logf                func(string, ...any)
+	DB                 *sql.DB
+	Runtime            RuntimeActions
+	Notifier           *Notifier
+	GitHub             GitHubBadger
+	Token              string
+	Assets             fs.FS
+	RenderPage         PageRenderer
+	RenderRun          RunRenderer
+	RenderRunDetail    RunDetailRenderer
+	RenderNebulaDetail NebulaDetailRenderer
+	Logf               func(string, ...any)
 }
 
 // Server is the cockpit HTTP server. It serves the fleet dashboard and
 // provides SSE, approve, and reject endpoints.
 type Server struct {
-	db                  *sql.DB
-	rt                  RuntimeActions
-	notifier            *Notifier
-	github              GitHubBadger
-	token               string
-	assets              fs.FS
-	renderPage          PageRenderer
-	renderRun           RunRenderer
-	renderRunDetail     RunDetailRenderer
-	renderNebulaDetail  NebulaDetailRenderer
-	logf                func(string, ...any)
+	db                 *sql.DB
+	rt                 RuntimeActions
+	notifier           *Notifier
+	github             GitHubBadger
+	token              string
+	assets             fs.FS
+	renderPage         PageRenderer
+	renderRun          RunRenderer
+	renderRunDetail    RunDetailRenderer
+	renderNebulaDetail NebulaDetailRenderer
+	logf               func(string, ...any)
 }
 
 // New constructs a Server from the given Opts. DB and Token are required.
@@ -128,17 +128,17 @@ func New(o Opts) (*Server, error) {
 		}
 	}
 	return &Server{
-		db:                  o.DB,
-		rt:                  o.Runtime,
-		notifier:            o.Notifier,
-		github:              o.GitHub,
-		token:               o.Token,
-		assets:              o.Assets,
-		renderPage:          rp,
-		renderRun:           rr,
-		renderRunDetail:     rrd,
-		renderNebulaDetail:  rnd,
-		logf:                lf,
+		db:                 o.DB,
+		rt:                 o.Runtime,
+		notifier:           o.Notifier,
+		github:             o.GitHub,
+		token:              o.Token,
+		assets:             o.Assets,
+		renderPage:         rp,
+		renderRun:          rr,
+		renderRunDetail:    rrd,
+		renderNebulaDetail: rnd,
+		logf:               lf,
 	}, nil
 }
 

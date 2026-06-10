@@ -55,7 +55,7 @@ func TestLoadRunDetail(t *testing.T) {
 	}
 
 	// Seed two star invocations: seq 1 (coder) and seq 2 (reviewer). Insert in
-	// order to verify ORDER BY seq is honoured.
+	// order to verify ORDER BY seq is honored.
 	if _, err := runs.InsertStarInvocation(ctx, fabric.StarInvocationRow{
 		RunID:            runID,
 		Seq:              1,
@@ -70,13 +70,13 @@ func TestLoadRunDetail(t *testing.T) {
 		t.Fatalf("insert invocation 1: %v", err)
 	}
 	if _, err := runs.InsertStarInvocation(ctx, fabric.StarInvocationRow{
-		RunID:    runID,
-		Seq:      2,
-		Node:     "reviewer",
-		StarName: "code-review",
-		State:    "done",
-		Cycle:    1,
-		CostUSD:  0.018,
+		RunID:      runID,
+		Seq:        2,
+		Node:       "reviewer",
+		StarName:   "code-review",
+		State:      "done",
+		Cycle:      1,
+		CostUSD:    0.018,
 		DurationMs: 1100,
 	}); err != nil {
 		t.Fatalf("insert invocation 2: %v", err)

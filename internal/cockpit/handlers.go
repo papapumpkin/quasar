@@ -1,11 +1,15 @@
 package cockpit
 
 import (
+	"context"
 	"net/http"
+	"time"
 )
 
 // handleFleet loads the current fleet state and renders the Mission Control
 // dashboard page via the injected PageRenderer. On a DB error it returns 500.
+// If a GitHubBadger is wired in, PR-state badges are enriched best-effort with
+// a per-call timeout so a slow or absent gh cannot hang the page.
 func (s *Server) handleFleet(w http.ResponseWriter, r *http.Request) {
 	f, err := LoadFleet(r.Context(), s.db)
 	if err != nil {
@@ -13,9 +17,47 @@ func (s *Server) handleFleet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	if s.github != nil {
+		s.enrichPRStates(r.Context(), &f)
+	}
 	if err := s.renderPage(r.Context(), w, f); err != nil {
 		s.logf("cockpit: render fleet page: %v", err)
 	}
+}
+
+// prBadgeTimeout is the per-PR-status-call deadline. The 30s ghBadger cache
+// makes steady-state lookups instant; this guards only the first cold fetch.
+const prBadgeTimeout = 1500 * time.Millisecond
+
+// enrichPRStates calls s.github.PRStatus for every NebulaCard in Awaiting and
+// Recent that carries a PR number. Each call is independently time-bounded.
+// Errors are logged and left as empty PRState so they never fail the page.
+func (s *Server) enrichPRStates(ctx context.Context, f *Fleet) {
+	for li := range f.Repos {
+		lane := &f.Repos[li]
+		for ci := range lane.Awaiting {
+			s.fetchPRState(ctx, lane.Path, &lane.Awaiting[ci])
+		}
+		for ci := range lane.Recent {
+			s.fetchPRState(ctx, lane.Path, &lane.Recent[ci])
+		}
+	}
+}
+
+// fetchPRState fetches the live PR state for a single card, updating
+// card.PRState in place. No-op when PRNumber is zero.
+func (s *Server) fetchPRState(ctx context.Context, repoPath string, card *NebulaCard) {
+	if card.PRNumber <= 0 {
+		return
+	}
+	tctx, cancel := context.WithTimeout(ctx, prBadgeTimeout)
+	defer cancel()
+	state, err := s.github.PRStatus(tctx, repoPath, card.PRNumber)
+	if err != nil {
+		s.logf("cockpit: PR badge %s#%d: %v", repoPath, card.PRNumber, err)
+		return
+	}
+	card.PRState = state
 }
 
 // handleRunDetail loads a single constellation run and its star-invocation step

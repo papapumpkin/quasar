@@ -10,6 +10,7 @@ package forge
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -79,6 +80,49 @@ func OpenPR(ctx context.Context, opts PROpts) (PRResult, error) {
 	}
 	num, _ := parsePRNumber(url)
 	return PRResult{URL: url, Number: num}, nil
+}
+
+// prStateJSON is the shape returned by `gh pr view --json state,isDraft`.
+type prStateJSON struct {
+	State   string `json:"state"`
+	IsDraft bool   `json:"isDraft"`
+}
+
+// parsePRState parses the JSON bytes from `gh pr view --json state,isDraft`
+// and returns a normalised status string: "draft", "open", "merged", or
+// "closed". It is a pure function so it can be unit-tested without gh.
+func parsePRState(data []byte) (string, error) {
+	var v prStateJSON
+	if err := json.Unmarshal(data, &v); err != nil {
+		return "", fmt.Errorf("forge: parse pr state: %w", err)
+	}
+	if v.IsDraft {
+		return "draft", nil
+	}
+	return strings.ToLower(v.State), nil
+}
+
+// PRStatus runs `gh pr view <number> --json state,isDraft` inside workDir (so
+// gh infers the owner/repo from the local git remote) and returns a normalised
+// status string: "draft", "open", "merged", or "closed". This is a READ-ONLY
+// operation — no write subcommand is invoked.
+func PRStatus(ctx context.Context, workDir string, number int) (string, error) {
+	if strings.TrimSpace(workDir) == "" {
+		return "", fmt.Errorf("forge: PRStatus requires workDir")
+	}
+	if number <= 0 {
+		return "", fmt.Errorf("forge: PRStatus requires a positive PR number")
+	}
+	args := []string{"pr", "view", fmt.Sprintf("%d", number), "--json", "state,isDraft"}
+	cmd := exec.CommandContext(ctx, "gh", args...)
+	cmd.Dir = workDir
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("forge: gh pr view: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return parsePRState(stdout.Bytes())
 }
 
 // parsePRNumber extracts the trailing /<number> from a PR URL like

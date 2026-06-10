@@ -8,7 +8,9 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/config"
 	"github.com/papapumpkin/quasar/internal/constellations"
 	"github.com/papapumpkin/quasar/internal/fabric"
+	"github.com/papapumpkin/quasar/internal/forge"
 	"github.com/papapumpkin/quasar/internal/tui/fleet"
 )
 
@@ -131,10 +134,51 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+// ghEntry is a single cached PR-status lookup with its timestamp.
+type ghEntry struct {
+	status string
+	at     time.Time
+}
+
+// ghBadger implements cockpit.GitHubBadger with a 30s in-process cache to
+// avoid hammering gh on every fleet page render. The repo argument is the
+// repo's local working directory; forge.PRStatus infers owner/repo from it.
+// On gh errors the error is returned and no cache entry is written; the
+// cockpit treats errors as best-effort and leaves PRState empty.
+type ghBadger struct {
+	mu    sync.Mutex
+	cache map[string]ghEntry
+}
+
+// ghBadgerTTL is the cache entry lifetime before a fresh gh call is issued.
+const ghBadgerTTL = 30 * time.Second
+
+// PRStatus implements cockpit.GitHubBadger. It serves from cache when the
+// entry is fresh enough; otherwise calls forge.PRStatus, caches the result,
+// and returns it.
+func (g *ghBadger) PRStatus(ctx context.Context, repo string, number int) (string, error) {
+	key := fmt.Sprintf("%s#%d", repo, number)
+	g.mu.Lock()
+	if e, ok := g.cache[key]; ok && time.Since(e.at) < ghBadgerTTL {
+		g.mu.Unlock()
+		return e.status, nil
+	}
+	g.mu.Unlock()
+
+	status, err := forge.PRStatus(ctx, repo, number)
+	if err != nil {
+		return "", err
+	}
+	g.mu.Lock()
+	g.cache[key] = ghEntry{status: status, at: time.Now()}
+	g.mu.Unlock()
+	return status, nil
+}
+
 // buildCockpitServer constructs the cockpit HTTP server: reads the bearer token,
-// wires the RuntimeActions / render adapters, and leaves GitHub badges disabled
-// (the github sensor exposes issue reads only, not PR status). The Notifier is
-// shared with the runtime event sink so live events reach connected browsers.
+// wires the RuntimeActions / render adapters, and wires in the ghBadger so
+// cards with a PR number show a live status badge. The Notifier is shared with
+// the runtime event sink so live events reach connected browsers.
 func buildCockpitServer(fab *fabric.SQLiteFabric, notifier *cockpit.Notifier) (*cockpit.Server, error) {
 	token, err := readCockpitToken()
 	if err != nil {
@@ -144,7 +188,7 @@ func buildCockpitServer(fab *fabric.SQLiteFabric, notifier *cockpit.Notifier) (*
 		DB:                 fab.DB(),
 		Runtime:            fleet.NewStore(fab.DB()),
 		Notifier:           notifier,
-		GitHub:             nil, // see comment above: no clean PR-status surface today
+		GitHub:             &ghBadger{cache: map[string]ghEntry{}},
 		Token:              token,
 		Assets:             cockpit.Assets(),
 		RenderPage:         renderCockpitPage,
