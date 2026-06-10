@@ -1,3 +1,13 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Bespoke keyframes the Mission Control views reference via arbitrary
+   animate-[...] utilities but Tailwind does not define itself. `pulse` is a
+   built-in (opacity) keyframe Tailwind emits; `blink` (the live stdout-tail
+   cursor) is ours. */
+@keyframes blink {
+	50% {
+		opacity: 0;
+	}
+}
