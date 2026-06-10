@@ -51,6 +51,23 @@ type NebulaSnapshot struct {
 	Status  string          `toml:"status"`
 	Context string          `toml:"context"`
 	Phases  []PhaseSnapshot `toml:"phases"`
+	// CurrentPhase is set per-iteration by the phase_iterator dispatcher
+	// when it spawns a child constellation for a single phase. It carries
+	// the phase's body so the child constellation's expression bindings
+	// (e.g. `nebula.current_phase.body` in coder-reviewer.toml) resolve
+	// against the right phase. Nil outside a phase_iterator child.
+	CurrentPhase *PhaseExec `toml:"current_phase,omitempty"`
+}
+
+// PhaseExec is the per-iteration phase context the phase_iterator dispatcher
+// injects into a child constellation's snapshot. It is distinct from
+// PhaseSnapshot because it carries the (potentially large) Body — Body lives
+// only on the child's transient snapshot, never on the parent's persisted
+// PhaseSnapshot slice.
+type PhaseExec struct {
+	ID    string `toml:"id"`
+	Title string `toml:"title"`
+	Body  string `toml:"body"`
 }
 
 // PhaseSnapshot is the per-phase projection a phase_iterator fans out over and
@@ -141,18 +158,29 @@ func (s *State) ExprState() artifacts.State {
 			"status": p.Status,
 		})
 	}
+	nebulaMap := map[string]any{
+		"id":      s.Nebula.ID,
+		"name":    s.Nebula.Name,
+		"source":  s.Nebula.Source,
+		"status":  s.Nebula.Status,
+		"context": s.Nebula.Context,
+		"phases":  phases,
+	}
+	if s.Nebula.CurrentPhase != nil {
+		// `nebula.current_phase.body` and `.title` are referenced by the
+		// default coder-reviewer constellation's inputs; the phase_iterator
+		// dispatcher populates CurrentPhase so those bindings resolve.
+		nebulaMap["current_phase"] = map[string]any{
+			"id":    s.Nebula.CurrentPhase.ID,
+			"title": s.Nebula.CurrentPhase.Title,
+			"body":  s.Nebula.CurrentPhase.Body,
+		}
+	}
 	return artifacts.State{
 		"inputs": mapOrEmpty(s.Inputs),
 		"nodes":  nodes,
-		"nebula": map[string]any{
-			"id":      s.Nebula.ID,
-			"name":    s.Nebula.Name,
-			"source":  s.Nebula.Source,
-			"status":  s.Nebula.Status,
-			"context": s.Nebula.Context,
-			"phases":  phases,
-		},
-		"cycle": s.Cycle,
+		"nebula": nebulaMap,
+		"cycle":  s.Cycle,
 		"meta": map[string]any{
 			"total_cost_usd": s.Meta.TotalCostUSD,
 			"run_started_at": s.Meta.RunStartedAt,

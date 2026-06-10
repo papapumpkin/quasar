@@ -75,6 +75,25 @@ var nebulaSubcmds = []nebulaSubcmd{
 		args:  cobra.ExactArgs(1),
 		run:   runNebulaUndelete,
 	},
+	{
+		use:   "import <path>",
+		short: "Import a nebula blueprint into SQLite without executing it",
+		long: "Parse a nebula directory (nebula.toml + *.md phase files) and insert it " +
+			"as an awaiting_approval row in the nebulas table so it surfaces in the " +
+			"fleet dashboard. The on-disk files are untouched.\n\n" +
+			"This is the manual counterpart to sensor-driven seed creation: an author " +
+			"writes a nebula in .nebulas/<id>/, runs `quasar nebula import` to surface " +
+			"it in the fleet view, and approves it with [a]. The fleet's trigger " +
+			"supervisor then fires the architect constellation against the imported row.\n\n" +
+			"PREREQUISITE: same as `nebula apply` — the CWD must be inside a repo " +
+			"registered with `quasar repo register <path>`. The imported nebula is " +
+			"associated with that repo and shows up under its lane in the fleet view.",
+		args: cobra.ExactArgs(1),
+		flags: func(cmd *cobra.Command) {
+			cmd.Flags().Bool("approve", false, "set the imported nebula's status to 'approved' immediately so the fleet supervisor fires it without manual approval")
+		},
+		run: runNebulaImport,
+	},
 }
 
 func init() {

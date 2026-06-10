@@ -22,6 +22,10 @@ var layers = map[string]int{
 	"sensors":   0,
 	"snapshot":  0,
 	"telemetry": 0,
+	// forge is the write-side adapter to a code host (gh pr create today).
+	// Sibling to sensors in role — a thin, narrow-surface integration
+	// layer with no internal dependencies, so it lands at layer 0.
+	"forge": 0,
 
 	"claude": 1,
 	"fabric": 1,

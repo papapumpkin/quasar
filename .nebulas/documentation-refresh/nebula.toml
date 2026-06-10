@@ -1,0 +1,43 @@
+[nebula]
+name = "documentation-refresh"
+description = "Bring the docs/ directory and root README into alignment with the current codebase. Every feature shipped through constellation-runtime, coder-runtime-hardening, master-reviewer-loop-hardening, coordinated-parallel-execution, and the 2026-06-08 audit gets a doc that describes BOTH what it does AND how the code achieves it, with file:line citations so a reader can navigate from prose to source in one hop. Six thematic phases, each producing a coherent slice of the doc suite."
+
+[defaults]
+type = "task"
+priority = 2
+labels = ["quasar", "docs"]
+assignee = ""
+
+[execution]
+max_workers = 1
+max_review_cycles = 3
+max_budget_usd = 30.0
+model = ""
+gate = "trust"
+
+[context]
+repo = "github.com/papapumpkin/quasar"
+working_dir = "."
+goals = [
+    "Every shipped feature has a doc describing what it does, how the code achieves it (with file:line citations), and what its trade-offs are",
+    "A reader exploring one subsystem can follow links into adjacent ones; cross-references are explicit and bidirectional",
+    "CLAUDE.md, README.md, and the docs/ set are mutually consistent — no claim contradicts another",
+    "Audience: a developer who knows Go and SQLite but has not seen Quasar before; the docs alone are enough to onboard them",
+    "The 2026-06-08 audit findings doc is preserved as historical artifact but linked from a new docs index so it does not look like the current state",
+]
+constraints = [
+    "All claims must be verifiable against the current main branch; no aspirational features described as if they shipped",
+    "No marketing copy — describe what's there, why it's there, what its failure modes are",
+    "All file:line citations must exist at write time; the reviewer verifies before approving each phase",
+    "Diagrams are Mermaid blocks that render in GitHub's markdown viewer; no external image assets",
+    "Stale docs (docs/integrations.md references the renamed sensors package) are either rewritten or explicitly retired with a redirect note",
+    "Per-phase docs may safely overlap; the goal is good documentation, not deduplication. Cross-link rather than duplicate prose.",
+]
+
+[dependencies]
+requires_nebulae = [
+    "constellation-runtime",
+    "coder-runtime-hardening",
+    "master-reviewer-loop-hardening",
+    "coordinated-parallel-execution",
+]

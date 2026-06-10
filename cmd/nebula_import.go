@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/spf13/cobra"
+
 	"github.com/papapumpkin/quasar/internal/blobstore"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/nebula"
@@ -93,4 +95,65 @@ func applyImportToSQLite(ctx context.Context, nebulaDir string) (string, error) 
 	}
 	store := fabric.NewNebulaStore(fab.DB(), blobs)
 	return importNebulaToStore(ctx, store, nebulaDir, repo.Path)
+}
+
+// runNebulaImport is the cobra handler for `quasar nebula import <path>`. It
+// imports the nebula at <path> into the SQLite store (where it surfaces in
+// the fleet view's Awaiting Approval lane), without executing it. With
+// --approve, it immediately flips the new row's status to 'approved' and
+// enqueues a trigger_queue row so the fleet supervisor fires the architect
+// constellation on its next tick — useful for autorun workflows.
+func runNebulaImport(cmd *cobra.Command, args []string) error {
+	nebulaDir := args[0]
+	ctx := cmd.Context()
+
+	id, err := applyImportToSQLite(ctx, nebulaDir)
+	if err != nil {
+		return err
+	}
+	approveNow, _ := cmd.Flags().GetBool("approve")
+	if !approveNow {
+		fmt.Fprintf(os.Stderr, "imported nebula %s (status=awaiting_approval).\n", id)
+		fmt.Fprintln(os.Stderr, "open `quasar fleet` and press [a] on its card to fire the architect.")
+		return nil
+	}
+
+	if err := approveImportedNebula(ctx, id); err != nil {
+		return fmt.Errorf("approve %s: %w", id, err)
+	}
+	fmt.Fprintf(os.Stderr, "imported and approved nebula %s.\n", id)
+	fmt.Fprintln(os.Stderr, "the fleet supervisor will fire the architect on its next tick (~1s).")
+	return nil
+}
+
+// approveImportedNebula flips the nebula's status to 'approved' and inserts a
+// trigger_queue row for the architect constellation, atomically. Mirrors
+// fleet.Store.Approve so the supervisor consumes the row exactly as it would
+// after a TUI approval.
+func approveImportedNebula(ctx context.Context, nebulaID string) error {
+	dbPath := fabricDBPath()
+	fab, err := fabric.NewSQLiteFabric(ctx, dbPath)
+	if err != nil {
+		return fmt.Errorf("open fabric: %w", err)
+	}
+	defer fab.Close() //nolint:errcheck // close error is non-fatal for a CLI op
+
+	tx, err := fab.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // rollback after commit is a no-op
+
+	if _, err := tx.ExecContext(ctx,
+		"UPDATE nebulas SET status = 'approved', updated_at = strftime('%s','now') WHERE id = ?",
+		nebulaID); err != nil {
+		return fmt.Errorf("update status: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO trigger_queue (nebula_id, constellation_name, state, created_at, repo_path)
+		 SELECT id, 'architect', 'pending', strftime('%s','now'), repo_path FROM nebulas WHERE id = ?`,
+		nebulaID); err != nil {
+		return fmt.Errorf("enqueue trigger: %w", err)
+	}
+	return tx.Commit()
 }

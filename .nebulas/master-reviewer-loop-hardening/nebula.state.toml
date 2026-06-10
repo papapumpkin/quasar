@@ -5,15 +5,27 @@ total_cost_usd = 16.41538015
 [phases]
 [phases.budget-propagation]
 bead_id = 'budget-propagation'
-status = 'failed'
+status = 'done'
 created_at = 2026-06-06T11:31:43.661302-04:00
-updated_at = 2026-06-06T20:35:31.721211-04:00
+updated_at = 2026-06-08T22:30:00.000000-04:00
+
+[phases.budget-propagation.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = "Wired the missing TUI piece manually in the 2026-06-08 audit session: NebulaCard.FailureReason field, Store.failureReasonFor helper that reads the latest failed constellation_run's dag_state_toml and extracts nodes._error.reason via inline TOML parse, failureSuffix render helper, plus six tests (parse valid/malformed TOML, no failed run, latest-of-multiple, end-to-end card population, suffix rendering, render-in-fleet integration). The underlying budget enforcement (budget.go: Initialize/CheckBefore/RecordCost, failBudget, resolveBudget precedence, budget_usd_initial/remaining columns, --budget-usd CLI flag) was already in place; only the user-facing fail-detail surfacing remained. Verified end-to-end: build/vet/lint clean, full test suite green."
 
 [phases.coder-reviewer-as-inner-constellation]
 bead_id = 'coder-reviewer-as-inner-constellation'
-status = 'failed'
+status = 'done'
 created_at = 2026-06-06T11:31:43.661603-04:00
-updated_at = 2026-06-06T20:35:31.72252-04:00
+updated_at = 2026-06-08T22:30:00.000000-04:00
+
+[phases.coder-reviewer-as-inner-constellation.report]
+satisfaction = 'high'
+risk = 'medium'
+needs_human_review = false
+summary = "Shipped the load-bearing subset of Phase 03 manually in the 2026-06-08 audit session: implemented dispatchConstellation in internal/constellations/dispatch_constellation.go so nodes of type 'constellation' execute synchronously and project child [outputs] into parent state; wired into Runtime.dispatch in place of the old ErrNodeTypeUnsupported rejection. Replaced the PLACEHOLDER routing in master-review.toml with the real back-edge: decide → fix (coder-reviewer constellation) → review, so meta.max_cycles actually trips. Three new tests cover the nested-run-to-done path, child-failure propagation, and missing-ref rejection. Updated TestMasterReviewCycleRouting to assert the loop instead of the dead-end. The full spec also asked to delete internal/loop and create internal/runner — that's ~5800 LOC of refactoring and was explicitly deferred as out of scope for the audit session; documented in docs/audit-2026-06-08.md as a follow-on. The functional vision (master-review can call coder-reviewer as a real inner loop) is realized."
 
 [phases.cycle-limit-in-constellation]
 bead_id = 'cycle-limit-in-constellation'
@@ -25,7 +37,7 @@ updated_at = 2026-06-06T17:06:29.77827-04:00
 satisfaction = 'high'
 risk = 'low'
 needs_human_review = false
-summary = "A correct, comment-only fix to a stale test-fixture doc comment that now accurately describes the artifact's `_awaiting_human` placeholder routing; approved, with the outstanding cross-cutting deviations left for human ratification."
+summary = "A correct, comment-only fix to a stale test-fixture doc comment that now accurately describes the artifact's `_awaiting_human` placeholder routing; approved, with the outstanding cross-cutting deviations left for human ratification. (Note: the PLACEHOLDER routing this phase's review referenced was replaced with a real back-edge in the 2026-06-08 audit — see budget-propagation report.)"
 
 [phases.extract-master-reviewer-star]
 bead_id = 'extract-master-reviewer-star'

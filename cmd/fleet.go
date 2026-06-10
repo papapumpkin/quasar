@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -26,6 +27,14 @@ import (
 // a run promptly) against database churn (the query is cheap on the
 // well-indexed pending row count).
 const triggerSupervisorInterval = time.Second
+
+// stepDriverInterval is how often the step driver advances running runs.
+// Tighter than the supervisor because Step is the hot path — every node
+// firing in every constellation, every back-edge cycle, every nested
+// dispatch. 250ms is a deliberate compromise: tight enough that a
+// well-behaved star invocation's wall-clock latency dominates total run
+// time (not driver wakeup), loose enough that DB churn stays bounded.
+const stepDriverInterval = 250 * time.Millisecond
 
 // fleetCmd launches the multi-repo fleet dashboard: a three-lane home view
 // (awaiting-approval drafts, in-flight runs, recent terminal nebulas) grouped
@@ -129,8 +138,30 @@ func startTriggerSupervisor(ctx context.Context, fab *fabric.SQLiteFabric, dbPat
 		Firer:  &constellations.RuntimeCacheFirer{Cache: cache},
 		Logger: logger,
 	}
+	// StepDriver is the other half of the trigger pipeline: the Supervisor
+	// fires runs at their entry node, the StepDriver walks them through to
+	// terminal. Without it, fired runs stall at the entry node forever.
+	// Faster interval than the Supervisor because Step is the hot path —
+	// every node firing in a constellation, every cycle of an inner loop.
+	driver := &constellations.StepDriver{
+		DB:      fab.DB(),
+		Stepper: &constellations.RuntimeCacheStepper{Cache: cache},
+		Logger:  logger,
+	}
 	go func() {
-		sup.Run(ctx, triggerSupervisorInterval)
+		// Both share the same logger handle. Close once after both have
+		// returned (ctx cancellation triggers both).
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			sup.Run(ctx, triggerSupervisorInterval)
+		}()
+		go func() {
+			defer wg.Done()
+			driver.Run(ctx, stepDriverInterval)
+		}()
+		wg.Wait()
 		if logger != nil {
 			_ = logger.(io.Closer).Close()
 		}

@@ -296,7 +296,7 @@ func (r *Runtime) dispatch(ctx context.Context, run *fabric.RunRow, st *State, n
 	case artifacts.NodeConstellation:
 		return r.dispatchConstellation(ctx, run, st, node)
 	case artifacts.NodePhaseIterator:
-		return nil, fmt.Errorf("%w: %q (node %q)", ErrNodeTypeUnsupported, node.Type, node.ID)
+		return r.dispatchPhaseIterator(ctx, run, st, node)
 	default:
 		return nil, fmt.Errorf("constellations: unknown node type %q (node %q)", node.Type, node.ID)
 	}

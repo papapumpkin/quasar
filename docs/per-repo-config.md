@@ -8,11 +8,15 @@ case.
 
 See [deployment.md](deployment.md) for registering the repo with a running
 supervisor, and [safety.md](safety.md) for what Quasar is allowed to do once it
-is pointed at your code.
+is pointed at your code. For the **complete, authoritative list** of every
+`.quasar.yaml` key — types, defaults, and what reads each one — see
+[configuration.md](configuration.md); this page only covers the per-repo
+authoring workflow.
 
 ## `.quasar.yaml` at the repo root
 
-The minimum useful config:
+The minimum useful config (every key here is a field of the `Config` struct —
+see [configuration.md](configuration.md#the-full-quasaryaml-surface)):
 
 ```yaml
 pre_commit:
@@ -21,14 +25,17 @@ pre_commit:
     - go test -short ./...
   fail_on_error: true        # abort the commit if any command exits non-zero
 
-budget:
-  default_max_usd: 30.0      # per-nebula spend cap
-  default_max_review_cycles: 5
+max_budget_usd: 30.0         # per-run spend cap (top-level key)
+max_review_cycles: 5         # default coder-reviewer cycle cap
 
-branch:
-  prefix: quasar/            # all Quasar branches start with this (enforced)
-  base: main                 # what Quasar PRs target
+github:
+  base_branch: main          # what Quasar PRs target
 ```
+
+> The `quasar/*` branch **prefix** is not a config key — it is enforced
+> unconditionally by the git output-safety perimeter (see [safety.md](safety.md)).
+> Older drafts of this page showed `[budget]` and `[branch]` blocks; those are
+> not read by the loader. The live equivalents are the top-level keys above.
 
 The `[pre_commit]` block is loaded by the constellation runtime and passed into
 every `gitops.Commit` call, so your quality gates run uniformly before any commit
@@ -80,7 +87,7 @@ default stars, fires the architect on approval, and gates commits on
 
 ```
 my-repo/
-├── .quasar.yaml            # the pre_commit / budget / branch config above
+├── .quasar.yaml            # the pre_commit / budget / github config above
 └── sensors/
     └── github-issues.toml  # the github_issues sensor above
 ```
