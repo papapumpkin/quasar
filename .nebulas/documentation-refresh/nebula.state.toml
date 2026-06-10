@@ -1,6 +1,6 @@
 version = 1
 nebula_name = 'documentation-refresh'
-total_cost_usd = 25.16598415
+total_cost_usd = 29.10561065
 
 [phases]
 [phases.config-and-handbook]
@@ -17,9 +17,15 @@ summary = 'A documentation phase that adds a config reference + contributor hand
 
 [phases.coordination]
 bead_id = 'coordination'
-status = 'in_progress'
+status = 'done'
 created_at = 2026-06-08T23:30:57.76066-04:00
-updated_at = 2026-06-09T21:53:04.638771-04:00
+updated_at = 2026-06-09T22:00:53.60084-04:00
+
+[phases.coordination.report]
+satisfaction = 'high'
+risk = 'low'
+needs_human_review = false
+summary = 'A verification-focused cycle that fixed one drifted telemetry citation and confirmed all eight acceptance criteria hold against current `main`; the three coordination docs are accurate, honest, and consistent.'
 
 [phases.foundation]
 bead_id = 'foundation'
