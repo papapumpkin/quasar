@@ -23,6 +23,11 @@ const defaultMaxInflight = 4
 // stall the scheduler's tick loop indefinitely.
 const defaultPollTimeout = 60 * time.Second
 
+// defaultPollInterval is the fallback poll cadence for sensor instances whose
+// TOML file omits poll_interval. Five minutes is conservative enough to stay
+// within typical GitHub API rate limits across a large fleet.
+const defaultPollInterval = 5 * time.Minute
+
 // defaultTriggerWhen is the trigger condition matched against newly-seeded
 // events when a trigger omits its `when`.
 const defaultTriggerWhen = "new_item"
@@ -93,6 +98,10 @@ type SchedulerOpts struct {
 	Logger      io.Writer     // nil discards
 	PollTimeout time.Duration // <=0 uses defaultPollTimeout
 	Now         func() time.Time
+	// OnSeed, when non-nil, is called after each new nebula row is durably
+	// written. The supervisor uses it to notify connected UIs without coupling
+	// the sensors package to any UI or event-bus type.
+	OnSeed func(nebulaID string)
 }
 
 // Scheduler drives one sensor instance: on each tick it polls for new events,
@@ -111,6 +120,7 @@ type Scheduler struct {
 	logger      io.Writer
 	pollTimeout time.Duration
 	now         func() time.Time
+	onSeed      func(string)
 
 	gate *inflightGate
 }
@@ -157,6 +167,10 @@ func NewScheduler(opts SchedulerOpts) (*Scheduler, error) {
 	if now == nil {
 		now = time.Now
 	}
+	onSeed := opts.OnSeed
+	if onSeed == nil {
+		onSeed = func(string) {}
+	}
 
 	return &Scheduler{
 		repoPath:    opts.RepoPath,
@@ -170,6 +184,7 @@ func NewScheduler(opts SchedulerOpts) (*Scheduler, error) {
 		logger:      logger,
 		pollTimeout: pollTimeout,
 		now:         now,
+		onSeed:      onSeed,
 		gate:        newInflightGate(maxInflight),
 	}, nil
 }
@@ -180,7 +195,9 @@ func NewScheduler(opts SchedulerOpts) (*Scheduler, error) {
 func (s *Scheduler) Run(ctx context.Context) error {
 	interval := s.instance.PollInterval
 	if interval <= 0 {
-		return fmt.Errorf("sensors: scheduler %q/%q has no poll_interval", s.repoPath, s.sensorName)
+		interval = defaultPollInterval
+		fmt.Fprintf(s.logger, "sensor %s/%s: no poll_interval configured, using default %s\n",
+			s.repoPath, s.sensorName, defaultPollInterval)
 	}
 
 	s.tick(ctx)
@@ -312,6 +329,7 @@ func (s *Scheduler) seed(ctx context.Context, ev Event) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("sensors: insert seed nebula for %q: %w", ev.ExternalID, err)
 	}
+	s.onSeed(id)
 	return id, nil
 }
 

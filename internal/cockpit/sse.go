@@ -74,7 +74,7 @@ func (s *Server) renderEvent(ctx context.Context, w http.ResponseWriter, e Event
 			return
 		}
 		writeMergeFragments(w, buf.String())
-	case "nebula_status_changed", "resync":
+	case "nebula_status_changed", "nebula_seeded", "resync":
 		writeReload(w)
 	}
 }
