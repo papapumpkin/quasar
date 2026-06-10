@@ -141,16 +141,17 @@ func buildCockpitServer(fab *fabric.SQLiteFabric, notifier *cockpit.Notifier) (*
 		return nil, err
 	}
 	server, err := cockpit.New(cockpit.Opts{
-		DB:              fab.DB(),
-		Runtime:         fleet.NewStore(fab.DB()),
-		Notifier:        notifier,
-		GitHub:          nil, // see comment above: no clean PR-status surface today
-		Token:           token,
-		Assets:          cockpit.Assets(),
-		RenderPage:      renderCockpitPage,
-		RenderRun:       renderCockpitRun,
-		RenderRunDetail: renderCockpitRunDetail,
-		Logf:            func(f string, a ...any) { fmt.Fprintf(os.Stderr, "cockpit: "+f+"\n", a...) },
+		DB:                 fab.DB(),
+		Runtime:            fleet.NewStore(fab.DB()),
+		Notifier:           notifier,
+		GitHub:             nil, // see comment above: no clean PR-status surface today
+		Token:              token,
+		Assets:             cockpit.Assets(),
+		RenderPage:         renderCockpitPage,
+		RenderRun:          renderCockpitRun,
+		RenderRunDetail:    renderCockpitRunDetail,
+		RenderNebulaDetail: renderCockpitNebulaDetail,
+		Logf:               func(f string, a ...any) { fmt.Fprintf(os.Stderr, "cockpit: "+f+"\n", a...) },
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build cockpit server: %w", err)
@@ -214,4 +215,11 @@ func renderCockpitRun(ctx context.Context, w io.Writer, rc cockpit.RunCard) erro
 func renderCockpitRunDetail(ctx context.Context, w http.ResponseWriter, d cockpit.RunDetail) error {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	return views.RunDetailPage(d).Render(ctx, w)
+}
+
+// renderCockpitNebulaDetail is the cockpit.NebulaDetailRenderer: it renders the
+// nebula-detail page via the templ-generated views.NebulaDetailPage component.
+func renderCockpitNebulaDetail(ctx context.Context, w http.ResponseWriter, d cockpit.NebulaDetail) error {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return views.NebulaDetailPage(d).Render(ctx, w)
 }

@@ -23,6 +23,7 @@ func (s *Server) Routes() http.Handler {
 	// Authenticated routes.
 	mux.Handle("GET /{$}", requireAuth(s.token, http.HandlerFunc(s.handleFleet)))
 	mux.Handle("GET /runs/{id}", requireAuth(s.token, http.HandlerFunc(s.handleRunDetail)))
+	mux.Handle("GET /nebulas/{id}", requireAuth(s.token, http.HandlerFunc(s.handleNebulaDetail)))
 	mux.Handle("GET /sse", requireAuth(s.token, http.HandlerFunc(s.handleSSE)))
 	mux.Handle("POST /nebulas/{id}/approve",
 		requireAuth(s.token, http.HandlerFunc(s.handleApprove)))
