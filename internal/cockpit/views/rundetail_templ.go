@@ -273,9 +273,12 @@ func StepRowView(s cockpit.StepRow) templ.Component {
 	})
 }
 
-// RunDetailPage renders the Mission Control run-detail page: a sticky topbar
-// back-link, a run header card, and a scrollable step trace.
-func RunDetailPage(d cockpit.RunDetail) templ.Component {
+// RunTailFragment renders the live stdout-tail panel: a Datastar-mergeable
+// element with id "run-tail" containing the streamed subprocess output in a
+// scrollable monospace <pre>. The runtime tees the active star's stdout into a
+// per-run log; this fragment is re-fetched on an interval and merged in place.
+// The inline script auto-scrolls the pre to the bottom on each merge.
+func RunTailFragment(lines string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -296,7 +299,66 @@ func RunDetailPage(d cockpit.RunDetail) templ.Component {
 			templ_7745c5c3_Var13 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var14 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<div id=\"run-tail\" class=\"border border-[#172131] rounded-[9px] overflow-hidden mb-[18px]\"><div class=\"flex items-center gap-[8px] py-[10px] px-[11px] border-b border-[#172131] bg-[#0c111a]\"><span class=\"font-mono text-[9.5px] tracking-[.14em] uppercase text-[#475061]\">live stdout</span> <span class=\"w-[6px] h-[6px] rounded-full bg-cyan/70 shadow-[0_0_6px_rgba(34,211,238,.6)]\"></span></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if lines == "" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<div class=\"font-mono text-[10px] text-[#475061] text-center py-[24px]\">— waiting for output —</div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		} else {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<pre id=\"run-tail-pre\" class=\"overflow-auto max-h-[420px] bg-[#06090e] text-[#9fb0c8] font-mono text-[11px] leading-[1.55] p-[12px] m-0 whitespace-pre-wrap break-words\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var14 string
+			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(lines)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 111, Col: 179}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</pre><script>\n\t\t\t\t(function () {\n\t\t\t\t\tvar el = document.getElementById(\"run-tail-pre\");\n\t\t\t\t\tif (el) { el.scrollTop = el.scrollHeight; }\n\t\t\t\t})();\n\t\t\t</script>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// RunDetailPage renders the Mission Control run-detail page: a sticky topbar
+// back-link, a run header card, and a scrollable step trace.
+func RunDetailPage(d cockpit.RunDetail) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var15 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var15 == nil {
+			templ_7745c5c3_Var15 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Var16 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -308,169 +370,190 @@ func RunDetailPage(d cockpit.RunDetail) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<!-- topbar --> <div class=\"sticky top-0 z-10 flex items-center gap-[18px] py-[13px] px-1 border-b border-[#172131] backdrop-blur-md mb-5 bg-[#070a0f]/90\"><div class=\"flex items-center gap-[9px] font-bold tracking-[.06em] text-[14px]\"><span class=\"w-[13px] h-[13px] rounded-[3px] bg-[conic-gradient(from_45deg,#22d3ee,#a78bfa,#22d3ee)] shadow-[0_0_14px_rgba(34,211,238,.5)]\"></span> <b class=\"text-white\">QUASAR</b><span class=\"text-cyan\">cockpit</span></div><a href=\"/\" class=\"flex items-center gap-[6px] font-mono text-[11px] text-[#6b7686] hover:text-cyan transition-colors no-underline\">‹ fleet</a><div class=\"flex-1\"></div><span class=\"font-mono text-[10px] text-[#475061]\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var15 string
-			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(d.Run.ConstellationName)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 116, Col: 79}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</span> <span class=\"font-mono text-[10px] text-[#475061] truncate max-w-[240px]\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var16 string
-			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(d.Run.ID)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 117, Col: 87}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</span></div><!-- run header card --> <div class=\"bg-gradient-to-b from-[#0c1422] to-[#0a1019] border border-cyan/20 rounded-[9px] p-[14px] mb-[18px] relative overflow-hidden\"><span class=\"absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-cyan to-green\"></span><div class=\"flex items-start gap-[10px] flex-wrap\"><div class=\"flex-1 min-w-0\"><div class=\"text-[#eef2f8] font-semibold text-[14px] leading-snug\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<!-- topbar --> <div class=\"sticky top-0 z-10 flex items-center gap-[18px] py-[13px] px-1 border-b border-[#172131] backdrop-blur-md mb-5 bg-[#070a0f]/90\"><div class=\"flex items-center gap-[9px] font-bold tracking-[.06em] text-[14px]\"><span class=\"w-[13px] h-[13px] rounded-[3px] bg-[conic-gradient(from_45deg,#22d3ee,#a78bfa,#22d3ee)] shadow-[0_0_14px_rgba(34,211,238,.5)]\"></span> <b class=\"text-white\">QUASAR</b><span class=\"text-cyan\">cockpit</span></div><a href=\"/\" class=\"flex items-center gap-[6px] font-mono text-[11px] text-[#6b7686] hover:text-cyan transition-colors no-underline\">‹ fleet</a><div class=\"flex-1\"></div><span class=\"font-mono text-[10px] text-[#475061]\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var17 string
-			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(d.Run.Title)
+			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(d.Run.ConstellationName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 124, Col: 85}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 141, Col: 79}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</div><div class=\"font-mono text-[10.5px] text-[#475061] mt-[3px]\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</span> <span class=\"font-mono text-[10px] text-[#475061] truncate max-w-[240px]\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var18 string
-			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(d.Run.ConstellationName)
+			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(d.Run.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 125, Col: 91}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 142, Col: 87}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</span></div><!-- run header card --> <div class=\"bg-gradient-to-b from-[#0c1422] to-[#0a1019] border border-cyan/20 rounded-[9px] p-[14px] mb-[18px] relative overflow-hidden\"><span class=\"absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-cyan to-green\"></span><div class=\"flex items-start gap-[10px] flex-wrap\"><div class=\"flex-1 min-w-0\"><div class=\"text-[#eef2f8] font-semibold text-[14px] leading-snug\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var19 = []any{"font-mono text-[10px] font-semibold py-[3px] px-[10px] rounded-[6px] border", stepStatePillClass(d.Run.State)}
-			templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var19...)
+			var templ_7745c5c3_Var19 string
+			templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(d.Run.Title)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 149, Col: 85}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<span class=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</div><div class=\"font-mono text-[10.5px] text-[#475061] mt-[3px]\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var20 string
-			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var19).String())
+			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(d.Run.ConstellationName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 1, Col: 0}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 150, Col: 91}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var21 string
-			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(d.Run.State)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 128, Col: 18}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
+			var templ_7745c5c3_Var21 = []any{"font-mono text-[10px] font-semibold py-[3px] px-[10px] rounded-[6px] border", stepStatePillClass(d.Run.State)}
+			templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var21...)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</span></div><div class=\"grid grid-cols-2 md:grid-cols-4 gap-[10px] mt-[13px]\"><div class=\"bg-[#060a10] border border-[#172131] rounded-[6px] py-[8px] px-[10px]\"><div class=\"font-mono text-[9px] tracking-[.1em] uppercase text-[#475061] mb-[3px]\">current node</div><div class=\"font-mono text-[12px] text-cyan\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<span class=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var22 string
-			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(d.Run.CurrentNode)
+			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var21).String())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 134, Col: 69}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 1, Col: 0}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</div></div><div class=\"bg-[#060a10] border border-[#172131] rounded-[6px] py-[8px] px-[10px]\"><div class=\"font-mono text-[9px] tracking-[.1em] uppercase text-[#475061] mb-[3px]\">cost</div><div class=\"font-mono text-[12px] text-amber\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var23 string
-			templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("$%.4f", d.Run.CostUSD))
+			templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(d.Run.State)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 138, Col: 88}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 153, Col: 18}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</div></div><div class=\"bg-[#060a10] border border-[#172131] rounded-[6px] py-[8px] px-[10px]\"><div class=\"font-mono text-[9px] tracking-[.1em] uppercase text-[#475061] mb-[3px]\">cycle</div><div class=\"font-mono text-[12px] text-[#dde3ec]\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "</span></div><div class=\"grid grid-cols-2 md:grid-cols-4 gap-[10px] mt-[13px]\"><div class=\"bg-[#060a10] border border-[#172131] rounded-[6px] py-[8px] px-[10px]\"><div class=\"font-mono text-[9px] tracking-[.1em] uppercase text-[#475061] mb-[3px]\">current node</div><div class=\"font-mono text-[12px] text-cyan\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var24 string
-			templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(cycleLabel(d.Run))
+			templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(d.Run.CurrentNode)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 142, Col: 74}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 159, Col: 69}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</div></div><div class=\"bg-[#060a10] border border-[#172131] rounded-[6px] py-[8px] px-[10px]\"><div class=\"font-mono text-[9px] tracking-[.1em] uppercase text-[#475061] mb-[3px]\">steps</div><div class=\"font-mono text-[12px] text-[#dde3ec]\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "</div></div><div class=\"bg-[#060a10] border border-[#172131] rounded-[6px] py-[8px] px-[10px]\"><div class=\"font-mono text-[9px] tracking-[.1em] uppercase text-[#475061] mb-[3px]\">cost</div><div class=\"font-mono text-[12px] text-amber\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var25 string
-			templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d / %d", d.Run.StepIndex, d.Run.StepCount))
+			templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("$%.4f", d.Run.CostUSD))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 146, Col: 113}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 163, Col: 88}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</div></div></div></div><!-- step trace --> <div class=\"border border-[#172131] rounded-[9px] overflow-hidden\"><div class=\"flex items-center gap-[8px] py-[10px] px-[11px] border-b border-[#172131] bg-[#0c111a]\"><span class=\"font-mono text-[9.5px] tracking-[.14em] uppercase text-[#475061]\">step trace</span> <span class=\"ml-auto font-mono text-[9px] text-[#475061] bg-[#0c111a] border border-[#172131] rounded-[10px] px-[6px]\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "</div></div><div class=\"bg-[#060a10] border border-[#172131] rounded-[6px] py-[8px] px-[10px]\"><div class=\"font-mono text-[9px] tracking-[.1em] uppercase text-[#475061] mb-[3px]\">cycle</div><div class=\"font-mono text-[12px] text-[#dde3ec]\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var26 string
-			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", len(d.Steps)))
+			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(cycleLabel(d.Run))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 154, Col: 156}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 167, Col: 74}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "</span></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "</div></div><div class=\"bg-[#060a10] border border-[#172131] rounded-[6px] py-[8px] px-[10px]\"><div class=\"font-mono text-[9px] tracking-[.1em] uppercase text-[#475061] mb-[3px]\">steps</div><div class=\"font-mono text-[12px] text-[#dde3ec]\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var27 string
+			templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d / %d", d.Run.StepIndex, d.Run.StepCount))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 171, Col: 113}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "</div></div></div></div><!-- live stdout tail: poll the tail endpoint every 2s and merge the\n\t\t     returned fragment (id run-tail) in place. data-on-interval is the\n\t\t     Datastar v1.0.0-beta.11 interval plugin; the __duration.2s modifier\n\t\t     sets the period. The endpoint is cheap and returns an empty fragment\n\t\t     when there is no log yet, so polling unconditionally is safe. --> <div data-on-interval__duration.2s=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var28 string
+			templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs("@get('/runs/" + d.Run.ID + "/tail')")
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 180, Col: 76}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = RunTailFragment("").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</div><!-- step trace --> <div class=\"border border-[#172131] rounded-[9px] overflow-hidden\"><div class=\"flex items-center gap-[8px] py-[10px] px-[11px] border-b border-[#172131] bg-[#0c111a]\"><span class=\"font-mono text-[9.5px] tracking-[.14em] uppercase text-[#475061]\">step trace</span> <span class=\"ml-auto font-mono text-[9px] text-[#475061] bg-[#0c111a] border border-[#172131] rounded-[10px] px-[6px]\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var29 string
+			templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", len(d.Steps)))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/rundetail.templ`, Line: 187, Col: 156}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "</span></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if len(d.Steps) == 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<div class=\"font-mono text-[10px] text-[#475061] text-center py-[24px]\">— no steps recorded yet —</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<div class=\"font-mono text-[10px] text-[#475061] text-center py-[24px]\">— no steps recorded yet —</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "<div class=\"overflow-y-auto max-h-[640px] bg-[#08101a]\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "<div class=\"overflow-y-auto max-h-[640px] bg-[#08101a]\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -480,18 +563,18 @@ func RunDetailPage(d cockpit.RunDetail) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = Shell("Quasar Cockpit — Run "+d.Run.ID).Render(templ.WithChildren(ctx, templ_7745c5c3_Var14), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Shell("Quasar Cockpit — Run "+d.Run.ID).Render(templ.WithChildren(ctx, templ_7745c5c3_Var16), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

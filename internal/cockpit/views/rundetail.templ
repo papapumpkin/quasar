@@ -94,6 +94,31 @@ templ StepRowView(s cockpit.StepRow) {
 	</div>
 }
 
+// RunTailFragment renders the live stdout-tail panel: a Datastar-mergeable
+// element with id "run-tail" containing the streamed subprocess output in a
+// scrollable monospace <pre>. The runtime tees the active star's stdout into a
+// per-run log; this fragment is re-fetched on an interval and merged in place.
+// The inline script auto-scrolls the pre to the bottom on each merge.
+templ RunTailFragment(lines string) {
+	<div id="run-tail" class="border border-[#172131] rounded-[9px] overflow-hidden mb-[18px]">
+		<div class="flex items-center gap-[8px] py-[10px] px-[11px] border-b border-[#172131] bg-[#0c111a]">
+			<span class="font-mono text-[9.5px] tracking-[.14em] uppercase text-[#475061]">live stdout</span>
+			<span class="w-[6px] h-[6px] rounded-full bg-cyan/70 shadow-[0_0_6px_rgba(34,211,238,.6)]"></span>
+		</div>
+		if lines == "" {
+			<div class="font-mono text-[10px] text-[#475061] text-center py-[24px]">— waiting for output —</div>
+		} else {
+			<pre id="run-tail-pre" class="overflow-auto max-h-[420px] bg-[#06090e] text-[#9fb0c8] font-mono text-[11px] leading-[1.55] p-[12px] m-0 whitespace-pre-wrap break-words">{ lines }</pre>
+			<script>
+				(function () {
+					var el = document.getElementById("run-tail-pre");
+					if (el) { el.scrollTop = el.scrollHeight; }
+				})();
+			</script>
+		}
+	</div>
+}
+
 // RunDetailPage renders the Mission Control run-detail page: a sticky topbar
 // back-link, a run header card, and a scrollable step trace.
 templ RunDetailPage(d cockpit.RunDetail) {
@@ -146,6 +171,14 @@ templ RunDetailPage(d cockpit.RunDetail) {
 					<div class="font-mono text-[12px] text-[#dde3ec]">{ fmt.Sprintf("%d / %d", d.Run.StepIndex, d.Run.StepCount) }</div>
 				</div>
 			</div>
+		</div>
+		<!-- live stdout tail: poll the tail endpoint every 2s and merge the
+		     returned fragment (id run-tail) in place. data-on-interval is the
+		     Datastar v1.0.0-beta.11 interval plugin; the __duration.2s modifier
+		     sets the period. The endpoint is cheap and returns an empty fragment
+		     when there is no log yet, so polling unconditionally is safe. -->
+		<div data-on-interval__duration.2s={ "@get('/runs/" + d.Run.ID + "/tail')" }>
+			@RunTailFragment("")
 		</div>
 		<!-- step trace -->
 		<div class="border border-[#172131] rounded-[9px] overflow-hidden">

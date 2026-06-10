@@ -3,8 +3,16 @@ package cockpit
 import (
 	"context"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 )
+
+// tailLineCount is the number of trailing lines of a run's stdout tail log the
+// cockpit serves on each poll. Bounded so a long-running burn does not ship the
+// whole log to the browser every two seconds.
+const tailLineCount = 80
 
 // handleFleet loads the current fleet state and renders the Mission Control
 // dashboard page via the injected PageRenderer. On a DB error it returns 500.
@@ -83,6 +91,56 @@ func (s *Server) handleRunDetail(w http.ResponseWriter, r *http.Request) {
 	if err := s.renderRunDetail(r.Context(), w, d); err != nil {
 		s.logf("cockpit: render run detail %s: %v", id, err)
 	}
+}
+
+// handleRunTail serves the last lines of a run's stdout tail log as a
+// Datastar-mergeable fragment (id "run-tail"). It returns 400 when the id is
+// missing. When no tail dir is configured or the log does not exist yet, it
+// renders an empty fragment with 200 (the file appears once the active star
+// dispatches). Reading the log is best-effort: a read error is logged and
+// treated as no content, so the page never breaks on a transient FS hiccup.
+func (s *Server) handleRunTail(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		http.Error(w, "missing run id", http.StatusBadRequest)
+		return
+	}
+	lines := s.readRunTail(id)
+	if err := s.renderRunTail(r.Context(), w, lines); err != nil {
+		s.logf("cockpit: render run tail %s: %v", id, err)
+	}
+}
+
+// readRunTail returns the last tailLineCount lines of the run's tail log, or ""
+// when teeing is disabled, the file is absent, or it cannot be read. It is
+// deliberately best-effort: the tail is a convenience view, never authoritative.
+func (s *Server) readRunTail(id string) string {
+	if s.tailDir == "" {
+		return ""
+	}
+	path := filepath.Join(s.tailDir, id+".log")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			s.logf("cockpit: read run tail %s: %v", id, err)
+		}
+		return ""
+	}
+	return lastLines(string(raw), tailLineCount)
+}
+
+// lastLines returns the final n lines of s, preserving order. A trailing
+// newline is trimmed first so it does not count as an empty final line.
+func lastLines(s string, n int) string {
+	s = strings.TrimRight(s, "\n")
+	if s == "" {
+		return ""
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // handleNebulaDetail loads a single nebula with its phases and constellation

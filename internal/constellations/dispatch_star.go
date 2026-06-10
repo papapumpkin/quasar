@@ -54,6 +54,13 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 	// in via coordination_aware (default true for coder-class stars).
 	prompt := r.coordinationPrompt(ctx, run, node, star, userPrompt(args, st))
 
+	// Best-effort live stdout tail: when a tail dir is configured, open the
+	// per-run .log and tee the star's subprocess stdout into it so the cockpit
+	// can stream it to the browser. Every step is best-effort — on any failure
+	// we proceed WITHOUT teeing, never altering the dispatch (see rule #1).
+	ctx, closeTail := r.attachStdoutTail(ctx, run, node, st)
+	defer closeTail()
+
 	started := time.Now()
 	res, err := r.invoker.Invoke(ctx, agent.Agent{
 		Role:          agent.RoleCoder,
@@ -110,6 +117,44 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 		"cost_usd":   res.CostUSD,
 		"session_id": res.SessionID,
 	}, nil
+}
+
+// attachStdoutTail opens the per-run tail log and returns a context carrying a
+// best-effort stdout tee plus a closer to defer. When r.tailDir is empty (the
+// common, no-cockpit case) it is a no-op: it returns ctx unchanged and a no-op
+// closer, so the happy path is byte-for-byte unchanged.
+//
+// SAFETY (rule #1) — teeing must NEVER affect the run. Every step here is
+// best-effort: a MkdirAll, OpenFile, or header-write failure is logged to
+// stderr and we return ctx WITHOUT a tee. We never return an error and never
+// block the dispatch. The invoker's in-memory buffer remains the single source
+// of truth for parsing the result regardless of what happens to the tail file.
+func (r *Runtime) attachStdoutTail(ctx context.Context, run *fabric.RunRow, node *artifacts.ConstellationNode, st *State) (context.Context, func()) {
+	noop := func() {}
+	if r.tailDir == "" {
+		return ctx, noop
+	}
+	if err := os.MkdirAll(r.tailDir, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "tail: mkdir %s (run %s): %v\n", r.tailDir, run.ID, err)
+		return ctx, noop
+	}
+	path := filepath.Join(r.tailDir, run.ID+".log")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tail: open %s (run %s): %v\n", path, run.ID, err)
+		return ctx, noop
+	}
+	// A header delimits each dispatch in the appended log; a write failure here
+	// is non-fatal (the tee below still streams the subprocess output).
+	if _, err := fmt.Fprintf(f, "\n--- %s (cycle %d) ---\n", node.ID, st.Cycle); err != nil {
+		fmt.Fprintf(os.Stderr, "tail: write header %s (run %s): %v\n", path, run.ID, err)
+	}
+	closer := func() {
+		if err := f.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "tail: close %s (run %s): %v\n", path, run.ID, err)
+		}
+	}
+	return agent.WithStdoutTee(ctx, f), closer
 }
 
 // coordinationPrompt runs the pre-flight coordination check for a dispatching

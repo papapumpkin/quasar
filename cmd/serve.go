@@ -93,18 +93,28 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	// into the runtime cache even when the cockpit HTTP server is not served.
 	notifier := cockpit.NewNotifier(128)
 
+	// Per-run stdout tail directory: the runtime tees the active star's
+	// subprocess stdout here and the cockpit reads it back for the live tail.
+	// The SAME directory is passed to both sides. Best-effort throughout — a
+	// resolution failure disables teeing rather than failing the process.
+	tailDir, err := cockpitTailDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "serve: cockpit tail disabled: %v\n", err)
+		tailDir = ""
+	}
+
 	// The cockpit server is started first so a bad token or bind fails fast,
 	// before we spin up the supervisor.
 	var server *cockpit.Server
 	if cockpitCfg.Enabled {
-		server, err = buildCockpitServer(fab, notifier)
+		server, err = buildCockpitServer(fab, notifier, tailDir)
 		if err != nil {
 			return err
 		}
 	}
 
 	if !cockpitOnly {
-		cache, err := buildRuntimeCache(fab, dbPath, &notifierSink{n: notifier})
+		cache, err := buildRuntimeCache(fab, dbPath, &notifierSink{n: notifier}, tailDir)
 		if err != nil {
 			return fmt.Errorf("start supervisor: %w", err)
 		}
@@ -179,7 +189,7 @@ func (g *ghBadger) PRStatus(ctx context.Context, repo string, number int) (strin
 // wires the RuntimeActions / render adapters, and wires in the ghBadger so
 // cards with a PR number show a live status badge. The Notifier is shared with
 // the runtime event sink so live events reach connected browsers.
-func buildCockpitServer(fab *fabric.SQLiteFabric, notifier *cockpit.Notifier) (*cockpit.Server, error) {
+func buildCockpitServer(fab *fabric.SQLiteFabric, notifier *cockpit.Notifier, tailDir string) (*cockpit.Server, error) {
 	token, err := readCockpitToken()
 	if err != nil {
 		return nil, err
@@ -195,6 +205,8 @@ func buildCockpitServer(fab *fabric.SQLiteFabric, notifier *cockpit.Notifier) (*
 		RenderRun:          renderCockpitRun,
 		RenderRunDetail:    renderCockpitRunDetail,
 		RenderNebulaDetail: renderCockpitNebulaDetail,
+		RenderRunTail:      renderCockpitRunTail,
+		TailDir:            tailDir,
 		Logf:               func(f string, a ...any) { fmt.Fprintf(os.Stderr, "cockpit: "+f+"\n", a...) },
 	})
 	if err != nil {
@@ -223,6 +235,24 @@ func readCockpitToken() (string, error) {
 		return "", fmt.Errorf("cockpit token at %s is empty; run 'quasar cockpit token' to regenerate", path)
 	}
 	return tok, nil
+}
+
+// cockpitTailDir returns the directory for per-run stdout tail logs, under the
+// same ~/.quasar data dir that holds the cockpit token. The runtime tees into
+// it and the cockpit reads from it; both are passed the identical path.
+func cockpitTailDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home dir: %w", err)
+	}
+	return filepath.Join(home, ".quasar", "cockpit-tail"), nil
+}
+
+// renderCockpitRunTail is the cockpit.RunTailRenderer: it renders the live
+// stdout-tail fragment via the templ-generated views.RunTailFragment component.
+func renderCockpitRunTail(ctx context.Context, w http.ResponseWriter, lines string) error {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return views.RunTailFragment(lines).Render(ctx, w)
 }
 
 // notifierSink adapts a cockpit.Notifier to the constellations.EventSink

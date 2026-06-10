@@ -7,6 +7,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,6 +17,89 @@ import (
 	"github.com/papapumpkin/quasar/internal/cockpit/views"
 	"github.com/papapumpkin/quasar/internal/fabric"
 )
+
+// renderRunTail is the RunTailRenderer wired in for tests: it renders the
+// live-tail fragment via views.RunTailFragment.
+func renderRunTail(ctx context.Context, w http.ResponseWriter, lines string) error {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return views.RunTailFragment(lines).Render(ctx, w)
+}
+
+// newTailFabric returns an in-memory fabric DB for the tail handler tests.
+func newTailFabric(t *testing.T) *fabric.SQLiteFabric {
+	t.Helper()
+	fab, err := fabric.NewSQLiteFabric(context.Background(), filepath.Join(t.TempDir(), "tail.db"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFabric: %v", err)
+	}
+	t.Cleanup(func() { fab.Close() })
+	return fab
+}
+
+// TestHandleRunTailReturnsLastLines seeds a tail dir with a .log and confirms
+// GET /runs/{id}/tail returns 200 with the log content.
+func TestHandleRunTailReturnsLastLines(t *testing.T) {
+	fab := newTailFabric(t)
+	tailDir := t.TempDir()
+	runID := "run-tail-xyz"
+	logBody := "--- coder (cycle 0) ---\nKNOWN-LINE-MARKER\nmore output\n"
+	if err := os.WriteFile(filepath.Join(tailDir, runID+".log"), []byte(logBody), 0o644); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+
+	s, err := cockpit.New(cockpit.Opts{
+		DB:            fab.DB(),
+		Token:         "t",
+		TailDir:       tailDir,
+		RenderPage:    renderPage,
+		RenderRunTail: renderRunTail,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := httptest.NewRequest("GET", "/runs/"+runID+"/tail", nil)
+	r.AddCookie(&http.Cookie{Name: cockpit.CookieName, Value: "t"})
+	w := httptest.NewRecorder()
+	s.Routes().ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("code %d, body: %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "KNOWN-LINE-MARKER") {
+		t.Errorf("expected log line in body; got:\n%s", body)
+	}
+}
+
+// TestHandleRunTailEmptyWhenNoFile confirms GET /runs/{id}/tail returns 200
+// with an empty (waiting) fragment when no log file exists.
+func TestHandleRunTailEmptyWhenNoFile(t *testing.T) {
+	fab := newTailFabric(t)
+
+	s, err := cockpit.New(cockpit.Opts{
+		DB:            fab.DB(),
+		Token:         "t",
+		TailDir:       t.TempDir(), // set, but no .log seeded
+		RenderPage:    renderPage,
+		RenderRunTail: renderRunTail,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := httptest.NewRequest("GET", "/runs/no-log-run/tail", nil)
+	r.AddCookie(&http.Cookie{Name: cockpit.CookieName, Value: "t"})
+	w := httptest.NewRecorder()
+	s.Routes().ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("code %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "waiting for output") {
+		t.Errorf("expected empty/waiting fragment; got:\n%s", w.Body.String())
+	}
+}
 
 // renderRunDetail is the RunDetailRenderer wired in for tests: calls
 // views.RunDetailPage and writes the rendered HTML into w.

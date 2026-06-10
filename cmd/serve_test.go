@@ -76,7 +76,7 @@ func TestServeCockpitEndToEnd(t *testing.T) {
 
 	// Build the cockpit server through the same wiring serve.go uses.
 	notifier := cockpit.NewNotifier(16)
-	server, err := buildCockpitServer(fab, notifier)
+	server, err := buildCockpitServer(fab, notifier, "")
 	if err != nil {
 		t.Fatalf("buildCockpitServer: %v", err)
 	}

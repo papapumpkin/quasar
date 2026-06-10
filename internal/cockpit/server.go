@@ -52,6 +52,13 @@ type RunDetailRenderer func(ctx context.Context, w http.ResponseWriter, d RunDet
 // empty 200.
 type NebulaDetailRenderer func(ctx context.Context, w http.ResponseWriter, d NebulaDetail) error
 
+// RunTailRenderer renders the live-stdout-tail fragment (a Datastar-mergeable
+// <pre> with id "run-tail") into the response writer. Injected as a function to
+// preserve the views→cockpit one-directional import. The canonical
+// implementation is views.RunTailFragment(lines).Render(ctx, w), wired by the
+// cmd layer. If nil, New substitutes a no-op that writes an empty 200.
+type RunTailRenderer func(ctx context.Context, w http.ResponseWriter, lines string) error
+
 // Opts holds the dependencies required to construct a Server.
 type Opts struct {
 	DB                 *sql.DB
@@ -64,7 +71,12 @@ type Opts struct {
 	RenderRun          RunRenderer
 	RenderRunDetail    RunDetailRenderer
 	RenderNebulaDetail NebulaDetailRenderer
-	Logf               func(string, ...any)
+	RenderRunTail      RunTailRenderer
+	// TailDir is the directory holding per-run stdout tail logs (<run-id>.log),
+	// the same directory the runtime tees into. Empty disables the tail endpoint
+	// (it returns an empty fragment).
+	TailDir string
+	Logf    func(string, ...any)
 }
 
 // Server is the cockpit HTTP server. It serves the fleet dashboard and
@@ -80,6 +92,8 @@ type Server struct {
 	renderRun          RunRenderer
 	renderRunDetail    RunDetailRenderer
 	renderNebulaDetail NebulaDetailRenderer
+	renderRunTail      RunTailRenderer
+	tailDir            string
 	logf               func(string, ...any)
 }
 
@@ -127,6 +141,13 @@ func New(o Opts) (*Server, error) {
 			return err
 		}
 	}
+	rt := o.RenderRunTail
+	if rt == nil {
+		rt = func(_ context.Context, w http.ResponseWriter, _ string) error {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			return nil
+		}
+	}
 	return &Server{
 		db:                 o.DB,
 		rt:                 o.Runtime,
@@ -138,6 +159,8 @@ func New(o Opts) (*Server, error) {
 		renderRun:          rr,
 		renderRunDetail:    rrd,
 		renderNebulaDetail: rnd,
+		renderRunTail:      rt,
+		tailDir:            o.TailDir,
 		logf:               lf,
 	}, nil
 }
