@@ -32,17 +32,21 @@ func TestRunInitWith(t *testing.T) {
 		}
 
 		content := readConfig(t, dir)
-		for _, want := range []string{"claude_path:", "pre_commit:", "max_review_cycles:", "token_env"} {
+		for _, want := range []string{"claude_path:", "pre_commit:", "max_review_cycles:", "sensors/"} {
 			if !strings.Contains(content, want) {
 				t.Errorf("generated config missing %q\n%s", want, content)
 			}
 		}
-		// No language or repo detected: both sections are commented out.
+		// No language or repo detected: verify is commented out, the deprecated
+		// integrations block is never emitted, and no sensor is scaffolded.
 		if strings.Contains(content, "\nverify:") {
 			t.Errorf("expected [verify] commented out for empty dir, got:\n%s", content)
 		}
-		if strings.Contains(content, "\nintegrations:") {
-			t.Errorf("expected [integrations] commented out for empty dir, got:\n%s", content)
+		if strings.Contains(content, "integrations:") {
+			t.Errorf("init must not emit the deprecated integrations block, got:\n%s", content)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "sensors", "github.toml")); !os.IsNotExist(err) {
+			t.Error("empty dir (no github remote) should not scaffold a sensor")
 		}
 	})
 
@@ -73,12 +77,16 @@ func TestRunInitWith(t *testing.T) {
 			t.Fatalf("runInitWith: %v", err)
 		}
 
-		content := readConfig(t, dir)
-		if !strings.Contains(content, "integrations:") {
-			t.Errorf("expected live [integrations] block, got:\n%s", content)
+		// The detected repo is written to a scaffolded sensors/github.toml, not
+		// the config (which carries no integrations/sensors key).
+		if strings.Contains(readConfig(t, dir), "integrations:") {
+			t.Error("init must not emit the deprecated integrations block")
 		}
-		if !strings.Contains(content, `repo: "papapumpkin/quasar"`) {
-			t.Errorf("expected detected repo, got:\n%s", content)
+		sensor := readSensor(t, dir)
+		for _, want := range []string{`type = "github_issues"`, `repo = "papapumpkin/quasar"`} {
+			if !strings.Contains(sensor, want) {
+				t.Errorf("scaffolded sensor missing %q\n%s", want, sensor)
+			}
 		}
 	})
 
@@ -91,12 +99,12 @@ func TestRunInitWith(t *testing.T) {
 		if err := runInitWith(dir, false, false, strings.NewReader(""), &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInitWith: %v", err)
 		}
-		if !strings.Contains(readConfig(t, dir), `repo: "papapumpkin/quasar"`) {
-			t.Errorf("expected detected repo from scp url")
+		if !strings.Contains(readSensor(t, dir), `repo = "papapumpkin/quasar"`) {
+			t.Errorf("expected detected repo from scp url in the scaffolded sensor")
 		}
 	})
 
-	t.Run("non-github remote leaves integrations commented", func(t *testing.T) {
+	t.Run("non-github remote scaffolds no sensor", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		writeFile(t, filepath.Join(dir, ".git", "config"),
@@ -105,8 +113,11 @@ func TestRunInitWith(t *testing.T) {
 		if err := runInitWith(dir, false, false, strings.NewReader(""), &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInitWith: %v", err)
 		}
-		if strings.Contains(readConfig(t, dir), "\nintegrations:") {
-			t.Errorf("expected non-github remote to leave [integrations] commented out")
+		if strings.Contains(readConfig(t, dir), "integrations:") {
+			t.Error("init must not emit the deprecated integrations block")
+		}
+		if _, err := os.Stat(filepath.Join(dir, "sensors", "github.toml")); !os.IsNotExist(err) {
+			t.Error("a non-github remote should not scaffold a github sensor")
 		}
 	})
 
@@ -175,6 +186,16 @@ func readConfig(t *testing.T, dir string) string {
 	data, err := os.ReadFile(filepath.Join(dir, configFileName))
 	if err != nil {
 		t.Fatalf("read generated config: %v", err)
+	}
+	return string(data)
+}
+
+// readSensor reads the scaffolded sensors/github.toml from dir.
+func readSensor(t *testing.T, dir string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(dir, "sensors", "github.toml"))
+	if err != nil {
+		t.Fatalf("read scaffolded sensor: %v", err)
 	}
 	return string(data)
 }

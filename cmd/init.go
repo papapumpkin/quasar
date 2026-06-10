@@ -72,11 +72,60 @@ func runInitWith(dir string, force, yes bool, in io.Reader, out io.Writer) error
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", configFileName, err)
 	}
-
 	fmt.Fprintf(out, "created %s\n", path)
-	reportDetections(out, verify, repo, hasRepo)
-	fmt.Fprintf(out, "edit %s to fill in integrations and pre-commit hooks, then run `quasar doctor`\n", configFileName)
+
+	// When a GitHub repo is detected, scaffold a sensor in the current model
+	// (sensors/<name>.toml). The deprecated [integrations.github] block is no
+	// longer written — it failed `quasar doctor` ("no Sensor registered").
+	sensorCreated := false
+	if hasRepo {
+		created, err := scaffoldGitHubSensor(dir, repo)
+		if err != nil {
+			return err
+		}
+		sensorCreated = created
+		if created {
+			fmt.Fprintf(out, "created %s\n", filepath.Join("sensors", "github.toml"))
+		}
+	}
+
+	reportDetections(out, verify, repo, hasRepo, sensorCreated)
+	fmt.Fprintf(out, "edit %s and sensors/ as needed, then run `quasar doctor` and `quasar lint`\n", configFileName)
 	return nil
+}
+
+// scaffoldGitHubSensor writes <dir>/sensors/github.toml configuring the
+// github_issues sensor for repo, unless the file already exists (it is never
+// clobbered). Returns whether it created the file. A token is never written:
+// with none set the sensor uses the operator's authenticated `gh`.
+func scaffoldGitHubSensor(dir, repo string) (bool, error) {
+	path := filepath.Join(dir, "sensors", "github.toml")
+	if _, err := os.Stat(path); err == nil {
+		return false, nil
+	} else if !os.IsNotExist(err) {
+		return false, fmt.Errorf("stat %s: %w", path, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return false, fmt.Errorf("create sensors dir: %w", err)
+	}
+
+	var b strings.Builder
+	b.WriteString("# GitHub issues sensor — matching open issues become draft nebulas in\n")
+	b.WriteString("# the awaiting-approval lane. Validate with `quasar lint`.\n")
+	b.WriteString("name = \"github\"\n")
+	b.WriteString("type = \"github_issues\"\n\n")
+	b.WriteString("[config]\n")
+	fmt.Fprintf(&b, "repo = %q\n", repo)
+	b.WriteString("# Tokens are NEVER inlined. With none set, the sensor uses your `gh` auth.\n")
+	b.WriteString("# To use a PAT instead, set token_env to the env var holding it:\n")
+	b.WriteString("# token_env = \"GITHUB_TOKEN\"\n")
+	b.WriteString("# Narrow to issues carrying every listed label:\n")
+	b.WriteString("# labels = [\"quasar\"]\n")
+
+	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+		return false, fmt.Errorf("write %s: %w", path, err)
+	}
+	return true, nil
 }
 
 // confirmOverwrite prompts on out and reads a yes/no answer from in. Any answer
@@ -93,16 +142,19 @@ func confirmOverwrite(in io.Reader, out io.Writer) bool {
 
 // reportDetections prints a short summary of what init auto-detected so the user
 // knows which sections were pre-populated versus left as placeholders.
-func reportDetections(out io.Writer, v verifyCommands, repo string, hasRepo bool) {
+func reportDetections(out io.Writer, v verifyCommands, repo string, hasRepo, sensorCreated bool) {
 	if v.Lang != "" {
 		fmt.Fprintf(out, "  detected language: %s ([verify] populated)\n", v.Lang)
 	} else {
 		fmt.Fprintln(out, "  language: not detected ([verify] left commented out)")
 	}
-	if hasRepo {
-		fmt.Fprintf(out, "  detected GitHub repo: %s ([integrations.github].repo populated)\n", repo)
-	} else {
-		fmt.Fprintln(out, "  GitHub remote: not detected ([integrations.github] left commented out)")
+	switch {
+	case hasRepo && sensorCreated:
+		fmt.Fprintf(out, "  detected GitHub repo: %s (scaffolded sensors/github.toml)\n", repo)
+	case hasRepo:
+		fmt.Fprintf(out, "  detected GitHub repo: %s (sensors/github.toml already exists; left as-is)\n", repo)
+	default:
+		fmt.Fprintln(out, "  GitHub remote: not detected (no sensor scaffolded)")
 	}
 }
 
@@ -127,7 +179,7 @@ func renderConfigTemplate(v verifyCommands, repo string, hasRepo bool) string {
 	b.WriteString("model: \"\"\n\n")
 
 	writeVerifySection(&b, v)
-	writeIntegrationsSection(&b, repo, hasRepo)
+	writeSensorsSection(&b, repo, hasRepo)
 	writeForgeSection(&b)
 	writePreCommitSection(&b)
 
@@ -153,26 +205,26 @@ func writeVerifySection(b *strings.Builder, v verifyCommands) {
 	fmt.Fprintf(b, "  build: %q\n\n", v.Build)
 }
 
-// writeIntegrationsSection emits [integrations.github]. The repo is written live
-// when detected; the credential reference is always a placeholder pointing at an
-// env var — a token value is never written to the file.
-func writeIntegrationsSection(b *strings.Builder, repo string, hasRepo bool) {
-	b.WriteString("# External ticket sources. Tokens are NEVER stored here: set\n")
-	b.WriteString("# token_env (an env var name) or token_file (a Docker secret path).\n")
-	if !hasRepo {
-		b.WriteString("# No github.com origin detected; uncomment and set repo:\n")
-		b.WriteString("# integrations:\n")
-		b.WriteString("#   github:\n")
-		b.WriteString("#     repo: \"owner/repo\"\n")
-		b.WriteString("#     token_env: \"GITHUB_TOKEN\"\n")
-		b.WriteString("#     # token_file: \"/run/secrets/github_token\"\n\n")
+// writeSensorsSection documents that sensors are configured as TOML files under
+// sensors/ — NOT in this file (the old [integrations.*] block is gone). When a
+// GitHub repo was detected, init also scaffolds sensors/github.toml; otherwise
+// this shows how to add one. No `integrations:`/`sensors:` YAML key is emitted,
+// so `quasar doctor` no longer fails on a phantom sensor lookup.
+func writeSensorsSection(b *strings.Builder, repo string, hasRepo bool) {
+	b.WriteString("# Sensors (external work sources) are configured as TOML files under\n")
+	b.WriteString("# sensors/<name>.toml — not in this file. Each sets a `type` (e.g.\n")
+	b.WriteString("# \"github_issues\") and a [config] block; tokens use token_env or defer\n")
+	b.WriteString("# to `gh` auth. Validate them with `quasar lint`.\n")
+	if hasRepo {
+		fmt.Fprintf(b, "# A sensors/github.toml watching %s was scaffolded for you.\n\n", repo)
 		return
 	}
-	b.WriteString("integrations:\n")
-	b.WriteString("  github:\n")
-	fmt.Fprintf(b, "    repo: %q\n", repo)
-	b.WriteString("    token_env: \"GITHUB_TOKEN\"\n")
-	b.WriteString("    # token_file: \"/run/secrets/github_token\"\n\n")
+	b.WriteString("# No github.com origin detected — add one like:\n")
+	b.WriteString("#   # sensors/github.toml\n")
+	b.WriteString("#   name = \"github\"\n")
+	b.WriteString("#   type = \"github_issues\"\n")
+	b.WriteString("#   [config]\n")
+	b.WriteString("#   repo = \"owner/repo\"\n\n")
 }
 
 // writeForgeSection emits the reserved [forge.github] placeholder. The forge
