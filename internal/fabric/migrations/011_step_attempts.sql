@@ -1,0 +1,13 @@
+-- 011_step_attempts.sql
+--
+-- Adds a per-run re-attempt counter used by the constellation runtime's
+-- poison-node guard. The StepDriver auto-resumes interrupted runs on restart
+-- (it re-steps any row left in state='running'); a node that crashes the
+-- process mid-dispatch would otherwise be re-stepped and re-crash forever,
+-- taking the fleet down on every restart.
+--
+-- The runtime bumps this counter (autocommitted) before dispatching a node and
+-- resets it to 0 on a successful transition, so it only grows while one node is
+-- re-entered without completing. Past a cap the runtime fails the run instead
+-- of re-dispatching, bounding the blast radius of a poison node.
+ALTER TABLE constellation_runs ADD COLUMN step_attempts INTEGER NOT NULL DEFAULT 0;

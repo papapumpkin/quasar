@@ -3,10 +3,14 @@ package constellations
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"time"
+
+	"github.com/papapumpkin/quasar/internal/artifacts"
+	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
 // defaultSupervisorBatchLimit caps how many pending trigger_queue rows a
@@ -189,4 +193,102 @@ func (s *Supervisor) logf(format string, args ...any) {
 		w = os.Stderr
 	}
 	fmt.Fprintf(w, "constellations.Supervisor: "+format+"\n", args...)
+}
+
+// heartbeatInterval is how often an in-flight Step refreshes its run's liveness
+// timestamp. It must stay comfortably below any crash reaper's stale cutoff so
+// a healthy long step is never mistaken for a dead process.
+const heartbeatInterval = 30 * time.Second
+
+// startHeartbeat refreshes runID's liveness timestamp every `interval` until
+// the returned stop func is called. A star invocation can block for minutes and
+// a nested constellation for an entire child walk; without a periodic refresh,
+// a heartbeat-based crash reaper would mistake a healthy long-running step for a
+// dead process. Heartbeat write failures are non-fatal and logged. Call stop
+// exactly once (Step does so right after dispatch returns). interval is a
+// parameter so tests can drive it without mutating shared state.
+func (r *Runtime) startHeartbeat(ctx context.Context, runID string, interval time.Duration) (stop func()) {
+	done := make(chan struct{})
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if err := r.runStore.Heartbeat(ctx, runID); err != nil {
+					fmt.Fprintf(os.Stderr, "constellations: heartbeat run %s: %v\n", runID, err)
+				}
+			}
+		}
+	}()
+	return func() { close(done) }
+}
+
+// maxStepAttempts bounds how many times the runtime will (re)enter a single
+// node without it completing before failing the run. A completed node resets
+// the counter (SaveProgress), so this only trips for a node that repeatedly
+// crashes the process mid-dispatch and is auto-resumed on restart — a poison
+// node. Five tolerates a few transient hard restarts before giving up.
+const maxStepAttempts = 5
+
+var (
+	// ErrMaxStepAttempts is the failure cause when a node is re-entered more
+	// than maxStepAttempts times without completing (a crash-looping node).
+	ErrMaxStepAttempts = errors.New("constellations: node exceeded max step attempts")
+	// ErrNodePanic wraps a panic recovered from a node dispatch so it fails the
+	// run instead of crashing the fleet process.
+	ErrNodePanic = errors.New("constellations: node panicked")
+)
+
+// guardAttempt bumps the run's poison-node counter before dispatch and fails
+// the run when it exceeds maxStepAttempts. The bool reports whether the guard
+// handled the run: it returns (StateFailed, true, cause) when it failed the run
+// — the caller returns that pair, mirroring the normal fail path — or
+// ("", false, nil) to proceed, or ("", false, err) on a store error.
+func (r *Runtime) guardAttempt(ctx context.Context, run *fabric.RunRow, st *State, node *artifacts.ConstellationNode) (string, bool, error) {
+	attempts, err := r.runStore.BumpStepAttempt(ctx, run.ID)
+	if err != nil {
+		return "", false, err
+	}
+	if attempts > maxStepAttempts {
+		state, cause := r.fail(ctx, run, st,
+			fmt.Errorf("%w: node %q reached %d attempts", ErrMaxStepAttempts, node.ID, attempts))
+		return state, true, cause
+	}
+	return "", false, nil
+}
+
+// dispatchSafely runs dispatch with panic recovery so a panicking node (a bug
+// in an operator/builtin, or malformed state) fails its run instead of crashing
+// the fleet process — which would re-step and re-panic on every restart. The
+// recovered panic becomes an ordinary node error routed to the run's failure
+// path.
+func (r *Runtime) dispatchSafely(ctx context.Context, run *fabric.RunRow, st *State, node *artifacts.ConstellationNode) (out map[string]any, err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			err = fmt.Errorf("%w: node %q: %v", ErrNodePanic, node.ID, rec)
+		}
+	}()
+	return r.dispatch(ctx, run, st, node)
+}
+
+// Resume restores a run interrupted mid-flight. The DAG state and current node
+// already live in the row, so resume is a heartbeat refresh that re-asserts the
+// run as live; the supervisor then drives Step from the persisted node.
+func (r *Runtime) Resume(ctx context.Context, runID string) error {
+	run, err := r.runStore.GetRun(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if isTerminalState(run.State) {
+		return ErrTerminal
+	}
+	if _, err := UnmarshalState(run.DAGStateTOML); err != nil {
+		return fmt.Errorf("constellations: resume %q: corrupt dag state: %w", runID, err)
+	}
+	return r.runStore.Heartbeat(ctx, runID)
 }

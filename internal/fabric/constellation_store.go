@@ -137,10 +137,14 @@ func (s *ConstellationRunStore) GetRun(ctx context.Context, id string) (*RunRow,
 // reaper sees the run as alive.
 func (s *ConstellationRunStore) SaveProgress(ctx context.Context, r *RunRow) error {
 	now := time.Now().Unix()
+	// step_attempts is reset to 0 here: reaching SaveProgress means the node
+	// completed (a transition, terminal, or child-seed write), so the poison
+	// re-attempt counter for that node starts fresh. Only a node that never
+	// reaches here (crashes the process mid-dispatch) accumulates attempts.
 	const q = `
 		UPDATE constellation_runs
 		SET state = ?, current_node = ?, step_index = ?, cycle = ?, dag_state_toml = ?,
-		    updated_at = ?, heartbeat_at = ?
+		    updated_at = ?, heartbeat_at = ?, step_attempts = 0
 		WHERE id = ?`
 	res, err := s.db.ExecContext(ctx, q,
 		r.State, r.CurrentNode, r.StepIndex, r.Cycle, r.DAGStateTOML, now, now, r.ID,
@@ -201,17 +205,29 @@ func (s *ConstellationRunStore) ListByState(ctx context.Context, state string) (
 	return out, rows.Err()
 }
 
-// ReapStale marks running runs whose heartbeat is older than cutoff (unix
-// seconds) as 'crashed'. Returns the number reaped. The supervisor calls this
-// at boot to recover from a hard crash.
-func (s *ConstellationRunStore) ReapStale(ctx context.Context, cutoff int64) (int, error) {
-	const q = `UPDATE constellation_runs SET state = 'crashed' WHERE state = 'running' AND heartbeat_at < ?`
-	res, err := s.db.ExecContext(ctx, q, cutoff)
+// BumpStepAttempt increments and returns a run's step_attempts counter. The
+// runtime calls it at the START of each Step, before dispatching the node, and
+// the increment is autocommitted immediately — so if the process dies mid-node
+// (a panic that escapes recovery, OOM, SIGKILL) the bump survives the crash.
+// A successful transition resets the counter to 0 in SaveProgress, so the count
+// only accumulates while a single node is re-entered without ever completing —
+// i.e. a poison node crash-looping across restarts. The runtime fails the run
+// once the count crosses its cap, so a poison run cannot crash-loop the fleet.
+func (s *ConstellationRunStore) BumpStepAttempt(ctx context.Context, id string) (int, error) {
+	const upd = `UPDATE constellation_runs SET step_attempts = step_attempts + 1 WHERE id = ?`
+	res, err := s.db.ExecContext(ctx, upd, id)
 	if err != nil {
-		return 0, fmt.Errorf("fabric: reap stale runs: %w", err)
+		return 0, fmt.Errorf("fabric: bump step attempt %q: %w", id, err)
 	}
-	n, err := res.RowsAffected()
-	return int(n), err
+	if err := notFoundIfZeroRun(res, id); err != nil {
+		return 0, err
+	}
+	var n int
+	const sel = `SELECT step_attempts FROM constellation_runs WHERE id = ?`
+	if err := s.db.QueryRowContext(ctx, sel, id).Scan(&n); err != nil {
+		return 0, fmt.Errorf("fabric: read step attempt %q: %w", id, err)
+	}
+	return n, nil
 }
 
 // insertStarInvocationSQL inserts one star_invocation row. Shared by the plain

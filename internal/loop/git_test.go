@@ -198,6 +198,13 @@ func TestResetTo(t *testing.T) {
 		c := NewCycleCommitter(context.Background(), dir)
 		ctx := context.Background()
 
+		// Quasar works on a feature branch, never the base branch; a hard reset
+		// is refused on a protected base branch (main/master), so move off it to
+		// mirror production.
+		if out, err := exec.Command("git", "-C", dir, "checkout", "-b", "quasar/reset-test").CombinedOutput(); err != nil {
+			t.Fatalf("git checkout -b: %v\n%s", err, out)
+		}
+
 		// Record the initial SHA.
 		baseSHA, err := c.HeadSHA(ctx)
 		if err != nil {

@@ -11,14 +11,30 @@ import (
 
 // fakeOpener captures the PROpts and produces either a canned URL or an error.
 type fakeOpener struct {
-	gotOpts forge.PROpts
-	result  forge.PRResult
-	err     error
+	gotOpts   forge.PROpts
+	result    forge.PRResult
+	err       error
+	openCalls int
+
+	// FindOpenPR behavior. Defaults (found=false, err=nil) make the operator
+	// fall through to OpenPR, matching pre-idempotency-guard behavior.
+	findResult forge.PRResult
+	findFound  bool
+	findErr    error
+	findHead   string
+	findCalls  int
 }
 
 func (f *fakeOpener) OpenPR(_ context.Context, opts forge.PROpts) (forge.PRResult, error) {
+	f.openCalls++
 	f.gotOpts = opts
 	return f.result, f.err
+}
+
+func (f *fakeOpener) FindOpenPR(_ context.Context, _, head string) (forge.PRResult, bool, error) {
+	f.findCalls++
+	f.findHead = head
+	return f.findResult, f.findFound, f.findErr
 }
 
 // swapForgeOpener replaces the module-level opener for the lifetime of t.
@@ -71,6 +87,64 @@ func TestOpGHOpenPR_Success(t *testing.T) {
 	}
 	if op.gotOpts.WorkDir != "/tmp/repo" {
 		t.Errorf("WorkDir = %q, want the runtime's repoPath", op.gotOpts.WorkDir)
+	}
+}
+
+func TestOpGHOpenPR_IdempotentWhenPRExists(t *testing.T) {
+	// No t.Parallel: shared activeForgeOpener. When an open PR already exists
+	// for the head branch (e.g. a re-step after a crash), the operator must
+	// return it WITHOUT calling OpenPR — gh pr create would otherwise error and
+	// fail the whole run.
+	op := &fakeOpener{
+		findFound:  true,
+		findResult: forge.PRResult{URL: "https://github.com/o/r/pull/9", Number: 9},
+		// If OpenPR were (wrongly) called it would return a different PR.
+		result: forge.PRResult{URL: "https://github.com/o/r/pull/999", Number: 999},
+	}
+	swapForgeOpener(t, op)
+
+	rt := &Runtime{repoPath: "/tmp/repo"}
+	out, err := opGHOpenPR(context.Background(), rt, stateWithNebula("ship-it"), map[string]any{
+		"head": "quasar/feature", "title": "t",
+	})
+	if err != nil {
+		t.Fatalf("opGHOpenPR: %v", err)
+	}
+	if op.openCalls != 0 {
+		t.Errorf("OpenPR called %d times; existing PR should short-circuit", op.openCalls)
+	}
+	if got, _ := out["pr_number"].(int); got != 9 {
+		t.Errorf("pr_number = %v, want existing PR #9", out["pr_number"])
+	}
+	if got, _ := out["pr_url"].(string); got != "https://github.com/o/r/pull/9" {
+		t.Errorf("pr_url = %q, want existing PR url", got)
+	}
+	if op.findHead != "quasar/feature" {
+		t.Errorf("FindOpenPR head = %q, want quasar/feature", op.findHead)
+	}
+}
+
+func TestOpGHOpenPR_FindErrorFallsThroughToCreate(t *testing.T) {
+	// No t.Parallel: shared activeForgeOpener. A failed existence lookup is
+	// best-effort: it must NOT block opening a PR.
+	op := &fakeOpener{
+		findErr: errors.New("gh list boom"),
+		result:  forge.PRResult{URL: "https://github.com/o/r/pull/3", Number: 3},
+	}
+	swapForgeOpener(t, op)
+
+	rt := &Runtime{repoPath: "/tmp/repo"}
+	out, err := opGHOpenPR(context.Background(), rt, stateWithNebula("ship-it"), map[string]any{
+		"head": "quasar/feature", "title": "t",
+	})
+	if err != nil {
+		t.Fatalf("opGHOpenPR: %v", err)
+	}
+	if op.openCalls != 1 {
+		t.Errorf("OpenPR called %d times; a find error must fall through to create", op.openCalls)
+	}
+	if got, _ := out["pr_number"].(int); got != 3 {
+		t.Errorf("pr_number = %v, want created PR #3", out["pr_number"])
 	}
 }
 

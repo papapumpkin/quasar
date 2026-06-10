@@ -22,6 +22,20 @@ var ErrForcePushRejected = errors.New("force-with-lease push rejected: remote br
 // quasar/ prefix followed by one or more path-safe characters.
 var quasarBranchRe = regexp.MustCompile(`^quasar/[A-Za-z0-9._/-]+$`)
 
+// ownedBranchRe matches every namespace Quasar creates and may write: the
+// quasar/* branches the constellation runtime uses and the legacy nebula/*
+// branches the in-process nebula engine creates. Both are Quasar-owned; neither
+// is a base branch. It is the allowlist for PushUpstream (the legacy path);
+// Push itself stays restricted to quasar/* since the constellation runtime
+// never writes nebula/*.
+var ownedBranchRe = regexp.MustCompile(`^(quasar|nebula)/[A-Za-z0-9._/-]+$`)
+
+// isOwnedBranch reports whether name is a Quasar-created branch (quasar/* or
+// the legacy nebula/*).
+func isOwnedBranch(name string) bool {
+	return ownedBranchRe.MatchString(name)
+}
+
 // forbiddenPushBranches are base-branch names Quasar must never push to, even
 // if some upstream bug let them past the quasar/* check. This is defense in
 // depth and is intentionally not config-overridable so a misconfiguration can
@@ -74,6 +88,48 @@ func (c *Client) Push(ctx context.Context, branch string) error {
 		}
 		return fmt.Errorf("git push origin %s --force-with-lease: %w: %s",
 			branch, err, strings.TrimSpace(string(stderr)))
+	}
+	return nil
+}
+
+// PushUpstream pushes branch to origin with --set-upstream and NO force — the
+// legacy nebula engine's single end-of-run push of a fresh branch. Like Push it
+// refuses any ref outside the Quasar-owned namespace (quasar/* or nebula/*) or a
+// forbidden base branch, so the in-process nebula path can no longer bypass the
+// perimeter. Plain (non-force) push preserves the engine's first-push-of-a-new-
+// branch semantics; the constellation path that rewrites branches uses Push.
+func (c *Client) PushUpstream(ctx context.Context, branch string) error {
+	branch = strings.TrimPrefix(branch, "refs/heads/")
+
+	if !isOwnedBranch(branch) {
+		return fmt.Errorf("%w: %q", ErrUnsafeRef, branch)
+	}
+	if isForbiddenBranch(branch) {
+		return fmt.Errorf("%w: %q is a forbidden base branch", ErrUnsafeRef, branch)
+	}
+
+	if _, stderr, err := c.runGit(ctx, "push", "--set-upstream", "origin", branch); err != nil {
+		return fmt.Errorf("git push --set-upstream origin %s: %w: %s",
+			branch, err, strings.TrimSpace(string(stderr)))
+	}
+	return nil
+}
+
+// ResetHard hard-resets the working tree to sha. It is the codebase's only
+// sanctioned destructive reset: routing it through the perimeter means the op
+// is refused while HEAD is on a protected base branch (main, master, …), so a
+// control-flow bug can never discard a real branch's history. The caller is
+// responsible for verifying sha is a desired ancestor of HEAD.
+func (c *Client) ResetHard(ctx context.Context, sha string) error {
+	branch, err := c.CurrentBranch(ctx)
+	if err != nil {
+		return fmt.Errorf("hard reset: resolve current branch: %w", err)
+	}
+	if isForbiddenBranch(strings.TrimSpace(branch)) {
+		return fmt.Errorf("%w: refusing a hard reset on base branch %q", ErrUnsafeRef, branch)
+	}
+	if _, err := c.run(ctx, "reset", "--hard", sha); err != nil {
+		return err
 	}
 	return nil
 }

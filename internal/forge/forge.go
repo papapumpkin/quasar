@@ -125,6 +125,45 @@ func PRStatus(ctx context.Context, workDir string, number int) (string, error) {
 	return parsePRState(stdout.Bytes())
 }
 
+// FindOpenPR returns the open PR whose head branch is `head`, if one exists.
+// It runs the read-only `gh pr list`, so it stays within forge's gh
+// confinement (the arch test permits gh in this package) without touching any
+// write subcommand. The bool is false when no open PR matches — the caller
+// (gh_open_pr) uses it to make PR creation idempotent: a re-step after a crash
+// returns the existing PR instead of erroring on `gh pr create`.
+func FindOpenPR(ctx context.Context, workDir, head string) (PRResult, bool, error) {
+	if strings.TrimSpace(head) == "" {
+		return PRResult{}, false, fmt.Errorf("forge: FindOpenPR requires head branch")
+	}
+	if strings.TrimSpace(workDir) == "" {
+		return PRResult{}, false, fmt.Errorf("forge: FindOpenPR requires WorkDir")
+	}
+
+	cmd := exec.CommandContext(ctx, "gh", "pr", "list",
+		"--head", head, "--state", "open", "--json", "number,url", "--limit", "1")
+	cmd.Dir = workDir
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return PRResult{}, false, fmt.Errorf("forge: gh pr list: %w: %s",
+			err, strings.TrimSpace(stderr.String()))
+	}
+
+	var prs []struct {
+		Number int    `json:"number"`
+		URL    string `json:"url"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &prs); err != nil {
+		return PRResult{}, false, fmt.Errorf("forge: parse gh pr list: %w", err)
+	}
+	if len(prs) == 0 {
+		return PRResult{}, false, nil
+	}
+	return PRResult{URL: prs[0].URL, Number: prs[0].Number}, true, nil
+}
+
 // parsePRNumber extracts the trailing /<number> from a PR URL like
 // https://github.com/owner/repo/pull/42. Returns 0 if the trailing segment
 // cannot be parsed; the caller treats 0 as "unknown" rather than an error.
