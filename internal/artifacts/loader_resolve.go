@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"strings"
 
 	toml "github.com/pelletier/go-toml/v2"
 )
@@ -16,6 +17,19 @@ import (
 // repos.EmbeddedPath by value: artifacts must not import repos (a layering
 // inversion), so the literal is duplicated here and the two stay in sync.
 const EmbeddedPath = ":embedded:"
+
+// ReadSource reads the raw bytes of an artifact source referenced by a loaded
+// artifact's SourcePath. It transparently handles the EmbeddedPath sentinel —
+// reading from the embedded defaults FS, which os.ReadFile cannot open — as well
+// as ordinary on-disk override paths. Callers that need the original source
+// bytes (e.g. the runtime's audit snapshot of a constellation) use this instead
+// of os.ReadFile, so an embedded artifact doesn't fail with "no such file".
+func ReadSource(sourcePath string) ([]byte, error) {
+	if rest, ok := strings.CutPrefix(sourcePath, EmbeddedPath); ok {
+		return fs.ReadFile(DefaultsFS, rest)
+	}
+	return os.ReadFile(sourcePath)
+}
 
 // PathResolver locates per-repo artifact override files by name, returning
 // EmbeddedPath when no override exists so the loader falls back to the embedded

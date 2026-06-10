@@ -142,7 +142,11 @@ func snapshotSource(con *artifacts.Constellation) []byte {
 	if con.SourcePath == "" {
 		return nil
 	}
-	data, err := os.ReadFile(con.SourcePath)
+	// Use artifacts.ReadSource, not os.ReadFile: an embedded constellation's
+	// SourcePath is the ":embedded:…" sentinel, which os.ReadFile cannot open —
+	// previously every embedded run logged a spurious "no such file" and stored a
+	// nil audit snapshot.
+	data, err := artifacts.ReadSource(con.SourcePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "constellations: snapshot %q: %v\n", con.SourcePath, err)
 		return nil
