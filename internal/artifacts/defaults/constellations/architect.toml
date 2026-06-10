@@ -16,7 +16,7 @@ inputs = { prompt = "${nodes.render_seed.prompt}" }
 id     = "persist"
 type   = "builtin"
 op     = "persist_phases"
-inputs = { phases_toml = "${nodes.plan.result}" }
+inputs = { phases_json = "${nodes.plan.result_json}" }
 
 [[edges]]
 from = "render_seed"

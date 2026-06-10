@@ -30,18 +30,11 @@ func TestOpPersistPhases(t *testing.T) {
 	rt, nebID := newTestRuntime(t, &fakeLoader{}, nil)
 	st := NewState(NebulaSnapshot{ID: nebID}, 1)
 
-	t.Run("inserts phases", func(t *testing.T) {
-		args := map[string]any{"phases_toml": `
-[[phases]]
-id = "p1"
-title = "First"
-body = "do first"
-
-[[phases]]
-id = "p2"
-title = "Second"
-body = "do second"
-`}
+	t.Run("inserts phases from structured JSON", func(t *testing.T) {
+		args := map[string]any{"phases_json": `{"phases":[
+			{"id":"p1","title":"First","body":"do first"},
+			{"id":"p2","title":"Second","body":"do second"}
+		]}`}
 		out, err := opPersistPhases(ctx, rt, st, args)
 		if err != nil {
 			t.Fatalf("opPersistPhases: %v", err)
@@ -60,7 +53,21 @@ body = "do second"
 
 	t.Run("missing input errors", func(t *testing.T) {
 		if _, err := opPersistPhases(ctx, rt, st, map[string]any{}); err == nil {
-			t.Fatal("expected error for missing phases_toml")
+			t.Fatal("expected error for missing phases_json")
+		}
+	})
+
+	t.Run("invalid JSON errors", func(t *testing.T) {
+		args := map[string]any{"phases_json": "not json"}
+		if _, err := opPersistPhases(ctx, rt, st, args); err == nil {
+			t.Fatal("expected parse error for non-JSON input")
+		}
+	})
+
+	t.Run("empty phases errors", func(t *testing.T) {
+		args := map[string]any{"phases_json": `{"phases":[]}`}
+		if _, err := opPersistPhases(ctx, rt, st, args); err == nil {
+			t.Fatal("expected error for zero phases")
 		}
 	})
 }

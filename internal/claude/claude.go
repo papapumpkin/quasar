@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/papapumpkin/quasar/internal/agent"
@@ -35,6 +36,29 @@ type Invoker struct {
 	// (read back by `quasar coder report`). Telemetry only — a write failure
 	// never blocks an invocation.
 	HealthEvents *telemetry.HealthEventStore
+
+	// schemaFlagOnce memoizes the one-time probe of whether the resolved claude
+	// binary accepts --json-schema (native structured output). schemaFlagSupported
+	// holds the result. An older CLI without the flag falls back to the in-prompt
+	// JSON instruction path, so structured output degrades gracefully rather than
+	// passing an unknown flag that would error.
+	schemaFlagOnce      sync.Once
+	schemaFlagSupported bool
+}
+
+// supportsJSONSchema reports whether the resolved claude binary accepts the
+// --json-schema flag, probed once via `claude --help` and memoized. A probe
+// failure is treated as "unsupported" so the invoker never passes a flag the CLI
+// would reject.
+func (inv *Invoker) supportsJSONSchema() bool {
+	inv.schemaFlagOnce.Do(func() {
+		out, err := inv.execCommand(inv.ClaudePath, "--help").CombinedOutput()
+		if err != nil {
+			return
+		}
+		inv.schemaFlagSupported = strings.Contains(string(out), "--json-schema")
+	})
+	return inv.schemaFlagSupported
 }
 
 // NewInvoker creates an Invoker with sensible defaults for command execution.
@@ -132,7 +156,17 @@ func buildArgs(a agent.Agent, prompt string) []string {
 }
 
 func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, workDir string) (agent.InvocationResult, error) {
+	// Structured output: prefer the CLI's native --json-schema (constrained
+	// decoding guarantees a schema-valid object); on an older CLI lacking the
+	// flag, steer the model in-prompt and recover the JSON object from its text.
+	useNativeSchema := len(a.OutputSchema) > 0 && inv.supportsJSONSchema()
+	if len(a.OutputSchema) > 0 && !useNativeSchema {
+		prompt = appendSchemaInstruction(prompt, a.OutputSchema)
+	}
 	args := buildArgs(a, prompt)
+	if useNativeSchema {
+		args = append(args, "--json-schema", string(a.OutputSchema))
+	}
 
 	// Install the per-tool budget hook when the agent opts in. Failure is
 	// fail-open: log and proceed without the hook so a setup glitch never
@@ -174,6 +208,13 @@ func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, wo
 	}
 
 	if err := inv.run(ctx, cmd, workDir, &stderr, inv.effectiveHealth(a)); err != nil {
+		// With --output-format json the CLI writes its error object to stdout,
+		// not stderr, so a bare exit status discards the only diagnostic. Surface
+		// the parsed error (or raw stdout) alongside the exit error so the failure
+		// is debuggable in supervisor.log and the star trace.
+		if detail := failureDetail(stdout.Bytes()); detail != "" {
+			return agent.InvocationResult{}, fmt.Errorf("%w\nclaude stdout: %s", err, detail)
+		}
 		return agent.InvocationResult{}, err
 	}
 
@@ -195,8 +236,21 @@ func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, wo
 		fmt.Fprintf(os.Stderr, "[claude] truncated result from %d to %d bytes\n", len(resp.Result), len(resultText))
 	}
 
+	// When a schema was requested, resolve the validated JSON object: the native
+	// structured_output field if present, else recover it from the result text
+	// (the fallback path). A schema that can't be satisfied is a hard error — the
+	// downstream operator must never receive prose.
+	var structured json.RawMessage
+	if len(a.OutputSchema) > 0 {
+		var serr error
+		if structured, serr = structuredResult(useNativeSchema, resp); serr != nil {
+			return agent.InvocationResult{}, fmt.Errorf("claude: structured output: %w", serr)
+		}
+	}
+
 	return agent.InvocationResult{
 		ResultText:          resultText,
+		StructuredOutput:    structured,
 		CostUSD:             resp.TotalCostUSD,
 		DurationMs:          resp.DurationMs,
 		SessionID:           resp.SessionID,
@@ -228,6 +282,26 @@ func (inv *Invoker) Validate() error {
 // preserves the legacy blocking cmd.Run path. A non-nil policy starts the
 // subprocess, monitors it via the multi-signal probe, and returns a
 // *DeadCoderError if the coder was terminated for stalling or thrashing.
+// failureDetail extracts a human-readable error from a failed claude -p run's
+// stdout. With --output-format json the CLI writes its error object there; if it
+// parses, return its result text, otherwise the raw (bounded) stdout. Empty
+// stdout yields "" so the caller falls back to the bare exit error.
+func failureDetail(stdout []byte) string {
+	trimmed := strings.TrimSpace(string(stdout))
+	if trimmed == "" {
+		return ""
+	}
+	var resp CLIResponse
+	if err := json.Unmarshal(stdout, &resp); err == nil && resp.Result != "" {
+		return resp.Result
+	}
+	const max = 2000
+	if len(trimmed) > max {
+		return trimmed[:max] + "…(truncated)"
+	}
+	return trimmed
+}
+
 func (inv *Invoker) run(ctx context.Context, cmd *exec.Cmd, workDir string, stderr *bytes.Buffer, policy *agent.HealthPolicy) error {
 	if policy == nil {
 		if err := cmd.Run(); err != nil {

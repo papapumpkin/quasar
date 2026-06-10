@@ -22,7 +22,7 @@ inputs = { nebula_diff = "${nebula.full_diff}", verify_results = "${nebula.verif
 id     = "decide"
 type   = "builtin"
 op     = "master_review_decision"
-inputs = { output = "${nodes.review.result}" }
+inputs = { output = "${nodes.review.result_json}" }
 
 # fix dispatches the coder-reviewer constellation as a child run. The
 # reviewer's feedback becomes the synthetic phase body the inner coder reads;

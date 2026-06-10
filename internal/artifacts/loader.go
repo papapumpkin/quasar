@@ -90,6 +90,7 @@ func (l *Loader) LoadStar(name string) (*Star, error) {
 	star.Health = health
 	star.Checkpoint = parseStarCheckpoint(sf)
 	star.CoordinationAware = sf.CoordinationAware == nil || *sf.CoordinationAware
+	star.OutputSchema = sf.OutputSchema
 
 	if err := l.resolveSkills(star); err != nil {
 		return nil, err
@@ -342,6 +343,7 @@ type starFrontmatter struct {
 	Name          string   `toml:"name"`
 	Model         string   `toml:"model"`
 	FallbackModel string   `toml:"fallback_model"`
+	OutputSchema  string   `toml:"output_schema"`
 	Skills        []string `toml:"skills"`
 	Tools         struct {
 		Allowed []string `toml:"allowed"`

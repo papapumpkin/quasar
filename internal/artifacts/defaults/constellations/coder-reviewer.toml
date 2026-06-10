@@ -45,7 +45,7 @@ inputs = { phase_body = "${nebula.current_phase.body}", diff = "${nodes.implemen
 id     = "decide"
 type   = "builtin"
 op     = "reviewer_decision"
-inputs = { output = "${nodes.review.result}" }
+inputs = { output = "${nodes.review.result_json}" }
 
 # Cycle cap exhausted: terminate the run failed with a structured reason rather
 # than shipping work the reviewer never signed off on. Mirrors master-review's

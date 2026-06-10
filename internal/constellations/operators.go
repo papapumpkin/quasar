@@ -2,13 +2,12 @@ package constellations
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
-
-	"github.com/pelletier/go-toml/v2"
 
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/gitops"
@@ -114,26 +113,29 @@ func renderPreCommitSection(pre gitops.PreCommitConfig) string {
 	return b.String()
 }
 
-// phaseSpec is the structure the architect emits and persist_phases consumes.
+// phaseSpec is the structure the architect emits (schema phases-v1) and
+// persist_phases consumes.
 type phaseSpec struct {
 	Phases []struct {
-		ID              string `toml:"id"`
-		Title           string `toml:"title"`
-		Body            string `toml:"body"`
-		FrontmatterTOML string `toml:"frontmatter_toml"`
-	} `toml:"phases"`
+		ID              string `json:"id"`
+		Title           string `json:"title"`
+		Body            string `json:"body"`
+		FrontmatterTOML string `json:"frontmatter_toml"`
+	} `json:"phases"`
 }
 
-// opPersistPhases parses an architect's structured output (a TOML document with
-// a [[phases]] array, passed as args["phases_toml"]) and inserts each phase
-// into the nebula. Output: {"count": <n>}.
+// opPersistPhases consumes the architect's schema-validated JSON output (a
+// {"phases":[…]} object passed as args["phases_json"]) and inserts each phase
+// into the nebula. Output: {"count": <n>}. The structured-output contract
+// (schema phases-v1, enforced by the invoker) guarantees a valid object, so this
+// no longer parses free-text TOML or strips Markdown fences.
 func opPersistPhases(ctx context.Context, rt *Runtime, st *State, args map[string]any) (map[string]any, error) {
-	raw, ok := args["phases_toml"].(string)
+	raw, ok := args["phases_json"].(string)
 	if !ok || strings.TrimSpace(raw) == "" {
-		return nil, fmt.Errorf("persist_phases: missing string input %q", "phases_toml")
+		return nil, fmt.Errorf("persist_phases: missing string input %q", "phases_json")
 	}
 	var spec phaseSpec
-	if err := toml.Unmarshal([]byte(raw), &spec); err != nil {
+	if err := json.Unmarshal([]byte(raw), &spec); err != nil {
 		return nil, fmt.Errorf("persist_phases: parse phases: %w", err)
 	}
 	if len(spec.Phases) == 0 {
