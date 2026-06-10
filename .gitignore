@@ -39,3 +39,6 @@ Thumbs.db
 .beads/dolt-server.port
 .beads/dolt-server.activity
 .beads/dolt-monitor.pid
+
+# Visual brainstorming companion artifacts
+.superpowers/

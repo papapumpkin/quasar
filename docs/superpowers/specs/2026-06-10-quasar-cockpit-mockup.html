@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quasar Cockpit — Fleet Dashboard</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#070a0f; --panel:#0c111a; --panel2:#0e1420; --line:#172131; --line2:#1f2c3f;
+    --txt:#dde3ec; --mut:#6b7686; --mut2:#475061;
+    --cyan:#22d3ee; --green:#34d399; --amber:#fbbf24; --red:#f87171; --violet:#a78bfa; --blue:#60a5fa;
+    --mono:ui-monospace,SFMono-Regular,Menlo,"Cascadia Code",monospace;
+    --sans:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  body{background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(34,211,238,.05), transparent 60%),
+      radial-gradient(900px 500px at 0% 110%, rgba(167,139,250,.05), transparent 55%),
+      var(--bg);
+    color:var(--txt); font-family:var(--sans); font-size:13px; min-height:100vh;}
+  .wrap{max-width:1320px;margin:0 auto;padding:0 20px 60px}
+
+  /* ---- top bar ---- */
+  .topbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:18px;
+    padding:13px 4px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(7,10,15,.92),rgba(7,10,15,.75));backdrop-filter:blur(8px);margin-bottom:20px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.06em;font-size:14px}
+  .brand .d{width:13px;height:13px;border-radius:3px;background:conic-gradient(from 45deg,var(--cyan),var(--violet),var(--cyan));box-shadow:0 0 14px rgba(34,211,238,.5)}
+  .brand b{color:#fff}
+  .brand span{color:var(--cyan)}
+  .search{flex:1;max-width:380px;display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 11px;color:var(--mut)}
+  .search input{background:none;border:none;outline:none;color:var(--txt);font-family:var(--sans);font-size:12.5px;width:100%}
+  .search kbd{font-family:var(--mono);font-size:10px;color:var(--mut2);border:1px solid var(--line2);border-radius:4px;padding:1px 5px}
+  .tb-spacer{flex:1}
+  .stat{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;color:var(--mut)}
+  .stat b{color:var(--txt);font-weight:600}
+  .stat .lbl{color:var(--mut2);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase}
+  .presence{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--mut);background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:4px 11px}
+  .av{display:flex}.av i{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--bg);margin-left:-6px;display:grid;place-items:center;font-size:8px;font-weight:700;color:#04121a}
+  .av i:first-child{margin-left:0}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 1.8s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.55)}70%{box-shadow:0 0 0 7px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+
+  /* ---- repo rack ---- */
+  .rack{border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,var(--panel),rgba(12,17,26,.6));margin-bottom:18px;overflow:hidden}
+  .rack-h{display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--line)}
+  .rack-h .repo{font-weight:650;color:#fff;font-size:13.5px;letter-spacing:-.01em}
+  .rack-h .repo span{color:var(--mut)}
+  .rack-h .gh{font-family:var(--mono);font-size:10px;color:var(--mut2)}
+  .counts{margin-left:auto;display:flex;gap:14px;font-family:var(--mono);font-size:10.5px}
+  .counts div{display:flex;align-items:center;gap:5px;color:var(--mut)}
+  .counts b{color:var(--txt)}
+  .cdot{width:6px;height:6px;border-radius:50%}
+  .lanes{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--line)}
+  @media(max-width:900px){.lanes{grid-template-columns:1fr}}
+  .lane{background:var(--panel2);padding:12px;min-height:120px}
+  .lane-h{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--mut2);margin-bottom:11px}
+  .lane-h .n{margin-left:auto;color:var(--mut);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:0 6px;font-size:9px}
+
+  /* ---- cards ---- */
+  .card{background:linear-gradient(180deg,#101725,#0d1320);border:1px solid var(--line2);border-radius:9px;padding:10px 11px;margin-bottom:9px;transition:border-color .12s,transform .12s;position:relative}
+  .card:hover{border-color:#2c3c54;transform:translateY(-1px)}
+  .card .title{color:#eef2f8;font-weight:600;font-size:12.5px;line-height:1.35;letter-spacing:-.005em}
+  .card .sub{font-family:var(--mono);font-size:10px;color:var(--mut2);margin-top:3px}
+  .row{display:flex;align-items:center;gap:7px;margin-top:9px;flex-wrap:wrap}
+  .pill{font-family:var(--mono);font-size:9.5px;font-weight:600;padding:2px 7px;border-radius:5px;display:flex;align-items:center;gap:4px;letter-spacing:.03em}
+  .p-amber{background:rgba(251,191,36,.1);color:var(--amber);border:1px solid rgba(251,191,36,.22)}
+  .p-cyan{background:rgba(34,211,238,.09);color:var(--cyan);border:1px solid rgba(34,211,238,.22)}
+  .p-green{background:rgba(52,211,153,.09);color:var(--green);border:1px solid rgba(52,211,153,.22)}
+  .p-red{background:rgba(248,113,113,.09);color:var(--red);border:1px solid rgba(248,113,113,.22)}
+  .p-violet{background:rgba(167,139,250,.1);color:var(--violet);border:1px solid rgba(167,139,250,.22)}
+  .link{font-family:var(--mono);font-size:10px;color:var(--blue);text-decoration:none}
+  .link:hover{text-decoration:underline}
+  .ago{font-family:var(--mono);font-size:9.5px;color:var(--mut2);margin-left:auto}
+
+  .actions{display:flex;gap:6px;margin-top:10px}
+  .btn{flex:1;font-size:11px;font-weight:600;padding:5px 0;border-radius:6px;text-align:center;cursor:pointer;border:1px solid transparent;transition:.12s}
+  .btn-approve{background:rgba(52,211,153,.12);color:var(--green);border-color:rgba(52,211,153,.3)}
+  .btn-approve:hover{background:rgba(52,211,153,.2)}
+  .btn-reject{background:transparent;color:var(--mut);border-color:var(--line2)}
+  .btn-reject:hover{color:var(--red);border-color:rgba(248,113,113,.3)}
+
+  /* ---- live run card ---- */
+  .run{background:linear-gradient(180deg,#0c1422,#0a1019);border:1px solid rgba(34,211,238,.18);border-radius:9px;padding:11px;margin-bottom:9px;position:relative;overflow:hidden}
+  .run::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:linear-gradient(180deg,var(--cyan),var(--green))}
+  .run .title{color:#eef2f8;font-weight:600;font-size:12.5px}
+  .flow{display:flex;align-items:center;gap:6px;margin-top:10px;font-family:var(--mono);font-size:10px;flex-wrap:wrap}
+  .flow .step{color:var(--mut2);display:flex;align-items:center;gap:5px}
+  .flow .step.done{color:var(--green)}
+  .flow .step.active{color:var(--cyan)}
+  .flow .step.active .sd{width:5px;height:5px;border-radius:50%;background:var(--cyan);animation:pulse2 1.4s infinite}
+  @keyframes pulse2{0%{opacity:.4}50%{opacity:1}100%{opacity:.4}}
+  .flow .arr{color:var(--mut2)}
+  .flow .step .sd{width:4px;height:4px;border-radius:50%;background:currentColor;opacity:.6}
+  .bar{height:4px;background:#13202f;border-radius:4px;margin-top:11px;overflow:hidden;position:relative}
+  .bar i{display:block;height:100%;width:64%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:4px;box-shadow:0 0 10px rgba(34,211,238,.4)}
+  .run-meta{display:flex;align-items:center;gap:10px;margin-top:9px;font-family:var(--mono);font-size:10px;color:var(--mut)}
+  .run-meta .c{color:var(--amber)}
+  .run-meta .e{color:var(--mut)}
+  .run-meta .right{margin-left:auto;display:flex;gap:5px}
+  .tail{margin-top:9px;background:#060a10;border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-family:var(--mono);font-size:9.5px;line-height:1.55;color:#7d8aa0;max-height:54px;overflow:hidden;position:relative}
+  .tail .l{color:#8b93a3}.tail .l .g{color:var(--green)}.tail .l .d{color:var(--mut2)}
+  .tail::after{content:"";position:absolute;left:0;right:0;bottom:0;height:18px;background:linear-gradient(transparent,#060a10)}
+  .cur{display:inline-block;width:6px;height:11px;background:var(--cyan);vertical-align:middle;animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .empty{font-family:var(--mono);font-size:10px;color:var(--mut2);text-align:center;padding:18px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand"><span class="d"></span><b>QUASAR</b><span>cockpit</span></div>
+    <div class="search">
+      <span style="font-size:12px">⌕</span>
+      <input placeholder="Filter repos, nebulas, runs…">
+      <kbd>/</kbd>
+    </div>
+    <div class="tb-spacer"></div>
+    <div class="stat"><span class="lbl">fleet&nbsp;spend</span><b>$4.07</b></div>
+    <div class="stat"><span class="lbl">running</span><b style="color:var(--cyan)">2</b></div>
+    <div class="presence">
+      <div class="av"><i style="background:#34d399">A</i><i style="background:#60a5fa">M</i><i style="background:#fbbf24">K</i></div>
+      <span class="live-dot"></span> 3 operators
+    </div>
+  </div>
+
+  <!-- ======== REPO RACK 1 ======== -->
+  <div class="rack">
+    <div class="rack-h">
+      <span class="d" style="width:8px;height:8px;border-radius:2px;background:var(--cyan)"></span>
+      <div class="repo">papapumpkin<span>/quasar</span></div>
+      <div class="gh">main · 2 sensors</div>
+      <div class="counts">
+        <div><span class="cdot" style="background:var(--amber)"></span><b>2</b> awaiting</div>
+        <div><span class="cdot" style="background:var(--cyan)"></span><b>1</b> running</div>
+        <div><span class="cdot" style="background:var(--mut2)"></span><b>5</b> recent</div>
+      </div>
+    </div>
+    <div class="lanes">
+
+      <!-- awaiting -->
+      <div class="lane">
+        <div class="lane-h">◆ Awaiting approval <span class="n">2</span></div>
+        <div class="card">
+          <div class="title">Fix flaky sensor poll dedup</div>
+          <div class="sub">github · issue · 14m ago</div>
+          <div class="row"><span class="pill p-amber">● draft</span><a class="link" href="#">issue #42 ↗</a></div>
+          <div class="actions"><div class="btn btn-approve">Approve</div><div class="btn btn-reject">Reject</div></div>
+        </div>
+        <div class="card">
+          <div class="title">Document the entanglement lifecycle</div>
+          <div class="sub">github · issue · 1h ago</div>
+          <div class="row"><span class="pill p-amber">● draft</span><a class="link" href="#">issue #39 ↗</a></div>
+          <div class="actions"><div class="btn btn-approve">Approve</div><div class="btn btn-reject">Reject</div></div>
+        </div>
+      </div>
+
+      <!-- in-flight -->
+      <div class="lane">
+        <div class="lane-h"><span class="live-dot"></span> In-flight <span class="n">1</span></div>
+        <div class="run">
+          <div class="title">Heartbeat refresh + poison guard</div>
+          <div class="flow">
+            <span class="step done"><span class="sd"></span>implement</span><span class="arr">›</span>
+            <span class="step done"><span class="sd"></span>commit</span><span class="arr">›</span>
+            <span class="step active"><span class="sd"></span>review</span><span class="arr">›</span>
+            <span class="step">decide</span>
+          </div>
+          <div class="bar"><i></i></div>
+          <div class="run-meta"><span class="c">$0.34</span><span class="e">3m12s</span>
+            <span class="right"><span class="pill p-cyan">cycle 1/3</span></span>
+          </div>
+          <div class="tail">
+            <div class="l"><span class="d">reviewer ›</span> reading diff (8 files, +231 −44)…</div>
+            <div class="l"><span class="d">reviewer ›</span> checking <span class="g">step_driver.go</span> guard…</div>
+            <div class="l">verdict: request_changes — node ownership<span class="cur"></span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- recent -->
+      <div class="lane">
+        <div class="lane-h">▸ Recent <span class="n">5</span></div>
+        <div class="card">
+          <div class="title">Close perimeter bypasses</div>
+          <div class="sub">architect · master-review</div>
+          <div class="row"><span class="pill p-green">✓ merged</span><a class="link" href="#">PR #48 ↗</a><span class="ago">22m</span></div>
+        </div>
+        <div class="card">
+          <div class="title">Auto-resume + poison guard</div>
+          <div class="row"><span class="pill p-violet">⊙ open PR</span><a class="link" href="#">PR #47 ↗</a><span class="ago">41m</span></div>
+        </div>
+        <div class="card">
+          <div class="title">Sensor retry storm fix</div>
+          <div class="row"><span class="pill p-red">✕ failed</span><span class="sub" style="margin:0">budget exhausted</span><span class="ago">1h</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======== REPO RACK 2 ======== -->
+  <div class="rack">
+    <div class="rack-h">
+      <span class="d" style="width:8px;height:8px;border-radius:2px;background:var(--violet)"></span>
+      <div class="repo">papapumpkin<span>/relativity</span></div>
+      <div class="gh">main · 1 sensor</div>
+      <div class="counts">
+        <div><span class="cdot" style="background:var(--amber)"></span><b>0</b> awaiting</div>
+        <div><span class="cdot" style="background:var(--cyan)"></span><b>1</b> running</div>
+        <div><span class="cdot" style="background:var(--mut2)"></span><b>2</b> recent</div>
+      </div>
+    </div>
+    <div class="lanes">
+      <div class="lane">
+        <div class="lane-h">◆ Awaiting approval <span class="n">0</span></div>
+        <div class="empty">— nothing waiting —</div>
+      </div>
+      <div class="lane">
+        <div class="lane-h"><span class="live-dot"></span> In-flight <span class="n">1</span></div>
+        <div class="run">
+          <div class="title">Coordination lock contention</div>
+          <div class="flow">
+            <span class="step done"><span class="sd"></span>implement</span><span class="arr">›</span>
+            <span class="step active"><span class="sd"></span>commit</span><span class="arr">›</span>
+            <span class="step">review</span><span class="arr">›</span>
+            <span class="step">decide</span>
+          </div>
+          <div class="bar"><i style="width:38%"></i></div>
+          <div class="run-meta"><span class="c">$0.12</span><span class="e">1m02s</span>
+            <span class="right"><span class="pill p-cyan">cycle 0/3</span></span>
+          </div>
+          <div class="tail">
+            <div class="l"><span class="d">coder ›</span> writing striped lock for <span class="g">registry.go</span>…</div>
+            <div class="l"><span class="d">coder ›</span> running pre-commit (gofmt, vet)…<span class="cur"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="lane">
+        <div class="lane-h">▸ Recent <span class="n">2</span></div>
+        <div class="card">
+          <div class="title">Multi-repo registry index</div>
+          <div class="row"><span class="pill p-green">✓ merged</span><a class="link" href="#">PR #18 ↗</a><span class="ago">3h</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
