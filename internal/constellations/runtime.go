@@ -233,11 +233,22 @@ func (r *Runtime) Step(ctx context.Context, runID string) (string, error) {
 		return r.fail(ctx, run, st, fmt.Errorf("%w: %q", ErrUnknownNode, run.CurrentNode))
 	}
 
+	// Poison-node guard: bump the durable attempt counter before dispatching.
+	// A node that crash-loops (panic-on-restart, OOM) is failed here rather
+	// than re-dispatched forever, so it can't take the fleet down on every boot.
+	// handled means the guard already failed the run (state+cause mirror the
+	// normal fail path); a non-nil err with handled=false is a store error.
+	if state, handled, err := r.guardAttempt(ctx, run, st, node); handled || err != nil {
+		return state, err
+	}
+
 	// Keep the run's heartbeat fresh across a potentially minutes-long dispatch
 	// (a star invocation, or an entire nested-constellation walk) so a crash
-	// reaper can distinguish a live long step from a dead process.
+	// reaper can distinguish a live long step from a dead process. dispatchSafely
+	// recovers a node panic into a normal failure so one bad node can't crash
+	// the fleet process.
 	stopHeartbeat := r.startHeartbeat(ctx, run.ID, heartbeatInterval)
-	output, err := r.dispatch(ctx, run, st, node)
+	output, err := r.dispatchSafely(ctx, run, st, node)
 	stopHeartbeat()
 	if err != nil {
 		if errors.Is(err, ErrBudgetExhausted) {

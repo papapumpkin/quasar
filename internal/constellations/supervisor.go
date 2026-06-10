@@ -3,10 +3,14 @@ package constellations
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"time"
+
+	"github.com/papapumpkin/quasar/internal/artifacts"
+	"github.com/papapumpkin/quasar/internal/fabric"
 )
 
 // defaultSupervisorBatchLimit caps how many pending trigger_queue rows a
@@ -222,6 +226,54 @@ func (r *Runtime) startHeartbeat(ctx context.Context, runID string, interval tim
 		}
 	}()
 	return func() { close(done) }
+}
+
+// maxStepAttempts bounds how many times the runtime will (re)enter a single
+// node without it completing before failing the run. A completed node resets
+// the counter (SaveProgress), so this only trips for a node that repeatedly
+// crashes the process mid-dispatch and is auto-resumed on restart — a poison
+// node. Five tolerates a few transient hard restarts before giving up.
+const maxStepAttempts = 5
+
+var (
+	// ErrMaxStepAttempts is the failure cause when a node is re-entered more
+	// than maxStepAttempts times without completing (a crash-looping node).
+	ErrMaxStepAttempts = errors.New("constellations: node exceeded max step attempts")
+	// ErrNodePanic wraps a panic recovered from a node dispatch so it fails the
+	// run instead of crashing the fleet process.
+	ErrNodePanic = errors.New("constellations: node panicked")
+)
+
+// guardAttempt bumps the run's poison-node counter before dispatch and fails
+// the run when it exceeds maxStepAttempts. The bool reports whether the guard
+// handled the run: it returns (StateFailed, true, cause) when it failed the run
+// — the caller returns that pair, mirroring the normal fail path — or
+// ("", false, nil) to proceed, or ("", false, err) on a store error.
+func (r *Runtime) guardAttempt(ctx context.Context, run *fabric.RunRow, st *State, node *artifacts.ConstellationNode) (string, bool, error) {
+	attempts, err := r.runStore.BumpStepAttempt(ctx, run.ID)
+	if err != nil {
+		return "", false, err
+	}
+	if attempts > maxStepAttempts {
+		state, cause := r.fail(ctx, run, st,
+			fmt.Errorf("%w: node %q reached %d attempts", ErrMaxStepAttempts, node.ID, attempts))
+		return state, true, cause
+	}
+	return "", false, nil
+}
+
+// dispatchSafely runs dispatch with panic recovery so a panicking node (a bug
+// in an operator/builtin, or malformed state) fails its run instead of crashing
+// the fleet process — which would re-step and re-panic on every restart. The
+// recovered panic becomes an ordinary node error routed to the run's failure
+// path.
+func (r *Runtime) dispatchSafely(ctx context.Context, run *fabric.RunRow, st *State, node *artifacts.ConstellationNode) (out map[string]any, err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			err = fmt.Errorf("%w: node %q: %v", ErrNodePanic, node.ID, rec)
+		}
+	}()
+	return r.dispatch(ctx, run, st, node)
 }
 
 // Resume restores a run interrupted mid-flight. The DAG state and current node
