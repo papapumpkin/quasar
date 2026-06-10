@@ -3,6 +3,7 @@ module github.com/papapumpkin/quasar
 go 1.25.11
 
 require (
+	github.com/a-h/templ v0.3.960
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
@@ -16,7 +17,6 @@ require (
 )
 
 require (
-	github.com/a-h/templ v0.3.960 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymanbagabas/go-udiff v0.3.1 // indirect
 	github.com/charmbracelet/colorprofile v0.4.1 // indirect
