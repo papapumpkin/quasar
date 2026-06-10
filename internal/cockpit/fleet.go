@@ -41,6 +41,7 @@ type NebulaCard struct {
 	SourceID   string // e.g. issue number / "papapumpkin/quasar#42"
 	IssueURL   string // may be ""
 	PRNumber   int    // 0 if none
+	PRState    string // live GitHub state: "open"|"draft"|"merged"|"closed"; "" if unknown
 	AgeLabel   string // e.g. "14m"
 }
 

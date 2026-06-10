@@ -100,6 +100,7 @@ type Runtime struct {
 	coordination     *Check                           // Optional; nil disables the pre-flight coordination check.
 	conflictLog      *telemetry.ConflictResolutionLog // Optional; nil disables conflict-resolution telemetry (emit node no-ops).
 	events           EventSink                        // Optional; nil disables live event emission (cockpit SSE).
+	tailDir          string                           // Optional; empty disables the per-run stdout tail (best-effort tee).
 }
 
 // RuntimeOpts configures New. RunStore, NebStore, and Loader are required;
@@ -141,6 +142,13 @@ type RuntimeOpts struct {
 	// Events, when non-nil, receives live run/fleet state-change events for the
 	// cockpit's SSE fan-out. Nil disables emission.
 	Events EventSink
+	// TailDir, when non-empty, is the directory under which the runtime opens a
+	// per-run <run-id>.log and tees the active star's subprocess stdout into it,
+	// so the cockpit can stream a live tail to the browser. Teeing is entirely
+	// best-effort: any failure to open or write the file is logged and ignored,
+	// and the run proceeds exactly as if TailDir were empty. A fleet without the
+	// cockpit leaves this empty and pays nothing.
+	TailDir string
 }
 
 // New constructs a Runtime. It panics on a nil required dependency, surfacing a
@@ -165,6 +173,7 @@ func New(opts RuntimeOpts) *Runtime {
 		coordination:     opts.Coordination,
 		conflictLog:      opts.ConflictLog,
 		events:           opts.Events,
+		tailDir:          opts.TailDir,
 	}
 }
 

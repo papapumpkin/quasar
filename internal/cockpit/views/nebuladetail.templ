@@ -1,0 +1,132 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/papapumpkin/quasar/internal/cockpit"
+)
+
+// phaseStatusPillClass maps a phase status to its pill color classes.
+func phaseStatusPillClass(status string) string {
+	switch status {
+	case "done", "merged", "shipped":
+		return "bg-green/[.09] text-green border border-green/20"
+	case "running":
+		return "bg-cyan/[.09] text-cyan border border-cyan/20"
+	case "failed", "canceled", "rejected":
+		return "bg-red/[.09] text-red border border-red/20"
+	case "pending":
+		return "bg-[#172131] text-[#6b7686] border border-[#1f2c3f]"
+	default:
+		return "bg-amber/10 text-amber border border-amber/20"
+	}
+}
+
+// phaseStatusGlyph returns the leading glyph for a phase status pill.
+func phaseStatusGlyph(status string) string {
+	switch status {
+	case "done", "merged", "shipped":
+		return "✓"
+	case "running":
+		return "●"
+	case "failed", "canceled", "rejected":
+		return "✕"
+	default:
+		return "·"
+	}
+}
+
+// NebulaDetailPage renders the Mission Control nebula-detail page: a sticky
+// topbar back-link, a nebula header card, an ordered phases list, and a
+// constellation runs list (each linking to /runs/{id}).
+templ NebulaDetailPage(d cockpit.NebulaDetail) {
+	@Shell("Quasar Cockpit — " + d.Nebula.Title) {
+		<!-- topbar -->
+		<div
+			class="sticky top-0 z-10 flex items-center gap-[18px] py-[13px] px-1 border-b border-[#172131] backdrop-blur-md mb-5 bg-[#070a0f]/90"
+		>
+			<div class="flex items-center gap-[9px] font-bold tracking-[.06em] text-[14px]">
+				<span class="w-[13px] h-[13px] rounded-[3px] bg-[conic-gradient(from_45deg,#22d3ee,#a78bfa,#22d3ee)] shadow-[0_0_14px_rgba(34,211,238,.5)]"></span>
+				<b class="text-white">QUASAR</b><span class="text-cyan">cockpit</span>
+			</div>
+			<a
+				href="/"
+				class="flex items-center gap-[6px] font-mono text-[11px] text-[#6b7686] hover:text-cyan transition-colors no-underline"
+			>
+				‹ fleet
+			</a>
+			<div class="flex-1"></div>
+			<span class="font-mono text-[10px] text-[#475061] truncate max-w-[240px]">{ d.Nebula.ID }</span>
+		</div>
+		<!-- nebula header card -->
+		<div class="bg-gradient-to-b from-[#0c1422] to-[#0a1019] border border-cyan/20 rounded-[9px] p-[14px] mb-[18px] relative overflow-hidden">
+			<span class="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-cyan to-violet-400"></span>
+			<div class="flex items-start gap-[10px] flex-wrap">
+				<div class="flex-1 min-w-0">
+					<div class="text-[#eef2f8] font-semibold text-[14px] leading-snug">{ d.Nebula.Title }</div>
+					if d.Description != "" {
+						<div class="font-mono text-[10.5px] text-[#7d8aa0] mt-[4px] leading-[1.55]">{ d.Description }</div>
+					}
+				</div>
+				@statusPill(d.Nebula.Status)
+			</div>
+			<div class="flex items-center gap-[10px] mt-[11px] flex-wrap">
+				@prOrIssueLink(d.Nebula)
+				if d.Nebula.PRNumber > 0 {
+					<span class="font-mono text-[10px] text-[#475061]">PR #{ fmt.Sprintf("%d", d.Nebula.PRNumber) }</span>
+				}
+				<span class="font-mono text-[10px] text-[#475061]">{ fmt.Sprintf("%d phases · %d runs", len(d.Phases), len(d.Runs)) }</span>
+			</div>
+		</div>
+		<!-- phases list -->
+		<div class="border border-[#172131] rounded-[9px] overflow-hidden mb-[18px]">
+			<div class="flex items-center gap-[8px] py-[10px] px-[11px] border-b border-[#172131] bg-[#0c111a]">
+				<span class="font-mono text-[9.5px] tracking-[.14em] uppercase text-[#475061]">phases</span>
+				<span class="ml-auto font-mono text-[9px] text-[#475061] bg-[#0c111a] border border-[#172131] rounded-[10px] px-[6px]">{ fmt.Sprintf("%d", len(d.Phases)) }</span>
+			</div>
+			if len(d.Phases) == 0 {
+				<div class="font-mono text-[10px] text-[#475061] text-center py-[24px]">— no phases recorded —</div>
+			} else {
+				<div class="bg-[#08101a]">
+					for _, p := range d.Phases {
+						<div class="flex items-center gap-[10px] py-[9px] px-[11px] border-b border-[#0f1926] hover:bg-[#0c1422]/60 transition-colors">
+							<span class="font-mono text-[10px] text-[#475061] w-[28px] flex-shrink-0 text-right">{ fmt.Sprintf("%d", p.Seq) }</span>
+							<span class="flex-1 min-w-0 font-mono text-[12px] text-[#eef2f8] truncate">{ p.Title }</span>
+							<span class={ "font-mono text-[9.5px] font-semibold py-[2px] px-[7px] rounded-[5px] flex items-center gap-1 tracking-[.03em] flex-shrink-0", phaseStatusPillClass(p.Status) }>
+								<span>{ phaseStatusGlyph(p.Status) }</span> { p.Status }
+							</span>
+						</div>
+					}
+				</div>
+			}
+		</div>
+		<!-- constellation runs list -->
+		<div class="border border-[#172131] rounded-[9px] overflow-hidden">
+			<div class="flex items-center gap-[8px] py-[10px] px-[11px] border-b border-[#172131] bg-[#0c111a]">
+				<span class="font-mono text-[9.5px] tracking-[.14em] uppercase text-[#475061]">constellation runs</span>
+				<span class="ml-auto font-mono text-[9px] text-[#475061] bg-[#0c111a] border border-[#172131] rounded-[10px] px-[6px]">{ fmt.Sprintf("%d", len(d.Runs)) }</span>
+			</div>
+			if len(d.Runs) == 0 {
+				<div class="font-mono text-[10px] text-[#475061] text-center py-[24px]">— no runs yet —</div>
+			} else {
+				<div class="bg-[#08101a]">
+					for _, rc := range d.Runs {
+						<a
+							href={ templ.SafeURL("/runs/" + rc.ID) }
+							class="flex items-center gap-[10px] py-[9px] px-[11px] border-b border-[#0f1926] hover:bg-[#0c1422]/60 transition-colors no-underline group"
+						>
+							<span class="flex-1 min-w-0 font-mono text-[11px] text-[#6b7686] truncate group-hover:text-cyan transition-colors">{ rc.ID }</span>
+							<span class="font-mono text-[10px] text-[#7d8aa0] flex-shrink-0">{ rc.ConstellationName }</span>
+							<span class={ "font-mono text-[9.5px] font-semibold py-[2px] px-[7px] rounded-[5px] flex items-center gap-1 tracking-[.03em] flex-shrink-0", stepStatePillClass(rc.State) }>
+								<span>{ stepStateGlyph(rc.State) }</span> { rc.State }
+							</span>
+							if rc.CostUSD > 0 {
+								<span class="font-mono text-[10px] text-amber flex-shrink-0">{ fmt.Sprintf("$%.4f", rc.CostUSD) }</span>
+							}
+						</a>
+					}
+				</div>
+			}
+		</div>
+	}
+}

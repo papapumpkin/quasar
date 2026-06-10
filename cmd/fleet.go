@@ -106,7 +106,7 @@ func runFleet(cmd *cobra.Command, _ []string) error {
 // diagnostics route to .quasar/supervisor.log alongside the fabric DB.
 // Tail it during TUI sessions to see what the consumer is doing.
 func startTriggerSupervisor(ctx context.Context, fab *fabric.SQLiteFabric, dbPath string) error {
-	cache, err := buildRuntimeCache(fab, dbPath, nil)
+	cache, err := buildRuntimeCache(fab, dbPath, nil, "")
 	if err != nil {
 		return err
 	}
@@ -121,7 +121,7 @@ func startTriggerSupervisor(ctx context.Context, fab *fabric.SQLiteFabric, dbPat
 // state-change events reach the cockpit's SSE fan-out; a nil sink disables
 // emission. Construction is best-effort: a config-load, blobstore, or invoker
 // failure returns a non-nil error so the caller can degrade cleanly.
-func buildRuntimeCache(fab *fabric.SQLiteFabric, dbPath string, events constellations.EventSink) (*constellations.RuntimeCache, error) {
+func buildRuntimeCache(fab *fabric.SQLiteFabric, dbPath string, events constellations.EventSink, tailDir string) (*constellations.RuntimeCache, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
@@ -144,6 +144,7 @@ func buildRuntimeCache(fab *fabric.SQLiteFabric, dbPath string, events constella
 		DefaultBudgetUSD: cfg.MaxBudgetUSD,
 		PreCommitFor:     repoPreCommitFor,
 		Events:           events,
+		TailDir:          tailDir,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build runtime cache: %w", err)

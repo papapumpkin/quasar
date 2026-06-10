@@ -3,7 +3,10 @@ package constellations
 import (
 	"context"
 	"errors"
+	"io"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/papapumpkin/quasar/internal/agent"
@@ -46,9 +49,16 @@ type fakeInvoker struct {
 	gotPrompt string
 }
 
-func (f *fakeInvoker) Invoke(_ context.Context, a agent.Agent, prompt string, _ string) (agent.InvocationResult, error) {
+func (f *fakeInvoker) Invoke(ctx context.Context, a agent.Agent, prompt string, _ string) (agent.InvocationResult, error) {
 	f.gotAgent = a
 	f.gotPrompt = prompt
+	// Honor a best-effort stdout tee if the runtime set one. A real invoker tees
+	// the claude subprocess stdout here; the fake writes its canned result text
+	// so the runtime's tail-file plumbing is exercised end-to-end without a
+	// subprocess. Best-effort: write errors are ignored.
+	if tee := agent.StdoutTee(ctx); tee != nil {
+		_, _ = io.WriteString(tee, f.result.ResultText)
+	}
 	return f.result, nil
 }
 func (f *fakeInvoker) Validate() error { return nil }
@@ -99,6 +109,111 @@ func newTestRuntimeWithExecution(t *testing.T, loader Loader, inv agent.Invoker,
 		RepoPath: dir,
 	})
 	return rt, nebID
+}
+
+// newTestRuntimeWithTail builds a runtime whose star dispatches tee stdout into
+// tailDir/<run-id>.log, used by the live-tail tests.
+func newTestRuntimeWithTail(t *testing.T, loader Loader, inv agent.Invoker, tailDir string) (*Runtime, string) {
+	t.Helper()
+	dir := t.TempDir()
+	fab, err := fabric.NewSQLiteFabric(context.Background(), filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("fabric: %v", err)
+	}
+	t.Cleanup(func() { _ = fab.DB().Close() })
+	blobs, err := blobstore.New(filepath.Join(dir, "blobs"), fab.DB())
+	if err != nil {
+		t.Fatalf("blobs: %v", err)
+	}
+	nebStore := fabric.NewNebulaStore(fab.DB(), blobs)
+	nebID, err := nebStore.Insert(context.Background(), fabric.NebulaRow{
+		Name: "demo", Status: "running", ContextTOML: "do the thing",
+	})
+	if err != nil {
+		t.Fatalf("seed nebula: %v", err)
+	}
+	rt := New(RuntimeOpts{
+		RunStore: fabric.NewConstellationRunStore(fab.DB()),
+		NebStore: nebStore,
+		Loader:   loader,
+		Invoker:  inv,
+		RepoPath: dir,
+		TailDir:  tailDir,
+	})
+	return rt, nebID
+}
+
+// starConstellation returns a single-star constellation that terminates on done.
+func starConstellation() (*artifacts.Constellation, Loader) {
+	con := &artifacts.Constellation{
+		Name:  "code",
+		Nodes: []artifacts.ConstellationNode{{ID: "coder", Type: artifacts.NodeStar, Star: "coder"}},
+		Edges: []artifacts.ConstellationEdge{{From: "coder", To: artifacts.TermDone}},
+	}
+	loader := &fakeLoader{
+		cons:  map[string]*artifacts.Constellation{"code": con},
+		stars: map[string]*artifacts.Star{"coder": {Name: "coder", Model: "sonnet", Prompt: "be a coder"}},
+	}
+	return con, loader
+}
+
+// TestRuntimeStarTeesToTailFile asserts that with TailDir set, dispatching a
+// star writes the run's .log with the dispatch header and the streamed output.
+func TestRuntimeStarTeesToTailFile(t *testing.T) {
+	ctx := context.Background()
+	_, loader := starConstellation()
+	inv := &fakeInvoker{result: agent.InvocationResult{ResultText: "STREAMED-OUTPUT"}}
+	tailDir := t.TempDir()
+	rt, nebID := newTestRuntimeWithTail(t, loader, inv, tailDir)
+
+	runID, err := rt.Fire(ctx, "code", nebID, "", 0)
+	if err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	if _, err := rt.Step(ctx, runID); err != nil {
+		t.Fatalf("Step: %v", err)
+	}
+
+	logPath := filepath.Join(tailDir, runID+".log")
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("tail log not written: %v", err)
+	}
+	body := string(raw)
+	if !strings.Contains(body, "--- coder (cycle 0) ---") {
+		t.Errorf("expected dispatch header in tail log, got:\n%s", body)
+	}
+	if !strings.Contains(body, "STREAMED-OUTPUT") {
+		t.Errorf("expected streamed output in tail log, got:\n%s", body)
+	}
+}
+
+// TestRuntimeStarNoTailWhenDirEmpty asserts that with TailDir empty, no tail
+// file is written and the run still completes normally.
+func TestRuntimeStarNoTailWhenDirEmpty(t *testing.T) {
+	ctx := context.Background()
+	_, loader := starConstellation()
+	inv := &fakeInvoker{result: agent.InvocationResult{ResultText: "did it", CostUSD: 0.5}}
+	// TailDir empty: teeing disabled.
+	rt, nebID := newTestRuntimeWithTail(t, loader, inv, "")
+
+	runID, err := rt.Fire(ctx, "code", nebID, "", 0)
+	if err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	state, err := rt.Step(ctx, runID)
+	if err != nil {
+		t.Fatalf("Step: %v", err)
+	}
+	if state != StateDone {
+		t.Fatalf("state = %q, want done", state)
+	}
+	// The result was recorded normally — behavior unchanged.
+	run, _ := rt.runStore.GetRun(ctx, runID)
+	st, _ := UnmarshalState(run.DAGStateTOML)
+	if st.Nodes["coder"]["result"] != "did it" {
+		t.Errorf("star result not recorded: %+v", st.Nodes["coder"])
+	}
 }
 
 // builtinNode is a small constructor for a builtin node with no inputs.
