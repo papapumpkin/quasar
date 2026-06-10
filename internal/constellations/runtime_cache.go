@@ -45,6 +45,10 @@ type RuntimeCacheOpts struct {
 	// SSE fan-out). Nil-safe: a fleet running without the cockpit sets nothing
 	// and pays no emission cost.
 	Events EventSink
+	// TailDir, when non-empty, is threaded into every per-repo Runtime as the
+	// directory for per-run stdout tail logs the cockpit streams to the browser.
+	// Empty disables teeing fleet-wide; a fleet without the cockpit pays nothing.
+	TailDir string
 }
 
 // RuntimeCache lazily constructs and caches one *Runtime per repo. It is the
@@ -131,6 +135,7 @@ func (c *RuntimeCache) Get(_ context.Context, repoPath string) (*Runtime, error)
 		DefaultBudgetUSD: c.opts.DefaultBudgetUSD,
 		Entanglements:    c.entStore,
 		Events:           c.opts.Events,
+		TailDir:          c.opts.TailDir,
 	})
 	c.runtimes[abs] = rt
 	return rt, nil

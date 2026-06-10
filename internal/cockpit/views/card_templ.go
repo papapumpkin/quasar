@@ -104,6 +104,10 @@ func NebulaCardView(c cockpit.NebulaCard) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
+		templ_7745c5c3_Err = prStatePill(c.PRState).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
 		if !isAwaiting(c.Status) {
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<span class=\"font-mono text-[9.5px] text-[#475061] ml-auto\">")
 			if templ_7745c5c3_Err != nil {
@@ -112,7 +116,7 @@ func NebulaCardView(c cockpit.NebulaCard) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(c.AgeLabel)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/card.templ`, Line: 40, Col: 76}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/card.templ`, Line: 41, Col: 76}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
@@ -135,7 +139,7 @@ func NebulaCardView(c cockpit.NebulaCard) templ.Component {
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs("@post('/nebulas/" + c.ID + "/approve')")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/card.templ`, Line: 47, Col: 61}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/card.templ`, Line: 48, Col: 61}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -148,7 +152,7 @@ func NebulaCardView(c cockpit.NebulaCard) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs("@post('/nebulas/" + c.ID + "/reject')")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/card.templ`, Line: 51, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/card.templ`, Line: 52, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {

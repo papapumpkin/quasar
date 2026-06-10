@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -158,6 +159,16 @@ func (inv *Invoker) Invoke(ctx context.Context, a agent.Agent, prompt string, wo
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
+	// Best-effort stdout tail: when the runtime set a tee on the context (the
+	// cockpit's per-run .log), mirror subprocess stdout to it as well. The
+	// in-memory buffer stays authoritative for parsing the result — the tee is
+	// extra and must never affect the run. A write failure on the tee is the
+	// sink's concern (it is an io.Writer that swallows its own errors); the
+	// MultiWriter still feeds &stdout, so parsing is unaffected regardless.
+	if tee := agent.StdoutTee(ctx); tee != nil {
+		cmd.Stdout = io.MultiWriter(&stdout, bestEffortWriter{tee})
+	}
+
 	if inv.Verbose {
 		fmt.Fprintf(os.Stderr, "[claude] running: %s %s\n", inv.ClaudePath, strings.Join(args, " "))
 	}
@@ -287,6 +298,24 @@ func (inv *Invoker) runMonitored(ctx context.Context, cmd *exec.Cmd, workDir str
 		return fmt.Errorf("claude invocation failed: %w\nstderr: %s", waitErr, stderr.String())
 	}
 	return nil
+}
+
+// bestEffortWriter wraps a stdout tee so that a write error never propagates
+// back through cmd.Stdout. io.MultiWriter aborts (and surfaces the error to the
+// os/exec stdout copier) on the first writer that fails; wrapping the tee this
+// way guarantees the authoritative &stdout buffer keeps receiving output and
+// the run is unaffected even if the tail file's writer errors mid-invocation.
+// A short write is likewise reported as a full write for the same reason.
+type bestEffortWriter struct {
+	w io.Writer
+}
+
+// Write forwards p to the wrapped writer but always reports a full, error-free
+// write to the caller (io.MultiWriter), so a failing tee can never abort the
+// subprocess stdout copy.
+func (b bestEffortWriter) Write(p []byte) (int, error) {
+	_, _ = b.w.Write(p)
+	return len(p), nil
 }
 
 // sha256Hex returns the SHA-256 hex digest of s.

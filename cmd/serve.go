@@ -8,7 +8,9 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/papapumpkin/quasar/internal/config"
 	"github.com/papapumpkin/quasar/internal/constellations"
 	"github.com/papapumpkin/quasar/internal/fabric"
+	"github.com/papapumpkin/quasar/internal/forge"
 	"github.com/papapumpkin/quasar/internal/tui/fleet"
 )
 
@@ -90,18 +93,28 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	// into the runtime cache even when the cockpit HTTP server is not served.
 	notifier := cockpit.NewNotifier(128)
 
+	// Per-run stdout tail directory: the runtime tees the active star's
+	// subprocess stdout here and the cockpit reads it back for the live tail.
+	// The SAME directory is passed to both sides. Best-effort throughout — a
+	// resolution failure disables teeing rather than failing the process.
+	tailDir, err := cockpitTailDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "serve: cockpit tail disabled: %v\n", err)
+		tailDir = ""
+	}
+
 	// The cockpit server is started first so a bad token or bind fails fast,
 	// before we spin up the supervisor.
 	var server *cockpit.Server
 	if cockpitCfg.Enabled {
-		server, err = buildCockpitServer(fab, notifier)
+		server, err = buildCockpitServer(fab, notifier, tailDir)
 		if err != nil {
 			return err
 		}
 	}
 
 	if !cockpitOnly {
-		cache, err := buildRuntimeCache(fab, dbPath, &notifierSink{n: notifier})
+		cache, err := buildRuntimeCache(fab, dbPath, &notifierSink{n: notifier}, tailDir)
 		if err != nil {
 			return fmt.Errorf("start supervisor: %w", err)
 		}
@@ -131,25 +144,70 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+// ghEntry is a single cached PR-status lookup with its timestamp.
+type ghEntry struct {
+	status string
+	at     time.Time
+}
+
+// ghBadger implements cockpit.GitHubBadger with a 30s in-process cache to
+// avoid hammering gh on every fleet page render. The repo argument is the
+// repo's local working directory; forge.PRStatus infers owner/repo from it.
+// On gh errors the error is returned and no cache entry is written; the
+// cockpit treats errors as best-effort and leaves PRState empty.
+type ghBadger struct {
+	mu    sync.Mutex
+	cache map[string]ghEntry
+}
+
+// ghBadgerTTL is the cache entry lifetime before a fresh gh call is issued.
+const ghBadgerTTL = 30 * time.Second
+
+// PRStatus implements cockpit.GitHubBadger. It serves from cache when the
+// entry is fresh enough; otherwise calls forge.PRStatus, caches the result,
+// and returns it.
+func (g *ghBadger) PRStatus(ctx context.Context, repo string, number int) (string, error) {
+	key := fmt.Sprintf("%s#%d", repo, number)
+	g.mu.Lock()
+	if e, ok := g.cache[key]; ok && time.Since(e.at) < ghBadgerTTL {
+		g.mu.Unlock()
+		return e.status, nil
+	}
+	g.mu.Unlock()
+
+	status, err := forge.PRStatus(ctx, repo, number)
+	if err != nil {
+		return "", err
+	}
+	g.mu.Lock()
+	g.cache[key] = ghEntry{status: status, at: time.Now()}
+	g.mu.Unlock()
+	return status, nil
+}
+
 // buildCockpitServer constructs the cockpit HTTP server: reads the bearer token,
-// wires the RuntimeActions / render adapters, and leaves GitHub badges disabled
-// (the github sensor exposes issue reads only, not PR status). The Notifier is
-// shared with the runtime event sink so live events reach connected browsers.
-func buildCockpitServer(fab *fabric.SQLiteFabric, notifier *cockpit.Notifier) (*cockpit.Server, error) {
+// wires the RuntimeActions / render adapters, and wires in the ghBadger so
+// cards with a PR number show a live status badge. The Notifier is shared with
+// the runtime event sink so live events reach connected browsers.
+func buildCockpitServer(fab *fabric.SQLiteFabric, notifier *cockpit.Notifier, tailDir string) (*cockpit.Server, error) {
 	token, err := readCockpitToken()
 	if err != nil {
 		return nil, err
 	}
 	server, err := cockpit.New(cockpit.Opts{
-		DB:         fab.DB(),
-		Runtime:    fleet.NewStore(fab.DB()),
-		Notifier:   notifier,
-		GitHub:     nil, // see comment above: no clean PR-status surface today
-		Token:      token,
-		Assets:     cockpit.Assets(),
-		RenderPage: renderCockpitPage,
-		RenderRun:  renderCockpitRun,
-		Logf:       func(f string, a ...any) { fmt.Fprintf(os.Stderr, "cockpit: "+f+"\n", a...) },
+		DB:                 fab.DB(),
+		Runtime:            fleet.NewStore(fab.DB()),
+		Notifier:           notifier,
+		GitHub:             &ghBadger{cache: map[string]ghEntry{}},
+		Token:              token,
+		Assets:             cockpit.Assets(),
+		RenderPage:         renderCockpitPage,
+		RenderRun:          renderCockpitRun,
+		RenderRunDetail:    renderCockpitRunDetail,
+		RenderNebulaDetail: renderCockpitNebulaDetail,
+		RenderRunTail:      renderCockpitRunTail,
+		TailDir:            tailDir,
+		Logf:               func(f string, a ...any) { fmt.Fprintf(os.Stderr, "cockpit: "+f+"\n", a...) },
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build cockpit server: %w", err)
@@ -179,6 +237,24 @@ func readCockpitToken() (string, error) {
 	return tok, nil
 }
 
+// cockpitTailDir returns the directory for per-run stdout tail logs, under the
+// same ~/.quasar data dir that holds the cockpit token. The runtime tees into
+// it and the cockpit reads from it; both are passed the identical path.
+func cockpitTailDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home dir: %w", err)
+	}
+	return filepath.Join(home, ".quasar", "cockpit-tail"), nil
+}
+
+// renderCockpitRunTail is the cockpit.RunTailRenderer: it renders the live
+// stdout-tail fragment via the templ-generated views.RunTailFragment component.
+func renderCockpitRunTail(ctx context.Context, w http.ResponseWriter, lines string) error {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return views.RunTailFragment(lines).Render(ctx, w)
+}
+
 // notifierSink adapts a cockpit.Notifier to the constellations.EventSink
 // interface so per-repo Runtimes publish live state-change events into the
 // cockpit's SSE fan-out.
@@ -206,4 +282,18 @@ func renderCockpitPage(ctx context.Context, w http.ResponseWriter, f cockpit.Fle
 // the templ-generated views.RunCardView component.
 func renderCockpitRun(ctx context.Context, w io.Writer, rc cockpit.RunCard) error {
 	return views.RunCardView(rc).Render(ctx, w)
+}
+
+// renderCockpitRunDetail is the cockpit.RunDetailRenderer: it renders the
+// run-detail page via the templ-generated views.RunDetailPage component.
+func renderCockpitRunDetail(ctx context.Context, w http.ResponseWriter, d cockpit.RunDetail) error {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return views.RunDetailPage(d).Render(ctx, w)
+}
+
+// renderCockpitNebulaDetail is the cockpit.NebulaDetailRenderer: it renders the
+// nebula-detail page via the templ-generated views.NebulaDetailPage component.
+func renderCockpitNebulaDetail(ctx context.Context, w http.ResponseWriter, d cockpit.NebulaDetail) error {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return views.NebulaDetailPage(d).Render(ctx, w)
 }

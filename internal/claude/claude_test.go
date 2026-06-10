@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -601,5 +602,69 @@ func TestBuildEnv_SuppressesMCPPopups(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected CLAUDE_CODE_DISABLE_MCP_POPUPS=1 in env, but it was not present")
+	}
+}
+
+// TestInvoke_TeesStdout confirms that when a stdout tee is set on the context,
+// the invoker mirrors the subprocess's stdout to it while still parsing the
+// authoritative in-memory buffer for the result.
+func TestInvoke_TeesStdout(t *testing.T) {
+	resp := CLIResponse{Result: "teed result", SessionID: "sess-tee"}
+	jsonBytes, _ := json.Marshal(resp)
+
+	dir := t.TempDir()
+	script := writeScript(t, dir, "claude", "printf '%s' '"+string(jsonBytes)+"'")
+
+	inv := newTestInvoker("claude", false, fakeExecContextWith(script), nil)
+
+	var tee bytes.Buffer
+	ctx := agent.WithStdoutTee(context.Background(), &tee)
+	result, err := inv.Invoke(ctx, agent.Agent{}, "do stuff", dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// The buffer remains authoritative: the parsed result is correct.
+	if result.ResultText != "teed result" {
+		t.Errorf("ResultText = %q, want %q", result.ResultText, "teed result")
+	}
+	// The tee received the raw subprocess stdout (the JSON payload).
+	if !strings.Contains(tee.String(), "teed result") {
+		t.Errorf("tee did not receive subprocess stdout; got %q", tee.String())
+	}
+}
+
+// erroringWriter always fails its Write, used to prove a failing tee never
+// affects the invocation.
+type erroringWriter struct{}
+
+func (erroringWriter) Write(p []byte) (int, error) {
+	return 0, errFakeTee
+}
+
+var errFakeTee = errFakeTeeT("tee is broken")
+
+type errFakeTeeT string
+
+func (e errFakeTeeT) Error() string { return string(e) }
+
+// TestInvoke_TeeFailureDoesNotAffectRun confirms a tee whose Write always
+// errors does not break the invocation: the result still parses from the
+// authoritative buffer.
+func TestInvoke_TeeFailureDoesNotAffectRun(t *testing.T) {
+	resp := CLIResponse{Result: "still works", SessionID: "sess-tee-fail"}
+	jsonBytes, _ := json.Marshal(resp)
+
+	dir := t.TempDir()
+	script := writeScript(t, dir, "claude", "printf '%s' '"+string(jsonBytes)+"'")
+
+	inv := newTestInvoker("claude", false, fakeExecContextWith(script), nil)
+
+	ctx := agent.WithStdoutTee(context.Background(), erroringWriter{})
+	result, err := inv.Invoke(ctx, agent.Agent{}, "do stuff", dir)
+	if err != nil {
+		t.Fatalf("tee failure leaked into run: %v", err)
+	}
+	if result.ResultText != "still works" {
+		t.Errorf("ResultText = %q, want %q", result.ResultText, "still works")
 	}
 }
