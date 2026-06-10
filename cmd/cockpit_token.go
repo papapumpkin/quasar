@@ -51,6 +51,9 @@ func runCockpitToken(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("write token to %s: %w", path, err)
 	}
 
+	// The token path is machine-readable output a caller can capture (e.g.
+	// `tok=$(quasar cockpit token)`), like `version`.
+	// arch-test: stdout-allowed
 	fmt.Println(path)
 	return nil
 }

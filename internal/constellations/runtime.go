@@ -38,21 +38,47 @@ var (
 	ErrTerminal = errors.New("constellations: run is already terminal")
 )
 
+// The interfaces below are the Runtime's collaborator seams, declared here per
+// the project convention of defining interfaces at the point of use. Concrete
+// implementations are injected from the cmd layer so the runtime never imports
+// the blob/fabric/cockpit machinery directly, preserving the dependency layering.
+
 // Loader resolves constellations and stars by name. artifacts.Loader satisfies
-// it; tests inject a fake. Defined here (where consumed) per project convention.
+// it; tests inject a fake.
 type Loader interface {
 	LoadConstellation(name string) (*artifacts.Constellation, error)
 	LoadStar(name string) (*artifacts.Star, error)
 }
 
-// Committer is the runtime's git seam. gitops.Client satisfies it. The runtime
-// holds a repo-bound committer and always passes the repo's [pre_commit]
-// config, so stars never see pre-commit and the runtime never decides per call.
-// Commit is the only write; Diff is a read the runtime uses to inspect a
-// just-created commit (e.g. to mark touched entanglements in flight).
+// Committer is the runtime's git seam (gitops.Client satisfies it). The runtime
+// holds a repo-bound committer and always passes the repo's [pre_commit] config,
+// so stars never see pre-commit. Commit is the only write; Diff is a read used to
+// inspect a just-created commit (e.g. to mark touched entanglements in flight).
 type Committer interface {
 	Commit(ctx context.Context, message string, opts gitops.CommitOpts) (string, error)
 	Diff(ctx context.Context, baseRef, headRef string) (string, error)
+}
+
+// EventSink receives live state-change events for a subscriber (the cockpit's
+// SSE fan-out). Primitive argument types keep the runtime from importing the
+// cockpit package; a nil sink disables emission, so a fleet without the cockpit
+// pays nothing.
+type EventSink interface {
+	Emit(topic, typ string, data map[string]any)
+}
+
+// Checkpointer snapshots a run's worktree after a successful coder dispatch and
+// restores the latest snapshot when a later cycle's coder dies, so the reviewer
+// can fall back to a recoverable state. Granularity is per-dispatch (see the
+// internal/checkpoint package comment); checkpoint.RuntimeCheckpointer is the
+// injected implementation.
+type Checkpointer interface {
+	// Checkpoint captures the worktree for runID at the given cycle, labeled by
+	// trigger. Implementations dedup an unchanged tree.
+	Checkpoint(ctx context.Context, runID string, cycle int, trigger string) error
+	// RestoreForReview materializes, under baseDir, partial/ (the live worktree)
+	// and checkpoint/ (the latest snapshot) for runID, returning their paths.
+	RestoreForReview(ctx context.Context, runID, baseDir string) (partialDir, checkpointDir string, err error)
 }
 
 // Runtime executes constellation runs for a single repo. The supervisor owns
@@ -74,34 +100,6 @@ type Runtime struct {
 	coordination     *Check                           // Optional; nil disables the pre-flight coordination check.
 	conflictLog      *telemetry.ConflictResolutionLog // Optional; nil disables conflict-resolution telemetry (emit node no-ops).
 	events           EventSink                        // Optional; nil disables live event emission (cockpit SSE).
-}
-
-// EventSink receives live state-change events that a subscriber (the cockpit's
-// SSE fan-out today) pushes to connected operators. It is defined here, where
-// events are emitted, with primitive argument types so the runtime never imports
-// the cockpit package. A nil sink disables emission, so a fleet running without
-// the cockpit pays nothing. The cmd layer injects a cockpit-backed adapter only
-// when the cockpit is enabled.
-type EventSink interface {
-	Emit(topic, typ string, data map[string]any)
-}
-
-// Checkpointer snapshots a run's worktree after a successful coder dispatch and
-// restores the latest snapshot when a later cycle's coder dies, so the reviewer
-// can fall back to a recoverable state instead of judging only broken in-flight
-// work. Granularity is per-dispatch (cross-cycle), not per-build — see the
-// internal/checkpoint package comment. The runtime calls it; the concrete
-// blob-backed implementation
-// (checkpoint.RuntimeCheckpointer) is injected from the cmd layer. The interface
-// is defined here, where it is consumed, so dispatchStar never imports the
-// blob/fabric machinery directly (preserving the dependency layering).
-type Checkpointer interface {
-	// Checkpoint captures the worktree for runID at the given cycle, labeled by
-	// trigger. Implementations dedup an unchanged tree.
-	Checkpoint(ctx context.Context, runID string, cycle int, trigger string) error
-	// RestoreForReview materializes, under baseDir, partial/ (the live worktree)
-	// and checkpoint/ (the latest snapshot) for runID, returning their paths.
-	RestoreForReview(ctx context.Context, runID, baseDir string) (partialDir, checkpointDir string, err error)
 }
 
 // RuntimeOpts configures New. RunStore, NebStore, and Loader are required;

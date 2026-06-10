@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/spf13/viper"
+
+	"github.com/papapumpkin/quasar/internal/cockpit"
 )
 
 // DefaultLintCommands are the lint commands executed after each coder pass.
@@ -149,6 +151,10 @@ type Config struct {
 	// MergeGate holds the [merge_gate] section: the cross-phase merge gate's
 	// verify command and timeout override. Empty fields use built-in defaults.
 	MergeGate MergeGateConfig `mapstructure:"merge_gate"`
+
+	// Cockpit holds the [cockpit] section: the browser dashboard's enabled
+	// flag and listen address. Disabled by default; see cockpit.DefaultConfig.
+	Cockpit cockpit.Config `mapstructure:"cockpit"`
 }
 
 // ErrInlineToken indicates an integration or forge section stored a secret
@@ -205,6 +211,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("fix_effort", "low")
 	v.SetDefault("fallback_model", "")
 	v.SetDefault("pre_commit.fail_on_error", true)
+	cockpitDefaults := cockpit.DefaultConfig()
+	v.SetDefault("cockpit.enabled", cockpitDefaults.Enabled)
+	v.SetDefault("cockpit.addr", cockpitDefaults.Addr)
 	setGCDefaults(v)
 }
 
