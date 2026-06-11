@@ -56,6 +56,16 @@ type   = "builtin"
 op     = "fail_run"
 inputs = { reason = "max coder-reviewer cycles exhausted", detail = "${nodes.decide.comments}" }
 
+# Empty diff: the coder produced no changes, so `commit` returns committed=false
+# and its only success edge (→ review) does not match. Without a transition for
+# this case the walk dead-ends with "no outgoing edge matched: node commit" and
+# the run fails opaquely. Fail the phase cleanly with an actionable reason instead.
+[[nodes]]
+id     = "no-changes"
+type   = "builtin"
+op     = "fail_run"
+inputs = { reason = "coder produced no changes", detail = "The coder returned an empty diff for this phase; there was nothing to commit." }
+
 [[edges]]
 from = "implement"
 to   = "commit"
@@ -64,6 +74,11 @@ to   = "commit"
 from = "commit"
 to   = "review"
 when = "nodes.commit.committed"
+
+[[edges]]
+from = "commit"
+to   = "no-changes"
+when = "!nodes.commit.committed"
 
 [[edges]]
 from = "review"
@@ -86,6 +101,10 @@ when = "nodes.decide.verdict == 'request_changes' && cycle >= meta.max_cycles"
 
 [[edges]]
 from = "give-up"
+to   = "_failed"
+
+[[edges]]
+from = "no-changes"
 to   = "_failed"
 
 [outputs]

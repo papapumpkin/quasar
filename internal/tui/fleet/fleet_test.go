@@ -109,8 +109,8 @@ func TestStoreApprove(t *testing.T) {
 	if err := db.QueryRow("SELECT nebula_id, constellation_name, repo_path FROM trigger_queue WHERE state='pending'").Scan(&n, &name, &repoPath); err != nil {
 		t.Fatalf("expected a pending trigger: %v", err)
 	}
-	if n != "neb-1" || name != "architect" {
-		t.Errorf("trigger = (%q,%q), want (neb-1, architect)", n, name)
+	if n != "neb-1" || name != "nebula-lifecycle" {
+		t.Errorf("trigger = (%q,%q), want (neb-1, nebula-lifecycle)", n, name)
 	}
 	if repoPath != repo {
 		t.Errorf("trigger repo_path = %q, want %q (carried from the nebula)", repoPath, repo)
