@@ -90,6 +90,7 @@ type Runtime struct {
 	invoker          agent.Invoker
 	committer        Committer
 	repoPath         string
+	worktrees        Worktrees // Optional; nil disables per-nebula worktree isolation.
 	preCommit        gitops.PreCommitConfig
 	budget           *Budget
 	defaultBudgetUSD float64
@@ -103,6 +104,19 @@ type Runtime struct {
 	tailDir          string                           // Optional; empty disables the per-run stdout tail (best-effort tee).
 }
 
+// Worktrees provides per-nebula isolated git worktrees so a build never writes
+// to the operator's working tree or current branch. Optional: a nil Worktrees
+// disables isolation and runs use the repo root directly (the legacy behavior).
+// *gitops.Client satisfies this.
+type Worktrees interface {
+	// BranchFor returns the deterministic quasar/<nebula> branch for a nebula.
+	BranchFor(nebulaID string) string
+	// EnsureWorktree creates (idempotently) the nebula's worktree, returning its path.
+	EnsureWorktree(ctx context.Context, nebulaID string) (path string, err error)
+	// RemoveWorktree removes a build worktree (best-effort).
+	RemoveWorktree(ctx context.Context, path string) error
+}
+
 // RuntimeOpts configures New. RunStore, NebStore, and Loader are required;
 // Invoker is required for star nodes; Committer and PreCommit are required only
 // if any star commits.
@@ -113,6 +127,10 @@ type RuntimeOpts struct {
 	Invoker   agent.Invoker
 	Committer Committer
 	RepoPath  string
+	// Worktrees, when non-nil, isolates each nebula's build in its own git
+	// worktree on a quasar/<nebula> branch. Nil disables isolation (runs use the
+	// repo root directly — the legacy behavior).
+	Worktrees Worktrees
 	PreCommit gitops.PreCommitConfig
 	// DefaultBudgetUSD is the operator-level fallback budget cap (from the repo's
 	// .quasar.yaml defaults.max_budget_usd) used at Fire time when neither an
@@ -164,6 +182,7 @@ func New(opts RuntimeOpts) *Runtime {
 		invoker:          opts.Invoker,
 		committer:        opts.Committer,
 		repoPath:         opts.RepoPath,
+		worktrees:        opts.Worktrees,
 		preCommit:        opts.PreCommit,
 		budget:           NewBudget(opts.RunStore),
 		defaultBudgetUSD: opts.DefaultBudgetUSD,
@@ -209,13 +228,37 @@ func (r *Runtime) Fire(ctx context.Context, constellationName, nebulaID, parentR
 	now := time.Now()
 	st := NewState(SnapshotNebula(neb), now.Unix())
 	st.Meta.MaxCycles = resolveMaxCycles(con, neb)
+
+	// Per-nebula worktree isolation: a build runs in its own worktree on a
+	// quasar/<nebula> branch, never the operator's tree/branch. Top-level runs
+	// create the worktree; nested children (phase_iterator / NodeConstellation)
+	// inherit the parent's. A nil Worktrees provider disables isolation, leaving
+	// repoPath at the repo root (the legacy behavior).
+	repoPath := r.repoPath
+	if r.worktrees != nil {
+		st.Nebula.Branch = r.worktrees.BranchFor(nebulaID)
+		if parentRunID == "" {
+			wt, werr := r.worktrees.EnsureWorktree(ctx, nebulaID)
+			if werr != nil {
+				return "", fmt.Errorf("constellations: ensure worktree for %q: %w", nebulaID, werr)
+			}
+			repoPath = wt
+		} else {
+			parent, perr := r.runStore.GetRun(ctx, parentRunID)
+			if perr != nil {
+				return "", fmt.Errorf("constellations: load parent run %q: %w", parentRunID, perr)
+			}
+			repoPath = parent.RepoPath
+		}
+	}
+
 	dagState, err := MarshalState(st)
 	if err != nil {
 		return "", err
 	}
 
 	runID, err := r.runStore.InsertRun(ctx, fabric.RunRow{
-		RepoPath:          r.repoPath,
+		RepoPath:          repoPath,
 		NebulaID:          nebulaID,
 		ConstellationName: constellationName,
 		Snapshot:          snapshotSource(con),
@@ -258,6 +301,10 @@ func (r *Runtime) Step(ctx context.Context, runID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// The run's workDir (its isolated worktree, or the repo root) is on the run
+	// row, not the persisted DAG state. Thread it onto the State each Step so
+	// dispatchStar and opCommit operate in the right tree.
+	st.RepoPath = run.RepoPath
 	node := findNode(con, run.CurrentNode)
 	if node == nil {
 		return r.fail(ctx, run, st, fmt.Errorf("%w: %q", ErrUnknownNode, run.CurrentNode))
@@ -347,11 +394,18 @@ func (r *Runtime) dispatchBuiltin(ctx context.Context, st *State, node *artifact
 // commitWork is the single point where the runtime writes a commit. It always
 // applies the repo's pre-commit config; callers never pass it. Returns the SHA,
 // or "" when there was nothing to commit.
-func (r *Runtime) commitWork(ctx context.Context, message string) (string, error) {
-	if r.committer == nil {
+func (r *Runtime) commitWork(ctx context.Context, workDir, message string) (string, error) {
+	// A run in an isolated worktree commits THERE, not the repo root. Build a
+	// committer for the worktree on demand; otherwise use the injected committer
+	// (the test seam) bound to the repo root. An empty workDir means the repo root.
+	committer := r.committer
+	if workDir != "" && workDir != r.repoPath {
+		committer = gitops.New(workDir)
+	}
+	if committer == nil {
 		return "", fmt.Errorf("constellations: commit requested but no Committer configured")
 	}
-	sha, err := r.committer.Commit(ctx, message, gitops.CommitOpts{PreCommit: r.preCommit})
+	sha, err := committer.Commit(ctx, message, gitops.CommitOpts{PreCommit: r.preCommit})
 	if errors.Is(err, gitops.ErrNothingToCommit) {
 		return "", nil
 	}

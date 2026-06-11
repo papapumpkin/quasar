@@ -131,6 +131,7 @@ func (c *RuntimeCache) Get(_ context.Context, repoPath string) (*Runtime, error)
 		Invoker:          c.opts.Invoker,
 		Committer:        gitops.New(abs),
 		RepoPath:         abs,
+		Worktrees:        gitops.New(abs),
 		PreCommit:        preCommit,
 		DefaultBudgetUSD: c.opts.DefaultBudgetUSD,
 		Entanglements:    c.entStore,

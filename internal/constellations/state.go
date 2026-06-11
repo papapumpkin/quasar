@@ -39,18 +39,27 @@ type State struct {
 	Cycle int `toml:"cycle"`
 	// Meta carries run-wide bookkeeping surfaced to expressions and the TUI.
 	Meta MetaSnapshot `toml:"meta"`
+	// RepoPath is the working directory this run's stars and commits operate in:
+	// the run's isolated worktree when worktree isolation is enabled, else the
+	// repo root. Transient — set fresh each Step from the run row, never
+	// persisted — so resume always reflects the run's current RepoPath.
+	RepoPath string `toml:"-"`
 }
 
 // NebulaSnapshot is the subset of a nebula row the runtime exposes to
 // expressions. It is a snapshot taken at Fire time (plus phase status updates as
 // the run progresses), not a live view, so resume is deterministic.
 type NebulaSnapshot struct {
-	ID      string          `toml:"id"`
-	Name    string          `toml:"name"`
-	Source  string          `toml:"source"`
-	Status  string          `toml:"status"`
-	Context string          `toml:"context"`
-	Phases  []PhaseSnapshot `toml:"phases"`
+	ID      string `toml:"id"`
+	Name    string `toml:"name"`
+	Source  string `toml:"source"`
+	Status  string `toml:"status"`
+	Context string `toml:"context"`
+	// Branch is the quasar/<nebula> branch this nebula's build commits to and
+	// ship pushes. Set at Fire when worktree isolation is enabled; empty
+	// otherwise. Exposed to expressions as ${nebula.branch}.
+	Branch string          `toml:"branch,omitempty"`
+	Phases []PhaseSnapshot `toml:"phases"`
 	// CurrentPhase is set per-iteration by the phase_iterator dispatcher
 	// when it spawns a child constellation for a single phase. It carries
 	// the phase's body so the child constellation's expression bindings
@@ -164,6 +173,7 @@ func (s *State) ExprState() artifacts.State {
 		"source":  s.Nebula.Source,
 		"status":  s.Nebula.Status,
 		"context": s.Nebula.Context,
+		"branch":  s.Nebula.Branch,
 		"phases":  phases,
 	}
 	if s.Nebula.CurrentPhase != nil {

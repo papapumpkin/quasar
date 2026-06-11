@@ -31,14 +31,36 @@ func cycleLabel(rc cockpit.RunCard) string {
 	return fmt.Sprintf("cycle %d", rc.Cycle)
 }
 
-// flowSteps is the canonical coder-reviewer step flow rendered in the run card.
-var flowSteps = []string{"implement", "commit", "review", "decide"}
+// constellationFlows maps a constellation name to its node-id sequence so a run
+// card shows that run's REAL flow, not a single hardcoded one. Keep in sync with
+// the embedded constellation TOMLs; an unknown constellation falls back to just
+// the current node so the breadcrumb is never actively wrong.
+var constellationFlows = map[string][]string{
+	"nebula-lifecycle": {"plan", "execute_phases", "master_review", "ship"},
+	"architect":        {"render_seed", "plan", "persist"},
+	"coder-reviewer":   {"implement", "commit", "review", "decide"},
+	"master-review":    {"review", "decide"},
+	"open-pr":           {"push", "create_pr"},
+}
+
+// flowFor returns the breadcrumb steps for a run: its constellation's node flow
+// when known, otherwise just the current node.
+func flowFor(rc cockpit.RunCard) []string {
+	if f, ok := constellationFlows[rc.ConstellationName]; ok {
+		return f
+	}
+	if rc.CurrentNode != "" {
+		return []string{rc.CurrentNode}
+	}
+	return nil
+}
 
 // stepStateClass classifies a flow step relative to the run's current node:
 // done (before the active node), active (the current node), or pending.
-func stepStateClass(rc cockpit.RunCard, step string, idx int) string {
+func stepStateClass(rc cockpit.RunCard, idx int) string {
+	flow := flowFor(rc)
 	active := -1
-	for i, s := range flowSteps {
+	for i, s := range flow {
 		if s == rc.CurrentNode {
 			active = i
 			break
@@ -65,11 +87,11 @@ templ RunCardView(rc cockpit.RunCard) {
 		<span class="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-cyan to-green"></span>
 		<div class="text-[#eef2f8] font-semibold text-[12.5px]">{ rc.Title }</div>
 		<div class="flex items-center gap-[6px] mt-[10px] font-mono text-[10px] flex-wrap">
-			for i, step := range flowSteps {
+			for i, step := range flowFor(rc) {
 				if i > 0 {
 					<span class="text-[#475061]">›</span>
 				}
-				<span class={ "flex items-center gap-[5px]", stepStateClass(rc, step, i) }>
+				<span class={ "flex items-center gap-[5px]", stepStateClass(rc, i) }>
 					<span class="w-[4px] h-[4px] rounded-full bg-current opacity-60"></span>{ step }
 				</span>
 			}
