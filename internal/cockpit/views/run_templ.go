@@ -39,14 +39,36 @@ func cycleLabel(rc cockpit.RunCard) string {
 	return fmt.Sprintf("cycle %d", rc.Cycle)
 }
 
-// flowSteps is the canonical coder-reviewer step flow rendered in the run card.
-var flowSteps = []string{"implement", "commit", "review", "decide"}
+// constellationFlows maps a constellation name to its node-id sequence so a run
+// card shows that run's REAL flow, not a single hardcoded one. Keep in sync with
+// the embedded constellation TOMLs; an unknown constellation falls back to just
+// the current node so the breadcrumb is never actively wrong.
+var constellationFlows = map[string][]string{
+	"nebula-lifecycle": {"plan", "execute_phases", "master_review", "ship"},
+	"architect":        {"render_seed", "plan", "persist"},
+	"coder-reviewer":   {"implement", "commit", "review", "decide"},
+	"master-review":    {"review", "decide"},
+	"open-pr":          {"push", "create_pr"},
+}
+
+// flowFor returns the breadcrumb steps for a run: its constellation's node flow
+// when known, otherwise just the current node.
+func flowFor(rc cockpit.RunCard) []string {
+	if f, ok := constellationFlows[rc.ConstellationName]; ok {
+		return f
+	}
+	if rc.CurrentNode != "" {
+		return []string{rc.CurrentNode}
+	}
+	return nil
+}
 
 // stepStateClass classifies a flow step relative to the run's current node:
 // done (before the active node), active (the current node), or pending.
-func stepStateClass(rc cockpit.RunCard, step string, idx int) string {
+func stepStateClass(rc cockpit.RunCard, idx int) string {
+	flow := flowFor(rc)
 	active := -1
-	for i, s := range flowSteps {
+	for i, s := range flow {
 		if s == rc.CurrentNode {
 			active = i
 			break
@@ -93,7 +115,7 @@ func RunCardView(rc cockpit.RunCard) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs("run-" + rc.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/run.templ`, Line: 62, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/run.templ`, Line: 84, Col: 21}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
@@ -106,7 +128,7 @@ func RunCardView(rc cockpit.RunCard) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(rc.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/run.templ`, Line: 66, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/run.templ`, Line: 88, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -116,7 +138,7 @@ func RunCardView(rc cockpit.RunCard) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		for i, step := range flowSteps {
+		for i, step := range flowFor(rc) {
 			if i > 0 {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<span class=\"text-[#475061]\">›</span>")
 				if templ_7745c5c3_Err != nil {
@@ -127,7 +149,7 @@ func RunCardView(rc cockpit.RunCard) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var4 = []any{"flex items-center gap-[5px]", stepStateClass(rc, step, i)}
+			var templ_7745c5c3_Var4 = []any{"flex items-center gap-[5px]", stepStateClass(rc, i)}
 			templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var4...)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -152,7 +174,7 @@ func RunCardView(rc cockpit.RunCard) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(step)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/run.templ`, Line: 73, Col: 83}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/run.templ`, Line: 95, Col: 83}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -170,7 +192,7 @@ func RunCardView(rc cockpit.RunCard) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(fmt.Sprintf("width:%d%%", progressPct(rc)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/run.templ`, Line: 80, Col: 54}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/run.templ`, Line: 102, Col: 54}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -183,7 +205,7 @@ func RunCardView(rc cockpit.RunCard) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("$%.2f", rc.CostUSD))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/run.templ`, Line: 84, Col: 62}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/run.templ`, Line: 106, Col: 62}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
@@ -196,7 +218,7 @@ func RunCardView(rc cockpit.RunCard) templ.Component {
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(rc.State)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/run.templ`, Line: 85, Col: 42}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/run.templ`, Line: 107, Col: 42}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
@@ -209,7 +231,7 @@ func RunCardView(rc cockpit.RunCard) templ.Component {
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(cycleLabel(rc))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/run.templ`, Line: 87, Col: 173}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/run.templ`, Line: 109, Col: 173}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -222,7 +244,7 @@ func RunCardView(rc cockpit.RunCard) templ.Component {
 		var templ_7745c5c3_Var11 string
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(rc.CurrentNode)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/run.templ`, Line: 92, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/cockpit/views/run.templ`, Line: 114, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 		if templ_7745c5c3_Err != nil {

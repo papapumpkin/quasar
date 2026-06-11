@@ -145,7 +145,8 @@ func loadInFlight(ctx context.Context, db *sql.DB, repo string) ([]RunCard, erro
 		       COALESCE((SELECT SUM(cost_usd) FROM star_invocations WHERE run_id = r.id), 0)
 		FROM constellation_runs r
 		JOIN nebulas n ON n.id = r.nebula_id
-		WHERE n.repo_path = ? AND r.state IN ('running', 'paused', 'blocked_on_review')
+		WHERE n.repo_path = ? AND r.parent_run_id IS NULL
+		  AND r.state IN ('running', 'paused', 'blocked_on_review')
 		ORDER BY r.updated_at DESC`
 	rows, err := db.QueryContext(ctx, q, repo)
 	if err != nil {
