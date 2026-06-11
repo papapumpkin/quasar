@@ -22,19 +22,31 @@ type CommitOpts struct {
 }
 
 // AddTracked stages modifications to already-tracked files (git add -u). New
-// files are not staged here; they are introduced via the agent's own tooling
-// and tracked separately by the loop.
+// files are not staged. Retained as a utility; the Commit path uses StageAll so
+// a coder's newly-created files are captured (see StageAll).
 func (c *Client) AddTracked(ctx context.Context) error {
 	_, err := c.run(ctx, "add", "-u")
 	return err
 }
 
-// Commit runs pre-commit hooks, re-stages tracked modifications, and creates a
-// commit. The sequence is:
+// StageAll stages every change in the worktree — new, modified, and deleted
+// files (git add -A). The constellation runtime owns the commit and the coder
+// has no git-write tools, so this is the single point that captures the coder's
+// work. It must stage NEW files (which git add -u silently drops): a phase that
+// adds a file would otherwise commit nothing and stall the build. Mirrors the
+// legacy in-process loop's `git add -A` (internal/loop/git.go).
+func (c *Client) StageAll(ctx context.Context) error {
+	_, err := c.run(ctx, "add", "-A")
+	return err
+}
+
+// Commit runs pre-commit hooks, stages all changes, and creates a commit. The
+// sequence is:
 //
 //  1. Run opts.PreCommit. If a command fails and FailOnError is set, the commit
 //     is aborted and the pre-commit error is returned (git commit is not run).
-//  2. Re-stage tracked modifications introduced by the hooks (git add -u).
+//  2. Stage all changes — new, modified, and deleted (git add -A) — so a coder's
+//     newly-created files are committed, not silently dropped.
 //  3. If the index is empty, return ErrNothingToCommit.
 //  4. git commit (with --author when opts.Author is set).
 //
@@ -44,7 +56,7 @@ func (c *Client) Commit(ctx context.Context, message string, opts CommitOpts) (s
 		return "", err
 	}
 
-	if err := c.AddTracked(ctx); err != nil {
+	if err := c.StageAll(ctx); err != nil {
 		return "", err
 	}
 

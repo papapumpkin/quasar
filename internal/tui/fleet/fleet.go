@@ -325,8 +325,10 @@ func parseErrorReason(dagStateTOML string) string {
 	return reason
 }
 
-// Approve transitions a nebula to "approved" and enqueues an architect trigger,
-// atomically. The runtime supervisor consumes the trigger_queue row.
+// Approve transitions a nebula to "approved" and enqueues a nebula-lifecycle
+// trigger, atomically. The runtime supervisor consumes the trigger_queue row and
+// fires the full lifecycle (architect plan → per-phase coder-reviewer → master
+// review → ship), so Approve runs the work end to end rather than only planning.
 func (s *Store) Approve(ctx context.Context, nebulaID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -343,7 +345,7 @@ func (s *Store) Approve(ctx context.Context, nebulaID string) error {
 	// (later phase) can route/filter by repo without a join back to nebulas.
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO trigger_queue (nebula_id, constellation_name, state, created_at, repo_path)
-		 SELECT id, 'architect', 'pending', ?, repo_path FROM nebulas WHERE id = ?`,
+		 SELECT id, 'nebula-lifecycle', 'pending', ?, repo_path FROM nebulas WHERE id = ?`,
 		now, nebulaID); err != nil {
 		return fmt.Errorf("fleet: enqueue trigger %q: %w", nebulaID, err)
 	}

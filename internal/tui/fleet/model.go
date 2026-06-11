@@ -10,9 +10,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// inFlightTick is the background refresh interval for the in-flight lane. Only
-// that lane auto-refreshes; the others refresh on explicit user action (R).
+// inFlightTick is the background refresh interval for the in-flight lane.
 const inFlightTick = 2 * time.Second
+
+// awaitingTick is the background refresh interval for the awaiting-approval
+// lane. Slower than inFlightTick because new drafts arrive on the sensor's
+// poll_interval (minutes), not sub-second; 30s is a good balance between
+// latency and DB churn.
+const awaitingTick = 30 * time.Second
 
 // viewMode is the model's current interaction mode.
 type viewMode int
@@ -81,10 +86,11 @@ type nebulaDetailLoadedMsg struct{ detail NebulaDetail }
 type gitLoadedMsg struct{ summaries map[string]string }
 type errMsg struct{ err error }
 type tickMsg struct{}
+type awaitingTickMsg struct{}
 
-// Init loads the fleet and starts the in-flight refresh tick.
+// Init loads the fleet and starts both the in-flight and awaiting refresh ticks.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.loadCmd(), tickCmd())
+	return tea.Batch(m.loadCmd(), tickCmd(), awaitingTickCmd())
 }
 
 // loadCmd re-queries the full fleet from SQLite.
@@ -151,6 +157,11 @@ func tickCmd() tea.Cmd {
 	return tea.Tick(inFlightTick, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
+// awaitingTickCmd schedules the next awaiting-lane refresh tick.
+func awaitingTickCmd() tea.Cmd {
+	return tea.Tick(awaitingTick, func(time.Time) tea.Msg { return awaitingTickMsg{} })
+}
+
 // Update routes messages to the active mode's handler.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -188,6 +199,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.traceCmd(m.detail.RunID), tickCmd())
 		}
 		return m, tea.Batch(m.inflightCmd(), tickCmd())
+	case awaitingTickMsg:
+		// Full re-query on the slower awaiting tick so new sensor-seeded drafts
+		// appear without a manual R press. The awaiting and recent lanes do not
+		// change at the 2s cadence, so this separate tick keeps churn minimal.
+		return m, tea.Batch(m.loadCmd(), awaitingTickCmd())
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}

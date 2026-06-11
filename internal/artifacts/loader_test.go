@@ -194,11 +194,11 @@ func TestLoadConstellation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConstellation: %v", err)
 	}
-	if len(c.Nodes) != 5 {
-		t.Fatalf("nodes = %d, want 5", len(c.Nodes))
+	if len(c.Nodes) != 6 {
+		t.Fatalf("nodes = %d, want 6", len(c.Nodes))
 	}
-	if len(c.Edges) != 7 {
-		t.Fatalf("edges = %d, want 7", len(c.Edges))
+	if len(c.Edges) != 9 {
+		t.Fatalf("edges = %d, want 9", len(c.Edges))
 	}
 
 	// Safety wiring: the commit is a runtime-owned builtin node, not the coder

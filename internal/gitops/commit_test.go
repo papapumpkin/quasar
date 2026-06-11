@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// commitRunner simulates the git calls Commit makes: add -u, diff --cached
+// commitRunner simulates the git calls Commit makes: add -A, diff --cached
 // --quiet, commit, and rev-parse HEAD. indexEmpty controls whether the staged
 // index is reported empty.
 func commitRunner(indexEmpty bool) *fakeRunner {
@@ -144,6 +144,31 @@ func TestCommit(t *testing.T) {
 		}
 		if !strings.Contains(commitCall, "--author Quasar <quasar@noreply.local>") {
 			t.Errorf("commit call = %q, want --author flag", commitCall)
+		}
+	})
+
+	t.Run("stages all changes including new files (git add -A)", func(t *testing.T) {
+		t.Parallel()
+		fr := commitRunner(false)
+		c := NewWithRunner(".", fr.run)
+
+		if _, err := c.Commit(context.Background(), "msg", CommitOpts{}); err != nil {
+			t.Fatalf("Commit error: %v", err)
+		}
+		// The commit path must stage with `git add -A` so a coder's NEW files are
+		// captured; `git add -u` silently drops them, which stalls any phase that
+		// adds a file and breaks multi-phase builds.
+		var sawAddAll bool
+		for _, call := range fr.calls {
+			if len(call) >= 2 && call[0] == "add" && call[1] == "-A" {
+				sawAddAll = true
+			}
+			if len(call) >= 2 && call[0] == "add" && call[1] == "-u" {
+				t.Errorf("commit staged with `git add -u` (drops new files); want `git add -A`")
+			}
+		}
+		if !sawAddAll {
+			t.Errorf("commit did not stage with `git add -A`; calls = %v", fr.calls)
 		}
 	})
 }

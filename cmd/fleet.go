@@ -12,12 +12,15 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
+	"github.com/papapumpkin/quasar/internal/artifacts"
 	"github.com/papapumpkin/quasar/internal/blobstore"
 	"github.com/papapumpkin/quasar/internal/claude"
 	"github.com/papapumpkin/quasar/internal/config"
 	"github.com/papapumpkin/quasar/internal/constellations"
 	"github.com/papapumpkin/quasar/internal/fabric"
 	"github.com/papapumpkin/quasar/internal/gitops"
+	"github.com/papapumpkin/quasar/internal/repos"
+	"github.com/papapumpkin/quasar/internal/sensors"
 	"github.com/papapumpkin/quasar/internal/tui/fleet"
 )
 
@@ -85,6 +88,10 @@ func runFleet(cmd *cobra.Command, _ []string) error {
 	if err := startTriggerSupervisor(supCtx, fab, dbPath); err != nil {
 		fmt.Fprintf(os.Stderr, "fleet: trigger supervisor disabled: %v\n", err)
 	}
+	// Start sensor pollers so awaiting-approval drafts appear without a
+	// manual poll. onSeed is nil here; the awaiting-lane 30s tick picks up
+	// new rows on its next fire. The fleet TUI has no notifier to push to.
+	startSensorSupervisor(supCtx, fab, dbPath, nil)
 
 	statePath := filepath.Join(filepath.Dir(dbPath), "tui-state.json")
 	model := fleet.NewModel(cmd.Context(), fleet.NewStore(fab.DB()), statePath)
@@ -198,6 +205,99 @@ func closeIfCloser(w io.Writer) {
 	if c, ok := w.(io.Closer); ok {
 		_ = c.Close()
 	}
+}
+
+// startSensorSupervisor starts one Scheduler goroutine per (repo, sensor) pair
+// found across all active registered repos. Construction errors per repo or
+// sensor are logged and skipped rather than aborting the entire supervisor.
+// All goroutines stop cleanly when ctx is canceled — no goroutine leaks.
+//
+// onSeed, when non-nil, is called after each nebula is durably written. The
+// serve command wires in a cockpit notifier publish; the fleet command passes
+// nil and relies on the awaiting-lane 30s tick to pick up new rows.
+func startSensorSupervisor(ctx context.Context, fab *fabric.SQLiteFabric, dbPath string, onSeed func(string)) {
+	logger := openSupervisorLog(dbPath)
+
+	repoReg := repos.New(fab.DB())
+	activeRepos, err := repoReg.List(ctx, repos.StatusActive)
+	if err != nil {
+		fmt.Fprintf(logger, "sensor supervisor: list repos: %v\n", err)
+		return
+	}
+
+	root, err := blobRoot()
+	if err != nil {
+		fmt.Fprintf(logger, "sensor supervisor: %v\n", err)
+		return
+	}
+	blobs, err := blobstore.New(root, fab.DB())
+	if err != nil {
+		fmt.Fprintf(logger, "sensor supervisor: open blobstore: %v\n", err)
+		return
+	}
+
+	db := fab.DB()
+	triggerFn := sensors.TriggerFunc(func(ctx context.Context, repoPath, nebulaID, constellationName string) error {
+		_, err := db.ExecContext(ctx,
+			`INSERT INTO trigger_queue (nebula_id, constellation_name, state, created_at, repo_path)
+			 VALUES (?, ?, 'pending', ?, ?)`,
+			nebulaID, constellationName, time.Now().Unix(), repoPath)
+		return err
+	})
+
+	var started int
+	for _, repo := range activeRepos {
+		resolver, err := repos.NewResolver(repo)
+		if err != nil {
+			fmt.Fprintf(logger, "sensor supervisor: resolver for %q: %v\n", repo.Path, err)
+			continue
+		}
+		instances, err := artifacts.New(resolver).LoadAllSensorInstances()
+		if err != nil {
+			fmt.Fprintf(logger, "sensor supervisor: load sensors for %q: %v\n", repo.Path, err)
+			continue
+		}
+		if len(instances) == 0 {
+			continue
+		}
+		if err := repoReg.Touch(ctx, repo.Path); err != nil {
+			fmt.Fprintf(logger, "sensor supervisor: touch %q: %v\n", repo.Path, err)
+		}
+		for _, inst := range instances {
+			sensor, err := sensors.Default().BuildSensor(inst.Type)
+			if err != nil {
+				fmt.Fprintf(logger, "sensor supervisor: build %q/%q: %v\n", repo.Path, inst.Name, err)
+				continue
+			}
+			if err := sensor.Configure(inst.Config, sensors.OSSecretResolver{}); err != nil {
+				fmt.Fprintf(logger, "sensor supervisor: configure %q/%q: %v\n", repo.Path, inst.Name, err)
+				continue
+			}
+			sched, err := sensors.NewScheduler(sensors.SchedulerOpts{
+				RepoPath: repo.Path,
+				Instance: inst,
+				Sensor:   sensor,
+				Cursors:  fabric.NewSensorCursorStore(fab.DB()),
+				Events:   fabric.NewSensorEventStore(fab.DB()),
+				Nebulas:  &seedNebulaInserter{store: fabric.NewNebulaStore(fab.DB(), blobs)},
+				Trigger:  triggerFn,
+				OnSeed:   onSeed,
+				Logger:   logger,
+			})
+			if err != nil {
+				fmt.Fprintf(logger, "sensor supervisor: scheduler for %q/%q: %v\n", repo.Path, inst.Name, err)
+				continue
+			}
+			repoPath, instName := repo.Path, inst.Name
+			started++
+			go func(s *sensors.Scheduler) {
+				if err := s.Run(ctx); err != nil && ctx.Err() == nil {
+					fmt.Fprintf(logger, "sensor supervisor: %q/%q exited: %v\n", repoPath, instName, err)
+				}
+			}(sched)
+		}
+	}
+	fmt.Fprintf(logger, "sensor supervisor: started %d scheduler(s)\n", started)
 }
 
 // openSupervisorLog opens the supervisor's append-mode log file alongside

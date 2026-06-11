@@ -120,6 +120,14 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		}
 		startSupervisorAndDriver(ctx, fab, cache, openSupervisorLog(dbPath))
 		fmt.Fprintln(os.Stderr, "serve: supervisor and step driver running")
+
+		// Sensor supervisor: polls all registered repos and seeds awaiting-approval
+		// nebulas. The onSeed callback publishes a fleet/nebula_seeded event so
+		// connected cockpit browsers reload the board without polling.
+		startSensorSupervisor(ctx, fab, dbPath, func(nebulaID string) {
+			notifier.Publish(cockpit.Event{Topic: "fleet", Type: "nebula_seeded", Data: map[string]any{"nebula_id": nebulaID}})
+		})
+		fmt.Fprintln(os.Stderr, "serve: sensor supervisor running")
 	}
 
 	if server != nil {

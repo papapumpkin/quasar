@@ -92,7 +92,7 @@ func TestKeymapApprove(t *testing.T) {
 	waitForScalar(t, db, "SELECT status FROM nebulas WHERE id='neb-1'", "approved")
 	waitForScalar(t, db,
 		"SELECT constellation_name FROM trigger_queue WHERE nebula_id='neb-1' AND state='pending'",
-		"architect")
+		"nebula-lifecycle")
 	quit(t, tm)
 }
 

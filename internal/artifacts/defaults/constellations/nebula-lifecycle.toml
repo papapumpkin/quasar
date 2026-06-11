@@ -1,5 +1,14 @@
 name        = "nebula-lifecycle"
-description = "Standard lifecycle: per-phase execution, then master review, then ship or fix."
+description = "Full lifecycle fired by Approve: architect plans the seed into phases, per-phase execution, then master review, then ship or fix."
+
+# Plan stage: the architect decomposes the seed nebula into phases and persists
+# them. Runs as a nested constellation so a single Approve fires one constellation
+# that plans AND builds. execute_phases re-reads the nebula (dispatch_phase_iterator
+# loads it fresh), so it sees the phases this stage just persisted.
+[[nodes]]
+id   = "plan"
+type = "constellation"
+ref  = "architect"
 
 [[nodes]]
 id     = "execute_phases"
@@ -20,6 +29,10 @@ ref  = "open-pr"
 id   = "fix"
 type = "constellation"
 ref  = "architect-fix"
+
+[[edges]]
+from = "plan"
+to   = "execute_phases"
 
 [[edges]]
 from = "execute_phases"
