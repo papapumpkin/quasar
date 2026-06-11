@@ -253,12 +253,12 @@ func (r *Runtime) markInFlightFromCommit(ctx context.Context, run *fabric.RunRow
 // repo's quality gate uniformly. A pre-commit failure with fail_on_error=true
 // surfaces here as an error; an empty index (nothing to commit) is a normal
 // outcome. Output: {"sha": <hash>, "committed": bool}.
-func opCommit(ctx context.Context, rt *Runtime, _ *State, args map[string]any) (map[string]any, error) {
+func opCommit(ctx context.Context, rt *Runtime, st *State, args map[string]any) (map[string]any, error) {
 	message, _ := args["message"].(string)
 	if strings.TrimSpace(message) == "" {
 		message = "quasar: automated change"
 	}
-	sha, err := rt.commitWork(ctx, message)
+	sha, err := rt.commitWork(ctx, st.RepoPath, message)
 	if err != nil {
 		return nil, err
 	}

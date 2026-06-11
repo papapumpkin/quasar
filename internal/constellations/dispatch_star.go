@@ -96,7 +96,9 @@ func (r *Runtime) dispatchStar(ctx context.Context, run *fabric.RunRow, st *Stat
 		// invoker returns a validated JSON object the downstream operator consumes
 		// via result_json, so no stage ever re-parses fenced/prose-wrapped text.
 		OutputSchema: outputSchema,
-	}, prompt, r.repoPath)
+		// Write in the run's workDir — its isolated worktree when worktree
+		// isolation is enabled, else the repo root.
+	}, prompt, run.RepoPath)
 	if err != nil {
 		// A dead-coder termination is distinct from a generic failure: the
 		// partial work persists in the worktree, so record terminated_health so
