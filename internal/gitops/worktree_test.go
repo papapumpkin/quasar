@@ -27,6 +27,11 @@ func TestEnsureWorktree(t *testing.T) {
 		}
 	}
 	mustGit("init", "-q")
+	// Configure an identity IN the repo so commits made through gitops.Client
+	// (which does not inject GIT_AUTHOR_* env) succeed on CI, where git has no
+	// global user.name/user.email. Worktrees share the repo's config.
+	mustGit("config", "user.email", "test@quasar.local")
+	mustGit("config", "user.name", "Quasar Test")
 	// Real Quasar repos gitignore .quasar/ (the fabric db lives there), so the
 	// build worktrees under .quasar/worktrees/ never show in the operator's
 	// git status. Mirror that here.
